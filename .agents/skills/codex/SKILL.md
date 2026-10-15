@@ -9,6 +9,11 @@ Codex is an independent agent on PATH (`codex` — invoke as `command codex` if
 a shell alias shadows it), sharing this working tree and already authenticated. It is a second opinion, not ground truth: verify what it
 reports, own what it changes. It reads the same skills your repo carries.
 
+Leave Codex's model at its CLI default unless the user asks for a specific
+one. The default follows the current Codex release; do not pin a dated model
+ID in this skill. If an explicit override is needed, verify it is current and
+pass the requested model with `-m <model>`.
+
 ## If `codex` is not installed
 
 When `codex` is missing from PATH, offer to install it — **ask the user for
@@ -72,7 +77,7 @@ change — before declaring it done or committing. Skip it for trivial edits
    prompt. For custom framing, specify the exact diff to inspect in the prompt;
    don't rely on default scope or traverse all refs/checkpoint history. Never
    state the answer you expect (unprimed, same discipline as
-   [screenshot-critique](../screenshot-critique/SKILL.md)).
+   [screenshot-critique](../../visual/screenshot-critique/SKILL.md)).
 2. Monitor progress in `events.jsonl` and failures in `stderr.log`. An active
    reviewer reading relevant code is not hung merely because five minutes
    elapsed. If it stalls or drifts outside the diff and its dependencies,
@@ -165,5 +170,6 @@ changes. "Process running" is NOT "working."
   aliased workspace-write) — don't reach for it.
 - Reasoning effort and model are config/flag overrides — `-c
   model_reasoning_effort=high`, `-m <model>` (the old `--effort` flag is gone
-  in current Codex). Leave both at their defaults unless the user asks —
-  tighten the prompt first.
+  in current Codex). Leave both at their defaults unless the user asks;
+  tighten the prompt first and keep model IDs unversioned. If a version is
+  required, verify that it is current before using it.
