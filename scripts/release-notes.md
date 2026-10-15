@@ -6,6 +6,12 @@ The capture menu keeps its dark appearance after selecting a recording area and
 shows the latest recording below the action buttons with Play and Copy agent prompt
 actions. Screen recordings now include the pointer in the captured video.
 
+## 0.1.49
+
+Project previews now start with playable video and audio in a few seconds, then
+continue rendering the same pinned revision in the background. The first preview
+uses a faster draft raster while full-quality previews and exports remain available.
+
 ## 0.1.48
 
 Closing a recording's window in the Library now stops its sound; before, the audio
