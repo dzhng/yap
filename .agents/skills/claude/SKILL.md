@@ -1,6 +1,6 @@
 ---
 name: claude
-description: Use Claude Code as an independent `claude -p` subagent when the user explicitly asks for Claude, wants a second-agent opinion from Claude, or asks to delegate a well-scoped task to Claude. Supports selecting `--model` and thinking/effort level with defaults of `opus` and `high`.
+description: Use Claude Code as an independent `claude -p` subagent when the user explicitly asks for Claude, wants a second-agent opinion from Claude, or asks to delegate a well-scoped task to Claude. Supports selecting `--model` and thinking/effort level with defaults of the current `opus` alias and `high`.
 ---
 
 # Claude
@@ -13,10 +13,13 @@ contract narrow.
 ## Defaults
 
 Use `claude -p --model opus --effort high` unless the user or task calls for a
-different model or thinking level.
+different model or thinking level. Keep `opus` as an alias so Claude Code
+resolves the current Opus release; do not pin a dated model ID in this skill.
 
-- **Model:** accept aliases such as `opus`, `sonnet`, or `fable`, or a full
-  model name. Default `opus`.
+- **Model:** prefer aliases such as `opus`, `sonnet`, or `fable`, which follow
+  the current Claude releases. Accept a full model name only when the user or
+  task requires that specific model, and verify it is current first. Default
+  `opus`.
 - **Thinking level:** pass Claude Code's `--effort` flag. Valid levels are
   `low`, `medium`, `high`, `xhigh`, and `max`. Default `high`.
 - **Cost guard:** for exploratory asks, add `--max-budget-usd <amount>` when
@@ -116,7 +119,8 @@ classify the failure before retrying.
 
 ## Rules
 
-- Use `claude -p --model opus --effort high` as the default invocation.
+- Use `claude -p --model opus --effort high` as the default invocation; keep
+  the alias unversioned so it follows the current Opus release.
 - Let the user override model and effort in plain language; translate that to
   `--model` and `--effort`.
 - Keep Claude's writes out of the working tree unless delegation was explicit.
