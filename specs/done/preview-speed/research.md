@@ -19,10 +19,10 @@
 
 1. **Draft raster reduction** — tested and insufficient alone. Smaller output reduces the delivered
    rendition cost, but the measured curve does not reach the first-play target by itself.
-2. **Reusable prepared audio** — retained as an optional optimization, not needed for the first-play target. The cold runs repeatedly execute the complete audio recipe;
-   the installed catalog already contains a ready full-range processed audio artifact, but preview
-   rendering does not consume it. Prediction: reusing an exact pinned audio result removes a large
-   fixed cost while preserving audio bytes and evidence.
+2. **Reusable prepared audio** — retained as an internal dependency optimization. The launch
+   benchmark revision resolved a matching retained prepared resource automatically; the public
+   caller did not bind `preparedResourceId`. An isolated no-prepared comparison was not run, so the
+   benchmark does not attribute the 3.67-second result to progressive publication alone.
 3. **Progressive first-range playback** — implemented and verified on the launch revision. It
    requests and plays an honest 10-second receipt, then continues the same pinned revision at the
    boundary while retaining the full-quality export path.

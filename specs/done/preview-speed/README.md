@@ -18,9 +18,9 @@ renderer that could diverge from export composition.
 
 The draft bound is part of the pinned preview identity. A cached 960-pixel movie
 must never answer a later full-canvas request merely because both refer to the
-same revision. Prepared audio remains a compatible optimization, but the measured
-first-range path already meets the target without making that dependency part of
-the initial-play contract.
+same revision. Prepared audio is resolved opportunistically for an exact retained
+revision; callers do not have to bind its internal resource ID to the first-play
+request, and the receipt still carries the pinned processing evidence.
 
 ## Principles and invariants
 
@@ -40,17 +40,17 @@ the initial-play contract.
 
 `PreviewController` owns the Library's first-range request, continuation polling,
 identity checks, relative handoff seek and lease lifecycle in
-[`apps/macos/Sources/Yap/PreviewController.swift`](../../apps/macos/Sources/Yap/PreviewController.swift).
+[`apps/macos/Sources/Yap/PreviewController.swift`](../../../apps/macos/Sources/Yap/PreviewController.swift).
 `PreviewWindow` owns the AVPlayer boundary and end callback in
-[`apps/macos/Sources/Yap/PreviewWindow.swift`](../../apps/macos/Sources/Yap/PreviewWindow.swift).
+[`apps/macos/Sources/Yap/PreviewWindow.swift`](../../../apps/macos/Sources/Yap/PreviewWindow.swift).
 The preview identity, draft bound and pinned composition admission live in
-[`packages/core/src/project-preview.ts`](../../packages/core/src/project-preview.ts);
+[`packages/core/src/project-preview.ts`](../../../packages/core/src/project-preview.ts);
 the public request contract is described in
-[`packages/protocol/src/operations.ts`](../../packages/protocol/src/operations.ts).
+[`packages/protocol/src/operations.ts`](../../../packages/protocol/src/operations.ts).
 Native control coverage is in
-[`apps/macos/tests/preview-controls.test.mjs`](../../apps/macos/tests/preview-controls.test.mjs),
+[`apps/macos/tests/preview-controls.test.mjs`](../../../apps/macos/tests/preview-controls.test.mjs),
 and cache identity and revision coverage is in
-[`packages/core/src/project-preview.test.ts`](../../packages/core/src/project-preview.test.ts).
+[`packages/core/src/project-preview.test.ts`](../../../packages/core/src/project-preview.test.ts).
 
 ## Evidence and visual provenance
 
@@ -58,7 +58,8 @@ The research ledger in [`research.md`](research.md) records the fixed benchmark,
 parameter-effect map and raw evidence paths. The retained benchmark montages in
 [`assets/`](assets/) compare the ten-second receipt with the matching source
 service full preview at each second. They are generated from the real launch
-revision; the independent visual review found no candidate-specific difference.
+revision; pixel comparison and the recorded visual review found no
+candidate-specific difference.
 
 ## Dead ends
 

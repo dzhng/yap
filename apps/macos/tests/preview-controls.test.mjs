@@ -318,7 +318,8 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         let offsetProgressive = Rig(start)
         var offsetPartial = selecting(target, ready, token: "offset-partial-token")
         offsetPartial = movie(offsetPartial) { value in value["range"] = ["startUs": 20_000_000, "endUs": 30_000_000] }
-        let offsetFull = selecting(target, ready, token: "offset-full-token")
+        var offsetFull = selecting(target, ready, token: "offset-full-token")
+        offsetFull = movie(offsetFull) { value in value["range"] = ["startUs": 20_000_000, "endUs": 40_000_000] }
         offsetProgressive.service.answer("preview.get", offsetPartial)
         offsetProgressive.service.answer("preview.get", offsetFull)
         offsetProgressive.owner.open(target.id, range: ["startUs": 20_000_000, "endUs": 40_000_000])
@@ -330,6 +331,35 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         precondition(offsetProgressive.view.starts == [nil, 10_000_000])
         offsetProgressive.owner.close()
         await until { offsetProgressive.service.closed == ["offset-partial-token", "offset-full-token"] }
+
+        let wrongContinuation = Rig(start)
+        var wrongPartial = selecting(target, ready, token: "wrong-partial-token")
+        wrongPartial = movie(wrongPartial) { value in value["range"] = ["startUs": 0, "endUs": 10_000_000] }
+        var wrongFull = selecting(target, ready, token: "wrong-full-token")
+        wrongFull = movie(wrongFull) { value in value["range"] = ["startUs": 0, "endUs": 30_000_000] }
+        wrongContinuation.service.answer("preview.get", wrongPartial)
+        wrongContinuation.service.answer("preview.get", wrongFull)
+        wrongContinuation.owner.open(target.id, range: ["startUs": 0, "endUs": 40_000_000])
+        await until { wrongContinuation.view.movies.count == 1 }
+        await until { wrongContinuation.service.count("preview.get") == 2 }
+        wrongContinuation.view.ended?()
+        await until { wrongContinuation.service.closed == ["wrong-full-token"] }
+        precondition(wrongContinuation.view.movies.count == 1)
+        wrongContinuation.owner.close()
+        await until { wrongContinuation.service.closed == ["wrong-full-token", "wrong-partial-token"] }
+
+        let exactRange = Rig(start)
+        var exactReceipt = selecting(target, ready, token: "exact-token")
+        exactReceipt = movie(exactReceipt) { value in value["range"] = ["startUs": 0, "endUs": 10_000_000] }
+        exactRange.service.answer("preview.get", exactReceipt)
+        exactRange.service.answer("preview.get", exactReceipt)
+        exactRange.owner.open(target.id, range: ["startUs": 0, "endUs": 10_000_000])
+        await until { exactRange.view.movies.count == 1 || !exactRange.failures.values.isEmpty }
+        precondition(exactRange.failures.values.isEmpty, "exact range failure: \\(exactRange.failures.values)")
+        try? await Task.sleep(for: .milliseconds(50))
+        precondition(exactRange.service.count("preview.get") == 1)
+        exactRange.owner.close()
+        await until { exactRange.service.closed == ["exact-token"] }
         print("PASS native preview interprets retained project receipts without windows, players or media reads")
         print("PASS recording/project identity, pinned retry, renewal, expiry, revocation, malformed receipts and late callbacks")
     }

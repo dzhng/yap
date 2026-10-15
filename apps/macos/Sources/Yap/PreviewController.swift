@@ -259,10 +259,12 @@ final class PreviewController {
     }
 
     private func isPartial(_ movie: Answer.Movie) -> Bool {
+        if let range, let start = range["startUs"] as? Int, let end = range["endUs"] as? Int,
+            end - start <= 10_000_000 { return false }
         guard let requested = initialPreviewRange(), let end = requested["endUs"] as? Int,
             let start = requested["startUs"] as? Int,
             let actual = movie.playbackRange else { return false }
-        return actual.startUs == Int64(start) && actual.endUs == Int64(end) && end - start >= 10_000_000
+        return actual.startUs == Int64(start) && actual.endUs == Int64(end)
     }
 
     private func playInitial(title: String, movie: Answer.Movie, partial: Bool, generation: UUID) {
@@ -300,6 +302,7 @@ final class PreviewController {
                     }
                     if answer.state == "ready", let movie = answer.published?.output, let delivered,
                         movie.target == target, movie.revisionId == revisionId,
+                        continuationRangeMatches(movie),
                         movie.mediaType == "video/mp4", movie.bytes > 0,
                         !delivered.token.isEmpty, delivered.bytes == movie.bytes,
                         delivered.expiresAt > self.now().timeIntervalSince1970 * 1000,
@@ -311,7 +314,10 @@ final class PreviewController {
                         if playerViewIsEnded { playContinuation(title: title, generation: generation) }
                         return
                     }
-                    if answer.state == "ready" { throw InvalidAnswer() }
+                    if answer.state == "ready" {
+                        if let delivered { release(delivered.token) }
+                        throw InvalidAnswer()
+                    }
                     if let delivered { release(delivered.token) }
                     if answer.state == "failed" || answer.state == "unavailable" {
                         presentation.show(title: title, message: answer.reason ?? "Preview continuation failed.", canRetry: answer.retryable == true)
@@ -321,6 +327,13 @@ final class PreviewController {
                 }
             } catch { if self.generation == generation { presentation.show(title: title, message: error.localizedDescription, canRetry: false) } }
         }
+    }
+
+    private func continuationRangeMatches(_ movie: Answer.Movie) -> Bool {
+        guard let range else { return true }
+        guard let start = range["startUs"] as? Int, let end = range["endUs"] as? Int,
+            let actual = movie.playbackRange else { return false }
+        return actual.startUs == Int64(start) && actual.endUs == Int64(end)
     }
 
     private var playerViewIsEnded = false
