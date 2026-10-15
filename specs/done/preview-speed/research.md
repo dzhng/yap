@@ -7,26 +7,27 @@
   `b071876f-8470-485d-8918-c056168030f4`, rendered through the local service on the owner's Mac.
 - **Cold:** a new preview identity, so no derived preview can answer the request.
 - **Warm:** the exact same identity requested again.
-- **Metric:** wall time from CLI request through delivered MP4; audio must be present.
+- **Metric:** wall time from the preview request through a delivered MP4 that the
+  Library can start with audio; the controller begins playback as soon as that
+  receipt is ready, so this measures the open/click-to-playable boundary.
 - **Non-regression:** pinned revision, source bytes, composition timing and audio contract remain
   unchanged; full-canvas export remains available.
-- **Current coverage:** one 124.96-second, 1920×1080 launch revision. No visual quality gate has
-  been run for the draft sizes yet.
+- **Current coverage:** one 124.96-second, 1920×1080 launch revision, with cold and warm
+  first-range measurements, full continuation, focused control tests and visual comparison.
 
 ## Hypothesis queue
 
-1. **Draft raster reduction** — tested and insufficient alone. Smaller output should reduce Core
-   Image compositing and encoding. Next action: keep the identity-bound option, but do not select a
-   smaller default based on speed alone.
-2. **Reusable prepared audio** — next if the first-range benchmark remains above target. The cold runs repeatedly execute the complete audio recipe;
+1. **Draft raster reduction** — tested and insufficient alone. Smaller output reduces the delivered
+   rendition cost, but the measured curve does not reach the first-play target by itself.
+2. **Reusable prepared audio** — retained as an optional optimization, not needed for the first-play target. The cold runs repeatedly execute the complete audio recipe;
    the installed catalog already contains a ready full-range processed audio artifact, but preview
    rendering does not consume it. Prediction: reusing an exact pinned audio result removes a large
    fixed cost while preserving audio bytes and evidence.
-3. **Progressive first-range playback** — implemented in the Library controller. It requests and
-   plays an honest 10-second receipt, then continues the same pinned revision at the boundary while
-   retaining the full-quality export path. The source-service cold/warm timing is still pending.
-4. **Draft encoder controls** — pending. Only test after audio/dependency work, since raster trials
-   show the current bottleneck is not primarily final pixel count.
+3. **Progressive first-range playback** — implemented and verified on the launch revision. It
+   requests and plays an honest 10-second receipt, then continues the same pinned revision at the
+   boundary while retaining the full-quality export path.
+4. **Draft encoder controls** — not pursued after the progressive path met the target. Raster trials
+   show that final pixel count is not the dominant first-play bottleneck.
 
 ## Parameter-effect map
 
@@ -58,17 +59,23 @@ measurement machine.
 | draft-480 | source service | `maxLongEdge: 480` | 43.84 s cold, 0.34 s warm | `/tmp/yap-preview-speed-trials-1792088106` |
 | draft-320 | source service | `maxLongEdge: 320` | 38.37 s cold, 0.28 s warm | `/tmp/yap-preview-speed-trials-1792088106` |
 | audio-prepare | source service | full processed output, exact revision | 23.53 s, reusable resource published | `/tmp/yap-preview-speed-audio-prepare.json` |
-| progressive-controls | native fixture | 10-second receipt, background full receipt, boundary handoff | focused control test passes; real wall time pending | `apps/macos/tests/preview-controls.test.mjs` |
+| progressive-controls | native fixture | 10-second receipt, background full receipt, boundary handoff | focused control test passes | `apps/macos/tests/preview-controls.test.mjs` |
 | first-range-admission | fresh bound source service | launch revision, 10-second range, 960 draft | refused before render: `NOT_READY` because compressor/limiter/normalization capabilities were unavailable; no timing verdict | `/tmp/yap-preview-speed-bound-1792092843/measure/cold.json` |
+| first-range-benchmark | source service, corrected FFmpeg receipt and private scratch path | launch revision, 10-second range, 960 draft | **3.67 s cold**, **0.17 s warm**; 960×540 H.264 + 48kHz stereo AAC | `/private/tmp/yap-preview-speed-first-range-success-1792093973` |
+| continuation-benchmark | same source service and pinned revision | full range, 960 draft | **21.28 s** to ready; 960×540 H.264 + 48kHz stereo AAC, revision unchanged | `/private/tmp/yap-preview-speed-first-range-success-1792093973/full*` |
+
+The first-range MP4 was compared frame-for-frame against the same source-service
+960-pixel full preview at each second from 0 through 9. Pixelmatch found no
+mismatched pixels in the matched frames; the largest structural distance was
+the seek-sensitive fourth-second frame, with edge difference below 0.001. The
+installed-service full-canvas file was retained as historical evidence only; its
+opening imagery differs from the source-service 960 cohort, so it is not the
+visual reference for this rendition comparison.
 
 ## Handoff
 
-The implementation currently keeps the 960-pixel Library default because it is a usable draft
-size; the research result does not justify claiming the 10-second target. The next discriminating
-experiment is a cold and warm first-range request on the launch revision. The fresh source-service
-harness now reaches preview admission but refuses this revision because the active native
-capability receipt reports its compressor, limiter and normalization processors as unavailable.
-`project.get` and `frame.get` remain usable. The first-range wall time therefore needs a
-processor-capability/runtime match before it can be recorded. If the first-range wall time remains
-above 10 seconds after that repair, bind an exact ready full-range processed-audio artifact and
-compare it with the 960 draft parent.
+The verified result is the 960-pixel progressive path: the launch revision starts in 3.67 seconds
+cold and 0.17 seconds warm, with audio present, and the full pinned continuation remains available.
+The earlier refusal was a harness error: the FFmpeg receipt hash was mistyped and the scratch path
+went through `/tmp`, whose symlink component violates the package file boundary. The corrected
+benchmark uses the verified receipt hash and `/private/tmp`.

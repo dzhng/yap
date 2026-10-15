@@ -56,6 +56,10 @@ fresh-agent acceptance run.
 records provenance-preserving transcript imports, explicit optional alignment,
 missed-filler and pause evidence, and reversible speaker-attribution corrections.
 
+[Faster project previews](done/preview-speed/README.md) records the bounded first
+receipt and pinned continuation that bring launch-video playback under ten
+seconds while preserving the full-quality export contract.
+
 ## Archived plans
 
 The [reliable autonomous video editing rationale](done/video-editing-feedback/README.md)
@@ -69,10 +73,6 @@ the mechanics; the archived document owns the reasons and explicit evidence limi
 [App-managed install](app-managed-install/README.md) makes agents the only install
 route: the agent places the app, and the app installs and keeps current the `yap`
 command, the skill and the PATH line. It is built and awaiting its release-day checks.
-
-[Faster project previews](preview-speed/README.md) is a placeholder: what the owner's
-projects show about preview cost, the measurement that comes next, and the candidate
-approaches it will choose between.
 
 ## Future proposals
 

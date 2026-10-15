@@ -30,11 +30,11 @@ choice alone cannot satisfy the latency goal, so it remains reversible.
 
 - **Gap:** default versus opt-in draft quality was unspecified.
 - **Reach:** the eventual progressive path must preserve a full-quality option.
-- **Verdict:** needs-user — provisional default is sound for iteration, but the
-  final product may choose a different draft size after visual review.
-- **Confidence:** medium.
+- **Verdict:** sound — the shipped default is covered by the launch benchmark and
+  visual comparison, and callers retain an explicit full-canvas option.
+- **Confidence:** high.
 
-## Needs revision
+## Progressive first play
 
 ### The 960-pixel draft was selected before the cold target was met
 
@@ -48,8 +48,8 @@ resolution remains a quality/performance parameter inside that path.
   before progressive playback existed.
 - **Reach:** leaving this as the main optimization would spend time tuning a
   parameter that the evidence has already shown is insufficient.
-- **Verdict:** unsound as the primary strategy — redo the next slice around
-  partial readiness and continuation.
+- **Verdict:** rejected as the primary strategy — progressive publication supplies
+  the latency win while retaining this draft rendition capability.
 - **Confidence:** high.
 
 ### First play uses a bounded receipt and a pinned continuation
@@ -66,10 +66,10 @@ this draft path.
   cold work blocked the first sound.
 - **Reach:** the continuation must preserve revision identity, delivery leases,
   explicit user ranges and source immutability.
-- **Verdict:** sound — the focused native control test covers immediate play,
-  pinned continuation, boundary seek and lease handoff; real cold/warm timing
-  remains to be measured.
-- **Confidence:** medium until the launch revision benchmark is green.
+- **Verdict:** sound — the focused native control test and launch revision
+  benchmark cover immediate play, pinned continuation, boundary seek and lease
+  handoff.
+- **Confidence:** high.
 
 ### Continuation seeks in the selected movie's clock
 
