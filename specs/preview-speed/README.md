@@ -1,6 +1,6 @@
 # Faster project previews
 
-Status: measurement complete; draft-resolution implementation in progress.
+Status: progressive first-range implementation in progress; target measurement pending.
 
 The experiment contract, hypothesis queue and parameter-effect map live in
 [`research.md`](research.md).
@@ -9,15 +9,17 @@ The experiment contract, hypothesis queue and parameter-effect map live in
 
 The identity-bound draft raster is implemented and Library playback requests a
 960-pixel long edge. Research shows raster reduction alone leaves cold startup
-at 38.37 seconds even at 320×180. The next slice is progressive playback: a
-short pinned range must become playable while the full revision continues to
-render. Reusable prepared audio remains a supporting optimization, not a
-replacement for the first-play contract. Full-canvas export and an explicit
-`maxLongEdge: null` preview remain unchanged.
+at 38.37 seconds even at 320×180. Library playback now requests a pinned
+10-second range, starts it as soon as its receipt is playable, and continues
+with the full pinned revision at the range boundary. Reusable prepared audio
+remains a supporting optimization, not a replacement for the first-play
+contract. Full-canvas export and an explicit `maxLongEdge: null` preview remain
+unchanged.
 
 The goal is still open: cold and warm launch-video previews must start with
-audio within 10 seconds. The native worker and TypeScript focused checks pass;
-the draft output has not yet had visual quality review.
+audio within 10 seconds. The native handoff and focused macOS controls checks
+pass; the real first-range cold/warm measurement and draft visual quality review
+are still pending.
 
 ## The question
 

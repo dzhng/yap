@@ -51,3 +51,40 @@ resolution remains a quality/performance parameter inside that path.
 - **Verdict:** unsound as the primary strategy — redo the next slice around
   partial readiness and continuation.
 - **Confidence:** high.
+
+### First play uses a bounded receipt and a pinned continuation
+
+Library playback requests the first ten seconds of the selected project
+revision with the draft raster bound in the request identity. A ready receipt
+starts immediately with its audio. The controller requests the full selected
+range in the background using the returned revision, and switches at the
+partial receipt's declared end time. The partial delivery is released only
+after the full delivery is installed. A full-quality export never consumes
+this draft path.
+
+- **Gap:** a complete MP4 was the only playback boundary, so the renderer's
+  cold work blocked the first sound.
+- **Reach:** the continuation must preserve revision identity, delivery leases,
+  explicit user ranges and source immutability.
+- **Verdict:** sound — the focused native control test covers immediate play,
+  pinned continuation, boundary seek and lease handoff; real cold/warm timing
+  remains to be measured.
+- **Confidence:** medium until the launch revision benchmark is green.
+
+### Continuation seeks in the selected movie's clock
+
+The service receipt names the selected project interval in absolute project
+microseconds, while the MP4 for that interval starts playback at zero. When a
+caller asks for a range beginning at 20 seconds, the first receipt covers
+20–30 seconds and the full receipt covers the selected range from its own zero
+point. The handoff therefore seeks to `partialEndUs - selectedStartUs` (10
+seconds), not to the absolute 30-second project timestamp. This preserves the
+same visible point for nonzero user ranges.
+
+- **Gap:** the initial default starts at zero, so an absolute seek looked
+  correct until an explicit offset range was exercised.
+- **Reach:** every future continuation, including timeline-selected ranges,
+  must use the playback clock declared by the rendered file.
+- **Verdict:** sound — the focused control test covers both zero-based and
+  offset ranges.
+- **Confidence:** high.

@@ -44,16 +44,18 @@ import YapControls
     var titles: [String] = []
     var messages: [(String, Bool)] = []
     var movies: [(String, String)] = []
+    var starts: [Int64?] = []
     var active = false
     var retry: (@MainActor () -> Void)?
     var closed: (@MainActor () -> Void)?
     var failed: (@MainActor (String) -> Void)?
+    var ended: (@MainActor () -> Void)?
     func open(title: String, retry: @escaping @MainActor () -> Void, closed: @escaping @MainActor () -> Void) {
         active = true; titles.append(title); self.retry = retry; self.closed = closed
     }
     func show(title: String, message: String, canRetry: Bool) { titles.append(title); messages.append((message, canRetry)) }
-    func play(title: String, file: String, mediaType: String, failed: @escaping @MainActor (String) -> Void) {
-        titles.append(title); movies.append((file, mediaType)); self.failed = failed
+    func play(title: String, file: String, mediaType: String, startAtUs: Int64?, failed: @escaping @MainActor (String) -> Void, ended: @escaping @MainActor () -> Void) {
+        titles.append(title); movies.append((file, mediaType)); starts.append(startAtUs); self.failed = failed; self.ended = ended
     }
     func close() { active = false }
 }
@@ -144,12 +146,12 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         pinned.service.answer("preview.get", ready)
         pinned.owner.tick()
         await until { !pinned.view.movies.isEmpty || !pinned.failures.values.isEmpty }
-        precondition(pinned.failures.values.isEmpty)
-        precondition(NSDictionary(dictionary: pinned.service.calls[0].1).isEqual(to: ["projectId": id, "maxLongEdge": 960]))
-        precondition(NSDictionary(dictionary: pinned.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision, "maxLongEdge": 960]))
-        precondition(pinned.view.movies[0].0 == originalMovie["file"] as! String && pinned.view.movies[0].1 == "video/mp4")
+        precondition(pinned.failures.values.isEmpty, "initial failure: \\(pinned.failures.values)")
+        precondition(NSDictionary(dictionary: pinned.service.calls[0].1).isEqual(to: ["projectId": id, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]), "initial call: \\(pinned.service.calls)")
+        precondition(NSDictionary(dictionary: pinned.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]), "ready call: \\(pinned.service.calls)")
+        precondition(pinned.view.movies[0].0 == originalMovie["file"] as! String && pinned.view.movies[0].1 == "video/mp4", "movie: \\(pinned.view.movies)")
         // With no name known for the project, its identifiers still stay out of the title.
-        precondition(pinned.view.titles.last == "Project preview")
+        precondition(pinned.view.titles.last == "Project preview", "title: \\(pinned.view.titles)")
         pinned.service.answer("project.get", ["projectId": id, "currentRevisionId": "newer-current-revision"])
         pinned.owner.tick()
         await until { pinned.service.count("project.get") == 1 }
@@ -174,7 +176,8 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         await another.ready(.project("another"), selecting(.project("another"), ready, token: "project-token"))
         another.owner.tick()
         await until { another.service.count("project.get") == 1 }
-        precondition(NSDictionary(dictionary: another.service.calls[0].1).isEqual(to: ["projectId": "another"]) && another.service.count("another.get") == 0)
+        let anotherLookup = another.service.calls.first { $0.0 == "project.get" }!
+        precondition(NSDictionary(dictionary: anotherLookup.1).isEqual(to: ["projectId": "another"]) && another.service.count("another.get") == 0)
         another.view.closed?()
         await until { another.service.closed == ["project-token"] }
 
@@ -193,7 +196,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
                 retry.view.retry?()
                 await until { !retry.view.movies.isEmpty }
                 let request = retry.service.calls.first { $0.0 == "preview.retry" }!.1
-                precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision, "maxLongEdge": 960]))
+                precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]))
             }
             retry.owner.close()
             if !dependency { await until { retry.service.closed == [token] } }
@@ -292,6 +295,41 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             await until { renewal.service.closed == [token] }
             precondition(!renewal.view.active && renewal.view.movies.count == 1)
         }
+
+        // A bounded receipt is playable immediately; the full pinned receipt takes over at its boundary.
+        let progressive = Rig(start)
+        var partial = selecting(target, ready, token: "partial-token")
+        partial = movie(partial) { value in value["range"] = ["startUs": 0, "endUs": 10_000_000] }
+        let full = selecting(target, ready, token: "full-token")
+        progressive.service.answer("preview.get", partial)
+        progressive.service.answer("preview.get", full)
+        progressive.owner.open(target.id)
+        await until { progressive.view.movies.count == 1 }
+        await until { progressive.service.count("preview.get") == 2 }
+        precondition(NSDictionary(dictionary: progressive.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision, "maxLongEdge": 960]))
+        precondition(progressive.view.starts == [nil])
+        progressive.view.ended?()
+        await until { progressive.view.movies.count == 2 }
+        precondition(progressive.view.starts == [nil, 10_000_000])
+        await until { progressive.service.closed == ["partial-token"] }
+        progressive.owner.close()
+        await until { progressive.service.closed == ["partial-token", "full-token"] }
+
+        let offsetProgressive = Rig(start)
+        var offsetPartial = selecting(target, ready, token: "offset-partial-token")
+        offsetPartial = movie(offsetPartial) { value in value["range"] = ["startUs": 20_000_000, "endUs": 30_000_000] }
+        let offsetFull = selecting(target, ready, token: "offset-full-token")
+        offsetProgressive.service.answer("preview.get", offsetPartial)
+        offsetProgressive.service.answer("preview.get", offsetFull)
+        offsetProgressive.owner.open(target.id, range: ["startUs": 20_000_000, "endUs": 40_000_000])
+        await until { offsetProgressive.view.movies.count == 1 }
+        await until { offsetProgressive.service.count("preview.get") == 2 }
+        precondition(NSDictionary(dictionary: offsetProgressive.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision, "range": ["startUs": 20_000_000, "endUs": 40_000_000], "maxLongEdge": 960]))
+        offsetProgressive.view.ended?()
+        await until { offsetProgressive.view.movies.count == 2 }
+        precondition(offsetProgressive.view.starts == [nil, 10_000_000])
+        offsetProgressive.owner.close()
+        await until { offsetProgressive.service.closed == ["offset-partial-token", "offset-full-token"] }
         print("PASS native preview interprets retained project receipts without windows, players or media reads")
         print("PASS recording/project identity, pinned retry, renewal, expiry, revocation, malformed receipts and late callbacks")
     }
@@ -320,7 +358,7 @@ import YapControls
 @MainActor final class Presentation: PreviewPresenting {
     func open(title: String, retry: @escaping @MainActor () -> Void, closed: @escaping @MainActor () -> Void) {}
     func show(title: String, message: String, canRetry: Bool) {}
-    func play(title: String, file: String, mediaType: String, failed: @escaping @MainActor (String) -> Void) {}
+    func play(title: String, file: String, mediaType: String, startAtUs: Int64?, failed: @escaping @MainActor (String) -> Void, ended: @escaping @MainActor () -> Void) {}
     func close() {}
 }
 struct Refused: Error {}

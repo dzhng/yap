@@ -5,7 +5,7 @@ import YapControls
 protocol PreviewPresenting: AnyObject {
     func open(title: String, retry: @escaping @MainActor () -> Void, closed: @escaping @MainActor () -> Void)
     func show(title: String, message: String, canRetry: Bool)
-    func play(title: String, file: String, mediaType: String, failed: @escaping @MainActor (String) -> Void)
+    func play(title: String, file: String, mediaType: String, startAtUs: Int64?, failed: @escaping @MainActor (String) -> Void, ended: @escaping @MainActor () -> Void)
     func showTimeline(_ items: [PreviewTimelineItem], selected: String, select: @escaping @MainActor (String) -> Void)
     func showExport(_ action: @escaping @MainActor () -> Void)
     func close()
@@ -43,6 +43,10 @@ final class PreviewController {
     private var revisionId: String?
     private var range: [String: Any]?
     private var lease: Lease?
+    private var continuationLease: Lease?
+    private var continuationMovie: Answer.Movie?
+    private var continuationTask: Task<Void, Never>?
+    private var partialEndUs: Int64?
     private var renewAt = Date.distantPast
     private var reading = false
     private var requestOperation = "preview.get"
@@ -133,6 +137,13 @@ final class PreviewController {
         range = nil
         polling = false
         reading = false
+        playerViewIsEnded = false
+        continuationTask?.cancel()
+        continuationTask = nil
+        if let token = continuationLease?.token { release(token) }
+        continuationLease = nil
+        continuationMovie = nil
+        partialEndUs = nil
         presentation.close()
         if let token = lease?.token { release(token) }
         lease = nil
@@ -151,87 +162,200 @@ final class PreviewController {
         let current = generation
         let pinnedRevision = revisionId
         let currentLease = lease
-        Task { @MainActor in
-            do {
-                if !polling || currentLease != nil {
-                    _ = try await call("project.get", target.parameters)
-                    guard generation == current else { return }
-                    guard let currentLease, now() >= renewAt else { reading = false; return }
-                    let data = try await call("artifact.renew", ["token": currentLease.token])
-                    let renewed = try JSONDecoder().decode(Lease.self, from: data)
-                    guard generation == current else { return }
-                    guard currentLease.expiresAt > now().timeIntervalSince1970 * 1000,
-                        renewed.token == currentLease.token, renewed.bytes == currentLease.bytes,
-                        renewed.expiresAt > now().timeIntervalSince1970 * 1000 else {
-                        throw InvalidAnswer()
-                    }
-                    lease = renewed
-                    renewAt = now().addingTimeInterval(10)
-                } else {
-                    var params: [String: Any] = target.parameters
-                    if let pinnedRevision { params["revisionId"] = pinnedRevision }
-                    if let range { params["range"] = range }
-                    params["maxLongEdge"] = draftMaxLongEdge
-                    let data = try await call(requestOperation, params)
-                    // Decode the lease separately so a late or otherwise invalid ready answer
-                    // releases the service pin rather than leaving it until expiration.
-                    let delivered = try? JSONDecoder().decode(Delivery.self, from: data).delivery
-                    guard generation == current else {
-                        if let delivered { release(delivered.token) }
-                        return
-                    }
-                    do {
-                        let answer = try JSONDecoder().decode(Answer.self, from: data)
-                        guard answer.target == target, !answer.revisionId.isEmpty,
-                            pinnedRevision == nil || pinnedRevision == answer.revisionId else {
-                            throw InvalidAnswer()
-                        }
-                        revisionId = answer.revisionId
-                        requestOperation = "preview.get"
-                        let title = self.title(for: target)
-                        if answer.state == "ready" {
-                            guard let movie = answer.published?.output, let delivered,
-                                movie.target == target, movie.revisionId == answer.revisionId,
-                                movie.mediaType == "video/mp4", movie.bytes > 0,
-                                !delivered.token.isEmpty, delivered.bytes == movie.bytes,
-                                delivered.expiresAt > now().timeIntervalSince1970 * 1000,
-                                movie.file.hasPrefix("/") else { throw InvalidAnswer() }
-                            lease = delivered
-                            renewAt = now().addingTimeInterval(10)
-                            polling = false
-                            presentation.play(title: title, file: movie.file, mediaType: movie.mediaType) { [weak self] reason in
-                                guard let self, self.generation == current else { return }
-                                self.stop(reason)
-                            }
-                        } else if delivered != nil {
-                            throw InvalidAnswer()
-                        } else if answer.state == "failed" || answer.state == "not_requested" || answer.state == "unavailable" {
-                            polling = false
-                            presentation.show(title: title, message: answer.reason ?? "Preview could not be prepared.",
-                                canRetry: answer.dependency == nil && answer.retryable == true)
-                        } else if answer.state == "queued" || answer.state == "processing" {
-                            presentation.show(title: title, message: "Preparing preview — \(answer.state)…", canRetry: false)
-                        } else {
-                            throw InvalidAnswer()
-                        }
-                    } catch {
-                        if let delivered { release(delivered.token) }
-                        throw error
-                    }
-                }
-            } catch {
-                if generation == current { stop(error.localizedDescription) }
-            }
-            if generation == current { reading = false }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.processTick(target: target, pinnedRevision: pinnedRevision,
+                currentLease: currentLease, current: current)
         }
     }
 
+    private func processTick(target: MediaTarget, pinnedRevision: String?, currentLease: Lease?, current: UUID) async {
+        do {
+            if !polling || currentLease != nil {
+                _ = try await call("project.get", target.parameters)
+                guard generation == current else { return }
+                guard let currentLease, now() >= renewAt else { reading = false; return }
+                let data = try await call("artifact.renew", ["token": currentLease.token])
+                let renewed = try JSONDecoder().decode(Lease.self, from: data)
+                guard generation == current else { return }
+                guard currentLease.expiresAt > now().timeIntervalSince1970 * 1000,
+                    renewed.token == currentLease.token, renewed.bytes == currentLease.bytes,
+                    renewed.expiresAt > now().timeIntervalSince1970 * 1000 else {
+                    throw InvalidAnswer()
+                }
+                lease = renewed
+                renewAt = now().addingTimeInterval(10)
+            } else {
+                var params: [String: Any] = target.parameters
+                if let pinnedRevision { params["revisionId"] = pinnedRevision }
+                if let previewRange = initialPreviewRange() { params["range"] = previewRange }
+                params["maxLongEdge"] = draftMaxLongEdge
+                let data = try await call(requestOperation, params)
+                // Decode the lease separately so a late or otherwise invalid ready answer
+                // releases the service pin rather than leaving it until expiration.
+                let delivered = try? JSONDecoder().decode(Delivery.self, from: data).delivery
+                guard generation == current else {
+                    if let delivered { release(delivered.token) }
+                    return
+                }
+                do {
+                    let answer = try JSONDecoder().decode(Answer.self, from: data)
+                    guard answer.target == target, !answer.revisionId.isEmpty,
+                        pinnedRevision == nil || pinnedRevision == answer.revisionId else {
+                        throw InvalidAnswer()
+                    }
+                    revisionId = answer.revisionId
+                    requestOperation = "preview.get"
+                    let title = self.title(for: target)
+                    if answer.state == "ready" {
+                        guard let movie = answer.published?.output, let delivered,
+                            movie.target == target, movie.revisionId == answer.revisionId,
+                            movie.mediaType == "video/mp4", movie.bytes > 0,
+                            !delivered.token.isEmpty, delivered.bytes == movie.bytes,
+                            delivered.expiresAt > now().timeIntervalSince1970 * 1000,
+                            movie.file.hasPrefix("/") else { throw InvalidAnswer() }
+                        lease = delivered
+                        renewAt = now().addingTimeInterval(10)
+                        polling = false
+                        let partial = self.isPartial(movie)
+                        if partial, let playbackRange = movie.playbackRange { partialEndUs = playbackRange.endUs }
+                        playInitial(title: title, movie: movie, partial: partial, generation: current)
+                        if partial { beginContinuation(title: title, generation: current, revisionId: answer.revisionId) }
+                    } else if delivered != nil {
+                        throw InvalidAnswer()
+                    } else if answer.state == "failed" || answer.state == "not_requested" || answer.state == "unavailable" {
+                        polling = false
+                        presentation.show(title: title, message: answer.reason ?? "Preview could not be prepared.",
+                            canRetry: answer.dependency == nil && answer.retryable == true)
+                    } else if answer.state == "queued" || answer.state == "processing" {
+                        presentation.show(title: title, message: "Preparing preview — \(answer.state)…", canRetry: false)
+                    } else {
+                        throw InvalidAnswer()
+                    }
+                } catch {
+                    if let delivered { release(delivered.token) }
+                    throw error
+                }
+            }
+        } catch {
+            if generation == current { stop(error.localizedDescription) }
+        }
+        if generation == current { reading = false }
+
+    }
     private func retryPreview() {
-        guard let target, let revisionId, !reading else { return }
+        guard let target, self.revisionId != nil, !reading else { return }
         presentation.show(title: title(for: target), message: "Retrying preview…", canRetry: false)
         requestOperation = "preview.retry"
         polling = true
         tick()
+    }
+
+    private func initialPreviewRange() -> [String: Any]? {
+        let start = (range?["startUs"] as? Int) ?? 0
+        let end = (range?["endUs"] as? Int) ?? Int.max
+        guard end - start > 10_000_000 else { return range }
+        return ["startUs": start, "endUs": min(end, start + 10_000_000)]
+    }
+
+    private func isPartial(_ movie: Answer.Movie) -> Bool {
+        guard let requested = initialPreviewRange(), let end = requested["endUs"] as? Int,
+            let start = requested["startUs"] as? Int,
+            let actual = movie.playbackRange else { return false }
+        return actual.startUs == Int64(start) && actual.endUs == Int64(end) && end - start >= 10_000_000
+    }
+
+    private func playInitial(title: String, movie: Answer.Movie, partial: Bool, generation: UUID) {
+        presentation.play(title: title, file: movie.file, mediaType: movie.mediaType, startAtUs: nil,
+            failed: { [weak self] reason in
+                guard let self, self.generation == generation else { return }
+                self.stop(reason)
+            }, ended: { [weak self] in
+                guard let self, self.generation == generation, partial else { return }
+                self.playContinuation(title: title, generation: generation)
+            })
+    }
+
+    private func beginContinuation(title: String, generation: UUID, revisionId: String) {
+        continuationTask?.cancel()
+        guard let target else { return }
+        continuationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            var params: [String: Any] = target.parameters
+            params["revisionId"] = revisionId
+            if let range { params["range"] = range }
+            params["maxLongEdge"] = draftMaxLongEdge
+            do {
+                while self.generation == generation {
+                    let data = try await self.call("preview.get", params)
+                    let delivered = try? JSONDecoder().decode(Delivery.self, from: data).delivery
+                    let answer = try JSONDecoder().decode(Answer.self, from: data)
+                    guard self.generation == generation else {
+                        if let delivered { self.release(delivered.token) }
+                        return
+                    }
+                    if answer.target != target || answer.revisionId != revisionId {
+                        if let delivered { self.release(delivered.token) }
+                        throw InvalidAnswer()
+                    }
+                    if answer.state == "ready", let movie = answer.published?.output, let delivered,
+                        movie.target == target, movie.revisionId == revisionId,
+                        movie.mediaType == "video/mp4", movie.bytes > 0,
+                        !delivered.token.isEmpty, delivered.bytes == movie.bytes,
+                        delivered.expiresAt > self.now().timeIntervalSince1970 * 1000,
+                        movie.file.hasPrefix("/") {
+                        continuationLease = delivered
+                        continuationMovie = movie
+                        continuationTask = nil
+                        if partialEndUs == nil { return }
+                        if playerViewIsEnded { playContinuation(title: title, generation: generation) }
+                        return
+                    }
+                    if answer.state == "ready" { throw InvalidAnswer() }
+                    if let delivered { release(delivered.token) }
+                    if answer.state == "failed" || answer.state == "unavailable" {
+                        presentation.show(title: title, message: answer.reason ?? "Preview continuation failed.", canRetry: answer.retryable == true)
+                        return
+                    }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            } catch { if self.generation == generation { presentation.show(title: title, message: error.localizedDescription, canRetry: false) } }
+        }
+    }
+
+    private var playerViewIsEnded = false
+
+    private func playContinuation(title: String, generation: UUID) {
+        guard generation == self.generation, let full = continuationLease, let movie = continuationMovie,
+            let partialEndUs else {
+            playerViewIsEnded = true
+            return
+        }
+        let fullStartUs = Int64((range?["startUs"] as? Int) ?? 0)
+        let start = partialEndUs - fullStartUs
+        guard start >= 0 else {
+            release(full.token)
+            continuationLease = nil
+            continuationMovie = nil
+            stop("Preview continuation range is invalid. Open Preview again to continue.")
+            return
+        }
+        guard full.expiresAt > now().timeIntervalSince1970 * 1000 else {
+            release(full.token)
+            continuationLease = nil
+            continuationMovie = nil
+            stop("Preview continuation lease expired. Open Preview again to continue.")
+            return
+        }
+        playerViewIsEnded = false
+        if let partial = lease { release(partial.token) }
+        lease = full
+        continuationLease = nil
+        continuationMovie = nil
+        presentation.play(title: title, file: movie.file, mediaType: movie.mediaType, startAtUs: start, failed: { [weak self] reason in
+            guard let self, self.generation == generation else { return }
+            self.stop(reason)
+        }, ended: {})
     }
 
     private func stop(_ reason: String) {
@@ -283,7 +407,9 @@ final class PreviewController {
             let file: String
             let mediaType: String
             let bytes: Int64
-            private enum Keys: String, CodingKey { case revisionId, file, mediaType, bytes }
+            let playbackRange: PlaybackRange?
+            struct PlaybackRange: Decodable { let startUs: Int64; let endUs: Int64 }
+            private enum Keys: String, CodingKey { case revisionId, file, mediaType, bytes, range }
             init(from decoder: Decoder) throws {
                 let fields = try decoder.container(keyedBy: Keys.self)
                 target = try MediaTarget(from: decoder)
@@ -291,6 +417,7 @@ final class PreviewController {
                 file = try fields.decode(String.self, forKey: .file)
                 mediaType = try fields.decode(String.self, forKey: .mediaType)
                 bytes = try fields.decode(Int64.self, forKey: .bytes)
+                playbackRange = try fields.decodeIfPresent(PlaybackRange.self, forKey: .range)
             }
         }
     }

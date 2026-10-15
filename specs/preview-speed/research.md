@@ -18,13 +18,13 @@
 1. **Draft raster reduction** — tested and insufficient alone. Smaller output should reduce Core
    Image compositing and encoding. Next action: keep the identity-bound option, but do not select a
    smaller default based on speed alone.
-2. **Reusable prepared audio** — next. The cold runs repeatedly execute the complete audio recipe;
+2. **Reusable prepared audio** — next if the first-range benchmark remains above target. The cold runs repeatedly execute the complete audio recipe;
    the installed catalog already contains a ready full-range processed audio artifact, but preview
    rendering does not consume it. Prediction: reusing an exact pinned audio result removes a large
    fixed cost while preserving audio bytes and evidence.
-3. **Progressive first-range publication** — pending. Render and publish an initial playable range,
-   then continue the pinned revision. Prediction: can meet the start target even when full render
-   remains slow; requires an honest partial-readiness and playback continuation contract.
+3. **Progressive first-range playback** — implemented in the Library controller. It requests and
+   plays an honest 10-second receipt, then continues the same pinned revision at the boundary while
+   retaining the full-quality export path. The source-service cold/warm timing is still pending.
 4. **Draft encoder controls** — pending. Only test after audio/dependency work, since raster trials
    show the current bottleneck is not primarily final pixel count.
 
@@ -58,11 +58,17 @@ measurement machine.
 | draft-480 | source service | `maxLongEdge: 480` | 43.84 s cold, 0.34 s warm | `/tmp/yap-preview-speed-trials-1792088106` |
 | draft-320 | source service | `maxLongEdge: 320` | 38.37 s cold, 0.28 s warm | `/tmp/yap-preview-speed-trials-1792088106` |
 | audio-prepare | source service | full processed output, exact revision | 23.53 s, reusable resource published | `/tmp/yap-preview-speed-audio-prepare.json` |
+| progressive-controls | native fixture | 10-second receipt, background full receipt, boundary handoff | focused control test passes; real wall time pending | `apps/macos/tests/preview-controls.test.mjs` |
+| first-range-admission | fresh bound source service | launch revision, 10-second range, 960 draft | refused before render: `NOT_READY` because compressor/limiter/normalization capabilities were unavailable; no timing verdict | `/tmp/yap-preview-speed-bound-1792092843/measure/cold.json` |
 
 ## Handoff
 
 The implementation currently keeps the 960-pixel Library default because it is a usable draft
 size; the research result does not justify claiming the 10-second target. The next discriminating
-experiment is to bind an exact ready full-range processed-audio artifact to the preview and compare
-its cold time with the 960 draft parent. Progressive playback should follow if that remains above
-10 seconds.
+experiment is a cold and warm first-range request on the launch revision. The fresh source-service
+harness now reaches preview admission but refuses this revision because the active native
+capability receipt reports its compressor, limiter and normalization processors as unavailable.
+`project.get` and `frame.get` remain usable. The first-range wall time therefore needs a
+processor-capability/runtime match before it can be recorded. If the first-range wall time remains
+above 10 seconds after that repair, bind an exact ready full-range processed-audio artifact and
+compare it with the 960 draft parent.

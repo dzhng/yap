@@ -7,6 +7,7 @@ final class PreviewWindow: NSObject, PreviewPresenting, NSWindowDelegate {
     private var window: NSWindow?
     private var playerView: AVPlayerView?
     private var playerObservation: NSKeyValueObservation?
+    private var playerEndedObservation: NSObjectProtocol?
     private var compositionTask: Task<Void, Never>?
     private var message: NSTextField?
     private var retry: NSButton?
@@ -189,8 +190,8 @@ final class PreviewWindow: NSObject, PreviewPresenting, NSWindowDelegate {
             width: container.bounds.width, height: Self.barHeight)
     }
 
-    func play(title: String, file: String, mediaType: String,
-        failed: @escaping @MainActor (String) -> Void)
+    func play(title: String, file: String, mediaType: String, startAtUs: Int64?,
+        failed: @escaping @MainActor (String) -> Void, ended: @escaping @MainActor () -> Void)
     {
         window?.title = title
         message?.isHidden = true
@@ -204,14 +205,20 @@ final class PreviewWindow: NSObject, PreviewPresenting, NSWindowDelegate {
             let reason = item.error?.localizedDescription ?? "Preview playback failed."
             Task { @MainActor in failed(reason) }
         }
-        playerView?.player = AVPlayer(playerItem: item)
-        playerView?.player?.play()
+        if let playerEndedObservation { NotificationCenter.default.removeObserver(playerEndedObservation) }
+        playerEndedObservation = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { _ in
+            Task { @MainActor in ended() }
+        }
+        let player = AVPlayer(playerItem: item)
+        playerView?.player = player
+        if let startAtUs { player.seek(to: CMTime(value: startAtUs, timescale: 1_000_000)) { _ in player.play() } }
+        else { player.play() }
     }
 
     func playLocalFile(title: String, file: String, mediaType: String) {
         close()
         open(title: title, retry: {}, closed: {})
-        play(title: title, file: file, mediaType: mediaType, failed: { _ in })
+        play(title: title, file: file, mediaType: mediaType, startAtUs: nil, failed: { _ in }, ended: {})
     }
 
     /// A captured take stores picture and microphone narration as separate canonical members.
@@ -262,6 +269,8 @@ final class PreviewWindow: NSObject, PreviewPresenting, NSWindowDelegate {
     func close() {
         stopPlayback()
         playerObservation = nil
+        if let playerEndedObservation { NotificationCenter.default.removeObserver(playerEndedObservation) }
+        playerEndedObservation = nil
         playerView?.player = nil
         window?.delegate = nil
         window?.close()

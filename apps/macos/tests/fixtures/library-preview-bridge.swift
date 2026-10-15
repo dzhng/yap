@@ -37,7 +37,7 @@ struct CheckFailure: Error, LocalizedError {
         messages.append(message)
         evidence.record(["presenter": "show", "title": title, "message": message, "canRetry": canRetry])
     }
-    func play(title: String, file: String, mediaType: String, failed: @escaping @MainActor (String) -> Void) {
+    func play(title: String, file: String, mediaType: String, startAtUs: Int64?, failed: @escaping @MainActor (String) -> Void, ended: @escaping @MainActor () -> Void) {
         movies.append(["title": title, "file": file, "mediaType": mediaType])
         evidence.record(["presenter": "play-arguments-only", "title": title, "file": file, "mediaType": mediaType])
     }
