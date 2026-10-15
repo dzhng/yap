@@ -1,7 +1,23 @@
 # Faster project previews
 
-Status: placeholder. Nothing is built or decided. The next step is the measurement
-below; the owner chooses an approach from its numbers.
+Status: measurement complete; draft-resolution implementation in progress.
+
+The experiment contract, hypothesis queue and parameter-effect map live in
+[`research.md`](research.md).
+
+## Current handoff
+
+The identity-bound draft raster is implemented and Library playback requests a
+960-pixel long edge. Research shows raster reduction alone leaves cold startup
+at 38.37 seconds even at 320×180. The next slice is progressive playback: a
+short pinned range must become playable while the full revision continues to
+render. Reusable prepared audio remains a supporting optimization, not a
+replacement for the first-play contract. Full-canvas export and an explicit
+`maxLongEdge: null` preview remain unchanged.
+
+The goal is still open: cold and warm launch-video previews must start with
+audio within 10 seconds. The native worker and TypeScript focused checks pass;
+the draft output has not yet had visual quality review.
 
 ## The question
 
@@ -43,6 +59,25 @@ Render the launch project's preview once with timing for each stage: dependency
 wait, decode, composite, encode and audio. Record the wall time and how it compares
 with the program's duration. Run it on the owner's Mac with the real project. It
 uses a render, so run it once and keep the numbers here.
+
+### Baseline — 2026-10-15
+
+Measured against the owner's local catalog, project `b071876f-8470-485d-8918-c056168030f4`,
+revision `8f551f16-a69c-4fa8-ad70-e1178a21c675` (124.96 s, 1920×1080, 3,746 frames),
+using a fresh `compact` preview identity so an existing cached preview could not answer.
+The installed service rendered the complete MP4 and delivered it to a local output file.
+
+- Cold render and delivery: **50.74 s** (0.41× program duration), 49 MB output.
+- Warm repeat with the exact identity: **0.60 s**, served from the derived cache.
+- Native audio report: 5 source descriptors, 1,244,169 decoded frames, 1.84 GB peak resident memory.
+- The public job record still has no stage timestamps, so this run establishes the cold/warm
+  wall-time gap but does not yet apportion dependency, decode, composite, encode and audio time.
+
+The cold result misses the ten-second target by roughly 5×. The first implementation slice adds
+an identity-bound `maxLongEdge` draft limit and makes Library playback request a 960-pixel long
+edge; full-canvas exports and explicit `maxLongEdge: null` previews remain available. Progressive
+publication remains a separate slice because the current native renderer publishes one complete MP4
+atomically.
 
 ## Candidate approaches
 

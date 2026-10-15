@@ -179,6 +179,24 @@ test("HEVC preview publishes its pinned codec and refuses an H264 substitute", a
   await f.jobs.idle();
   expect((await broken.request(input)).state).toBe("failed");
 });
+
+test("preview resolution is pinned and gives each draft size its own artifact", async () => {
+  const requests: (number | null | undefined)[] = [];
+  const f = await fixture({
+    ...renderer,
+    async render(request, signal) {
+      requests.push(request.maxLongEdge);
+      const value = await renderer.render(request, signal);
+      return request.maxLongEdge === null ? value : { ...value, width: 80, height: 48 };
+    },
+  });
+  const full = await f.preview.request({ projectId: f.projectId });
+  const draft = await f.preview.request({ projectId: f.projectId, maxLongEdge: 80 });
+  expect(draft.jobId).not.toBe(full.jobId);
+  await f.jobs.idle();
+  expect(requests).toEqual([null, 80]);
+  expect((await f.preview.request({ projectId: f.projectId, maxLongEdge: 80 })).state).toBe("ready");
+});
 test("pins an old revision through edits, repeated admission and cache eviction", async () => {
   const started = gate(),
     release = gate();

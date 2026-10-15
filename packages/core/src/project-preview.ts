@@ -36,6 +36,8 @@ export type ProjectPreviewInput = {
   projectId: string;
   revisionId?: string | undefined;
   range?: { startUs: number; endUs: number } | undefined;
+  /** Optional long-edge bound for a draft preview; exports never use this. */
+  maxLongEdge?: number | null | undefined;
   settings?: OutputSettingsInput | undefined;
   /** Internal retained intent binding; public requests omit this field. */
   implementationId?: string | undefined;
@@ -60,6 +62,7 @@ export type ProjectMovieRenderer = ProjectRenderSupport & {
       prepared?: PreparedAudioRead | undefined;
       model: import("@yap/composition").ValidatedComposition;
       window: CompositionWindow;
+      maxLongEdge: number | null;
       assets: readonly CompositionAssetBinding[];
       fonts: readonly ImmutableAssetBinding[];
       luts: readonly ImmutableAssetBinding[];
@@ -74,6 +77,7 @@ export type PinnedProjectPreview = {
   projectId: string;
   revisionId: string;
   range: { startUs: number; endUs: number };
+  maxLongEdge: number | null;
   settings: OutputSettings;
   implementationId: string;
   retimeImplementationId?: string | undefined;
@@ -83,6 +87,7 @@ const optionsSchema = z
   .object({
     preparedResourceId: z.string().min(1).nullable().optional(),
     range: rangeSchema,
+    maxLongEdge: z.int().positive().max(8192).nullable().default(null),
     settings: resolvedOutputSettingsSchema,
     implementationId: z.string().min(1),
     retimeImplementationId: z.string().min(1).optional(),
@@ -149,6 +154,7 @@ export class ProjectPreviewInspection {
       projectId: input.projectId,
       revisionId: plan.window.manifest.revisionId,
       range: plan.window.manifest.range,
+      maxLongEdge: input.maxLongEdge ?? null,
       settings,
       implementationId: this.renderer.implementationId,
       ...(retime ? { retimeImplementationId: retime } : {}),
@@ -299,7 +305,13 @@ export class ProjectPreviewInspection {
           : undefined;
       const render = () =>
         this.renderer.render(
-          { ...plan, prepared, settings: options.data.settings, output: output.path },
+          {
+            ...plan,
+            prepared,
+            maxLongEdge: options.data.maxLongEdge,
+            settings: options.data.settings,
+            output: output.path,
+          },
           signal,
         );
       const movie = this.renderer.pointers
@@ -317,11 +329,12 @@ export class ProjectPreviewInspection {
         file: output.path,
         codec: options.data.settings.video.codec,
         durationUs: options.data.range.endUs - options.data.range.startUs,
-        maxLongEdge: null,
+        maxLongEdge: options.data.maxLongEdge,
       });
       if (
-        movie.width !== plan.window.manifest.canvas.width ||
-        movie.height !== plan.window.manifest.canvas.height
+        options.data.maxLongEdge === null &&
+        (movie.width !== plan.window.manifest.canvas.width ||
+          movie.height !== plan.window.manifest.canvas.height)
       )
         throw new CatalogError("INVALID_RESPONSE", "Renderer changed the pinned canvas");
       const evidence = audioProcessingEvidenceSchema

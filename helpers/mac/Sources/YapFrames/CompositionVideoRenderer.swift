@@ -9,6 +9,7 @@ public enum CompositionVideoRenderer {
         public let frames: String
         public let range: TimeSpan
         let canvas: CompositionPictureExecutor.Canvas
+        public let maxLongEdge: Int?
         public let settings: OutputSettings
         public let processing: [CompositionProcessing]
         public let assets: [CompositionAsset]
@@ -19,14 +20,29 @@ public enum CompositionVideoRenderer {
         let pointers: PreparedPointersReceipt?
         public func validateOutput(hasAudio: Bool) throws {
             try canvas.validate()
+            let delivered = try deliveredSize()
             try settings.validate(
-                width: canvas.width, height: canvas.height,
+                width: delivered.width, height: delivered.height,
                 frameRate: Double(canvas.fps.numerator) / Double(canvas.fps.denominator),
                 hasAudio: hasAudio)
         }
+        public func deliveredSize() throws -> (width: Int, height: Int) {
+            guard let maxLongEdge else { return (canvas.width, canvas.height) }
+            guard maxLongEdge >= 2, maxLongEdge <= 8192 else {
+                throw CompositionVideoRenderer.invalid("Preview long edge is outside 2...8192.")
+            }
+            let sourceLongEdge = max(canvas.width, canvas.height)
+            guard sourceLongEdge > maxLongEdge else { return (canvas.width, canvas.height) }
+            let scale = Double(maxLongEdge) / Double(sourceLongEdge)
+            let scaledWidth = Int((Double(canvas.width) * scale).rounded(.down))
+            let scaledHeight = Int((Double(canvas.height) * scale).rounded(.down))
+            let width = max(2, scaledWidth - scaledWidth % 2)
+            let height = max(2, scaledHeight - scaledHeight % 2)
+            return (width, height)
+        }
         public func replacingOutput(_ path: String) -> Self {
             Self(
-                output: path, frames: frames, range: range, canvas: canvas, settings: settings,
+                output: path, frames: frames, range: range, canvas: canvas, maxLongEdge: maxLongEdge, settings: settings,
                 processing: processing, assets: assets, fonts: fonts, luts: luts, lutImplementationId: lutImplementationId, sdrCorrectionImplementationId: sdrCorrectionImplementationId, pointers: pointers)
         }
     }
@@ -58,6 +74,7 @@ public enum CompositionVideoRenderer {
         -> Result
     {
         let canvas = request.canvas
+        let delivered = try request.deliveredSize()
         guard request.range.startUs >= 0, request.range.endUs > request.range.startUs,
             request.range.endUs <= TimeSpan.maximumMicroseconds
         else {
@@ -65,13 +82,13 @@ public enum CompositionVideoRenderer {
         }
         try request.validateOutput(hasAudio: false)
         let pictures = try CompositionPictureExecutor(
-            canvas: canvas, deliveredSize: (canvas.width, canvas.height), bindings: request.assets, fonts: request.fonts ?? [], luts: request.luts ?? [], lutImplementationId: request.lutImplementationId, pointers: request.pointers, sdrCorrectionImplementationId: request.sdrCorrectionImplementationId)
+            canvas: canvas, deliveredSize: delivered, bindings: request.assets, fonts: request.fonts ?? [], luts: request.luts ?? [], lutImplementationId: request.lutImplementationId, pointers: request.pointers, sdrCorrectionImplementationId: request.sdrCorrectionImplementationId)
         let output = try NewFile(at: request.output, assembledAs: "video.mp4")
         defer { output.discard() }
         let writer = try AVAssetWriter(outputURL: output.url, fileType: .mp4)
         defer { if writer.status == .writing { writer.cancelWriting() } }
         let settings = try request.settings.videoDictionary(
-            width: canvas.width, height: canvas.height,
+            width: delivered.width, height: delivered.height,
             frameRate: Double(canvas.fps.numerator) / Double(canvas.fps.denominator))
         guard writer.canApply(outputSettings: settings, forMediaType: .video) else {
             throw unsupported("Video profile cannot encode this canvas.")
@@ -84,8 +101,8 @@ public enum CompositionVideoRenderer {
             assetWriterInput: video,
             sourcePixelBufferAttributes: [
                 kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: canvas.width,
-                kCVPixelBufferHeightKey as String: canvas.height,
+                kCVPixelBufferWidthKey as String: delivered.width,
+                kCVPixelBufferHeightKey as String: delivered.height,
                 kCVPixelBufferIOSurfacePropertiesKey as String: [:],
             ])
         guard writer.startWriting() else {
@@ -170,8 +187,8 @@ public enum CompositionVideoRenderer {
         return Result(
             file: request.output, settings: request.settings, encodedVideo: encodedVideo,
             durationUs: through - request.range.startUs,
-            width: canvas.width,
-            height: canvas.height, frames: frames, rasterizedFrames: pictures.rasterized,
+            width: delivered.width,
+            height: delivered.height, frames: frames, rasterizedFrames: pictures.rasterized,
             pointerRasterizations: pictures.pointerRasterizations,
             decodedImages: pictures.decodedImages, decodedSamples: pictures.decodedSamples,
             readerOpens: pictures.opens,

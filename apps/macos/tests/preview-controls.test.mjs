@@ -145,8 +145,8 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         pinned.owner.tick()
         await until { !pinned.view.movies.isEmpty || !pinned.failures.values.isEmpty }
         precondition(pinned.failures.values.isEmpty)
-        precondition(NSDictionary(dictionary: pinned.service.calls[0].1).isEqual(to: ["projectId": id]))
-        precondition(NSDictionary(dictionary: pinned.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision]))
+        precondition(NSDictionary(dictionary: pinned.service.calls[0].1).isEqual(to: ["projectId": id, "maxLongEdge": 960]))
+        precondition(NSDictionary(dictionary: pinned.service.calls[1].1).isEqual(to: ["projectId": id, "revisionId": revision, "maxLongEdge": 960]))
         precondition(pinned.view.movies[0].0 == originalMovie["file"] as! String && pinned.view.movies[0].1 == "video/mp4")
         // With no name known for the project, its identifiers still stay out of the title.
         precondition(pinned.view.titles.last == "Project preview")
@@ -193,7 +193,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
                 retry.view.retry?()
                 await until { !retry.view.movies.isEmpty }
                 let request = retry.service.calls.first { $0.0 == "preview.retry" }!.1
-                precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision]))
+                precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision, "maxLongEdge": 960]))
             }
             retry.owner.close()
             if !dependency { await until { retry.service.closed == [token] } }

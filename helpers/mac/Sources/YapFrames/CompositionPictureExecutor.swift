@@ -280,7 +280,7 @@ public final class CompositionPictureExecutor {
         let destination = try await allocate(nil)
         context.render(
             image, to: destination,
-            bounds: CGRect(x: 0, y: 0, width: canvas.width, height: canvas.height),
+            bounds: CGRect(x: 0, y: 0, width: deliveredSize.width, height: deliveredSize.height),
             colorSpace: color)
         CVBufferSetAttachment(
             destination, kCVImageBufferCGColorSpaceKey, color, .shouldPropagate)

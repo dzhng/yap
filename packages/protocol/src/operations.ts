@@ -181,6 +181,7 @@ const exportDestination = {
 const previewParams = project
   .extend({
     revisionId: id.optional(),
+    maxLongEdge: z.int().positive().max(8192).nullable().optional(),
     settings: outputSettingsSchema.optional(),
     range: range
       .refine(({ startUs, endUs }) => endUs > startUs, {
@@ -1356,7 +1357,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Request a playable MP4 of a pinned project. Projects accept an optional range in project microseconds; omitted range renders the whole project. Returns readiness until complete; pin the returned revision when polling. CLI writes a file; MCP returns a delivery token for artifact.read/close.",
+      "Request a playable MP4 of a pinned project. Projects accept an optional range in project microseconds and an optional maxLongEdge draft bound; omitted range renders the whole project. Returns readiness until complete; pin the returned revision when polling. CLI writes a file; MCP returns a delivery token for artifact.read/close.",
     ),
   z
     .object({

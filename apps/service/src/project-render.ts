@@ -378,6 +378,7 @@ export function projectMovieRenderer(
             frames,
             range: manifest.range,
             canvas: manifest.canvas,
+            maxLongEdge: request.maxLongEdge,
             ...pictureRecipe,
             settings: request.settings,
             processing: nativeProcessing(request.window.processing()),

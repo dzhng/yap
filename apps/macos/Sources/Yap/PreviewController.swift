@@ -27,6 +27,9 @@ extension PreviewPresenting {
 /// this owner holds no copied movie, edit plan, or rendering job.
 @MainActor
 final class PreviewController {
+    /// Library playback favors a bounded draft raster; callers that need the full canvas use the
+    /// public preview operation with `maxLongEdge: null`.
+    private let draftMaxLongEdge = 960
     typealias Call = @MainActor (String, [String: Any]) async throws -> Data
     private let call: Call
     private let presentation: any PreviewPresenting
@@ -168,6 +171,7 @@ final class PreviewController {
                     var params: [String: Any] = target.parameters
                     if let pinnedRevision { params["revisionId"] = pinnedRevision }
                     if let range { params["range"] = range }
+                    params["maxLongEdge"] = draftMaxLongEdge
                     let data = try await call(requestOperation, params)
                     // Decode the lease separately so a late or otherwise invalid ready answer
                     // releases the service pin rather than leaving it until expiration.
