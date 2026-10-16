@@ -315,6 +315,24 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         progressive.owner.close()
         await until { progressive.service.closed == ["partial-token", "full-token"] }
 
+        let answerRangeProgressive = Rig(start)
+        var answerRangePartial = selecting(target, ready, token: "answer-range-partial-token")
+        answerRangePartial = movie(answerRangePartial) { value in value.removeValue(forKey: "range") }
+        answerRangePartial["range"] = ["startUs": 0, "endUs": 10_000_000]
+        var answerRangeFull = selecting(target, ready, token: "answer-range-full-token")
+        answerRangeFull = movie(answerRangeFull) { value in value.removeValue(forKey: "range") }
+        answerRangeFull["range"] = ["startUs": 0, "endUs": 40_000_000]
+        answerRangeProgressive.service.answer("preview.get", answerRangePartial)
+        answerRangeProgressive.service.answer("preview.get", answerRangeFull)
+        answerRangeProgressive.owner.open(target.id)
+        await until { answerRangeProgressive.view.movies.count == 1 }
+        await until { answerRangeProgressive.service.count("preview.get") == 2 }
+        answerRangeProgressive.view.ended?()
+        await until { answerRangeProgressive.view.movies.count == 2 }
+        precondition(answerRangeProgressive.view.starts == [nil, 10_000_000])
+        answerRangeProgressive.owner.close()
+        await until { answerRangeProgressive.service.closed == ["answer-range-partial-token", "answer-range-full-token"] }
+
         let offsetProgressive = Rig(start)
         var offsetPartial = selecting(target, ready, token: "offset-partial-token")
         offsetPartial = movie(offsetPartial) { value in value["range"] = ["startUs": 20_000_000, "endUs": 30_000_000] }
@@ -343,6 +361,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         await until { wrongContinuation.view.movies.count == 1 }
         await until { wrongContinuation.service.count("preview.get") == 2 }
         wrongContinuation.view.ended?()
+        precondition(wrongContinuation.view.messages.last?.0.hasPrefix("Preparing the rest of the preview") == true)
         await until { wrongContinuation.service.closed == ["wrong-full-token"] }
         precondition(wrongContinuation.view.movies.count == 1)
         wrongContinuation.owner.close()

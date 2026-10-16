@@ -217,8 +217,10 @@ final class PreviewController {
                         lease = delivered
                         renewAt = now().addingTimeInterval(10)
                         polling = false
-                        let partial = self.isPartial(movie)
-                        if partial, let playbackRange = movie.playbackRange { partialEndUs = playbackRange.endUs }
+                        let partial = self.isPartial(movie, answerRange: answer.range)
+                        if partial, let playbackRange = movie.playbackRange ?? answer.range {
+                            partialEndUs = playbackRange.endUs
+                        }
                         playInitial(title: title, movie: movie, partial: partial, generation: current)
                         if partial { beginContinuation(title: title, generation: current, revisionId: answer.revisionId) }
                     } else if delivered != nil {
@@ -258,12 +260,12 @@ final class PreviewController {
         return ["startUs": start, "endUs": min(end, start + 10_000_000)]
     }
 
-    private func isPartial(_ movie: Answer.Movie) -> Bool {
+    private func isPartial(_ movie: Answer.Movie, answerRange: Answer.PlaybackRange?) -> Bool {
         if let range, let start = range["startUs"] as? Int, let end = range["endUs"] as? Int,
             end - start <= 10_000_000 { return false }
         guard let requested = initialPreviewRange(), let end = requested["endUs"] as? Int,
             let start = requested["startUs"] as? Int,
-            let actual = movie.playbackRange else { return false }
+            let actual = movie.playbackRange ?? answerRange else { return false }
         return actual.startUs == Int64(start) && actual.endUs == Int64(end)
     }
 
@@ -302,7 +304,7 @@ final class PreviewController {
                     }
                     if answer.state == "ready", let movie = answer.published?.output, let delivered,
                         movie.target == target, movie.revisionId == revisionId,
-                        continuationRangeMatches(movie),
+                        continuationRangeMatches(movie, answerRange: answer.range),
                         movie.mediaType == "video/mp4", movie.bytes > 0,
                         !delivered.token.isEmpty, delivered.bytes == movie.bytes,
                         delivered.expiresAt > self.now().timeIntervalSince1970 * 1000,
@@ -329,11 +331,16 @@ final class PreviewController {
         }
     }
 
-    private func continuationRangeMatches(_ movie: Answer.Movie) -> Bool {
-        guard let range else { return true }
-        guard let start = range["startUs"] as? Int, let end = range["endUs"] as? Int,
-            let actual = movie.playbackRange else { return false }
-        return actual.startUs == Int64(start) && actual.endUs == Int64(end)
+    private func continuationRangeMatches(_ movie: Answer.Movie, answerRange: Answer.PlaybackRange?) -> Bool {
+        if let range {
+            guard let start = range["startUs"] as? Int, let end = range["endUs"] as? Int,
+                let actual = movie.playbackRange ?? answerRange else { return false }
+            return actual.startUs == Int64(start) && actual.endUs == Int64(end)
+        }
+        if let answerRange, let movieRange = movie.playbackRange {
+            return answerRange.startUs == movieRange.startUs && answerRange.endUs == movieRange.endUs
+        }
+        return true
     }
 
     private var playerViewIsEnded = false
@@ -342,6 +349,7 @@ final class PreviewController {
         guard generation == self.generation, let full = continuationLease, let movie = continuationMovie,
             let partialEndUs else {
             playerViewIsEnded = true
+            presentation.show(title: title, message: "Preparing the rest of the preview…", canRetry: false)
             return
         }
         let fullStartUs = Int64((range?["startUs"] as? Int) ?? 0)
@@ -396,16 +404,18 @@ final class PreviewController {
     private struct Answer: Decodable {
         let target: MediaTarget
         let revisionId: String
+        let range: PlaybackRange?
         let state: String
         let reason: String?
         let retryable: Bool?
         let dependency: Dependency?
         let published: Published?
-        private enum Keys: String, CodingKey { case revisionId, state, reason, retryable, dependency, published }
+        private enum Keys: String, CodingKey { case revisionId, range, state, reason, retryable, dependency, published }
         init(from decoder: Decoder) throws {
             let fields = try decoder.container(keyedBy: Keys.self)
             target = try MediaTarget(from: decoder)
             revisionId = try fields.decode(String.self, forKey: .revisionId)
+            range = try fields.decodeIfPresent(PlaybackRange.self, forKey: .range)
             state = try fields.decode(String.self, forKey: .state)
             reason = try fields.decodeIfPresent(String.self, forKey: .reason)
             retryable = try fields.decodeIfPresent(Bool.self, forKey: .retryable)
@@ -413,6 +423,7 @@ final class PreviewController {
             published = try fields.decodeIfPresent(Published.self, forKey: .published)
         }
         struct Dependency: Decodable { let artifact: String }
+        struct PlaybackRange: Decodable { let startUs: Int64; let endUs: Int64 }
         struct Published: Decodable { let output: Movie }
         struct Movie: Decodable {
             let target: MediaTarget
@@ -420,8 +431,7 @@ final class PreviewController {
             let file: String
             let mediaType: String
             let bytes: Int64
-            let playbackRange: PlaybackRange?
-            struct PlaybackRange: Decodable { let startUs: Int64; let endUs: Int64 }
+            let playbackRange: Answer.PlaybackRange?
             private enum Keys: String, CodingKey { case revisionId, file, mediaType, bytes, range }
             init(from decoder: Decoder) throws {
                 let fields = try decoder.container(keyedBy: Keys.self)

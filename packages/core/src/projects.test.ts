@@ -264,9 +264,9 @@ test("independent catalog writers reject a stale head and keep project paginatio
     /in project/,
   );
   const page = store.list({ limit: 1 });
-  expect(page.projects.map((p) => p.title)).toEqual(["One"]);
+  expect(page.projects.map((p) => p.title)).toEqual(["Two"]);
   expect(store.list({ ...page.nextCursor!, limit: 1 }).projects.map((p) => p.title)).toEqual([
-    "Two",
+    "One",
   ]);
   expect(() =>
     store.history(second.project.projectId, {
@@ -275,6 +275,23 @@ test("independent catalog writers reject a stale head and keep project paginatio
       throughOrdinal: 0,
     }),
   ).toThrow(/cursor/);
+});
+
+test("project pages are newest first and continue below the last project", async () => {
+  const { store } = await setup();
+  const first = store.create({ requestId: "first", title: "First", canvas });
+  const second = store.create({ requestId: "second", title: "Second", canvas });
+  const third = store.create({ requestId: "third", title: "Third", canvas });
+
+  const page = store.list({ limit: 2 });
+  expect(page.projects.map((project) => project.projectId)).toEqual([
+    third.project.projectId,
+    second.project.projectId,
+  ]);
+  expect(page.nextCursor).toEqual({ afterSequence: 2 });
+  expect(
+    store.list({ ...page.nextCursor!, limit: 2 }).projects.map((project) => project.projectId),
+  ).toEqual([first.project.projectId]);
 });
 
 test("deletion fences reads and replayed edits, survives restart, and retains creation identity", async () => {

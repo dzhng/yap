@@ -417,7 +417,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
         .strict(),
     })
     .strict()
-    .describe("Read a bounded page of managed projects."),
+    .describe("Read a bounded page of managed projects, newest first."),
   z
     .object({ operation: z.literal("inspect.open"), params: inspectParams })
     .strict()

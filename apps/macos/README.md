@@ -75,7 +75,8 @@ handlers Settings uses, so the command line keeps them while the service is down
 Updater relaunch preserves the selected home/defaults and suppresses launch Settings.
 
 The [library controller](Sources/Yap/LibraryController.swift) presents
-source facts and caller-created projects separately. Last-good observations survive
+source facts and caller-created projects separately, with project pages ordered newest first.
+Last-good observations survive
 read errors; generations fence delayed replies after deletion, page changes or
 service replacement. A recording becoming ready cannot silently create a composition.
 

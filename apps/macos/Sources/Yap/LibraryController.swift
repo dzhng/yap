@@ -146,7 +146,7 @@ final class LibraryController {
                 guard service == serviceGeneration && generation == projectGeneration else { return }
                 guard page.projects.count <= 5,
                     Set(page.projects.map(\.projectId)).count == page.projects.count,
-                    page.nextCursor.map({ $0.afterSequence > (cursor?.afterSequence ?? 0) }) ?? true else {
+                    page.nextCursor.map({ $0.afterSequence > 0 && $0.afterSequence < (cursor?.afterSequence ?? Int.max) }) ?? true else {
                     throw Self.invalid("Unreadable project page or cursor")
                 }
                 state.projects = page.projects.filter { state.deletions[.project($0.projectId)] == nil }

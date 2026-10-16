@@ -21,6 +21,7 @@ public struct LibraryState: Equatable, Sendable {
         public init(beforeSequence: Int) { self.beforeSequence = beforeSequence }
     }
     public struct ProjectCursor: Codable, Equatable, Sendable {
+        /// The last sequence in a newest-first page; the next page contains lower sequences.
         public let afterSequence: Int
         public init(afterSequence: Int) { self.afterSequence = afterSequence }
     }

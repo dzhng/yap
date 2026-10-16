@@ -251,17 +251,20 @@ export class ProjectStore {
     if (!row) throw new CatalogError("NOT_FOUND", "Project does not exist", { projectId });
     return row as Project;
   }
+  /** Pages are newest first; afterSequence anchors the next page below the prior page's tail. */
   list(input: { afterSequence?: number; limit?: number } = {}) {
     const limit = input.limit ?? 250,
-      after = input.afterSequence ?? 0;
+      after = input.afterSequence;
     pageLimit(limit);
-    if (!Number.isSafeInteger(after) || after < 0)
+    if (after !== undefined && (!Number.isSafeInteger(after) || after < 0))
       throw new CatalogError("INVALID_PARAMS", "Invalid project cursor");
+    const where =
+      after === undefined || after === 0 ? "deletedAt IS NULL" : "deletedAt IS NULL AND sequence<?";
     const rows = this.store.catalog
       .prepare(
-        `SELECT sequence,${projectColumns} FROM projects WHERE deletedAt IS NULL AND sequence>? ORDER BY sequence LIMIT ?`,
+        `SELECT sequence,${projectColumns} FROM projects WHERE ${where} ORDER BY sequence DESC LIMIT ?`,
       )
-      .all(after, limit + 1);
+      .all(...(after === undefined || after === 0 ? [limit + 1] : [after, limit + 1]));
     return {
       projects: rows.slice(0, limit).map((row) => omit(row, "sequence") as Project),
       nextCursor:

@@ -31,6 +31,8 @@ import AVKit
         content.layoutSubtreeIfNeeded()
         precondition(bars().isEmpty, "With no revision history there is no bar")
         precondition(player().frame.height >= content.bounds.height - 1, "The video fills the window")
+        precondition((player() as! AVPlayerView).videoGravity == .resizeAspect,
+                     "Preview preserves the whole video frame instead of zooming to fill")
         let video = player().frame
         precondition(abs(video.width / video.height - 16.0 / 9.0) < 0.02, "The video area is 16:9: \(video.size)")
         // The controller offers Export before the revision history arrives.

@@ -57,6 +57,9 @@ final class PreviewWindow: NSObject, PreviewPresenting, NSWindowDelegate {
         let view = AVPlayerView(frame: container.bounds)
         view.autoresizingMask = [.width, .height]
         view.controlsStyle = .floating
+        // Project canvases are not guaranteed to be 16:9. Preserve every source pixel in the
+        // preview instead of letting a fixed window crop the edges to fill its bounds.
+        view.videoGravity = .resizeAspect
         view.showsSharingServiceButton = false
         view.allowsVideoFrameAnalysis = false
         container.addSubview(view)

@@ -29,6 +29,8 @@ request, and the receipt still carries the pinned processing evidence.
 - A partial receipt is playable and explicitly bounded. The controller only
   hands off after the full receipt is ready, at the partial boundary in the
   selected movie's clock.
+- The service range in the preview answer is the fallback boundary when the nested movie
+  descriptor does not repeat that range; the handoff remains pinned to the same selected interval.
 - Delivery leases are released on close, replacement, invalid answers, playback
   failure and handoff. Source media and project revisions remain untouched.
 - Draft preview settings never flow into export. Callers that need the canvas
