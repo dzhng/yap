@@ -6,6 +6,12 @@ The capture menu keeps its dark appearance after selecting a recording area and
 shows the latest recording below the action buttons with Play and Copy agent prompt
 actions. Screen recordings now include the pointer in the captured video.
 
+## 0.1.50
+
+Project previews continue past the fast ten-second draft, preserve the full video frame,
+and show progress while the full continuation is rendering. Projects in the Library are
+now listed newest first.
+
 ## 0.1.49
 
 Project previews now start with playable video and audio in a few seconds, then
