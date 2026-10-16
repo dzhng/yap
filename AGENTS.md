@@ -36,6 +36,12 @@ Never loosen a requirement to make a check pass. A narrow pass proves a narrow c
 
 Don't wait on a long run. Start it in the background and keep working. Give it a visible sign of progress and a point where you stop, and never repeat a failure unchanged.
 
+When a user reports a bug in an installed app, reproduce it through the installed public operation on the exact project or revision they named. Record the app, service and native implementation versions; a source checkout, pushed commit or synthetic fixture is not evidence of what they run.
+
+For a visual or media bug, the user's exact project and reported framing own the fixture. Synthetic scenes are supplemental. If the original media is too large to check in, retain the exact project document and a representative frame with its source time and dimensions.
+
+A fix is shipped only after the tagged package is built, published and the installed runtime reports that tag. Never call a pushed source commit the latest installed version while the app still reports an older release.
+
 ## What the viewer sees and hears
 
 Look at the actual output. A passing check is not evidence that a frame reads well or a cut sounds clean.

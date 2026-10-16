@@ -61,3 +61,10 @@ architecture manual.
 how customer agents use the installed product. Package and feature READMEs own
 their local contracts; the code and protocol schemas remain the source of truth
 for exact behavior.
+
+When a user reports a bug in a released app, the exact installed project and
+reported framing are the acceptance target. Preserve that project document and
+a representative frame when practical, reproduce through the public operation,
+and record the installed app, service and native implementation versions. A
+source checkout or synthetic fixture can supplement this evidence but cannot
+replace it.
