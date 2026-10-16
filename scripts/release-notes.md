@@ -6,6 +6,11 @@ The capture menu keeps its dark appearance after selecting a recording area and
 shows the latest recording below the action buttons with Play and Copy agent prompt
 actions. Screen recordings now include the pointer in the captured video.
 
+## 0.1.51
+
+Project previews now scale the complete authored canvas into their fast delivery
+buffer, so reduced-resolution previews keep the same framing as the full export.
+
 ## 0.1.50
 
 Project previews continue past the fast ten-second draft, preserve the full video frame,
