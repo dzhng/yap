@@ -87,6 +87,11 @@ if CommandLine.arguments.contains("--composition-downscale") {
     finish()
 }
 
+if CommandLine.arguments.contains("--composition-project-downscale") {
+    try await verifyCompositionProjectDownscale(in: images)
+    finish()
+}
+
 try verifyFaceObservations(in: images)
 try verifyPictureObservations(in: images)
 try await verifySDRCorrection(in: images)

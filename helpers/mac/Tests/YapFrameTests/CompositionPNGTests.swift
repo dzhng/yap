@@ -6,20 +6,29 @@ import Foundation
 @testable import YapFrames
 import YapMedia
 
-private func compositionPNGRequest(source: URL, output: URL, translation: Int = 0) throws
+private func compositionPNGRequest(
+    source: URL,
+    output: URL,
+    translation: Int = 0,
+    canvasWidth: Int = 320,
+    canvasHeight: Int = 240,
+    sourceWidth: Int = 320,
+    sourceHeight: Int = 240,
+    operationsOverride: [[String: Any]]? = nil
+) throws
     -> CompositionFrameRenderer.Request
 {
     let clip: [String: Any] = ["kind": "clip", "id": "c"]
-    let operations: [[String: Any]] = [
+    let operations: [[String: Any]] = operationsOverride ?? [
         ["kind": "clamp", "x": 0.5, "y": 0.5, "width": 319, "height": 239],
         ["kind": "affine", "matrix": [1, 0, 0, 1, translation, 0]],
-        ["kind": "coverage", "width": 320, "height": 240,
-         "points": [["x": translation, "y": 0], ["x": 320 + translation, "y": 0],
-                    ["x": 320 + translation, "y": 240], ["x": translation, "y": 240]]],
+        ["kind": "coverage", "width": canvasWidth, "height": canvasHeight,
+         "points": [["x": translation, "y": 0], ["x": canvasWidth + translation, "y": 0],
+                    ["x": canvasWidth + translation, "y": canvasHeight], ["x": translation, "y": canvasHeight]]],
     ]
     let layer: [String: Any] = [
         "kind": "image", "clipId": "c", "trackId": "t", "assetId": "a", "streamId": "image:0",
-        "availability": "available", "width": 320, "height": 240,
+        "availability": "available", "width": sourceWidth, "height": sourceHeight,
     ]
     let visual: [[String: Any]] = [
         ["target": clip, "inputs": [], "operations": operations],
@@ -31,7 +40,7 @@ private func compositionPNGRequest(source: URL, output: URL, translation: Int = 
     ]
     let body: [String: Any] = [
         "output": output.path, "profile": "h264-rec709", "processing": [], "frame": frame,
-        "canvas": ["width": 320, "height": 240, "fps": ["numerator": 30, "denominator": 1], "background": "#000000ff"],
+        "canvas": ["width": canvasWidth, "height": canvasHeight, "fps": ["numerator": 30, "denominator": 1], "background": "#000000ff"],
         "assets": [["assetId": "a", "streamId": "image:0", "path": source.path, "originUs": 0]],
         "maxLongEdge": 320,
     ]
@@ -266,4 +275,37 @@ func verifyCompositionMovieDownscale(in directory: URL) async throws {
         try encodePNG(preview).write(to: directory.appendingPathComponent("preview-candidate.png"))
     }
     print("PASS downscaled movie frames preserve the complete composition canvas")
+}
+
+func verifyCompositionProjectDownscale(in directory: URL) async throws {
+    guard let sourcePath = ProcessInfo.processInfo.environment["YAP_COMPOSITION_SOURCE"] else {
+        preconditionFailure("YAP_COMPOSITION_SOURCE is required for the project fixture")
+    }
+    let source = URL(fileURLWithPath: sourcePath)
+    let request = try compositionPNGRequest(
+        source: source,
+        output: directory.appendingPathComponent("unused-project-downscale.png"),
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
+        operationsOverride: [])
+    let executor = try CompositionPictureExecutor(
+        canvas: request.canvas, deliveredSize: (960, 540), bindings: request.assets)
+    var buffer: CVPixelBuffer?
+    precondition(CVPixelBufferCreate(nil, 960, 540, kCVPixelFormatType_32BGRA,
+        [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &buffer) == kCVReturnSuccess)
+    let rendered = try await executor.render(request.frame) { retained in
+        precondition(retained == nil)
+        return buffer!
+    }
+    if let evidence = ProcessInfo.processInfo.environment["YAP_FRAME_EVIDENCE"] {
+        let context = CIContext()
+        guard let preview = context.createCGImage(
+            CIImage(cvPixelBuffer: rendered), from: CGRect(x: 0, y: 0, width: 960, height: 540)) else {
+            preconditionFailure("Could not capture the project downscale fixture")
+        }
+        try encodePNG(preview).write(to: URL(fileURLWithPath: evidence).appendingPathComponent("preview-candidate.png"))
+    }
+    print("PASS exact project frame scales to the complete preview canvas")
 }

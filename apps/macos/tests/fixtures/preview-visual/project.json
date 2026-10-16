@@ -1,11 +1,4437 @@
 {
-  "id": "preview-canvas-fixture",
-  "canvas": { "width": 320, "height": 240 },
-  "preview": { "maxLongEdge": 160 },
-  "layers": [
-    { "id": "top-left", "color": "red" },
-    { "id": "top-right", "color": "green" },
-    { "id": "bottom-left", "color": "blue" },
-    { "id": "bottom-right", "color": "yellow" }
-  ]
+  "projectId": "b071876f-8470-485d-8918-c056168030f4",
+  "revisionId": "8f551f16-a69c-4fa8-ad70-e1178a21c675",
+  "title": "Yap launch video — edited by Claude",
+  "document": {
+    "canvas": {
+      "width": 1920,
+      "height": 1080,
+      "fps": {
+        "numerator": 30000,
+        "denominator": 1001
+      },
+      "background": "#fbf7efff"
+    },
+    "tracks": [
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "kind": "video",
+        "order": 10
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:1",
+        "kind": "video",
+        "order": 20
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "kind": "video",
+        "order": 30
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "kind": "video",
+        "order": 31
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "kind": "video",
+        "order": 32
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:5",
+        "kind": "video",
+        "order": 33
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "kind": "video",
+        "order": 40
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:7",
+        "kind": "video",
+        "order": 50
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "kind": "audio",
+        "order": 10
+      },
+      {
+        "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:9",
+        "kind": "audio",
+        "order": 20
+      }
+    ],
+    "groups": [],
+    "clips": [
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:10",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 5000000,
+            "endUs": 8500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:11",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 6100000,
+            "endUs": 14400000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 6400000,
+            "endUs": 14700000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:12",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 14700000,
+            "endUs": 23700000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 15300000,
+            "endUs": 24300000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:13",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 24050000,
+            "endUs": 28260000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 19040000,
+            "endUs": 23250000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:14",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 28410000,
+            "endUs": 32430000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 28100000,
+            "endUs": 32120000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:15",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 32680000,
+            "endUs": 34020000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 32260000,
+            "endUs": 33600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:16",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 34020000,
+            "endUs": 38500000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 42470000,
+            "endUs": 46950000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:17",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 38500000,
+            "endUs": 41220000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 50400000,
+            "endUs": 53120000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:18",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 41620000,
+            "endUs": 55460000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 55860000,
+            "endUs": 69700000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:19",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 55810000,
+            "endUs": 69120000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 24400000,
+            "endUs": 37710000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:20",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 71900000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 69620000,
+            "endUs": 71700000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:21",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 72000000,
+            "endUs": 75220000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 75880000,
+            "endUs": 79100000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:22",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 75670000,
+            "endUs": 81230000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 41040000,
+            "endUs": 46600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:23",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 81530000,
+            "endUs": 84150000
+          }
+        },
+        "assetId": "30c41c0159c5b6afb9de93fe89a61460ccf658113065cdd7468211d51298c6e0",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 55780000,
+            "endUs": 58400000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:24",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 92000000,
+            "endUs": 103160000
+          }
+        },
+        "assetId": "9ddcb13cdb1828ef05ef608dfc00d986654d01f09a1c4a7b4cacd61753c6c8fc",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 35440000,
+            "endUs": 46600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:28",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 103460000,
+            "endUs": 111300000
+          }
+        },
+        "assetId": "9ddcb13cdb1828ef05ef608dfc00d986654d01f09a1c4a7b4cacd61753c6c8fc",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 54120000,
+            "endUs": 61960000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:32",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 111750000,
+            "endUs": 118670000
+          }
+        },
+        "assetId": "9ddcb13cdb1828ef05ef608dfc00d986654d01f09a1c4a7b4cacd61753c6c8fc",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 121560000,
+            "endUs": 128480000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:36",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 119170000,
+            "endUs": 121610000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:2",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 99960000,
+            "endUs": 102400000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:38",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 5000000,
+            "endUs": 8500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:39",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 6100000,
+            "endUs": 14700000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 6400000,
+            "endUs": 15000000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:40",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 14700000,
+            "endUs": 24050000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 15300000,
+            "endUs": 24650000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:41",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 24050000,
+            "endUs": 26730000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 165083651,
+            "endUs": 167763651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:42",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 26730000,
+            "endUs": 28410000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 168347487,
+            "endUs": 170027487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:43",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 28410000,
+            "endUs": 32680000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 174727487,
+            "endUs": 178997487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:44",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 32680000,
+            "endUs": 34020000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 32260000,
+            "endUs": 33600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:45",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 34020000,
+            "endUs": 38500000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 42470000,
+            "endUs": 46950000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:46",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 38500000,
+            "endUs": 41620000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 50400000,
+            "endUs": 53520000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:47",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 41620000,
+            "endUs": 45760000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 55860000,
+            "endUs": 60000000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:48",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 45760000,
+            "endUs": 47320000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 900000,
+            "endUs": 2460000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:49",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 47320000,
+            "endUs": 54210000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 207603651,
+            "endUs": 214493651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:50",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 54210000,
+            "endUs": 55810000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 68450000,
+            "endUs": 70050000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:51",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 55810000,
+            "endUs": 59410000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 24400000,
+            "endUs": 28000000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:52",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 59410000,
+            "endUs": 60710000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 189600000,
+            "endUs": 190900000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:53",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 60710000,
+            "endUs": 63410000
+          }
+        },
+        "assetId": "7c729d183c2b3afd89a6ef9ccdf761cb5ebae46637124f31fcf9ea2120ccc025",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 6400000,
+            "endUs": 9100000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:54",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 63410000,
+            "endUs": 64510000
+          }
+        },
+        "assetId": "cf82c2388b0e1861e5a6c47bb2f5c77cd131fd162949eb9fb89e3a91ec43ab3b",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 4850000,
+            "endUs": 5950000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:55",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 64510000,
+            "endUs": 69820000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 33100000,
+            "endUs": 38410000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:56",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 69620000,
+            "endUs": 71800000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:57",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 72000000,
+            "endUs": 75670000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 75880000,
+            "endUs": 79550000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:58",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 75670000,
+            "endUs": 81530000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 41040000,
+            "endUs": 46900000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:59",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 81530000,
+            "endUs": 84350000
+          }
+        },
+        "assetId": "30c41c0159c5b6afb9de93fe89a61460ccf658113065cdd7468211d51298c6e0",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 55780000,
+            "endUs": 58600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:60",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 92000000,
+            "endUs": 97680000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 34903651,
+            "endUs": 40583651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:61",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 97680000,
+            "endUs": 98960000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 41167487,
+            "endUs": 42447487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:62",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 98960000,
+            "endUs": 99960000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 41863651,
+            "endUs": 42863651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:63",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 99960000,
+            "endUs": 101360000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 400000,
+            "endUs": 1800000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:64",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 101360000,
+            "endUs": 103460000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 44263651,
+            "endUs": 46363651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:65",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 103460000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 53583651,
+            "endUs": 61873651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:66",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 111750000,
+            "endUs": 119170000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 121023651,
+            "endUs": 128443651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:67",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:0",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 119170000,
+            "endUs": 121760000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 99960000,
+            "endUs": 102550000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:85",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:1",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "4843f3cd58f48e4784e056810d70091d7a85976522e1a5cc868dd79a1b287cd8",
+        "streamId": "image:0",
+        "source": {
+          "kind": "hold",
+          "atUs": 0
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:86",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 5000000,
+            "endUs": 8500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:89",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 151043651,
+            "endUs": 154543651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:93",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 151627487,
+            "endUs": 155127487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:97",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:5",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "7c729d183c2b3afd89a6ef9ccdf761cb5ebae46637124f31fcf9ea2120ccc025",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 400000,
+            "endUs": 3900000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:100",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 47320000,
+            "endUs": 52260000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 61560000,
+            "endUs": 66500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:104",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 47320000,
+            "endUs": 52260000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 208187487,
+            "endUs": 213127487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:108",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 47320000,
+            "endUs": 52260000
+          }
+        },
+        "assetId": "7c729d183c2b3afd89a6ef9ccdf761cb5ebae46637124f31fcf9ea2120ccc025",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 2000000,
+            "endUs": 6940000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:111",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:1",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "4843f3cd58f48e4784e056810d70091d7a85976522e1a5cc868dd79a1b287cd8",
+        "streamId": "image:0",
+        "source": {
+          "kind": "hold",
+          "atUs": 0
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:112",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 55543651,
+            "endUs": 61873651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:116",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 56127487,
+            "endUs": 62457487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:120",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 1600000,
+            "endUs": 7930000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:123",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:5",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "7c729d183c2b3afd89a6ef9ccdf761cb5ebae46637124f31fcf9ea2120ccc025",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 400000,
+            "endUs": 6730000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:126",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:1",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 52260000,
+            "endUs": 54210000
+          }
+        },
+        "assetId": "4843f3cd58f48e4784e056810d70091d7a85976522e1a5cc868dd79a1b287cd8",
+        "streamId": "image:0",
+        "source": {
+          "kind": "hold",
+          "atUs": 0
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:127",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 52260000,
+            "endUs": 54210000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 66500000,
+            "endUs": 68450000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:130",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 52260000,
+            "endUs": 54210000
+          }
+        },
+        "assetId": "30c41c0159c5b6afb9de93fe89a61460ccf658113065cdd7468211d51298c6e0",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 8550000,
+            "endUs": 10500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:133",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 52260000,
+            "endUs": 54210000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 500000,
+            "endUs": 2450000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:136",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:1",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "4843f3cd58f48e4784e056810d70091d7a85976522e1a5cc868dd79a1b287cd8",
+        "streamId": "image:0",
+        "source": {
+          "kind": "hold",
+          "atUs": 0
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:137",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:2",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "bfe4f1f3c74fa63bc7a61d9bb1456da2ee77cd98219a46b525353950be2ff29e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 69620000,
+            "endUs": 71800000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:140",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:3",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "72b154e882c47e388f9f488af4ffb4e03396d22bb2f585913c9e2eaf6bebd250",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 215663651,
+            "endUs": 217843651
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:144",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:4",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "700ca8936007dd9bf6723119f4c278b4e005c42b0499c7378bf42b9b81d8589e",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 216247487,
+            "endUs": 218427487
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:148",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:5",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 72000000
+          }
+        },
+        "assetId": "5dfa06284dc387ecba39a7bd459486216fa1b0c576834971dfec49f8ee14005f",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 26000000,
+            "endUs": 28180000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:151",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 92000000,
+            "endUs": 103443767
+          }
+        },
+        "assetId": "6169fb8b37dd6ff71681ab7704e414b60c0bd7bcf8419255703bc5de0ddc4ba0",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 11443767
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:152",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 105420000,
+            "endUs": 111750000
+          }
+        },
+        "assetId": "8717c3813003dd74329b23ef26f1788a56edbcc9ee58ec011a9cac8ef525f9fc",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 6330000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:153",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 115190000,
+            "endUs": 119159633
+          }
+        },
+        "assetId": "28c3fd6658f1fee2cfb67ada9e31586e4141e835f6c31fc12546472cdf5fb4b1",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3969633
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:154",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:7",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 92050000,
+            "endUs": 95585867
+          }
+        },
+        "assetId": "70b1a53bf322ec9483b85c94ba561c3f9a7a02ee250b30d54d6bd8aaffb4c97a",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3535867
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:155",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        },
+        "assetId": "20a11a1c2057fb22ae95ad887bc3100b199006b9bbe400b0fa775e6e0e2023cc",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3500000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:156",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 3500000,
+            "endUs": 6100000
+          }
+        },
+        "assetId": "e79be68d527fd7429487557f7bbee8376fb111617748dd8b8ef61a4a23e9c869",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 2600000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:157",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 6450000,
+            "endUs": 9685567
+          }
+        },
+        "assetId": "f3a0a8760088b3599f525a116e1266b394af01801fe80c9769831c09a7cbf681",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3235567
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:158",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 9900000,
+            "endUs": 14700000
+          }
+        },
+        "assetId": "cea5dcc6958a2dc123da8af63dc29218c2d8665c3665dcc5699cd735f1fbe776",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 4800000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:159",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 15500000,
+            "endUs": 19560000
+          }
+        },
+        "assetId": "bf365973d5fd17f00cdfc99a7c7ec31305572708b4cd7620394d1d6726bfc9b3",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 4060000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:160",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 19560000,
+            "endUs": 24050000
+          }
+        },
+        "assetId": "b8257e3410a030fdf542f6863934a6bd3950005326d82bbdd26aeb6177d1bad3",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 4490000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:161",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 26730000,
+            "endUs": 32668267
+          }
+        },
+        "assetId": "372c9b6c92518053eac6812da251f90e8314ea832f2bdc03233303fdedf584b7",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 5938267
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:162",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 32680000,
+            "endUs": 34013667
+          }
+        },
+        "assetId": "82881a40174fb344dacfb76cdb0bd94953224b05b753eca4016575d3ad096cb8",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1333667
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:163",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 34020000,
+            "endUs": 38490133
+          }
+        },
+        "assetId": "04ea65fcfe1a632a0616a17c1e6aeb1dd47526968ef9baecf1310655af98bd57",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 4470133
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:164",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 38500000,
+            "endUs": 41620000
+          }
+        },
+        "assetId": "63d3da83d65f910ee85406378a0dba455c6fecba901ba459c85d5c3b07d6ed54",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3120000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:165",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 44060000,
+            "endUs": 45760000
+          }
+        },
+        "assetId": "1dcbddd4484edbab71395345fa13f2844c104f3490eba7e933ae86be347c22b6",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1700000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:166",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 45760000,
+            "endUs": 47320000
+          }
+        },
+        "assetId": "d8af25458e582a1edf9c20b612cd2571d049754b4395c663864edc0c28c90259",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1560000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:167",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 47320000,
+            "endUs": 52257267
+          }
+        },
+        "assetId": "bb31c337a0583fd5db933aed7670a3c8dfda71df073d49c1f5639293e62b5cea",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 4937267
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:168",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 52260000,
+            "endUs": 54194267
+          }
+        },
+        "assetId": "ed7889f11291107fe5a63f135473919c0c35d3e291c64844c1c8a4dbd31e56ee",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1934267
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:169",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 59410000,
+            "endUs": 60710000
+          }
+        },
+        "assetId": "7c471cf62479df650f01b4ff551f16dbf9ad195996d8e37a15a0de709f3f36e8",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1300000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:170",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 60710000,
+            "endUs": 64510000
+          }
+        },
+        "assetId": "eaeed986c4e33da8f9405e4a82a7bad9b7d02a3046118c0e9964a36c149ddce9",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3800000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:171",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 66710000,
+            "endUs": 69812100
+          }
+        },
+        "assetId": "836458bd9be4891d2ce8b2b68fe572e4353ad5367d49feca2aea914799aec15a",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3102100
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:172",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 69820000,
+            "endUs": 71987833
+          }
+        },
+        "assetId": "b5065dde2ef2d38d030b714cd7871cbc7dd1f6308cafbdbb23696162a3dc6640",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 2167833
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:173",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 74420000,
+            "endUs": 75653567
+          }
+        },
+        "assetId": "9b15f71dad427de6fb6ba849efcec5275b19854a98fa9480c46de5cd4cd495c0",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 1233567
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:174",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 75770000,
+            "endUs": 77990000
+          }
+        },
+        "assetId": "541740fbcf9baa50a3281701b7f09c881b80d8da1ebcf02070da485adc8dcfe7",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 2220000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:175",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 77990000,
+            "endUs": 81525867
+          }
+        },
+        "assetId": "210d6416fde543640e743c81677398e284ff5a90bab9577e108a7bdb7ec1df75",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3535867
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:176",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 84350000,
+            "endUs": 91489467
+          }
+        },
+        "assetId": "485ab614da203c010d3e923e19851dc419f5321691b987fb68fd8a8ac0ede802",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 7139467
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:177",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 119170000,
+            "endUs": 121604767
+          }
+        },
+        "assetId": "2dd17a9fa362d34bc469c015526a0920b0c8686fc3fa689f6c65cc3b8f495623",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 2434767
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:178",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:6",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 121760000,
+            "endUs": 124960000
+          }
+        },
+        "assetId": "bb23688bb885c3e8f6c5ce165a78cd8acc7897c64ec16b247cb481e6f97885db",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 3200000
+          }
+        }
+      },
+      {
+        "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:179",
+        "trackId": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:9",
+        "placement": {
+          "kind": "project",
+          "range": {
+            "startUs": 0,
+            "endUs": 92000000
+          }
+        },
+        "assetId": "0a10fad47b6f89eb40a3a6d9e86ad8c44b4207495fbaff634e9d41e7e67174da",
+        "streamId": "track:1",
+        "source": {
+          "kind": "range",
+          "range": {
+            "startUs": 0,
+            "endUs": 92000000
+          }
+        }
+      }
+    ],
+    "syncGroups": [],
+    "processing": [
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:100"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:101",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 700,
+                "y": 120,
+                "width": 2560,
+                "height": 1440
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:102",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 1370,
+                "y": 40,
+                "width": 510,
+                "height": 287
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:103",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 15,
+                      "denominator": 494
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 43,
+                      "denominator": 494
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 237,
+                      "denominator": 247
+                    },
+                    "value": 1,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 1,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:104"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:105",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 0,
+                "y": 71,
+                "width": 2890,
+                "height": 1626
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:106",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 1370,
+                "y": 393,
+                "width": 510,
+                "height": 287
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:107",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 35,
+                      "denominator": 494
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 63,
+                      "denominator": 494
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 237,
+                      "denominator": 247
+                    },
+                    "value": 1,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 1,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:108"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:109",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 1370,
+                "y": 747,
+                "width": 510,
+                "height": 287
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:110",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 55,
+                      "denominator": 494
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 83,
+                      "denominator": 494
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 237,
+                      "denominator": 247
+                    },
+                    "value": 1,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 1,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:112"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:113",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:114",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:115",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 28,
+                      "denominator": 633
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:116"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:117",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 0,
+                "y": 71,
+                "width": 2890,
+                "height": 1626
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:118",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:119",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 4,
+                      "denominator": 211
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 40,
+                      "denominator": 633
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:120"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:121",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:122",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 8,
+                      "denominator": 211
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 52,
+                      "denominator": 633
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:123"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:124",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:125",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 12,
+                      "denominator": 211
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 64,
+                      "denominator": 633
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:127"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:128",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 30,
+                "y": 371,
+                "width": 600,
+                "height": 338
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:129",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 28,
+                      "denominator": 195
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:130"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:131",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 660,
+                "y": 371,
+                "width": 600,
+                "height": 338
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:132",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 2,
+                      "denominator": 39
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 38,
+                      "denominator": 195
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:133"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:134",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 1290,
+                "y": 371,
+                "width": 600,
+                "height": 338
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:135",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 4,
+                      "denominator": 39
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 16,
+                      "denominator": 65
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:137"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:138",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:139",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 14,
+                      "denominator": 109
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:140"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:141",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:142",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:143",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 4,
+                      "denominator": 109
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 18,
+                      "denominator": 109
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:144"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:145",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 0,
+                "y": 71,
+                "width": 2890,
+                "height": 1626
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:146",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:147",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 8,
+                      "denominator": 109
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 22,
+                      "denominator": 109
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:148"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:149",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:150",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 12,
+                      "denominator": 109
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 26,
+                      "denominator": 109
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:179"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:180",
+            "enabled": true,
+            "processor": {
+              "type": "gain",
+              "gain": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 7,
+                      "denominator": 1840
+                    },
+                    "value": 0.08,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 29,
+                      "denominator": 920
+                    },
+                    "value": 0.12,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 7,
+                      "denominator": 184
+                    },
+                    "value": 0.22,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 119,
+                      "denominator": 1840
+                    },
+                    "value": 0.22,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 129,
+                      "denominator": 1840
+                    },
+                    "value": 0.06,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 21,
+                      "denominator": 23
+                    },
+                    "value": 0.06,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 169,
+                      "denominator": 184
+                    },
+                    "value": 0.24,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 1,
+                      "denominator": 1
+                    },
+                    "value": 0.24,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:24"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:25",
+            "enabled": true,
+            "processor": {
+              "type": "rnnoise",
+              "mix": 0.85
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:26",
+            "enabled": true,
+            "processor": {
+              "type": "gain",
+              "gain": 4.8
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:27",
+            "enabled": true,
+            "processor": {
+              "type": "limiter",
+              "ceilingDbfs": -3,
+              "lookaheadMs": 5,
+              "releaseMs": 80
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:28"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:29",
+            "enabled": true,
+            "processor": {
+              "type": "rnnoise",
+              "mix": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0.85,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 683,
+                      "denominator": 784
+                    },
+                    "value": 0.85,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 13,
+                      "denominator": 14
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:30",
+            "enabled": true,
+            "processor": {
+              "type": "gain",
+              "gain": 4.8
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:31",
+            "enabled": true,
+            "processor": {
+              "type": "limiter",
+              "ceilingDbfs": -3,
+              "lookaheadMs": 5,
+              "releaseMs": 80
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:32"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:33",
+            "enabled": true,
+            "processor": {
+              "type": "rnnoise",
+              "mix": 0.85
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:34",
+            "enabled": true,
+            "processor": {
+              "type": "gain",
+              "gain": 4.8
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:35",
+            "enabled": true,
+            "processor": {
+              "type": "limiter",
+              "ceilingDbfs": -3,
+              "lookaheadMs": 5,
+              "releaseMs": 80
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:36"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:37",
+            "enabled": true,
+            "processor": {
+              "type": "gain",
+              "gain": 1.6
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:38"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:68",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 200,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "y": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 180,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "width": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 3840,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 3200,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "height": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 2160,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 1800,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:41"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:69",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:42"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:70",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 56
+                      },
+                      "value": 0,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 125,
+                        "denominator": 168
+                      },
+                      "value": 595,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "y": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 71,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 56
+                      },
+                      "value": 71,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 125,
+                        "denominator": 168
+                      },
+                      "value": 754,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "width": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 2890,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 56
+                      },
+                      "value": 2890,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 125,
+                        "denominator": 168
+                      },
+                      "value": 1700,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "height": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1626,
+                      "interpolation": "hold"
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 56
+                      },
+                      "value": 1626,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 125,
+                        "denominator": 168
+                      },
+                      "value": 956,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:43"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:71",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 595,
+                "y": 754,
+                "width": 1700,
+                "height": 956
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:47"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:72",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 700,
+                "y": 120,
+                "width": 2560,
+                "height": 1440
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:49"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:73",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:50"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:74",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 700,
+                "y": 120,
+                "width": 2560,
+                "height": 1440
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:52"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:75",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:57"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:76",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 800,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 160,
+                        "denominator": 367
+                      },
+                      "value": 0,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "y": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 200,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 160,
+                        "denominator": 367
+                      },
+                      "value": 0,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "width": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 2560,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 160,
+                        "denominator": 367
+                      },
+                      "value": 3840,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "height": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1440,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 160,
+                        "denominator": 367
+                      },
+                      "value": 2160,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:60"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:77",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:61"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:78",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 0,
+                "y": 71,
+                "width": 2890,
+                "height": 1626
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:62"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:79",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:64"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:80",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:81",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 21
+                      },
+                      "value": 180,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "y": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 21
+                      },
+                      "value": 70,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "width": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1920,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 21
+                      },
+                      "value": 1536,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "height": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1080,
+                      "interpolation": {
+                        "cubic": [
+                          0.45,
+                          0,
+                          0.2,
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "at": {
+                        "numerator": 5,
+                        "denominator": 21
+                      },
+                      "value": 864,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:65"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:82",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:66"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:83",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:84",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 210,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "y": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 0,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 90,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "width": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1920,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 1536,
+                      "interpolation": "hold"
+                    }
+                  ]
+                },
+                "height": {
+                  "keys": [
+                    {
+                      "at": {
+                        "numerator": 0,
+                        "denominator": 1
+                      },
+                      "value": 1080,
+                      "interpolation": "linear"
+                    },
+                    {
+                      "at": {
+                        "numerator": 1,
+                        "denominator": 1
+                      },
+                      "value": 864,
+                      "interpolation": "hold"
+                    }
+                  ]
+                }
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:86"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:87",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:88",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 2,
+                      "denominator": 25
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:89"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:90",
+            "enabled": true,
+            "processor": {
+              "type": "sdr-correction",
+              "exposureEV": -0.15,
+              "contrast": 1.04,
+              "saturation": 1,
+              "shadows": 0.1,
+              "highlights": 0.45,
+              "neutralKelvin": 5600,
+              "neutralTint": 0
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:91",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 23,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:92",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 1,
+                      "denominator": 35
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 19,
+                      "denominator": 175
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:93"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:94",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "crop": {
+                "x": 0,
+                "y": 71,
+                "width": 2890,
+                "height": 1626
+              },
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1920,
+                "height": 1080
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:95",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 40,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:96",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 2,
+                      "denominator": 35
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 24,
+                      "denominator": 175
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "clip",
+          "id": "clip:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:97"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:98",
+            "enabled": true,
+            "processor": {
+              "type": "geometry",
+              "rect": {
+                "x": 980,
+                "y": 551,
+                "width": 900,
+                "height": 506
+              },
+              "fit": "cover"
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:99",
+            "enabled": true,
+            "processor": {
+              "type": "opacity",
+              "opacity": {
+                "keys": [
+                  {
+                    "at": {
+                      "numerator": 0,
+                      "denominator": 1
+                    },
+                    "value": 0,
+                    "interpolation": "hold"
+                  },
+                  {
+                    "at": {
+                      "numerator": 3,
+                      "denominator": 35
+                    },
+                    "value": 0,
+                    "interpolation": "linear"
+                  },
+                  {
+                    "at": {
+                      "numerator": 29,
+                      "denominator": 175
+                    },
+                    "value": 1,
+                    "interpolation": "hold"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "output"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:182",
+            "enabled": true,
+            "processor": {
+              "type": "limiter",
+              "ceilingDbfs": -11.5,
+              "lookaheadMs": 5,
+              "releaseMs": 80
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:183",
+            "enabled": true,
+            "processor": {
+              "type": "normalization",
+              "mode": "gain-only",
+              "targetIntegratedLufs": -15,
+              "truePeakCeilingDbtp": -1,
+              "maxLoudnessRangeLu": 20
+            }
+          },
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:184",
+            "enabled": true,
+            "processor": {
+              "type": "limiter",
+              "ceilingDbfs": -1.2,
+              "lookaheadMs": 5,
+              "releaseMs": 60
+            }
+          }
+        ]
+      },
+      {
+        "target": {
+          "kind": "track",
+          "id": "track:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:8"
+        },
+        "steps": [
+          {
+            "id": "processingStep:0e5989c3c567514f69bed10fc52ba9cbd3fd92702c84c9e1e375c79bc96c96b8:181",
+            "enabled": true,
+            "processor": {
+              "type": "compressor",
+              "thresholdDbfs": -28,
+              "ratio": 3,
+              "kneeDb": 8,
+              "attackMs": 6,
+              "releaseMs": 140,
+              "makeupGainDb": 2,
+              "detector": {
+                "kind": "input"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "evidence": {
+    "frame": "source-frame.png",
+    "atUs": 20000000,
+    "maxLongEdge": 1920
+  }
 }

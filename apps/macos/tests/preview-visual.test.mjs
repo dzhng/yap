@@ -23,7 +23,11 @@ test(
   { timeout: 180_000 },
   () => {
     const project = JSON.parse(readFileSync(join(fixture, "project.json"), "utf8"));
-    assert.equal(project.preview.maxLongEdge, 160);
+    assert.equal(project.document.canvas.width, 1920);
+    assert.equal(project.document.canvas.height, 1080);
+    assert.equal(project.evidence.maxLongEdge, 1920);
+    const projectFrame = join(fixture, project.evidence.frame);
+    accessSync(projectFrame, constants.R_OK);
     const scratch = mkdtempSync(join("/tmp", "yap-preview-visual-"));
     try {
       const evidence = join(scratch, "evidence");
@@ -37,17 +41,21 @@ test(
           "--package-path",
           join(root, "helpers/mac"),
           "YapFrameTests",
-          "--composition-downscale",
+          "--composition-project-downscale",
         ],
         {
           cwd: root,
           timeout: 120_000,
           stdio: "pipe",
-          env: { ...process.env, YAP_FRAME_EVIDENCE: evidence },
+          env: {
+            ...process.env,
+            YAP_COMPOSITION_SOURCE: projectFrame,
+            YAP_FRAME_EVIDENCE: evidence,
+          },
         },
       );
       const movie = join(scratch, "preview.mp4");
-      const source = join(evidence, "images", "preview-candidate.png");
+      const source = join(evidence, "preview-candidate.png");
       accessSync(source, constants.R_OK);
       execFileSync(
         "ffmpeg",
