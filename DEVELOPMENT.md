@@ -68,3 +68,16 @@ a representative frame when practical, reproduce through the public operation,
 and record the installed app, service and native implementation versions. A
 source checkout or synthetic fixture can supplement this evidence but cannot
 replace it.
+
+For a visual or media bug, the user's exact project and reported framing own the
+fixture. Synthetic scenes are supplemental. If the original media is too large
+to check in, retain the exact project document and a representative frame with
+its source time and dimensions. Compare the old and new output through the same
+public operation, and make the regression fail once against the old behavior
+before accepting the fix.
+
+A fix is shipped only after the tagged package is built, published and the
+installed runtime reports that tag. A pushed source commit is not the latest
+installed version while the app still reports an older release. Verify the
+published release assets and then check the installed app version, CLI version,
+service health and the exact user project again.
