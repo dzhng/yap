@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreGraphics
+import CoreImage
 import CoreVideo
 import Foundation
 @testable import YapFrames
@@ -208,4 +209,61 @@ func verifyCompositionMovieTerminal(in directory: URL) async throws {
         "Translated graph must expose opaque canvas, rather than reuse held pixels")
     try executor.finishPointers()
     print("PASS movie terminal retains held buffer/allocation and Rec.709 attachments; geometry invalidates held pixels")
+}
+
+func verifyCompositionMovieDownscale(in directory: URL) async throws {
+    let source = directory.appendingPathComponent("composition-quadrants.png")
+    var pixels = Data(count: 320 * 240 * 4)
+    pixels.withUnsafeMutableBytes { bytes in
+        let values = bytes.bindMemory(to: UInt8.self)
+        for y in 0..<240 {
+            for x in 0..<320 {
+                let top = y < 120, left = x < 160
+                let color: (UInt8, UInt8, UInt8) =
+                    top && left ? (255, 0, 0) : top ? (0, 255, 0) : left ? (0, 0, 255) : (255, 255, 0)
+                let offset = (y * 320 + x) * 4
+                values[offset] = color.0
+                values[offset + 1] = color.1
+                values[offset + 2] = color.2
+                values[offset + 3] = 255
+            }
+        }
+    }
+    let image = CGImage(width: 320, height: 240, bitsPerComponent: 8, bitsPerPixel: 32,
+        bytesPerRow: 320 * 4, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.last.rawValue),
+        provider: CGDataProvider(data: pixels as CFData)!, decode: nil,
+        shouldInterpolate: false, intent: .defaultIntent)!
+    try encodePNG(image).write(to: source)
+    let request = try compositionPNGRequest(source: source,
+        output: directory.appendingPathComponent("unused-downscale.png"))
+    let executor = try CompositionPictureExecutor(
+        canvas: request.canvas, deliveredSize: (160, 120), bindings: request.assets)
+    var buffer: CVPixelBuffer?
+    precondition(CVPixelBufferCreate(nil, 160, 120, kCVPixelFormatType_32BGRA,
+        [kCVPixelBufferIOSurfacePropertiesKey as String: [:]] as CFDictionary, &buffer) == kCVReturnSuccess)
+    let rendered = try await executor.render(request.frame) { retained in
+        precondition(retained == nil)
+        return buffer!
+    }
+    CVPixelBufferLockBaseAddress(rendered, .readOnly)
+    defer { CVPixelBufferUnlockBaseAddress(rendered, .readOnly) }
+    let bytes = CVPixelBufferGetBaseAddress(rendered)!.assumingMemoryBound(to: UInt8.self)
+    func color(x: Int, y: Int) -> [UInt8] {
+        let offset = y * CVPixelBufferGetBytesPerRow(rendered) + x * 4
+        return Array(UnsafeBufferPointer(start: bytes + offset, count: 4))
+    }
+    let samples = [color(x: 20, y: 20), color(x: 140, y: 20), color(x: 20, y: 100), color(x: 140, y: 100)]
+    precondition(samples == [[0, 0, 255, 255], [0, 255, 0, 255], [255, 0, 0, 255], [0, 255, 255, 255]],
+        "Downscaled quadrants changed orientation or scale: \(samples)")
+    if ProcessInfo.processInfo.environment["YAP_FRAME_EVIDENCE"] != nil {
+        let context = CIContext()
+        let image = CIImage(cvPixelBuffer: rendered)
+        guard let preview = context.createCGImage(
+            image, from: CGRect(x: 0, y: 0, width: 160, height: 120)) else {
+            preconditionFailure("Could not capture the downscaled composition fixture")
+        }
+        try encodePNG(preview).write(to: directory.appendingPathComponent("preview-candidate.png"))
+    }
+    print("PASS downscaled movie frames preserve the complete composition canvas")
 }

@@ -278,8 +278,14 @@ public final class CompositionPictureExecutor {
         }
         let image = try compose(prepared)
         let destination = try await allocate(nil)
+        // Composition operations are authored in canvas coordinates. A preview can use a
+        // smaller delivery buffer, but that must scale the complete canvas into the buffer;
+        // rendering the unscaled image with smaller bounds would crop its top-left quadrant.
+        let deliveredImage = image.transformed(by: CGAffineTransform(
+            scaleX: CGFloat(deliveredSize.width) / CGFloat(canvas.width),
+            y: CGFloat(deliveredSize.height) / CGFloat(canvas.height)))
         context.render(
-            image, to: destination,
+            deliveredImage, to: destination,
             bounds: CGRect(x: 0, y: 0, width: deliveredSize.width, height: deliveredSize.height),
             colorSpace: color)
         CVBufferSetAttachment(

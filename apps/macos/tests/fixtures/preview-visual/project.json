@@ -1,0 +1,11 @@
+{
+  "id": "preview-canvas-fixture",
+  "canvas": { "width": 320, "height": 240 },
+  "preview": { "maxLongEdge": 160 },
+  "layers": [
+    { "id": "top-left", "color": "red" },
+    { "id": "top-right", "color": "green" },
+    { "id": "bottom-left", "color": "blue" },
+    { "id": "bottom-right", "color": "yellow" }
+  ]
+}

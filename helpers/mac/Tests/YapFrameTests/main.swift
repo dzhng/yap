@@ -82,6 +82,11 @@ if CommandLine.arguments.contains("--blend-modes") {
     finish()
 }
 
+if CommandLine.arguments.contains("--composition-downscale") {
+    try await verifyCompositionMovieDownscale(in: images)
+    finish()
+}
+
 try verifyFaceObservations(in: images)
 try verifyPictureObservations(in: images)
 try await verifySDRCorrection(in: images)
