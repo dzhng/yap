@@ -61,6 +61,7 @@ const closeUps = async (layout, hostFace) => {
 };
 const eyeShare = (face, crop) => (face.y + 0.4 * face.height - crop.y) / crop.height;
 const guestFace = { x: 2400, y: 900, width: 400, height: 400 };
+const EYE = { multicam: 0.36, single: 0.45 }; // square (single) frames the eyes lower to keep headroom
 
 test("host and guest close-ups show heads the same size at the same eye height", async () => {
   const hostFace = { x: 1100, y: 800, width: 300, height: 300 };
@@ -70,18 +71,18 @@ test("host and guest close-ups show heads the same size at the same eye height",
       ["HOST", hostFace],
       ["GUEST", guestFace],
     ])
-      assert.ok(Math.abs(eyeShare(face, crops[view]) - 0.36) < 0.002, `${layout} ${view} eye line`);
+      assert.ok(Math.abs(eyeShare(face, crops[view]) - EYE[layout]) < 0.002, `${layout} ${view} eye line`);
     const ratio = hostFace.height / crops.HOST.height / (guestFace.height / crops.GUEST.height);
     assert.ok(Math.abs(ratio - 1) < 0.01, `${layout} head sizes match, ratio ${ratio}`);
   }
 });
 
 test("a close-up that would leave the frame shrinks around the eye line instead of shifting", async () => {
-  // Low and near the left edge: shifting the crop back into frame would drop her eyes below 36%.
+  // Low and near the left edge: shifting the crop back into frame would drop her eyes below the eye line.
   const hostFace = { x: 550, y: 1500, width: 300, height: 300 };
   for (const layout of ["multicam", "single"]) {
     const crop = (await closeUps(layout, hostFace)).HOST;
-    assert.ok(Math.abs(eyeShare(hostFace, crop) - 0.36) < 0.002, `${layout} eye line`);
+    assert.ok(Math.abs(eyeShare(hostFace, crop) - EYE[layout]) < 0.002, `${layout} eye line`);
     assert.ok(
       crop.x >= 0 && crop.y >= 0 && crop.x + crop.width <= 3840 && crop.y + crop.height <= 2160,
     );

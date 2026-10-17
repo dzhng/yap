@@ -5,21 +5,23 @@ const S = 1_000_000;
 export const CALLS = ["keep", "trim", "cut", "decide"];
 // Virtual cameras as a fraction of the source height; widths follow from the aspect. From a
 // 3840x2160 source: 16:9 WIDE 3840x2160, TWO 2880x1620, GUEST/HOST 2400x1350, GUEST_TIGHT
-// 1920x1080; 1:1 WIDE 2160, TWO 2000, GUEST/HOST 1400, GUEST_TIGHT 1150; a split half 1240x1395.
+// 1920x1080; 1:1 WIDE 2160, TWO 2000, GUEST/HOST 1640, GUEST_TIGHT 1380; a split half 1240x1395.
 const HEIGHTS = {
   "16:9": { WIDE: 1, TWO: 0.75, GUEST: 0.625, GUEST_TIGHT: 0.5, HOST: 0.625 },
   "1:1": {
     WIDE: 1,
     TWO: 2000 / 2160,
-    GUEST: 1400 / 2160,
-    GUEST_TIGHT: 1150 / 2160,
-    HOST: 1400 / 2160,
+    GUEST: 1640 / 2160,
+    GUEST_TIGHT: 1380 / 2160,
+    HOST: 1640 / 2160,
   },
 };
 const SPLIT_HALF = 1395 / 2160; // one 8:9 crop per person, each filling half of a 16:9 frame
 const LAYOUTS = { multicam: "16:9", single: "1:1", split: "16:9" };
 const EYE_IN_FACE = 0.4; // the eye line sits this far down a detected face box
-const EYE_IN_CROP = 0.36; // and this far down every crop (rule of thirds, with headroom)
+// and this far down every crop (rule of thirds, with headroom). Square sits lower: a guest seated low in
+// the frame otherwise forces a tight square crop whose hair touches the top edge.
+const EYE_IN_CROP = { "16:9": 0.36, "1:1": 0.45 };
 const ROTATION = ["GUEST", "WIDE", "GUEST_TIGHT", "GUEST", "TWO", "GUEST_TIGHT"];
 const PHONE = "host looks down: guest";
 const KEY_LINE = "key line";
@@ -192,6 +194,7 @@ export async function planShots(request) {
     throw failure("INVALID_REQUEST", "The split layout is 16:9");
   const source = manifest.source;
   const sizes = viewSizes(aspect, source, request.views);
+  const eyeInCrop = EYE_IN_CROP[aspect];
   const minUs = request.minShotUs ?? 3 * S;
   const maxUs = request.maxShotUs ?? 12 * S;
   const longUs = request.longAnswerUs ?? 15 * S;
@@ -227,7 +230,7 @@ export async function planShots(request) {
   };
   const place = (point, width, height) => ({
     x: Math.round(clamp(point.cx - width / 2, 0, source.width - width)),
-    y: Math.round(clamp(point.eye - EYE_IN_CROP * height, 0, source.height - height)),
+    y: Math.round(clamp(point.eye - eyeInCrop * height, 0, source.height - height)),
     width,
     height,
   });
@@ -239,8 +242,8 @@ export async function planShots(request) {
     const height = size.height * k;
     const fit = Math.min(
       1,
-      (source.height - point.eye) / ((1 - EYE_IN_CROP) * height),
-      point.eye / (EYE_IN_CROP * height),
+      (source.height - point.eye) / ((1 - eyeInCrop) * height),
+      point.eye / (eyeInCrop * height),
       point.cx / (width / 2),
       (source.width - point.cx) / (width / 2),
     );

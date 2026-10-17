@@ -14,14 +14,16 @@ Sizes from a 3840x2160 source (the planner scales them to the source height):
 | --- | --- | --- | --- |
 | WIDE | 3840x2160 | 2160x2160 | chapter openers, breathers in long answers |
 | TWO | 2880x1620 | 2000x2000 | long host questions, exchanges |
-| GUEST | 2400x1350 | 1400x1400 | guest speaking, host on phone |
-| GUEST_TIGHT | 1920x1080 | 1150x1150 | key lines, every other long-answer beat |
-| HOST | 2400x1350 | 1400x1400 | host questions |
+| GUEST | 2400x1350 | 1640x1640 | guest speaking, host on phone |
+| GUEST_TIGHT | 1920x1080 | 1380x1380 | key lines, every other long-answer beat |
+| HOST | 2400x1350 | 1640x1640 | host questions |
 | SPLIT half | 1240x1395 (8:9) | - | one person per half of a 16:9 frame |
 
 **Framing.** Frame by the eye line, not the top of the face box: eye line = face top
-+ 0.4 x face height, placed 36% down the crop, head centred. Close-ups framed on the
-face top made heads too big and touching the top edge.
++ 0.4 x face height, placed 36% down a 16:9 crop (45% down a square one), head
+centred. Close-ups framed on the face top made heads too big and touching the top
+edge. Square sits lower because a guest seated low in a wide frame otherwise forces a
+crop so tight that the hair touches the top.
 
 **Equal heads.** Single-person crops scale with that person's measured face height
 relative to the guest's, so host and guest heads read the same size on screen.
