@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import {
   folderFor,
   isPackageId,
+  unsupportedIndex,
   type PresetFile,
   type PresetIndex,
   type PresetKind,
@@ -167,11 +168,9 @@ export async function installPackages(
       swept.add(resolve(target));
     }
     const index = await source.index();
-    if (index.format !== 1) {
-      report.failed.push({
-        id: "index",
-        reason: `unsupported preset index format: ${String(index.format)}`,
-      });
+    const unsupported = unsupportedIndex(index);
+    if (unsupported) {
+      report.failed.push({ id: "index", reason: unsupported });
       return report;
     }
     const receipt = readReceipt(target);

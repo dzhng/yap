@@ -7,7 +7,7 @@ import {
   readReceipt,
 } from "./preset-install.js";
 import { readLocalIds } from "./preset-store.js";
-import type { PresetIndex } from "./preset-format.js";
+import { unsupportedIndex, type PresetIndex } from "./preset-format.js";
 
 export type RefreshState = {
   checkedAt: string | null;
@@ -113,7 +113,9 @@ export class PresetRefresh {
     const source = this.options.source();
     try {
       const index = await source.index();
-      this.lastRemoteIds = index.packages.map((pkg) => pkg.id);
+      // Read nothing else from an index this app can't understand; the installer reports it.
+      const supported = !unsupportedIndex(index);
+      if (supported) this.lastRemoteIds = index.packages.map((pkg) => pkg.id);
       // An id-scoped refresh owns that preset plus the shared kit and guide.
       const owned = (remote: { id: string; kind: string }) =>
         !id || remote.id === id || remote.kind === "kit" || remote.kind === "authoring";
@@ -157,7 +159,7 @@ export class PresetRefresh {
         error: report.failed.length
           ? report.failed.map((failure) => `${failure.id}: ${failure.reason}`).join("; ")
           : null,
-        available: this.available(index),
+        available: supported ? this.available(index) : [],
         bytesDone: this.currentState.bytesDone,
       };
       return report;

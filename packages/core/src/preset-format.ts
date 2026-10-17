@@ -29,6 +29,11 @@ const ENTRY = new Map<string, PresetKind>([
 ]);
 
 /** The folder a package installs to: a preset under its id, kit and authoring under their kind. */
+/** Why an index can't be read by this app, or null when its format is the one it knows. */
+export function unsupportedIndex(index: { format?: unknown }): string | null {
+  return index.format === 1 ? null : `unsupported preset index format: ${String(index.format)}`;
+}
+
 export function folderFor(pkg: Pick<PresetManifest, "id" | "kind">): string {
   return pkg.kind === "preset" ? pkg.id : pkg.kind;
 }
@@ -305,7 +310,16 @@ export function validateTree(
       new Map([...files].filter(([path]) => path.startsWith(prefix))),
       policy,
     );
-    if (parsed.ok) manifests.push(parsed.manifest);
+    // Installs fetch each package from folderFor(manifest), so it must be this folder.
+    if (parsed.ok && folderFor(parsed.manifest) !== item.name)
+      issues.push(
+        issue(
+          "id-folder",
+          `${parsed.manifest.kind} ${parsed.manifest.id} belongs in ${folderFor(parsed.manifest)}/, not ${item.name}/`,
+          item.name,
+        ),
+      );
+    else if (parsed.ok) manifests.push(parsed.manifest);
     else
       for (const found of parsed.issues)
         issues.push(

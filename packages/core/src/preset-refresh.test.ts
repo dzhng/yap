@@ -237,3 +237,18 @@ it("remembers every id in the last remote index and lets callers wait for a run 
   expect(refresh.remoteIds()).toEqual(new Set(["official"]));
   await rm(root, { recursive: true, force: true });
 });
+
+it("an index in a format this app doesn't know is refused before any of it is read", async () => {
+  const root = await mkdtemp(join(tmpdir(), "preset-refresh-format-"));
+  const future = { format: 2, bundles: [pkg("official", 1)] } as unknown as PresetIndex;
+  const refresh = new PresetRefresh({
+    root,
+    source: () => sourceFor(future, {}),
+    clock: fakeClock(),
+  });
+  const report = await refresh.run();
+  expect(report.failed).toEqual([{ id: "index", reason: "unsupported preset index format: 2" }]);
+  expect(refresh.remoteIds()).toEqual(new Set());
+  expect(refresh.state().available).toEqual([]);
+  await rm(root, { recursive: true, force: true });
+});

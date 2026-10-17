@@ -166,6 +166,25 @@ describe("preset format", () => {
     expect(manifests).toEqual([]);
   });
 
+  test.each([
+    ["a kit outside kit/", "kits/KIT.md", "---\nid: kit\nversion: 1\n---\nKit.\n"],
+    [
+      "a preset nested one folder deep",
+      "foo/bar/PRESET.md",
+      "---\nid: bar\nversion: 1\n---\n## Any footage\n\n## Shoot\n## Edit\n",
+    ],
+  ])(
+    "%s is refused, because installs fetch packages from their own folder",
+    async (_name, path, text) => {
+      const root = await mkdtemp(join(tmpdir(), "preset-format-folder-"));
+      await mkdir(join(root, path, ".."), { recursive: true });
+      await writeFile(join(root, path), text);
+      const { issues, manifests } = validateTree(root);
+      expect(issues.map((found) => found.code)).toContain("id-folder");
+      expect(manifests).toEqual([]);
+    },
+  );
+
   test("changing one byte changes exactly one package index entry", () => {
     const first = parsePackage(preset(), { origin: "repo" });
     const changed = preset();
