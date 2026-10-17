@@ -33,6 +33,8 @@ function baseIndex() {
       return undefined;
     }
   }
+  // The merge base describes the repository's presets, not another tree.
+  if (root !== join(repo, "presets")) return undefined;
   try {
     const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
       cwd: repo,

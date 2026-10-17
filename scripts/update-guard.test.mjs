@@ -4,9 +4,12 @@ import { test } from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const framework = process.env.YAP_SPARKLE_FRAMEWORK;
-if (!framework) throw new Error("Set YAP_SPARKLE_FRAMEWORK to the built fixture framework");
+// The checkout's built framework, as the build and the Sparkle boundary test select it.
+const framework =
+  process.env.YAP_SPARKLE_FRAMEWORK ||
+  fileURLToPath(new URL("../dist/sparkle/Sparkle.framework", import.meta.url));
 
 function runScenario(scenario) {
   const result = spawnSync(

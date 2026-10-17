@@ -3,23 +3,22 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
+// The checkout's built framework, as the build and the Sparkle boundary test select it.
+const framework =
+  process.env.YAP_SPARKLE_FRAMEWORK ||
+  fileURLToPath(new URL("../dist/sparkle/Sparkle.framework", import.meta.url));
+
 test("changed bundles share a scratch certificate requirement while other keys and tampering fail", () => {
-  assert.ok(process.env.YAP_SPARKLE_FRAMEWORK, "select the exact framework to prove");
   const work = mkdtempSync(join(tmpdir(), "yap-signing-test-"));
   let passed = false;
   try {
     const output = join(work, "receipt.json");
     execFileSync(
       process.execPath,
-      [
-        "scripts/signing-lab.mjs",
-        "--framework",
-        process.env.YAP_SPARKLE_FRAMEWORK,
-        "--output",
-        output,
-      ],
+      ["scripts/signing-lab.mjs", "--framework", framework, "--output", output],
       { timeout: 120_000 },
     );
     const receipt = JSON.parse(readFileSync(output, "utf8"));
@@ -66,7 +65,6 @@ test("changed bundles share a scratch certificate requirement while other keys a
 });
 
 test("interruption removes scratch keys and reaps the owned signing child", async () => {
-  assert.ok(process.env.YAP_SPARKLE_FRAMEWORK, "select the exact framework to prove");
   const { spawn } = await import("node:child_process");
   const { existsSync, mkdirSync, writeFileSync } = await import("node:fs");
   const { setTimeout: delay } = await import("node:timers/promises");
@@ -81,13 +79,7 @@ test("interruption removes scratch keys and reaps the owned signing child", asyn
   );
   const child = spawn(
     process.execPath,
-    [
-      "scripts/signing-lab.mjs",
-      "--framework",
-      process.env.YAP_SPARKLE_FRAMEWORK,
-      "--output",
-      output,
-    ],
+    ["scripts/signing-lab.mjs", "--framework", framework, "--output", output],
     {
       stdio: "ignore",
       env: {
