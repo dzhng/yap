@@ -124,5 +124,17 @@
     "cli": true,
     "prompt": "Use the yap skill. I want my product announcement to feel like a quiet craft launch film: hands making something, window light, no one talking. Before touching media, find the right style guidance and tell me what I should shoot. In this trial, do not inspect media, install external tools, prepare models, edit or claim delivery.",
     "bar": "Route through presets, not the general use-case references alone: run yap preset.list, choose tactile-launch-film from its description, read it with preset.get and relay its Shoot guidance and instructions as the next steps. Treat the preset as the user's style choice, not as permission to edit. Report honestly if the service or command is unavailable in this trial rather than inventing preset content. No media inspection, edit or delivery claim."
+  },
+  {
+    "id": "preset-offer-after-styled-project",
+    "cli": true,
+    "prompt": "Use the yap skill. We've finished editing my launch video together this session. Along the way I chose a warm, low-contrast grade, hard cuts only on the beat, lowercase serif captions bottom-left, a quiet piano bed under my voice, and a two-second black beat before the end card. The export is done and I'm happy with it. In this trial, do not inspect media, install external tools, prepare models, edit, export or claim delivery; just wrap up.",
+    "bar": "Offer once, briefly, to save this project's style as a reusable preset, naming the choices it would capture (grade, cut rhythm, caption treatment, music bed, ending beat), and wait for the user's answer. Must not run preset.create, scaffold files or claim a preset was made before the user confirms. No media inspection, edit, export or delivery claim."
+  },
+  {
+    "id": "preset-no-offer-for-mechanical-edit",
+    "cli": true,
+    "prompt": "Use the yap skill. Quick one: I trimmed the dead air from the start and end of my screen recording and it's exported. Thanks, that's all. In this trial, do not inspect media, install external tools, prepare models, edit, export or claim delivery.",
+    "bar": "Close out without offering a preset: a trim of dead air expresses no style the user would reuse. Must not run preset.create or propose saving a style. No media inspection, edit, export or delivery claim."
   }
 ]

@@ -1331,7 +1331,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Create a local preset style bundle from the authoring template. This is unrelated to settings.preset and to the preset field on voice.generate.",
+      "Create a local preset style bundle from the authoring template. Call it only when the user asked for a preset or confirmed an offer to save a project's style. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
     .object({
