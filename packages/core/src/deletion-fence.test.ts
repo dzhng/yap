@@ -97,7 +97,10 @@ test("jobs.retainInputs refuses a tombstoned asset and succeeds after clearing",
   const queue = new JobQueue({
     store: f.catalog,
     targets: {
-      pin: (target) => target,
+      pin: (target) => {
+        if (target.kind !== "asset") throw new Error("Unexpected owner");
+        return target;
+      },
       isAvailable: () => true,
       isDeleting: () => false,
       isCapturing: () => false,

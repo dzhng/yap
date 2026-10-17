@@ -73,7 +73,7 @@ function addProject(
       projectId,
       title,
       "now",
-      revisionIds.at(-1),
+      revisionIds.at(-1) ?? null,
       deletedAt,
       `request-${projectId}`,
       "{}",
