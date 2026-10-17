@@ -18,7 +18,7 @@ descriptions are recorded; no frames, transcripts or on-screen text are kept.
 ## Findings that change the plan
 
 - **Grade LUTs work.** Each draft ships `look.cube`, generated from `look.json` by
-  [make-look-lut.mjs](../../presets/kit/make-look-lut.mjs). Yap applies LUTs in linear sRGB
+  [make-look-lut.mjs](../../../presets/kit/make-look-lut.mjs). Yap applies LUTs in linear sRGB
   with trilinear interpolation. On the `graham-picture.mov` fixture, simulating
   that path matched the display-space grade within about 0.4 luma levels.
 - **Lighting can't be graded in.** On a bright fixture the a16z LUT gives a matte

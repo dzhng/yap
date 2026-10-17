@@ -1,139 +1,166 @@
 # Choices ledger
 
-Decisions made during implementation where the spec was silent, with a verdict.
-Appended per pass. Consolidated when the spec closes.
+Decisions made during implementation where the plan was silent, with a verdict.
+*Sound* means kept on purpose; *provisional* names when to revisit.
 
-## Slice 01 (format and index)
+## Format and index
 
 - **Frontmatter parser:** a restricted parser for flat scalars and a
-  `references:` list, with no YAML dependency. *Sound*: the spec delegated it, and
-  every package uses only that shape.
+  `references:` list, with no YAML dependency. *Sound*: every package uses only
+  that shape. Names the parser would misread (a colon, `#`, quotes, edge spaces)
+  are written JSON-quoted by the scaffold, and the parser undoes JSON escapes, so
+  they round-trip (`preset-scaffold.test.ts`). References are written unquoted; a
+  local path containing ` #` would be cut short. *Provisional*: no such path has
+  appeared.
+- **`## Any footage` is a required section**, like `## Shoot` and `## Edit`.
+  *Sound*: `preset.get` tells the agent to start there, so a preset without it
+  would send the agent nowhere. Added after the final review.
 - **Links inside `authoring/template/` are exempt from the link check.** The
-  template holds placeholders such as `examples/source-slug/…` on purpose.
-  *Sound*: the template is never served as a preset.
-- **A missing `index.json` at the merge base counts every package as new.** *Sound*:
-  that is the case on the first merge; afterwards the check compares versions.
+  template holds placeholders on purpose and is never served as a preset. *Sound*.
+- **A missing `index.json` at the merge base counts every package as new.**
+  *Sound*: that is the first merge; afterwards versions are compared.
 - **An example with no `profile.json` is skipped, not failed.** *Provisional*: it
   lets a new example land before it is measured. Revisit if examples ever ship
   unmeasured.
-- **`presets-index.mjs` checks id against folder itself.** `parsePackage` sees
-  paths relative to the folder, so it can't. *Accepted overlap*: a small,
-  explicit duplicate of one rule, not a second owner of the format.
-- **Dependencies installed in this worktree** with `bun install --frozen-lockfile`,
-  hardlinked from Bun's cache, so vitest and `tsc` could run. Codex's sandbox could
-  not fetch them.
+- **`presets-index.mjs` checks id against folder itself**, because `parsePackage`
+  sees folder-relative paths. *Accepted overlap*: one explicit duplicate rule, not
+  a second owner of the format. The id pattern itself has one owner,
+  `isPackageId` in `preset-format.ts`, used by the installer and the store.
+- **The index check tests examples only against `targets.json`.** Section targets
+  (`targets-teaser.json`, `targets-body.json`) measure parts of an export, and an
+  example's `profile.json` is the whole reference. *Provisional*: revisit if
+  examples ship section profiles. A malformed `profile.json` is skipped like a
+  missing one.
 
-## Slice 02 (install and store)
+## Install and store
 
-- **`local.json` format is `{ "ids": [...] }`**, owned by `PresetStore`. Any other
-  shape is an error. *Sound*: one owner, no compatibility shims. Review caught an
-  earlier draft that accepted four shapes.
+- **`local.json` is `{ "ids": [...] }`, owned by `PresetStore`.** Any other shape
+  is an error. *Sound*: one owner, no compatibility shims.
 - **Conflicts live in `receipt.conflicts`.** A remote preset whose id matches a
-  local one is recorded there and never installed. *Sound*: the receipt only
-  describes what is actually on disk. Review caught an earlier draft that wrote a
-  fake `packages` entry.
-- **Concurrency:** an in-process queue per target directory, no file lock.
+  local one is recorded there and never installed. *Sound*: the receipt describes
+  only what is on disk.
+- **Concurrency is an in-process queue per target directory**, no file lock.
   *Sound*: one service owns `~/.yap/presets/`. Revisit if a second writer appears.
-- **`directorySource` labels its packages `bundled`; any other source defaults to
-  `downloaded`.** *Sound*: matches the two install paths in the spec.
-- **`list()` takes name, description and version from the installed `PRESET.md`.**
-  The receipt's version is the fallback. *Sound*: the file on disk is the truth.
+- **`list()` takes name, description and version from the installed `PRESET.md`**,
+  with the receipt's version as fallback. *Sound*: the file on disk is the truth.
+- **The installer refuses a remote package whose id or kind is outside the
+  format**, and `preset.get` serves only installed or local ids matching it, so a
+  crafted `../x` is not-found. *Sound*: found by the whole-branch review (P1).
 
-## Slice 03 (read operations and bundling)
+## Read and bundling
 
-- **`createPresets` is async and completes installation before returning the facade.**
-  *Sound*: package installation streams and atomically swaps files, so callers never read a
-  partially installed tree.
-- **Unknown ids throw `PresetNotFoundError` with code `PRESET_NOT_FOUND`.**
-  *Sound*: the service's existing error adapter can preserve the normal refusal envelope while
-  keeping the core facade typed.
-- **Instruction templates use uppercase exported constants.**
-  *Sound*: the template strings are public data owned by `preset-instructions`, and the names
-  distinguish them from rendered instruction lists.
-- **A failed bundled install never stops the service.** `createPresets` catches the
-  failure and reports it as `refresh.error` in `preset.list`. *Sound*: presets are an
-  add-on; recording and editing must keep working. Added in review.
-- **`preset.get`'s instructions point at `shoot-plan.svg` and the kit's
-  `measure.mjs` and `check.mjs` by absolute path.** *Sound*: the agent gets paths it
-  can act on directly.
+- **`createPresets` finishes the bundled install before returning**, and a failure
+  is reported as `refresh.error` until the first refresh completes, rather than
+  stopping the service. *Sound*: recording and editing must keep working without
+  presets, and a successful refresh installs what the bundle couldn't.
+- **`preset.get`'s instructions give absolute paths** to `shoot-plan.svg`,
+  `measure.mjs` and `check.mjs`. *Sound*: the agent can act on them directly.
+- **The bundled path is resolved by `main.ts` from `runtime.json`**, not passed
+  through Swift like `ffmpegDirectory`. *Sound*: one owner in TypeScript, no
+  native change.
 
-## Slice 04 (refresh)
+## Refresh
 
-Codex wrote the remote source and the refresh, then stopped twice on "model at
-capacity". Review fixes and the service wiring were done by hand.
+- **Remote tests inject `fetch` instead of running an HTTP fixture server.**
+  *Sound*: same contract (pinned URLs, statuses, streams), and it runs where
+  sockets can't be opened. The plan named a local server.
+- **Timeouts:** one configurable timeout (default 30 s) for each request and for
+  each read of a file stream, with no time or size cap on a whole package file; the
+  index is capped at 4 MiB. *Sound*: no per-preset cap means a large file may take
+  long, but a stalled one may not.
+- **Download, checksum and unreachable-source failures are reported, not
+  refused.** The plan named `PRESET_DOWNLOAD_FAILED` and `PRESET_HASH_MISMATCH`;
+  they became `failed` entries in the update report and `refresh.error`. *Sound*:
+  a refresh covers many packages, and one failure mustn't hide the others'
+  results. The final audit found an unreachable source still escaped as
+  `INTERNAL_ERROR`; `Presets.update` now reports it (`presets.test.ts`).
+- **An id-scoped `preset.update` also refreshes the kit and guide**, and removes
+  only packages it owns. *Sound*: a preset may depend on a newer kit.
+- **Refresh is opt-in for `startProjectService`**; `main.ts` turns it on. *Sound*:
+  dozens of test and harness callers start the service and must not reach the
+  network.
+- **When refresh is off, `preset.update` succeeds with a failed report** and
+  instructions saying nothing was downloaded. *Provisional*: a refusal would also
+  be defensible.
+- **`close()` waits for a run in flight**, and `preset.update`'s instructions name
+  only downloaded presets, not kit or guide updates. *Sound*: whole-branch review
+  (P2).
 
-- **Remote tests inject `fetch` rather than run an HTTP fixture server.** *Sound*:
-  same contract (pinned URLs, statuses, streams), and it runs inside a sandbox
-  that can't listen on sockets. The spec named a local server.
-- **Timeouts:** a request timeout plus a fixed per-read inactivity timeout (30 s
-  default), with no limit on a whole file. *Sound*: there's no per-preset cap, so a
-  large file may take long but a stalled one may not. Review removed a version that
-  scaled per-read timeouts by file size and leaked a timer on every request.
-- **An id-scoped `preset.update id` also refreshes the kit and guide**, and only
-  removes packages it owns. *Sound*: a preset may depend on a newer kit.
-- **Refresh is opt-in for `startProjectService`**; `main.ts` turns it on and
-  `YAP_PRESETS_REFRESH=0` turns it off. *Sound*: about 18 test callers start the
-  service and must not hit the network.
-- **When refresh is off, `preset.update` succeeds with a failed report and
-  instructions saying nothing was downloaded.** *Provisional*: a refusal code would
-  also be defensible. Kept as output-by-default.
-- **`preset.update` uses the `drain` wait budget**, like other long operations.
-  *Sound*.
+## Create and delete
 
-## Slice 06 (skill route)
-
-- **The routing paragraph sits in the skill's "Task references" section.** That is
-  where every other "go read X" pointer lives. *Sound*.
-- **The eval case runs with the CLI available and accepts an honest "unavailable"**
-  when the service can't run in the Linux trial. *Sound*: it grades routing, not
-  native readiness, like the existing `*-reference-routing` cases.
-- **The skill names `preset.create` and `preset.delete` one slice before they
-  exist.** *Provisional*: slice 05 lands next on the same branch, before any
-  release.
-
-## Slice 05
-
-- **Generated ids use Unicode NFKD before dropping non-ASCII characters.** *Sound*: names with accents retain their readable ASCII base while the public id contract stays ASCII.
-- **Local file references must point to regular files.** *Sound*: a directory is not a reference media file and should be refused before any scaffold is written.
-- **Create reads the installed authoring template and instructions.** *Sound*: bundled and refreshed authoring packages are the runtime source of truth, so guide changes reach new local presets without an app release.
-- **Delete reports the original preset path in `trashedPaths`.** *Sound*: that is the path passed to the Trash operation and lets callers identify what was moved.
-- **One `PresetError` base carries code, message and details**, and the service maps
-  it with a single check. *Sound*: review replaced a four-way `instanceof` chain.
-- **Names that the frontmatter parser would misread** (a colon, `#`, quotes, or
-  edge spaces) are written JSON-quoted. *Sound*: found in review; covered by a test.
-- **The create/delete wire test was written by hand.** Codex's sandbox can't open
-  the service socket.
-
-## Slice 07 (proof, part 1)
-
-- **The export proof used the installed Yap 0.1.51, not a dev build.** *Sound*:
-  `edit.apply` and export don't depend on the preset operations, and the installed
-  app has the native media helper this worktree lacks.
-- **The proof grades the video track, not the output.** This is forced by the
-  output-target export bug recorded in slice 07.
-
-## Whole-feature review (Codex, against main)
-
-All five findings were confirmed in the code and fixed, test first.
-
-- **`preset.get` serves only installed or local preset ids** that match the id format.
-  A crafted id such as `../x` returns not-found. *Sound* (P1).
-- **The installer refuses a remote package whose id or kind is outside the format**
-  before building any path from it. A remote index is untrusted input. *Sound* (P1).
-- **`PresetRefresh.close()` waits for a run in flight.** The service awaits it before
-  releasing ownership. *Sound* (P2).
-- **`preset.update` names only downloaded presets** as things to `preset.get`; kit and
-  guide updates aren't presets. *Sound* (P2).
+- **Ids use Unicode NFKD before dropping non-ASCII**, so accented names keep a
+  readable ASCII base ("Café Noir" → `cafe-noir`). *Sound*.
 - **`preset.create` waits for a refresh in flight and reserves every id in the last
-  remote index**, not just newer ones. *Sound* (P2). A preset published after that
-  index can still collide; the installer then records a conflict and the local
-  preset keeps its id.
+  remote index plus installed ids.** *Sound* (P2). A preset published later can
+  still collide; the installer records a conflict and the local preset keeps its id.
+- **Local file references must be regular files.** *Sound*: a directory is
+  refused before anything is written (`presets.test.ts`).
+- **Create reads the installed authoring template and instructions**, so guide
+  changes reach new presets without an app release. *Sound*.
+- **One `PresetError` base carries code, message and details**, mapped by the
+  service in one check. *Sound*.
+- **Trash is injectable**; production uses `/usr/bin/trash`. *Sound*: the wire
+  test uses a fake.
 
-## Presets are moods, not footage requirements
+## Skill route
 
-- **`targets.json` aspects:** grade, loudness and median shot length (cutting rhythm)
-  are `mood`; duration, shot count and longest take are `form`, notes only.
-  *Sound*: form depends on the footage the user gave. Median shot length stays mood
-  because it is how the cut feels, at any length.
-- **`## Shoot` is advice, shown when the user asks what to film or hasn't
-  recorded.** *Sound*: user requirement.
+- **The routing paragraph sits in the skill's "Task references" section**, with
+  the other "go read X" pointers. *Sound*.
+- **The eval case accepts an honest "unavailable"** when the service can't run in
+  the Linux trial. *Sound*: it grades routing, not native readiness.
+
+## Moods, not footage requirements
+
+- **`targets.json` aspects:** grade, loudness and median shot length are `mood`;
+  duration, shot count and longest take are `form`, notes only. *Sound*: form
+  depends on the footage. Median shot length stays mood because it is how the cut
+  feels at any length, except studio-podcast's whole-video median, which the fast
+  teaser dilutes: it is form there, and the teaser and body targets carry the mood
+  median.
+- **A mood FAIL is fixed or explained.** `preset.get`'s instructions say to tell
+  the user why a line stands when the footage can't reach it without breaking it
+  (a low-key range on bright footage). *Sound*: the final review found that "fix
+  every FAIL" would push agents to crush or lift footage, the forcing the mood rule
+  forbids. Eye checks that demanded footage (camera counts, one continuous shot,
+  no speech, fixed lengths) became "as far as the footage allows" or reference
+  notes.
+- **`## Shoot` is advice**, shown when the user asks what to film or hasn't
+  recorded. *Sound*: user requirement.
+
+## Proof
+
+- **The trial ran on installed Yap, not a dev build.** *Sound*: `edit.apply` and
+  export don't depend on the preset operations, and the installed app has the
+  native media helper a worktree lacks. Agents got each preset as files with its
+  rendered `instructions`, because the installed app predates `preset.get`.
+- **Presets say to grade each video track.** On the installed app a LUT on the
+  output failed at export. *Sound* either way: per-track grading also lets an
+  agent balance one shot. The Limits name the failure as Yap 0.1.53 and earlier,
+  because presets refresh into apps that predate the fix.
+
+## Product fixes found by the proof
+
+- **A video processor on the output stack reached the audio program.** The audio
+  lowering (`temporalProcessing().audio` in `packages/composition/src/temporal-processing.ts`)
+  now keeps only processors whose registry `mediaKind` is `audio`, and the native
+  audio renderer's own list of video processors to skip was deleted. A LUT on the
+  output now exports. Test: `lut.test.ts`, "a LUT on the output grades the picture
+  and never reaches the audio program". *Sound*: the processor registry is the one
+  owner of media kind.
+- **A new processing step with an invented `id` got "does not belong to this
+  target".** It now says the id names no existing step and to omit it to add one
+  (`edits.test.ts`). *Sound*.
+- **A text clip with a background box failed its frame read** with "Malformed
+  picture receipt". The native rasteriser joined the ink box with the padded box,
+  and Core Graphics' rect union can lose the last bit, so a flush background
+  reported decoration bounds a hair smaller than the ink, breaking the receipt
+  rule that decoration contains ink. `TextRaster.containing` now widens the
+  reported box to the ink edge; pixels are unchanged, so the renderer version was
+  not bumped (`TextVerticalTests.swift`, `--text-decorations`). *Sound*: the TS
+  receipt schema was right; the native side broke the contract.
+- **The stale picture-step stripping in `apps/service/src/native-processing.ts` was
+  deleted.** With the audio program holding only audio processors, no picture step
+  reaches native metadata. *Sound*.
+- **Not bugs:** `--wait` progress goes to stderr and stdout stays JSON (the agent
+  had merged the streams); concurrent frame reads past the open-delivery bound are
+  refused `LIMIT_EXCEEDED` with `retryable: true`, a deliberate limit.

@@ -35,6 +35,10 @@ replacement, admission, signing and explicit skill-lifecycle boundaries, with
 published-artifact and scoped native/agent evidence. Release publishing remains
 owned by the [tag workflow](../scripts/README.md#versioned-github-releases).
 
+[Presets](done/presets/README.md) records why a preset is a mood bundle that fits
+any footage, how presets ship, refresh daily from this repository and are authored
+locally, and the three-agent proof on one footage set.
+
 [Agent review workflow](done/agent-review-workflow/README.md) records the native
 revision inspection surface, launch-floor catalog boundary, read-only caption and
 layout evidence, timeline selection and revision-pinned Downloads export.
@@ -73,10 +77,6 @@ the mechanics; the archived document owns the reasons and explicit evidence limi
 [App-managed install](app-managed-install/README.md) makes agents the only install
 route: the agent places the app, and the app installs and keeps current the `yap`
 command, the skill and the PATH line. It is built and awaiting its release-day checks.
-
-[Presets](presets/README.md) adds style-specific, skill-like bundles that `yap`
-returns to agents (`preset.list`, `preset.get`, `preset.update`), shipped with the
-app and downloadable from this repository. It is specified but not implemented.
 
 ## Future proposals
 
