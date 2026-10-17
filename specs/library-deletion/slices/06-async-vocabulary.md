@@ -7,9 +7,10 @@
   model status, skill status). Catalog columns keep their existing strings, and
   the mapping happens at the edge, so the catalog stays at format 29.
 - **Every async result** carries `WorkState` plus `jobId`.
-- **`job.get`, `job.retry` and `job.cancel`** own polling and recovery. A per-item
-  `*.retry` survives only where probe P3 found the caller never receives a `jobId`,
-  and its description says so.
+- **`job.get`, `job.retry` and `job.cancel`** own polling and recovery. Probe P3 found every per-item
+  `*.retry` caller receives a `jobId`, so all ten are removed (index, transcript,
+  transcript.render, cursor.render, preview, audio, frame, waveform, spectrogram,
+  export).
 - **Cancels** return the item's status record.
 
 **Seam.** `packages/protocol/src/work.ts` (`WorkState`) plus one mapping function
@@ -30,5 +31,3 @@ state words appear everywhere.
 **Delegated.** The exact state words. They must cover every current state, with
 no synonyms.
 
-**Would change this slice.** P3 finding that most retries have no `jobId`. Then
-keep them, and record the rule.

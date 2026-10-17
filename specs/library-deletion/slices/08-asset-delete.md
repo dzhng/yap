@@ -7,8 +7,8 @@
   - the asset's file, under the publish lock;
   - its transcript generations and `transcripts/assets/<id>`;
   - its imported transcripts and `transcripts/imported/<id>`;
-  - its scene, screenshot-index and alignment generations, plus any others probe
-    P2 added;
+  - its scene, screenshot-index, alignment and speaker generations (probe P2's
+    full list);
   - `derived_cache` entries and `asset_origins` rows (`asset_segments` cascades by
     its foreign key);
   - jobs targeting it.
