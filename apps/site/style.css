@@ -18,6 +18,7 @@
 }
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
 }
 body {
   margin: 0;
@@ -108,8 +109,7 @@ html[data-mode="agent"] [data-set-mode="agent"] {
   z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 0.75rem 1.5rem;
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   backdrop-filter: blur(8px);
@@ -124,6 +124,19 @@ html[data-mode="agent"] [data-set-mode="agent"] {
 .brand .blob {
   width: 30px;
   height: 32px;
+}
+.nav {
+  display: flex;
+  gap: 1.4rem;
+  margin-left: auto;
+  font-size: 0.95rem;
+}
+.nav a {
+  text-decoration: none;
+  color: var(--muted);
+}
+.nav a:hover {
+  color: var(--ink);
 }
 .gh {
   font-weight: 600;
@@ -157,78 +170,17 @@ h1 span {
   font-size: 1.2rem;
 }
 
-.scribble {
-  position: relative;
+/* The artwork is black ink on white; multiply lets the paper and its rules show through. */
+.hero-art img,
+.how img {
+  display: block;
+  width: 100%;
+  height: auto;
+  mix-blend-mode: multiply;
+}
+.hero-art {
   margin: 1.5rem auto 0;
-  max-width: 980px;
-}
-.scribble svg {
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-.tangle {
-  fill: none;
-  stroke: var(--orange);
-  stroke-width: 3.2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw 3.2s cubic-bezier(0.55, 0.1, 0.3, 1) 0.2s forwards;
-}
-.card rect {
-  fill: var(--paper);
-  stroke: var(--ink);
-  stroke-width: 3;
-}
-.card .play {
-  fill: var(--coral);
-}
-.card {
-  opacity: 0;
-  transform-origin: 910px 140px;
-  animation: pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) 3.2s forwards;
-}
-.scribble text {
-  font-size: 30px;
-}
-.note-talk {
-  fill: var(--orange);
-}
-.note-agent {
-  fill: var(--blue);
-}
-.rider {
-  position: absolute;
-  left: 64%;
-  top: 8%;
-  width: 9%;
-  animation: bob 2.6s ease-in-out infinite;
-}
-.rider .blob {
-  width: 100%;
-  height: auto;
-}
-@keyframes draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: scale(0.6) rotate(-6deg);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes bob {
-  50% {
-    transform: translateY(-8px) rotate(3deg);
-  }
+  max-width: 1080px;
 }
 
 .ctas {
@@ -447,27 +399,36 @@ h1 span {
   transform: rotate(0) scale(1.03);
 }
 
-/* How it works */
+/* How it works: art and copy side by side, alternating. */
 .how article {
   display: grid;
-  gap: 1.3rem;
-  margin-bottom: 3.5rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1.2rem, 4vw, 3.5rem);
+  margin-bottom: clamp(2rem, 5vw, 4rem);
 }
-.how img {
-  width: 100%;
-  height: auto;
-  background: #fff;
-  border-radius: 18px;
-  border: 2.5px solid var(--ink);
+.how article:nth-of-type(even) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+}
+.how article:nth-of-type(even) figure {
+  order: 2;
+}
+.how figure {
+  margin: 0;
+}
+.how-kicker {
+  margin: 0;
+  color: var(--orange);
+  font-size: 1.45rem;
+  line-height: 1;
 }
 .how h3 {
-  font-size: 1.7rem;
-  margin-bottom: 0.4rem;
+  font-size: clamp(1.6rem, 3vw, 2.1rem);
+  margin: 0.4rem 0 0.6rem;
 }
-.how p {
+.how p:last-child {
   margin: 0;
   color: var(--muted);
-  max-width: 46rem;
 }
 
 .promises {
@@ -628,27 +589,22 @@ h1 span {
   .promises {
     grid-template-columns: 1fr 1fr;
   }
-  .scribble text {
-    font-size: 58px;
+  .how article,
+  .how article:nth-of-type(even) {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .note-agent {
-    transform: translateX(-180px);
+  .how article:nth-of-type(even) figure {
+    order: 0;
   }
+  .nav,
   .bar .gh,
   .mode .long {
     display: none;
   }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tangle {
-    animation: none;
-    stroke-dashoffset: 0;
+  .mode {
+    margin-left: auto;
   }
-  .card {
-    animation: none;
-    opacity: 1;
-  }
-  .rider {
-    animation: none;
+  .foot {
+    flex-direction: column;
   }
 }

@@ -46,24 +46,16 @@ function checkPromptMatchesReadme(readme) {
     );
 }
 
-/**
- * A tangle of loops that shrink until the line runs straight: messy talk in, clear video out.
- * Deterministic, so the page is byte-stable between builds.
- */
-function scribblePath() {
-  const points = [];
-  for (let i = 0; i <= 640; i++) {
-    const t = i / 640;
-    const radius = 78 * (1 - t) ** 1.7;
-    const angle = t * Math.PI * 2 * 11;
-    const wobble = Math.sin(t * 41) * 9 * (1 - t);
-    points.push([
-      60 + t * 700 + radius * 1.15 * Math.cos(angle),
-      140 + radius * Math.sin(angle) + wobble,
-    ]);
-  }
-  points.push([838, 140]);
-  return "M" + points.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join(" L");
+/** Intrinsic PNG size from the IHDR chunk, so images reserve their space before loading. */
+function pngSize(file) {
+  const bytes = readFileSync(file);
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+
+function illustration(name, alt, { eager = false } = {}) {
+  const { width, height } = pngSize(join(artwork, name));
+  const loading = eager ? `fetchpriority="high"` : `loading="lazy"`;
+  return `<img src="/art/${name}" alt="${escape(alt)}" width="${width}" height="${height}" ${loading} decoding="async">`;
 }
 
 const blob = (id) => `<svg class="blob" id="${id}" viewBox="0 0 120 130" aria-hidden="true">
@@ -123,6 +115,7 @@ function renderPage(siteUrl) {
 <body>
 <header class="bar">
   <a class="brand" href="/" aria-label="Yap home">${blob("brand-blob")}<span>Yap</span></a>
+  <nav class="nav" aria-label="Sections"><a href="#how">How it works</a><a href="#setup">Setup</a></nav>
   <div class="mode" role="group" aria-label="Who is reading?">
     <button type="button" data-set-mode="human"><span class="long">I'm a </span>human</button>
     <button type="button" data-set-mode="agent"><span class="long">I'm an </span>agent</button>
@@ -136,15 +129,7 @@ function renderPage(siteUrl) {
     <h1>Just yap.<br><span>Your agent makes it a great video.</span></h1>
     <p class="lede">Record your screen or camera and say it however it comes out. Yap gives your agent the eyes, ears and hands to turn it into what you meant.</p>
 
-    <figure class="scribble" aria-hidden="true">
-      <svg viewBox="0 0 1000 280">
-        <path class="tangle" d="${scribblePath()}" pathLength="1"/>
-        <g class="card"><rect x="840" y="78" width="140" height="124" rx="14"/><path class="play" d="M896 118v44l36-22z"/></g>
-        <text class="hand note-talk" x="40" y="34">you, yapping</text>
-        <text class="hand note-agent" x="560" y="250">your agent irons it out</text>
-      </svg>
-      <div class="rider">${blob("hero-blob")}</div>
-    </figure>
+    <figure class="hero-art">${illustration(content.heroArt.image, content.heroArt.alt, { eager: true })}</figure>
 
     <div class="ctas">
       <div class="cta prompt">
@@ -176,13 +161,13 @@ function renderPage(siteUrl) {
     <ul>${content.asks.map((ask) => `<li>“${escape(ask)}”</li>`).join("")}</ul>
   </section>
 
-  <section class="how">
+  <section class="how" id="how">
     <h2>How it works</h2>
     ${content.howItWorks
       .map(
         (item) => `<article>
-      <img src="/art/${item.image}" alt="${escape(item.alt)}" loading="lazy" decoding="async" width="1672" height="580">
-      <div><h3>${escape(item.title)}</h3><p>${prose(item.body)}</p></div>
+      <figure>${illustration(item.image, item.alt)}</figure>
+      <div><p class="hand how-kicker">${escape(item.kicker)}</p><h3>${escape(item.title)}</h3><p>${prose(item.body)}</p></div>
     </article>`,
       )
       .join("\n    ")}
@@ -243,7 +228,7 @@ export function build({
     `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${siteUrl}/</loc></url>\n</urlset>\n`,
   );
   for (const file of staticFiles) copyFileSync(join(here, file), join(out, file));
-  for (const item of [{ image: "header.png" }, ...content.howItWorks])
+  for (const item of [content.heroArt, ...content.howItWorks])
     copyFileSync(join(artwork, item.image), join(out, "art", item.image));
   return out;
 }
