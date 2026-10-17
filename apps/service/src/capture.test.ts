@@ -1,5 +1,6 @@
 import { JobQueue } from "@yap/core/jobs";
 import { CaptureStore } from "@yap/core/capture-store";
+import { seedRecordingStates } from "./capture-store.fixture.js";
 import { CatalogError } from "@yap/core/catalog";
 import { afterEach, expect, it } from "vitest";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -1227,53 +1228,17 @@ it("resumes persisted queued cleanup only after the recording service owners and
 
 it("pages source capture facts across default service restart without creating a project", async () => {
   const home = await temporaryHome();
-  await mkdir(join(home, "library"), { mode: 0o700 });
-  const store = new CaptureStore(join(home, "library", "catalog.sqlite"), {
-    now: () => "2026-10-02T00:00:00.000Z",
-    newId: randomUUID,
-  });
-  const complete = store.allocate().recording;
-  store.ingestLifecycle(complete.recordingId, {
-    sourceId: complete.sourceId,
-    sequence: 1,
-    state: "recording",
-  });
-  store.ingestLifecycle(complete.recordingId, {
-    sourceId: complete.sourceId,
-    sequence: 2,
-    state: "finalizing",
-  });
-  store.ingestLifecycle(complete.recordingId, {
-    sourceId: complete.sourceId,
-    sequence: 3,
-    state: "complete",
-    sourceDurationUs: 10_000_000,
-  });
-  const failed = store.allocate().recording;
-  store.ingestLifecycle(failed.recordingId, {
-    sourceId: failed.sourceId,
-    sequence: 1,
-    state: "interrupted",
-    reason: "START_FAILED",
-    sourceDurationUs: null,
-  });
-  const unfinished = store.allocate().recording;
-  const canceled = store.allocate().recording;
-  store.ingestLifecycle(canceled.recordingId, {
-    sourceId: canceled.sourceId,
-    sequence: 1,
-    state: "canceled",
-  });
-  store.close();
+  const { complete, failed, unfinished } = await seedRecordingStates(home);
   let service = await startService(home);
   const first = await service.call("recording.list", { limit: 1 });
   expect(first).toMatchObject({
     ok: true,
     data: {
       recordings: [{ recordingId: unfinished.recordingId, sourceId: unfinished.sourceId }],
-      nextCursor: { beforeSequence: 3 },
+      nextCursor: expect.any(String),
     },
   });
+  if (!first.ok) throw new Error(JSON.stringify(first));
   expect(await service.call("recording.latest")).toMatchObject({
     ok: true,
     data: { recordingId: unfinished.recordingId, sourceId: unfinished.sourceId },
@@ -1281,7 +1246,10 @@ it("pages source capture facts across default service restart without creating a
   await service.close();
   service = await startService(home);
   expect(
-    await service.call("recording.list", { limit: 2, cursor: { beforeSequence: 3 } }),
+    await service.call("recording.list", {
+      limit: 2,
+      cursor: (first.data as { nextCursor: string }).nextCursor,
+    }),
   ).toMatchObject({
     ok: true,
     data: {
@@ -1300,7 +1268,7 @@ it("pages source capture facts across default service restart without creating a
       nextCursor: null,
     },
   });
-  for (const params of [{ limit: 101 }, { cursor: { beforeSequence: 0 } }, { typo: true }])
+  for (const params of [{ limit: 1001 }, { cursor: "garbage" }, { typo: true }])
     expect(await service.call("recording.list", params)).toMatchObject({
       ok: false,
       error: { code: "INVALID_PARAMS" },

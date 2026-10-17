@@ -19,6 +19,7 @@ export const alignmentReadSchema = z.strictObject({
 export type AlignmentReadInput = z.infer<typeof alignmentReadSchema>;
 const cursorSchema = z.strictObject({
   generation: z.string().min(1),
+  evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
   queryDigest: z.string().regex(/^[a-f0-9]{64}$/),
   after: z.int().nonnegative(),
 });
@@ -46,20 +47,20 @@ export class SourceAlignmentRead {
     if (view !== "raw" && parsed.operand !== undefined)
       throw new CatalogError("INVALID_PARAMS", "operand only applies to raw reads");
     const operand = parsed.operand ?? "nativeReceipt";
-    const queryDigest = createHash("sha256")
-      .update(
-        JSON.stringify({
-          owner: this.metadata.owner,
-          source: this.metadata.source,
-          generation: this.metadata.generation,
-          view,
-          range,
-          thresholdRMS: parsed.thresholdRMS ?? null,
-          operand: view === "raw" ? operand : null,
-          context: this.context ?? null,
-        }),
-      )
-      .digest("hex");
+    const sha = (value: unknown) =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    // The query is the caller's filter set; the evidence it read is the continuation's pin.
+    const queryDigest = sha({
+        view,
+        range,
+        thresholdRMS: parsed.thresholdRMS ?? null,
+        operand: view === "raw" ? operand : null,
+      }),
+      evidenceDigest = sha({
+        owner: this.metadata.owner,
+        source: this.metadata.source,
+        context: this.context ?? null,
+      });
     let after = view === "raw" ? 0 : -1;
     if (parsed.cursor) {
       let value: unknown;
@@ -71,15 +72,25 @@ export class SourceAlignmentRead {
         throw new CatalogError("INVALID_PARAMS", "Invalid alignment continuation");
       }
       const cursor = cursorSchema.parse(value);
-      if (cursor.generation !== this.metadata.generation || cursor.queryDigest !== queryDigest)
-        throw new CatalogError("ARTIFACT_CHANGED", "Alignment generation or query changed");
+      if (cursor.queryDigest !== queryDigest)
+        throw new CatalogError("INVALID_PARAMS", "Alignment continuation used another query");
+      if (
+        cursor.generation !== this.metadata.generation ||
+        cursor.evidenceDigest !== evidenceDigest
+      )
+        throw new CatalogError("ARTIFACT_CHANGED", "Alignment generation changed");
       after = cursor.after;
     }
     const cursor = (value: number | null) =>
       value === null
         ? null
         : Buffer.from(
-            JSON.stringify({ generation: this.metadata.generation, queryDigest, after: value }),
+            JSON.stringify({
+              generation: this.metadata.generation,
+              evidenceDigest,
+              queryDigest,
+              after: value,
+            }),
           ).toString("base64url");
     if (view === "raw") {
       const raw = this.records.rawPage(this.metadata, operand, after);

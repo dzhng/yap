@@ -4,15 +4,16 @@ import type {
   ScreenshotIndexMetadata,
   ScreenshotIndexEntry,
 } from "./screenshot-index.js";
+import { RESPONSE_FRAME_BYTES } from "@yap/protocol";
 export type IndexCoverage<D extends IndexRecords = IndexRecords> = D["coverage"] & {
   sequence: number;
 };
 export type EntryQuery = { after: number; through?: number; limit: number };
 export type CoverageQuery = EntryQuery & { ordinal?: number };
 const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
-function limitValue(limit = 50): number {
-  if (!integer(limit) || limit < 1 || limit > 200)
-    throw new CatalogError("INVALID_PARAMS", "Index page limit must be 1...200");
+function limitValue(limit = 100): number {
+  if (!integer(limit) || limit < 1 || limit > 1000)
+    throw new CatalogError("INVALID_PARAMS", "Index page limit must be 1...1000");
   return limit;
 }
 function invalid(message: string): never {
@@ -52,8 +53,15 @@ export abstract class ScreenshotIndexReader<D extends IndexRecords = IndexRecord
       take = limitValue(limit);
     if (afterOrdinal !== undefined) this.readEntry(identity, afterOrdinal);
     const entries = this.entryRows(identity, { after: afterOrdinal ?? -1, limit: take + 1 });
-    const more = entries.length > take;
+    let more = entries.length > take;
     if (more) entries.pop();
+    while (
+      entries.length > 1 &&
+      Buffer.byteLength(JSON.stringify({ metadata, entries })) > RESPONSE_FRAME_BYTES
+    ) {
+      entries.pop();
+      more = true;
+    }
     return { metadata, entries, nextOrdinal: more ? entries.at(-1)!.candidate.ordinal : null };
   }
   coveragePage({

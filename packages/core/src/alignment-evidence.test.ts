@@ -104,7 +104,7 @@ test("only settlement publishes; pagination binds exact threshold and exposes co
     ]);
     expect(() =>
       read.page({ view: "acoustic", thresholdRMS: 0.2, limit: 3, cursor: first.nextCursor! }),
-    ).toThrow("changed");
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
     const next = read.page({
       view: "acoustic",
       thresholdRMS: 0.1,

@@ -135,20 +135,27 @@ export class SourceEvents {
       limit = input.limit ?? 100;
     const admitted = admitMicrosecondRange(requested, whole),
       range = admitted.range;
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
-      throw new CatalogError("INVALID_PARAMS", "Limit must be 1 to 500");
-    const reference = createHash("sha256").update(JSON.stringify({ context, range })).digest("hex");
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Limit must be 1 to 1000");
+    const sha = (value: unknown) =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    // The selection and range are the caller's filters; the resolved evidence is the pin.
+    const query = sha({ selection: selected.selection, range }),
+      reference = sha({ context, range });
     let position = initialSourceEvents();
     if (input.cursor !== undefined) {
       const cursor = z
         .strictObject({
+          query: z.string(),
           reference: z.string(),
           position: z.strictObject({ capture: capturePositionSchema, scene: scenePositionSchema }),
         })
         .safeParse(input.cursor);
       if (!cursor.success) throw new CatalogError("INVALID_PARAMS", "Invalid source event cursor");
+      if (cursor.data.query !== query)
+        throw new CatalogError("INVALID_PARAMS", "Event continuation used other filters");
       if (cursor.data.reference !== reference)
-        throw new CatalogError("ARTIFACT_CHANGED", "Event source or query changed");
+        throw new CatalogError("ARTIFACT_CHANGED", "Event source changed");
       for (const kind of Object.keys(position.capture) as (keyof CapturePosition)[])
         position.capture[kind] = { ...cursor.data.position.capture[kind], row: null };
       position.scene = cursor.data.position.scene;
@@ -191,6 +198,7 @@ export class SourceEvents {
               rows,
               nextCursor: more
                 ? {
+                    query,
                     reference,
                     position: {
                       capture: Object.fromEntries(

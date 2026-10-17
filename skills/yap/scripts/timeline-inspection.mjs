@@ -425,12 +425,12 @@ export async function inspectTimeline(
           limit: budgets.maxEvents - rows.length,
           ...(cursor ? { cursor } : {}),
         });
-        const { page: _page, ...facts } = result;
+        const { rows: _rows, nextCursor: _nextCursor, ...facts } = result;
         observations.push(facts);
         coverage ??= result.coverage ?? result.context?.coverage;
         state = result.state;
-        rows.push(...(result.page?.rows ?? []));
-        cursor = result.page?.nextCursor;
+        rows.push(...(result.rows ?? []));
+        cursor = result.nextCursor;
         if (!cursor || rows.length >= budgets.maxEvents) break;
       }
       return { state, coverage: coverage ?? null, rows, observations, nextCursor: cursor ?? null };

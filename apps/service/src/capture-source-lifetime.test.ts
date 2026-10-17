@@ -6,7 +6,12 @@ import { mkdir, readFile, writeFile, stat, symlink } from "node:fs/promises";
 import { fstatSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { captureFixture, sourceWorker, filesWorker } from "./project-capture.fixture.js";
+import {
+  captureFixture,
+  settleCapture,
+  sourceWorker,
+  filesWorker,
+} from "./project-capture.fixture.js";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -107,35 +112,6 @@ test("deletion fences retries and joins an acquisition borrowing the donor befor
   expect(await f.call("acquisition.get", { acquisitionId })).toMatchObject({ ok: false });
   await expect(readFile(join(directory, "video.mov"))).rejects.toMatchObject({ code: "ENOENT" });
 });
-
-async function settleCapture(f: Awaited<ReturnType<typeof fixture>>, requestId: string) {
-  const started = await f.call("capture.start", {
-    requestId,
-    source: { kind: "display", displayId: 1 },
-  });
-  if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
-  const directory = join(f.home, "library", "recordings", recordingId, "source");
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFile(
-    join(directory, "capture.journal.jsonl"),
-    JSON.stringify({ sessionID: sourceId }),
-  );
-  await writeFile(join(directory, "video.mov"), "borrowed source bytes");
-  await f.call("capture.stop", { recordingId });
-  const reported = await f.report({
-    recordingId,
-    sourceId,
-    sequence: 3,
-    state: "complete",
-    sourceDurationUs: 100,
-  });
-  if (!reported.ok) throw new Error(JSON.stringify(reported));
-  const { acquisitionId, job } = (
-    reported.data as { sourceAdmissions: { acquisitionId: string; job: { jobId: string } }[] }
-  ).sourceAdmissions[0]!;
-  return { recordingId, sourceId, directory, acquisitionId, job };
-}
 
 test("acquisition reads inherit the shared donor-directory lease as well as the workspace lease", async () => {
   const entered = deferred<readonly number[]>(),

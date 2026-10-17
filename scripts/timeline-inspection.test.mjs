@@ -122,11 +122,9 @@ test("a pinned project sheet retains repeated occurrences, exact fragments, chan
         projectId: "p",
         revisionId: "r",
         state: "ready",
-        page: {
-          rows,
-          nextCursor: null,
-          transcript: { source: { durationUs: range.endUs } },
-        },
+        rows,
+        nextCursor: null,
+        transcript: { source: { durationUs: range.endUs } },
       };
     }
     assert.equal(operation, "timeline.events");
@@ -135,7 +133,8 @@ test("a pinned project sheet retains repeated occurrences, exact fragments, chan
       revisionId: "r",
       state: "ready",
       coverage: { cut: { state: "ready" } },
-      page: { rows: [cut], nextCursor: null },
+      rows: [cut],
+      nextCursor: null,
     };
   };
   const output = await inspectTimeline(
@@ -218,7 +217,8 @@ test("source selection keeps VFR sample evidence and unavailable pictures withou
           { kind: "pause", state: "unavailable", reason: "capture_context_missing" },
         ],
       },
-      page: { rows: [], nextCursor: null },
+      rows: [],
+      nextCursor: null,
     };
   };
   const output = await inspectTimeline(
@@ -238,7 +238,7 @@ test("source selection keeps VFR sample evidence and unavailable pictures withou
 });
 
 test("event pagination stops at the total row budget and preserves its opaque continuation", async () => {
-  const cursor = { reference: "pinned", position: { opaque: "owner" } };
+  const cursor = "opaque-owner-continuation";
   let pages = 0;
   const invoke = async (operation, params) => {
     if (operation === "asset.get") return { id: "asset", streams: [] };
@@ -246,13 +246,11 @@ test("event pagination stops at the total row budget and preserves its opaque co
     pages++;
     return {
       state: "ready",
-      page: {
-        rows: Array.from({ length: params.limit }, (_, i) => ({
-          kind: "scene",
-          sourceAtUs: 10 + i,
-        })),
-        nextCursor: cursor,
-      },
+      rows: Array.from({ length: params.limit }, (_, i) => ({
+        kind: "scene",
+        sourceAtUs: 10 + i,
+      })),
+      nextCursor: cursor,
     };
   };
   const output = await inspectTimeline(
@@ -293,7 +291,6 @@ test("pending event evidence retains dependency failure identities for an explic
       reason: "source_evidence_not_ready",
       retryable: true,
       dependencies: [dependency],
-      page: null,
     };
   };
   const output = await inspectTimeline(
@@ -352,7 +349,7 @@ test("event labels fit beside their own markers while preserving kind/time and e
     operation === "revision.get"
       ? { revision: { id: "r" } }
       : operation === "timeline.events"
-        ? { revisionId: "r", state: "ready", page: { rows, nextCursor: null } }
+        ? { revisionId: "r", state: "ready", rows, nextCursor: null }
         : { revisionId: "r", state: "unavailable", reason: "no_audio" };
   for (const width of [640, 1200]) {
     const result = await inspectTimeline(

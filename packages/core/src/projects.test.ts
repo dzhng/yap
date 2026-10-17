@@ -265,16 +265,10 @@ test("independent catalog writers reject a stale head and keep project paginatio
   );
   const page = store.list({ limit: 1 });
   expect(page.projects.map((p) => p.title)).toEqual(["Two"]);
-  expect(store.list({ ...page.nextCursor!, limit: 1 }).projects.map((p) => p.title)).toEqual([
+  expect(store.list({ cursor: page.nextCursor!, limit: 1 }).projects.map((p) => p.title)).toEqual([
     "One",
   ]);
-  expect(() =>
-    store.history(second.project.projectId, {
-      projectId: original.project.projectId,
-      afterOrdinal: -1,
-      throughOrdinal: 0,
-    }),
-  ).toThrow(/cursor/);
+  expect(() => store.history(second.project.projectId, "foreign-cursor")).toThrow(/cursor/);
 });
 
 test("project pages are newest first and continue below the last project", async () => {
@@ -288,10 +282,35 @@ test("project pages are newest first and continue below the last project", async
     third.project.projectId,
     second.project.projectId,
   ]);
-  expect(page.nextCursor).toEqual({ afterSequence: 2 });
+  expect(page.nextCursor).toEqual(expect.any(String));
   expect(
-    store.list({ ...page.nextCursor!, limit: 2 }).projects.map((project) => project.projectId),
+    store.list({ cursor: page.nextCursor!, limit: 2 }).projects.map((project) => project.projectId),
   ).toEqual([first.project.projectId]);
+});
+
+test("project continuation at the oldest sequence does not reverse back to the head", async () => {
+  const { store } = await setup();
+  const projects = ["one", "two", "three", "four"].map(
+    (requestId) => store.create({ requestId, title: requestId, canvas }).project.projectId,
+  );
+  const seen: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = store.list({ limit: 1, ...(cursor ? { cursor } : {}) });
+    seen.push(...page.projects.map((project) => project.projectId));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(seen).toEqual([...projects].reverse());
+  expect(new Set(seen).size).toBe(projects.length);
+});
+
+test("listable hides a project after its deletion marker is set", async () => {
+  const { store } = await setup();
+  const created = store.create({ requestId: "listable-project", canvas });
+  expect(store.listable(created.project.projectId)).toBe(true);
+  store.markDeleting(created.project.projectId);
+  expect(store.listable(created.project.projectId)).toBe(false);
+  expect(store.list().projects).toEqual([]);
 });
 
 test("deletion fences reads and replayed edits, survives restart, and retains creation identity", async () => {

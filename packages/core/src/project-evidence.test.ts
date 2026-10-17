@@ -628,7 +628,7 @@ test("project transcript reads never infer and explicitly select retained bounde
     if (!cursor) break;
     await expect(
       f.evidence.get({ projectId: input.projectId, cursor, sourceGenerations: [], limit: 1 }),
-    ).rejects.toMatchObject({ code: "ARTIFACT_CHANGED" });
+    ).rejects.toMatchObject({ code: "INVALID_PARAMS" });
     page = await f.evidence.get({ projectId: input.projectId, cursor, limit: 1 });
     expect(page.dependencies).toEqual({ manifestId: cursor.manifestId });
   }
@@ -745,7 +745,7 @@ test("query clipping preserves editorial partiality and cursors pin history and 
   ).toEqual(["two", "three"]);
   await expect(
     f.evidence.get({ ...input, cursor, range: { startUs: 1, endUs: 2850 } }),
-  ).rejects.toMatchObject({ code: "ARTIFACT_CHANGED" });
+  ).rejects.toMatchObject({ code: "INVALID_PARAMS" });
   await f.ready({ ...input, range: { startUs: 120, endUs: 130 } });
   expect((await pages(f, { ...input, range: { startUs: 120, endUs: 130 } }))[0]).toMatchObject({
     partial: false,
@@ -1240,10 +1240,10 @@ test("phrase checkpoints pin raw query and domain while allowing page-size chang
   expect(first.page?.entries[0]?.projectRange).toEqual({ startUs: 100, endUs: 500 });
   const cursor = first.page!.nextCursor;
   await expect(f.evidence.search({ ...query, text: "ONE TWO", cursor })).rejects.toMatchObject({
-    code: "ARTIFACT_CHANGED",
+    code: "INVALID_PARAMS",
   });
   await expect(f.evidence.get({ ...input, cursor })).rejects.toMatchObject({
-    code: "ARTIFACT_CHANGED",
+    code: "INVALID_PARAMS",
   });
   const second = await f.evidence.search({ ...query, limit: 500, cursor });
   expect(second.page?.entries.map((e) => e.projectRange)).toEqual([{ startUs: 1100, endUs: 1500 }]);
@@ -1774,11 +1774,11 @@ test("capture project checkpoints bound tied-track initialization and reject dom
   expect(f.captureReads.length).toBeLessThanOrEqual(128);
   const saved = first.page!.nextCursor!;
   await expect(f.evidence.events({ ...input, cursor: saved })).rejects.toMatchObject({
-    code: "ARTIFACT_CHANGED",
+    code: "INVALID_PARAMS",
   });
   await expect(
     f.evidence.cursor({ ...input, range: { startUs: 1, endUs: 1000 }, cursor: saved }),
-  ).rejects.toMatchObject({ code: "ARTIFACT_CHANGED" });
+  ).rejects.toMatchObject({ code: "INVALID_PARAMS" });
   const rows = [];
   let cursor = first.page!.nextCursor;
   while (cursor) {
@@ -2411,11 +2411,11 @@ test("speaker cursors advance through empty source pages and reject changed sele
   expect(empty.page!.nextCursor).not.toBeNull();
   const cursor = empty.page!.nextCursor!;
   await expect(f.evidence.speakers({ ...input, cursor, channel: 0 })).rejects.toMatchObject({
-    code: "ARTIFACT_CHANGED",
+    code: "INVALID_PARAMS",
   });
   await expect(
     f.evidence.speakers({ ...input, cursor, modelId: "different" }),
-  ).rejects.toMatchObject({ code: "ARTIFACT_CHANGED" });
+  ).rejects.toMatchObject({ code: "INVALID_PARAMS" });
   const next = await f.evidence.speakers({ ...input, cursor });
   expect(next.page!.rows.map((row) => [row.ordinal, row.slot, row.sourceRange])).toEqual([
     [130, 1, { startUs: 3000000, endUs: 4000000 }],

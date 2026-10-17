@@ -2,6 +2,7 @@ import { refusalRetryable } from "./refusal-ledger.js";
 import { z } from "zod";
 import { RESPONSE_FRAME_BYTES } from "./framing.js";
 import { operationSchema } from "./operations.js";
+export { pageParams, pageResult, hasPageParams } from "./paging.js";
 
 export const requestSchema = z
   .object({

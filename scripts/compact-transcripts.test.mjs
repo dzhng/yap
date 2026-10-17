@@ -20,20 +20,30 @@ const sourcePage = (rows, nextCursor = null, generation = "generation-a") => ({
   streamId: selection.streamId,
   state: "ready",
   generation,
-  page: {
-    transcript: {
-      generation,
-      source: {
-        kind: "asset",
-        streamId: selection.streamId,
-        supportDigest: "support-a",
-        durationUs: 10_000_000,
-      },
+  transcript: {
+    generation,
+    source: {
+      kind: "asset",
+      streamId: selection.streamId,
+      supportDigest: "support-a",
+      durationUs: 10_000_000,
     },
-    rows,
-    nextCursor,
   },
+  rows,
+  nextCursor,
 });
+/** Service cursors are opaque base64url strings; these fakes keep a position inside one. */
+const opaque = (position) => Buffer.from(JSON.stringify(position)).toString("base64url");
+const position = (cursor) => JSON.parse(Buffer.from(cursor, "base64url").toString());
+/** A continuation repeats every first-page parameter except limit, or the service refuses it. */
+function repeatsFirstPage() {
+  let first;
+  return (params) => {
+    const { cursor, limit: _limit, ...filters } = params;
+    if (!cursor) first = filters;
+    else assert.deepEqual(filters, first, "continuation repeats the first page's parameters");
+  };
+}
 
 test("reading two takes retains verbatim rows, generations and admitted duration", async () => {
   const rows = [word(0, "Hello,", 100_000, 220_000), word(1, "世界!", 230_000, 400_000)];
@@ -46,12 +56,9 @@ test("reading two takes retains verbatim rows, generations and admitted duration
         ...sourcePage(rows),
         assetId: params.assetId,
         generation: params.assetId === "take-a" ? "generation-a" : "generation-b",
-        page: {
-          ...sourcePage(rows).page,
-          transcript: {
-            generation: params.assetId === "take-a" ? "generation-a" : "generation-b",
-            source: sourcePage(rows).page.transcript.source,
-          },
+        transcript: {
+          generation: params.assetId === "take-a" ? "generation-a" : "generation-b",
+          source: sourcePage(rows).transcript.source,
         },
       };
     },
@@ -71,13 +78,8 @@ test("reading two takes retains verbatim rows, generations and admitted duration
 });
 
 test("empty project pages continue with pinned revision and preserve repeated fractional occurrences", async () => {
-  const next = {
-    projectId: "project",
-    revisionId: "revision-a",
-    manifestId: "manifest",
-    checkpointId: "checkpoint",
-    queryDigest: "digest",
-  };
+  const next = opaque({ checkpointId: "checkpoint" });
+  const repeats = repeatsFirstPage();
   const row = {
     ...word(2, "Again!", 200_000, 300_000),
     partial: true,
@@ -99,13 +101,15 @@ test("empty project pages continue with pinned revision and preserve repeated fr
     async (operation, params) => {
       assert.equal(operation, "transcript.get");
       assert.equal(params.revisionId ?? "revision-a", "revision-a");
+      repeats(params);
       return params.cursor
         ? {
             projectId: "project",
             revisionId: "revision-a",
             state: "ready",
             dependencies: { manifestId: "manifest" },
-            page: { rows: [row], nextCursor: null },
+            rows: [row],
+            nextCursor: null,
           }
         : {
             projectId: "project",
@@ -117,7 +121,8 @@ test("empty project pages continue with pinned revision and preserve repeated fr
                 transcript: { generation: "generation-a", source: { durationUs: 10_000_000 } },
               },
             ],
-            page: { rows: [], nextCursor: next },
+            rows: [],
+            nextCursor: next,
           };
     },
   );
@@ -139,24 +144,12 @@ test("UTF-8 budget returns replayable pages without dropping verbatim words", as
     word(i, `世界${i}`.repeat(14), i * 100_000, (i + 1) * 100_000),
   );
   const invoke = async (_, params) => {
-    const start = params.cursor ? params.cursor.afterOrdinal + 1 : 0;
+    const { cursor, limit: _limit, ...filters } = params;
+    assert.deepEqual(filters, { assetId: "take-a", streamId: "audio:0" });
+    const start = cursor ? position(cursor).afterOrdinal + 1 : 0;
     const selected = rows.slice(start, start + params.limit);
     const last = selected.at(-1)?.ordinal;
-    return sourcePage(
-      selected,
-      last < rows.length - 1
-        ? {
-            assetId: "take-a",
-            streamId: "audio:0",
-            acquisitionId: null,
-            generation: "generation-a",
-            supportDigest: "support-a",
-            afterSourceUs: selected.at(-1).sourceRange.startUs,
-            afterOrdinal: last,
-            range: null,
-          }
-        : null,
-    );
+    return sourcePage(selected, last < rows.length - 1 ? opaque({ afterOrdinal: last }) : null);
   };
   const seen = [];
   let continuation;
@@ -220,7 +213,6 @@ test("unavailable reads do not erase the expected transcript-generation check", 
   const result = await compactTranscripts({ selections: [selection] }, async () => ({
     state: "unavailable",
     reason: "model_not_prepared",
-    page: null,
   }));
   assert.equal(result.selections[0].complete, false);
   assert.equal(result.selections[0].reason, "model_not_prepared");
@@ -286,13 +278,7 @@ test("gaps, inference segments and partial words split reading phrases", async (
 });
 
 test("a bounded empty-page read returns its real continuation and rejects another source list", async () => {
-  const cursor = {
-    projectId: "project",
-    revisionId: "revision",
-    manifestId: "manifest",
-    checkpointId: "checkpoint",
-    queryDigest: "digest",
-  };
+  const cursor = opaque({ checkpointId: "checkpoint" });
   const result = await compactTranscripts(
     { selections: [{ projectId: "project" }], maxPages: 1 },
     async () => ({
@@ -300,7 +286,8 @@ test("a bounded empty-page read returns its real continuation and rejects anothe
       revisionId: "revision",
       state: "ready",
       dependencies: [],
-      page: { rows: [], nextCursor: cursor },
+      rows: [],
+      nextCursor: cursor,
     }),
   );
   assert.equal(result.limitReached, "pages");
@@ -313,7 +300,7 @@ test("a bounded empty-page read returns its real continuation and rejects anothe
           throw new Error("must not call");
         },
       ),
-    { code: "ARTIFACT_CHANGED" },
+    { code: "INVALID_PARAMS" },
   );
 });
 
@@ -354,27 +341,21 @@ test("project occurrence coverage remains available after manifest-only continua
     manifestId: "manifest",
     occurrences: [{ clipId: "clip", available: [], unavailable: [{ startUs: 0, endUs: 100 }] }],
   };
+  const repeats = repeatsFirstPage();
   const result = await compactTranscripts(
     { selections: [{ projectId: "project" }] },
-    async (_, params) => ({
-      projectId: "project",
-      revisionId: "revision",
-      state: "ready",
-      dependencies: [],
-      coverage: params.cursor ? { manifestId: "manifest" } : coverage,
-      page: {
+    async (_, params) => {
+      repeats(params);
+      return {
+        projectId: "project",
+        revisionId: "revision",
+        state: "ready",
+        dependencies: [],
+        coverage: params.cursor ? { manifestId: "manifest" } : coverage,
         rows: [],
-        nextCursor: params.cursor
-          ? null
-          : {
-              projectId: "project",
-              revisionId: "revision",
-              manifestId: "manifest",
-              checkpointId: "checkpoint",
-              queryDigest: "digest",
-            },
-      },
-    }),
+        nextCursor: params.cursor ? null : opaque({ checkpointId: "checkpoint" }),
+      };
+    },
   );
   assert.deepEqual(result.selections[0].coverage, coverage);
 });

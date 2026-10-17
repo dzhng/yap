@@ -61,7 +61,7 @@ test("public speaker source requests report missing optional preparation without
   });
   expect(read).toMatchObject({
     ok: true,
-    data: { state: "unavailable", reason: "model_not_prepared", page: null },
+    data: { state: "unavailable", reason: "model_not_prepared" },
   });
   expect(requests).toEqual(["media.probe"]);
 });
@@ -109,7 +109,7 @@ test("public retained speaker pages survive service restart without runtime byte
   };
   const first = await f.call("speaker.get", query);
   if (!first.ok) throw new Error(JSON.stringify(first));
-  const cursor = (first.data as { page: { nextCursor: string } }).page.nextCursor;
+  const cursor = (first.data as { nextCursor: string }).nextCursor;
   const second = await f.call("speaker.get", { ...query, cursor });
   await f.service.close();
   const restarted = await projectServiceFixture(
@@ -130,26 +130,25 @@ test("public retained speaker pages survive service restart without runtime byte
     data: {
       state: "ready",
       generation: published.generation,
-      page: { rows: [], nextCursor: expect.any(String) },
+      rows: [],
+      nextCursor: expect.any(String),
     },
   });
   expect(second).toMatchObject({
     ok: true,
     data: {
-      page: {
-        rows: [
-          {
-            ordinal: 1,
-            slot: 1,
-            identity: "unknown",
-            sourceRange: {
-              startUs: { numerator: 1000125, denominator: 2 },
-              endUs: { numerator: 4000125, denominator: 2 },
-            },
+      rows: [
+        {
+          ordinal: 1,
+          slot: 1,
+          identity: "unknown",
+          sourceRange: {
+            startUs: { numerator: 1000125, denominator: 2 },
+            endUs: { numerator: 4000125, denominator: 2 },
           },
-        ],
-        nextCursor: null,
-      },
+        },
+      ],
+      nextCursor: null,
     },
   });
   expect(resumed).toEqual(second);
@@ -159,7 +158,7 @@ test("public retained speaker pages survive service restart without runtime byte
   });
   expect(await restarted.call("speaker.get", { ...query, view: "scores", cursor })).toMatchObject({
     ok: false,
-    error: { code: "ARTIFACT_CHANGED" },
+    error: { code: "INVALID_PARAMS" },
   });
 });
 
@@ -208,7 +207,7 @@ test("public speaker bindings are pinned to one retained generation and decorate
   expect(bound).toMatchObject({ ok: true, data: { bindings: [{ slot: 1, displayName: "Ada" }] } });
   expect(read).toMatchObject({ ok: true });
   if (read.ok) {
-    const rows = (read.data as { page: { rows: { slot: number; label?: string }[] } }).page.rows;
+    const rows = (read.data as { rows: { slot: number; label?: string }[] }).rows;
     expect(rows.find((row) => row.slot === 1)).toMatchObject({ slot: 1, label: "Ada" });
     expect(rows.find((row) => row.slot === 0)).not.toHaveProperty("label");
     const paged = await f.call("speaker.get", {
@@ -217,9 +216,7 @@ test("public speaker bindings are pinned to one retained generation and decorate
       limit: 1,
     });
     expect(paged).toMatchObject({ ok: true });
-    const nextCursor = paged.ok
-      ? (paged.data as { page: { nextCursor: string | null } }).page.nextCursor
-      : null;
+    const nextCursor = paged.ok ? (paged.data as { nextCursor: string | null }).nextCursor : null;
     if (nextCursor) {
       expect(
         await f.call("speaker.bind", {
@@ -337,13 +334,13 @@ test("project speaker rows carry caller labels for their retained generation", a
   let read;
   for (;;) {
     read = await f.call("speaker.get", query);
-    if (!read.ok || (read.data as { page: unknown }).page !== null) break;
+    if (!read.ok || (read.data as { state?: string }).state === "ready") break;
     await delay(10);
   }
   expect(read).toMatchObject({ ok: true });
   if (read.ok) {
-    const data = read.data as { page: { rows: { slot: number; label?: string }[] } };
-    const rows = data.page.rows;
+    const data = read.data as { rows: { slot: number; label?: string }[] };
+    const rows = data.rows;
     expect(rows.find((row) => row.slot === 1)).toMatchObject({ slot: 1, label: "Ada" });
     expect(rows.find((row) => row.slot === 0)).not.toHaveProperty("label");
   }
@@ -470,12 +467,10 @@ test.runIf(process.platform === "darwin")(
     };
     const projected = await ready("speaker.get", projectQuery, "ready");
     expect(projected).toMatchObject({
-      page: {
-        rows: [
-          { ordinal: 0, slot: 0, partial: false },
-          { ordinal: 1, slot: 1, partial: false },
-        ],
-      },
+      rows: [
+        { ordinal: 0, slot: 0, partial: false },
+        { ordinal: 1, slot: 1, partial: false },
+      ],
     });
     await ready("export.status", { exportId }, "committed");
     const target = await projectServiceFixture(cleanup, async (operation, params, options) => {
@@ -497,12 +492,12 @@ test.runIf(process.platform === "darwin")(
       "ready",
     );
     expect(
-      (portableProjection.page as { rows: { slot: number; label?: string }[] }).rows.find(
+      (portableProjection as { rows: { slot: number; label?: string }[] }).rows.find(
         (row) => row.slot === 0,
       ),
     ).toMatchObject({ slot: 0, label: "Ada" });
-    expect((portableProjection.page as { rows: unknown }).rows).toEqual(
-      (projected.page as { rows: unknown }).rows,
+    expect((portableProjection as { rows: unknown }).rows).toEqual(
+      (projected as { rows: unknown }).rows,
     );
     expect(portableProjection.issues).toEqual([]);
     // A range past the project's end reads the clamped range in both owners.
@@ -526,12 +521,10 @@ test.runIf(process.platform === "darwin")(
     expect((await ready("speaker.get", pastEnd, "ready")).issues).toEqual(clamp);
     active = target;
     expect(projected).toMatchObject({
-      page: {
-        rows: [
-          { fragments: [{ project: { startUs: 125, endUs: 2000125 } }] },
-          { fragments: [{ project: { startUs: 1000125, endUs: 4000125 } }] },
-        ],
-      },
+      rows: [
+        { fragments: [{ project: { startUs: 125, endUs: 2000125 } }] },
+        { fragments: [{ project: { startUs: 1000125, endUs: 4000125 } }] },
+      ],
     });
     const packaged = await target.call("speaker.get", { ...query, packageHandle });
     expect(packaged).toMatchObject(original);
@@ -542,9 +535,9 @@ test.runIf(process.platform === "darwin")(
     });
     if (!packagedIntervals.ok) throw Error(JSON.stringify(packagedIntervals));
     expect(
-      (
-        packagedIntervals.data as { page: { rows: { slot: number; label?: string }[] } }
-      ).page.rows.find((row) => row.slot === 0),
+      (packagedIntervals.data as { rows: { slot: number; label?: string }[] }).rows.find(
+        (row) => row.slot === 0,
+      ),
     ).toMatchObject({ slot: 0, label: "Ada" });
     const adopted = await ready(
       "package.adopt",

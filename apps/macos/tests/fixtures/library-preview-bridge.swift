@@ -160,13 +160,13 @@ struct CheckFailure: Error, LocalizedError {
                 try await until { !owner.state.projectsRefreshing && !owner.state.recent.isEmpty || !owner.state.projectsRefreshing && !owner.state.projects.isEmpty }
                 try require(page(owner) == Array(expected.prefix(5)), "Actual first page must preserve complete public creation values")
                 try require((live.calls.first { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary).isEqual(to: ["limit": 5]), "Actual first-page request must preserve the native page limit")
-                evidence.record(["state": "actual-first-page", "projects": page(owner), "nextCursor": owner.state.nextProjectCursor.map { ["afterSequence": $0.afterSequence] } ?? [:]])
+                evidence.record(["state": "actual-first-page", "projects": page(owner), "nextCursor": owner.state.nextProjectCursor ?? ""])
                 let cursor = owner.state.nextProjectCursor!
                 owner.nextProjects(); try await until { !owner.state.projectsRefreshing }
                 try require(page(owner) == Array(expected.suffix(1)) && owner.state.hasPreviousProjectPage && owner.state.nextProjectCursor == nil,
                     "Actual continuation must preserve the final project and exhausted cursor")
                 let continuation = live.calls.last { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary
-                try require(continuation.isEqual(to: ["limit": 5, "cursor": ["afterSequence": cursor.afterSequence]]), "Continuation must send the returned cursor unchanged")
+                try require(continuation.isEqual(to: ["limit": 5, "cursor": cursor]), "Continuation must send the returned cursor unchanged")
                 evidence.record(["state": "actual-continuation-page", "projects": page(owner)])
                 owner.previousProjects(); try await until { !owner.state.projectsRefreshing }
                 try require(page(owner) == Array(expected.prefix(5)) && !owner.state.hasPreviousProjectPage, "Actual previous page must restore complete values")

@@ -20,6 +20,7 @@ import {
 } from "./correspondence.js";
 import { captureSelectionSchema } from "./capture.js";
 import { DEFAULT_CALL_TIMEOUT_MS, MEDIA_WORKER_TIMEOUT_MS } from "./framing.js";
+import { pageParams } from "./paging.js";
 
 const id = z.string().min(1);
 /** The most bytes one artifact.read returns. */
@@ -104,25 +105,15 @@ const continuityCandidate = z.strictObject({
   }),
 });
 const project = z.object({ projectId: id }).strict();
-const projectEvidenceParams = project
-  .extend({
-    revisionId: id.optional(),
-    range: range.optional(),
-    trackIds: z.array(id).optional(),
-    limit: z.int().min(1).max(1000).optional(),
-    cursor: z
-      .strictObject({
-        projectId: id,
-        revisionId: id,
-        manifestId: z.uuid(),
-        checkpointId: z.uuid(),
-        queryDigest: z.string().regex(/^[a-f0-9]{64}$/),
-      })
-      .optional(),
-  })
-  .strict();
+const projectEvidenceParams = pageParams({
+  projectId: id,
+  revisionId: id.optional(),
+  range: range.optional(),
+  trackIds: z.array(id).optional(),
+});
 const projectTranscriptParams = projectEvidenceParams
   .extend({
+    cursor: z.string().min(1).optional(),
     sourceGenerations: z
       .array(sourceSelection.extend({ generation: z.uuid() }).strict())
       .min(1)
@@ -142,34 +133,7 @@ const captureHeads = z.strictObject({
   interruption: capturePosition,
 });
 const sourceCaptureParams = (maximum: number, events = false) =>
-  sourceSelection
-    .extend({
-      sourceRange: range.optional(),
-      limit: z.int().min(1).max(maximum).optional(),
-      cursor: z
-        .strictObject({
-          reference: id,
-          position: events
-            ? z.strictObject({
-                capture: captureHeads,
-                scene: z.strictObject({
-                  after: z
-                    .strictObject({
-                      actualSourceUs: z
-                        .int()
-                        .min(-Number.MAX_SAFE_INTEGER)
-                        .max(Number.MAX_SAFE_INTEGER),
-                      ordinal: time,
-                    })
-                    .nullable(),
-                  done: z.boolean(),
-                }),
-              })
-            : captureHeads,
-        })
-        .optional(),
-    })
-    .strict();
+  pageParams({ sourceRange: range.optional(), ...sourceSelection.shape });
 const projectEdit = project.extend({ requestId: id, expectedRevisionId: id });
 const exportDestination = {
   exportId: z.uuid(),
@@ -251,15 +215,11 @@ const layoutDiagnosticParams = project
     maxIssues: z.int().min(1).max(100).optional(),
   })
   .strict();
-const historyPosition = {
-  afterOrdinal: z.int().min(-1),
-  throughOrdinal: z.int().min(-1),
-};
 const historyParams = <T extends z.ZodRawShape>(target: z.ZodObject<T>) =>
   target
     .extend({
-      cursor: target.extend(historyPosition).strict().nullable().optional(),
-      limit: z.int().min(1).max(500).optional(),
+      cursor: z.string().min(1).optional(),
+      limit: z.int().min(1).max(1000).default(100),
     })
     .strict();
 
@@ -301,9 +261,7 @@ const cursorRenderParams = z.union([
 ]);
 const transcriptReviewParams = z.union([
   projectTranscriptParams,
-  sourceSelection
-    .extend({ range: range.optional(), limit: z.int().min(1).max(1000).default(250) })
-    .strict(),
+  pageParams({ ...sourceSelection.shape, range: range.optional() }),
 ]);
 
 const audioRange = range.refine(({ startUs, endUs }) => endUs > startUs, {
@@ -361,12 +319,10 @@ const pauseFields = {
   thresholdRMS: z.number().finite().nonnegative().optional(),
   minDurationUs: z.int().positive().optional(),
   channel: z.int().nonnegative().optional(),
-  limit: z.int().min(1).max(500).optional(),
-  cursor: z.strictObject({ offset: z.int().nonnegative() }).optional(),
 };
 const pauseParams = z.union([
-  projectAudioParams.extend(pauseFields),
-  sourceAudioParams.extend(pauseFields),
+  pageParams({ ...projectAudioParams.shape, ...pauseFields }),
+  pageParams({ ...sourceAudioParams.shape, ...pauseFields }),
 ]);
 
 const projectIndexParams = projectFrameParams.omit({ atUs: true });
@@ -374,11 +330,10 @@ const projectIndexReference = projectIndexParams
   .required()
   .partial({ observations: true, faceObservations: true })
   .extend({ generation: id });
-const paged = <T extends z.ZodRawShape, S extends z.ZodRawShape, C extends z.ZodRawShape>(
+const paged = <T extends z.ZodRawShape, S extends z.ZodRawShape>(
   target: z.ZodObject<T>,
   fields: S,
-  position: C,
-) => target.extend({ ...fields, cursor: target.extend(position).strict().optional() }).strict();
+) => target.extend({ ...fields, cursor: z.string().min(1).optional() }).strict();
 // Adapters derive their advertised tools from the same schemas the service validates.
 export const operationSchema = z.discriminatedUnion("operation", [
   z
@@ -409,12 +364,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("project.list"),
-      params: z
-        .object({
-          cursor: z.object({ afterSequence: z.int().nonnegative() }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams(),
     })
     .strict()
     .describe("Read a bounded page of managed projects, newest first."),
@@ -581,17 +531,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("asset.segments"),
-      params: z
-        .object({
-          assetId: id,
-          streamId: z.string().min(1),
-          cursor: z
-            .object({ assetId: id, streamId: z.string().min(1), afterOrdinal: z.int().min(-1) })
-            .strict()
-            .optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams({ assetId: id, streamId: z.string().min(1) }),
     })
     .strict()
     .describe(
@@ -600,13 +540,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("asset.origins"),
-      params: z
-        .object({
-          assetId: id,
-          cursor: z.object({ afterProvenance: z.string() }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams({ assetId: id }),
     })
     .strict()
     .describe(
@@ -615,16 +549,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("asset.list"),
-      params: z
-        .object({
-          cursor: z.object({ afterSequence: time }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams(),
     })
     .strict()
     .describe(
-      "Read a bounded page of admitted assets. streamCount/mediaKinds describe media streams; fontFaceCount identifies non-timed font assets, which have no streams.",
+      "Read admitted assets newest first with an opaque continuation. streamCount/mediaKinds describe media streams; fontFaceCount identifies non-timed font assets, which have no streams.",
     ),
   z
     .object({ operation: z.literal("job.get"), params: z.object({ jobId: id }).strict() })
@@ -676,25 +605,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("export.list"),
-      params: z
-        .object({
-          projectId: id.optional(),
-          unfinishedOnly: z.boolean().optional(),
-          limit: z.int().min(1).max(500).optional(),
-          cursor: z
-            .object({
-              projectId: id.nullable(),
-              unfinishedOnly: z.boolean(),
-              afterExportId: z.uuid(),
-            })
-            .strict()
-            .optional(),
-        })
-        .strict(),
+      params: pageParams({ projectId: id.optional(), unfinishedOnly: z.boolean().optional() }),
     })
     .strict()
     .describe(
-      "Discover persisted export summaries after restart without starting work. Defaults to 100, maximum 500. unfinishedOnly includes uncommitted exports, abandonment and private cleanup. Filter by projectId. Cursor binds the project filter and unfinishedOnly. Pages follow live lexical export IDs; start a fresh traversal for new arrivals before your cursor. Use export.status for details.",
+      "Discover persisted export summaries after restart without starting work. The page limit is 1–1000 (default 100). unfinishedOnly includes uncommitted exports, abandonment and private cleanup. Filter by projectId. The opaque cursor binds the project filter and unfinishedOnly. Pages are newest first. Use export.status for details.",
     ),
   z
     .object({
@@ -797,21 +712,13 @@ export const operationSchema = z.discriminatedUnion("operation", [
       operation: z.literal("index.get"),
       params: z.union([
         projectIndexParams.extend({
-          limit: z.int().min(1).max(200).default(50),
-          cursor: projectIndexReference.extend({ afterOrdinal: z.int().nonnegative() }).optional(),
+          ...pageParams().shape,
         }),
-        paged(
-          sourceSelection,
-          {
-            limit: z.int().min(1).max(200).default(50),
-            observations: pictureObservationRequestSchema.optional(),
-            faceObservations: faceObservationRequestSchema.optional(),
-          },
-          {
-            generation: id,
-            afterOrdinal: z.int().nonnegative(),
-          },
-        ),
+        paged(sourceSelection, {
+          ...pageParams().shape,
+          observations: pictureObservationRequestSchema.optional(),
+          faceObservations: faceObservationRequestSchema.optional(),
+        }),
       ]),
     })
     .strict()
@@ -826,11 +733,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           generation: id,
           maxGapUs: z.int().positive().max(1_000_000).optional(),
           prediction: z.enum(["none", "linear"]).optional(),
-          limit: z.int().min(1).max(200).optional(),
-          cursor: sourceSelection
-            .extend({ generation: id, afterOrdinal: z.int().nonnegative() })
-            .strict()
-            .optional(),
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -857,30 +760,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({
       operation: z.literal("index.coverage"),
       params: z.union([
-        paged(
-          projectIndexReference,
-          {
-            candidateOrdinal: z.int().nonnegative().optional(),
-            limit: z.int().min(1).max(200).default(50),
-          },
-          {
-            afterSequence: z.int().nonnegative(),
-            candidateOrdinal: z.int().nonnegative().nullable(),
-          },
-        ),
-        paged(
-          sourceSelection,
-          {
-            generation: id,
-            candidateOrdinal: z.int().nonnegative().optional(),
-            limit: z.int().min(1).max(200).default(50),
-          },
-          {
-            generation: id,
-            afterSequence: z.int().nonnegative(),
-            candidateOrdinal: z.int().nonnegative().nullable(),
-          },
-        ),
+        paged(projectIndexReference, {
+          candidateOrdinal: z.int().nonnegative().optional(),
+          ...pageParams().shape,
+        }),
+        paged(sourceSelection, {
+          generation: id,
+          candidateOrdinal: z.int().nonnegative().optional(),
+          ...pageParams().shape,
+        }),
       ]),
     })
     .strict()
@@ -1014,8 +902,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           view: z.enum(["words", "acoustic", "scores", "raw"]).optional(),
           thresholdRMS: z.number().finite().nonnegative().optional(),
           operand: z.enum(["nativeReceipt", "report", "correspondence"]).optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         }),
         z.strictObject({
           projectId: id,
@@ -1029,8 +916,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           trackIds: z.array(id).optional(),
           view: z.enum(["words", "acoustic", "scores"]).optional(),
           thresholdRMS: z.number().finite().nonnegative().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         }),
       ]),
     })
@@ -1100,14 +986,13 @@ export const operationSchema = z.discriminatedUnion("operation", [
             packageHandle: id.optional(),
             sourceRange: selectionRangeSchema.optional(),
             view: z.enum(["intervals", "scores"]).optional(),
-            limit: z.int().min(1).max(1000).optional(),
-            cursor: z.string().min(1).max(8192).optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
     })
     .describe(
-      "Read immutable source observations or their source/project projection without preparing or invoking a model. Project selectors consume retained matching channel/model generations only; no project scores. Optional packageHandle reads the opened immutable package; package project metadata jobs and checkpoints share its bounded context lifetime. observationRange selects the generation; sourceRange only narrows display. Intervals retain complete exact source ranges, native ordinals and anonymous generation-local slots. Scores retain every original 80ms cell and are uncalibrated, never assignment confidence or silence. Continue while nextCursor exists, including empty pages. Continuations pin the original generation, decoder and display query; changed input refuses with ARTIFACT_CHANGED. Ready reads need neither the current native executable nor prepared runtime bytes.",
+      "Read immutable source observations or their source/project projection without preparing or invoking a model. Project selectors consume retained matching channel/model generations only; no project scores. Optional packageHandle reads the opened immutable package; package project metadata jobs and checkpoints share its bounded context lifetime. observationRange selects the generation; sourceRange only narrows display. Intervals retain complete exact source ranges, native ordinals and anonymous generation-local slots. Scores retain every original 80ms cell and are uncalibrated, never assignment confidence or silence. Continue while nextCursor exists, including empty pages. Continuations pin the original generation and decoder: a different view, display range or selection refuses with INVALID_PARAMS, and a republished generation or decoder refuses with ARTIFACT_CHANGED. Ready reads need neither the current native executable nor prepared runtime bytes.",
     ),
   z
     .strictObject({
@@ -1184,17 +1069,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
         .extend({
           revisionId: id,
           generation: z.uuid(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z
-            .strictObject({
-              generation: z.uuid(),
-              sourceCursor: z.strictObject({
-                ...sourceTranscriptReference,
-                afterOrdinal: time.nullable(),
-                range: range.nullable(),
-              }),
-            })
-            .optional(),
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -1219,16 +1094,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
             speaker: transcriptSpeaker.optional(),
             generation: z.uuid().optional(),
             range: range.optional(),
-            limit: z.int().min(1).max(1000).default(250),
-            cursor: z
-              .object({
-                ...sourceTranscriptReference,
-                afterOrdinal: time.nullable(),
-                range: range.nullable(),
-                speaker: transcriptSpeakerCursor.optional(),
-              })
-              .strict()
-              .optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
@@ -1250,8 +1116,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
         .extend({
           generation: id.optional(),
           range: range.optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -1263,18 +1128,12 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({
       operation: z.literal("transcript.search"),
       params: z.union([
-        projectTranscriptParams
-          .extend({ text: z.string().min(1).max(200), limit: z.int().min(1).max(500).optional() })
-          .strict(),
+        projectTranscriptParams.extend({ text: z.string().min(1).max(200) }).strict(),
         sourceSelection
           .extend({
             text: z.string().min(1).max(200),
             generation: z.uuid().optional(),
-            limit: z.int().min(1).max(500).default(100),
-            cursor: z
-              .object({ ...sourceTranscriptReference, afterOrdinal: time, text: z.string() })
-              .strict()
-              .optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
@@ -1299,7 +1158,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Explicitly retry previously requested selected-source preparation with the same executionRange/context; initial work uses transcript.transcribe. Models must already be prepared. A project selector retries only its evidence manifest (include the same text to retry phrase search); source preparation failures must be retried with their returned asset-stream selection. Keep the same acquisition selection; preparation uses a fresh generation after failure.",
     ),
   z
-    .object({ operation: z.literal("preset.list"), params: z.object({}).strict() })
+    .object({ operation: z.literal("preset.list"), params: pageParams() })
     .strict()
     .describe(
       "List installed presets. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
@@ -1343,10 +1202,10 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
-    .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
+    .object({ operation: z.literal("model.list"), params: pageParams() })
     .strict()
     .describe(
-      "Discover immutable registered model IDs, purpose, platform, content identities and preparation requirements without preparing anything.",
+      "Discover immutable registered model IDs, purpose, platform, content identities and preparation requirements without preparing anything. Results are paged newest first with an opaque cursor.",
     ),
   z
     .object({
@@ -1558,10 +1417,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("timeline.events"),
-      params: z.union([
-        projectEvidenceParams.extend({ limit: z.int().min(1).max(500).optional() }),
-        sourceCaptureParams(500, true),
-      ]),
+      params: z.union([projectEvidenceParams, sourceCaptureParams(500, true)]),
     })
     .strict()
     .describe(
@@ -1570,10 +1426,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("cursor.raw"),
-      params: z.union([
-        projectEvidenceParams.extend({ limit: z.int().min(1).max(5000).optional() }),
-        sourceCaptureParams(5000),
-      ]),
+      params: z.union([projectEvidenceParams, sourceCaptureParams(5000)]),
     })
     .strict()
     .describe(
@@ -1733,16 +1586,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("recording.list"),
-      params: z
-        .object({
-          cursor: z.object({ beforeSequence: z.int().positive() }).strict().nullable().optional(),
-          limit: z.int().min(1).max(100).optional(),
-        })
-        .strict(),
+      params: pageParams(),
     })
     .strict()
     .describe(
-      "Page through discoverable recordings newest first; continuation excludes newer takes.",
+      "Page through discoverable recordings newest first with the shared opaque cursor and 1–1000 limit (default 100).",
     ),
   z
     .object({ operation: z.literal("recording.cleanup"), params: recording })
@@ -1766,7 +1614,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("revision.history"),
-      params: historyParams(project).extend({ limit: z.int().min(1).max(1000).optional() }),
+      params: historyParams(project).extend(pageParams().shape),
     })
     .strict()
     .describe("Read a bounded page of history pinned to its initial revision ordinal."),

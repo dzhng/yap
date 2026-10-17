@@ -270,7 +270,7 @@ export class IndexProcessing {
           )))
     )
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
+        "INVALID_PARAMS",
         "Project index continuation belongs to another selection",
       );
     const status = input.cursor ? null : this.requestProject(input);
@@ -630,10 +630,11 @@ export class IndexProcessing {
       input.cursor &&
       (input.cursor.assetId !== input.assetId ||
         input.cursor.streamId !== input.streamId ||
-        input.cursor.acquisitionId !== input.acquisitionId)
+        input.cursor.acquisitionId !== input.acquisitionId ||
+        (input.generation !== undefined && input.cursor.generation !== input.generation))
     )
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
+        "INVALID_PARAMS",
         "Source index continuation belongs to another selection",
       );
     const status = input.cursor || input.generation ? null : this.requestSource(input);
@@ -737,22 +738,21 @@ export class IndexProcessing {
 
   async cleanup(signal: AbortSignal): Promise<void> {
     if (this.options.project) {
-      let afterSequence = 0;
+      let cursor: string | undefined;
       for (;;) {
         signal.throwIfAborted();
-        const page = this.project.projects.list({ afterSequence, limit: 100 });
+        const page = this.project.projects.list({ ...(cursor ? { cursor } : {}), limit: 100 });
         for (const project of page.projects) await this.cleanupProject(project.projectId, signal);
         if (!page.nextCursor) break;
-        afterSequence = page.nextCursor.afterSequence;
+        cursor = page.nextCursor;
         await setImmediate(undefined, { signal });
       }
     }
     if (this.options.asset) {
-      let afterSequence = 0,
-        failure: unknown;
+      let cursor: string | undefined, failure: unknown;
       for (;;) {
         signal.throwIfAborted();
-        const page = this.asset.assets.list({ afterSequence, limit: 100 });
+        const page = this.asset.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
         for (const asset of page.assets) {
           try {
             await this.cleanupAsset(asset.id, signal);
@@ -762,7 +762,7 @@ export class IndexProcessing {
           }
         }
         if (!page.nextCursor) break;
-        afterSequence = page.nextCursor.afterSequence;
+        cursor = page.nextCursor;
         await setImmediate(undefined, { signal });
       }
       if (failure) throw failure;

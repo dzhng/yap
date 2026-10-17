@@ -99,18 +99,16 @@ describe("associateDeliveredScenes", () => {
           return {
             state: "ready",
             coverage: { scenes: { state: "ready" } },
-            page: { rows: [{ kind: "scene", sourceAtUs: 1_000_000 }], nextCursor: null },
+            rows: [{ kind: "scene", sourceAtUs: 1_000_000 }], nextCursor: null,
           };
         if (operation === "timeline.events")
           return {
             state: "ready",
             coverage: { cuts: { state: "ready" } },
-            page: {
-              rows: [
-                { kind: "cut", mediaKind: "video", projectAtUs: 1_000_000, trackId: "screen" },
-              ],
-              nextCursor: null,
-            },
+            rows: [
+              { kind: "cut", mediaKind: "video", projectAtUs: 1_000_000, trackId: "screen" },
+            ],
+            nextCursor: null,
           };
         throw new Error(`unexpected ${operation}`);
       };

@@ -117,7 +117,7 @@ test("pages and filtered coverage remain bounded and reject unrelated anchors", 
   expect(() => f.index.page({ identity: f.identity, afterOrdinal: 50 })).toThrow(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
-  expect(() => f.index.page({ identity: f.identity, limit: 201 })).toThrow("limit");
+  expect(() => f.index.page({ identity: f.identity, limit: 201 })).not.toThrow();
   expect(() =>
     f.index.coveragePage({ identity: f.identity, candidateOrdinal: 0, afterSequence: 1 }),
   ).toThrow("outside");
@@ -337,7 +337,7 @@ test("one damaged generation does not starve unrelated reclamation", async () =>
   expect(existsSync(nextPath)).toBe(false);
   expect(() => f.index.page({ identity: f.identity })).toThrow("complete");
 });
-test("candidate and coverage pages cap work independently at 50 by default and 200 maximum", async () => {
+test("candidate and coverage pages cap work independently at 100 by default and 1000 maximum", async () => {
   const f = await fixture();
   f.index.begin(f.identity);
   for (let i = 0; i < 205; i++) add(f, i, i * 1000);
@@ -345,7 +345,7 @@ test("candidate and coverage pages cap work independently at 50 by default and 2
     cover(f, i % 2, Math.floor((i * 10_000_000) / 205), Math.floor(((i + 1) * 10_000_000) / 205));
   await f.index.finish(f.identity);
   expect(f.index.page({ identity: f.identity }).entries.map((e) => e.candidate.ordinal)).toEqual(
-    Array.from({ length: 50 }, (_, i) => i),
+    Array.from({ length: 100 }, (_, i) => i),
   );
   const first = f.index.page({ identity: f.identity, limit: 200 });
   expect(first.nextOrdinal).toBe(199);
@@ -354,7 +354,7 @@ test("candidate and coverage pages cap work independently at 50 by default and 2
       .page({ identity: f.identity, afterOrdinal: first.nextOrdinal! })
       .entries.map((e) => e.candidate.ordinal),
   ).toEqual([200, 201, 202, 203, 204]);
-  expect(f.index.coveragePage({ identity: f.identity }).nextSequence).toBe(49);
+  expect(f.index.coveragePage({ identity: f.identity }).nextSequence).toBe(99);
   const coverage = f.index.coveragePage({ identity: f.identity, limit: 200 });
   expect(coverage.nextSequence).toBe(199);
   expect(

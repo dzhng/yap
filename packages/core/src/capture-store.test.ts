@@ -487,14 +487,25 @@ test("recording pages keep newest-first identity across new takes, source update
   expect(reopened.list(null, 1).recordings).toEqual([added]);
 });
 
-test("recording discovery has an empty end page and the specified default page bound", () => {
+test("recording discovery uses the shared default page bound", () => {
   const { store } = fixture();
   expect(store.list()).toEqual({ recordings: [], nextCursor: null });
   const recordings = Array.from({ length: 21 }, () => store.allocate().recording);
   const first = store.list();
-  expect(first.recordings).toEqual(recordings.slice(1).reverse());
-  expect(store.list(first.nextCursor)).toEqual({ recordings: [recordings[0]], nextCursor: null });
-  expect(() => store.list(null, 101)).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+  expect(first.recordings).toEqual(recordings.reverse());
+  expect(first.nextCursor).toBeNull();
+  expect(() => store.list(null, 1001)).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+});
+
+test("listable hides a recording once its deletion marker exists", () => {
+  const { store } = fixture();
+  const recording = store.allocate().recording;
+  expect(store.listable(recording.recordingId)).toBe(true);
+  store.catalog
+    .prepare("INSERT INTO recording_deletions(recordingId) VALUES(?)")
+    .run(recording.recordingId);
+  expect(store.listable(recording.recordingId)).toBe(false);
+  expect(store.list().recordings).toEqual([]);
 });
 
 test("an allocation request is a durable receipt that replays and refuses different arguments", () => {

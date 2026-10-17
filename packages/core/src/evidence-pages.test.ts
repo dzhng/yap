@@ -392,15 +392,16 @@ test("raw cursor pages share source-time ordering and isolate package continuati
   );
   expect([...first.samples, ...second.samples]).toEqual(library.samples);
   expect(first.integrity).toEqual(library.integrity);
-  for (const changed of [
-    { packageHandle: "second-open" },
-    { sourceId: "other" },
-    { generation: "other" },
-    { sourceRange: { startUs: 0, endUs: 40 } },
-  ])
+  // Another package or range is another filter set; other evidence is a stale pin.
+  for (const [changed, code] of [
+    [{ packageHandle: "second-open" }, "INVALID_PARAMS"],
+    [{ sourceRange: { startUs: 0, endUs: 40 } }, "INVALID_PARAMS"],
+    [{ sourceId: "other" }, "ARTIFACT_CHANGED"],
+    [{ generation: "other" }, "ARTIFACT_CHANGED"],
+  ] as const)
     expect(() =>
       readRawCursor(target, { sourceRange, cursor: { ...first.nextCursor!, ...changed } }, source),
-    ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+    ).toThrow(expect.objectContaining({ code }));
   expect(() =>
     readRawCursor(
       target,

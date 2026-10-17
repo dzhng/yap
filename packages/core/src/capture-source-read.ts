@@ -305,21 +305,25 @@ export class CaptureSourceRead {
     const whole = { startUs: 0, endUs: ceil(fromTime(context.durationUs)) },
       requested = input.sourceRange ?? whole;
     const limit = input.limit ?? (domain === "events" ? 100 : 1000),
-      maximum = domain === "events" ? 500 : 5000;
+      maximum = domain === "events" ? 1000 : 5000;
     const admitted = admitMicrosecondRange(requested, whole),
       range = admitted.range;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum)
       throw new CatalogError("INVALID_PARAMS", `Limit must be 1 to ${maximum}`);
-    const reference = digest({ context, range });
+    // The selection and range are the caller's filters; the resolved evidence is the pin.
+    const query = digest({ selection, range }),
+      reference = digest({ context, range });
     let position = initialCapture();
     if (input.cursor !== undefined) {
       const cursor = z
-        .strictObject({ reference: z.string(), position: capturePositionSchema })
+        .strictObject({ query: z.string(), reference: z.string(), position: capturePositionSchema })
         .safeParse(input.cursor);
       if (!cursor.success)
         throw new CatalogError("INVALID_PARAMS", "Invalid capture evidence cursor");
+      if (cursor.data.query !== query)
+        throw new CatalogError("INVALID_PARAMS", "Capture continuation used other filters");
       if (cursor.data.reference !== reference)
-        throw new CatalogError("ARTIFACT_CHANGED", "Capture evidence or filters changed");
+        throw new CatalogError("ARTIFACT_CHANGED", "Capture evidence changed");
       for (const kind of Object.keys(position) as PointKind[])
         position[kind] = { ...cursor.data.position[kind], row: null };
     }
@@ -359,6 +363,7 @@ export class CaptureSourceRead {
             rows,
             nextCursor: more
               ? {
+                  query,
                   reference,
                   position: Object.fromEntries(
                     Object.entries(position).map(([kind, { after, done }]) => [

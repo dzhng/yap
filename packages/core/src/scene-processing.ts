@@ -189,11 +189,10 @@ export class SceneProcessing {
     );
   }
   async cleanup(signal: AbortSignal): Promise<void> {
-    let afterSequence = 0,
-      failure: unknown;
+    let cursor: string | undefined, failure: unknown;
     for (;;) {
       signal.throwIfAborted();
-      const page = this.asset.assets.list({ afterSequence, limit: 100 });
+      const page = this.asset.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
       for (const asset of page.assets) {
         try {
           await this.cleanupAsset(asset.id, signal);
@@ -203,7 +202,7 @@ export class SceneProcessing {
         }
       }
       if (!page.nextCursor) break;
-      afterSequence = page.nextCursor.afterSequence;
+      cursor = page.nextCursor;
       await setImmediate(undefined, { signal });
     }
     if (failure) throw failure;

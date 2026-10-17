@@ -6,6 +6,7 @@ import type { SpeakerEvidenceMetadata, SpeakerEvidenceStore } from "./speaker-ev
 
 const cursorSchema = z.strictObject({
   generation: z.string().min(1),
+  evidenceDigest: z.string().regex(/^[a-f0-9]{64}$/),
   queryDigest: z.string().regex(/^[a-f0-9]{64}$/),
   afterSequence: z.int().nonnegative(),
 });
@@ -27,17 +28,15 @@ export class SourceSpeakerRead {
     const range = selectionRangeSchema.parse(
       input.sourceRange ?? this.metadata.source.observationRange,
     );
-    const queryDigest = createHash("sha256")
-      .update(
-        JSON.stringify({
-          context: this.context ?? null,
-          owner: this.metadata.owner,
-          source: this.metadata.source,
-          view,
-          range,
-        }),
-      )
-      .digest("hex");
+    const sha = (value: unknown) =>
+      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+    // The query is the caller's filter set; the evidence it read is the continuation's pin.
+    const queryDigest = sha({ view, range }),
+      evidenceDigest = sha({
+        context: this.context ?? null,
+        owner: this.metadata.owner,
+        source: this.metadata.source,
+      });
     let afterSequence: number | undefined;
     if (input.cursor !== undefined) {
       let value: unknown;
@@ -51,11 +50,13 @@ export class SourceSpeakerRead {
       }
       const parsed = cursorSchema.safeParse(value);
       if (!parsed.success) throw new CatalogError("INVALID_PARAMS", "Invalid speaker continuation");
+      if (parsed.data.queryDigest !== queryDigest)
+        throw new CatalogError("INVALID_PARAMS", "Speaker continuation used another query");
       if (
         parsed.data.generation !== this.metadata.generation ||
-        parsed.data.queryDigest !== queryDigest
+        parsed.data.evidenceDigest !== evidenceDigest
       )
-        throw new CatalogError("ARTIFACT_CHANGED", "Speaker observation or query changed");
+        throw new CatalogError("ARTIFACT_CHANGED", "Speaker observation changed");
       afterSequence = parsed.data.afterSequence;
     }
     const request = { identity: this.metadata, range, limit: input.limit ?? 250 };
@@ -108,6 +109,7 @@ export class SourceSpeakerRead {
           : Buffer.from(
               JSON.stringify({
                 generation: this.metadata.generation,
+                evidenceDigest,
                 queryDigest,
                 afterSequence: nextSequence,
               }),

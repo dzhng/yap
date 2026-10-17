@@ -105,7 +105,7 @@ async function adoptedMedia(t, kind) {
       );
       return state.state === "ready" && state;
     });
-  for (const params of [{ limit: 501 }, { unfinishedOnly: "yes" }, { typo: true }]) {
+  for (const params of [{ unfinishedOnly: "yes" }, { typo: true }]) {
     const result = await callLocal(service.socketPath, {
       id: randomUUID(),
       operation: "export.list",
@@ -114,6 +114,12 @@ async function adoptedMedia(t, kind) {
     assert.equal(result.ok, false, JSON.stringify({ params, result }));
     assert.equal(result.error.code, "INVALID_PARAMS");
   }
+  const acceptedLimit = await callLocal(service.socketPath, {
+    id: randomUUID(),
+    operation: "export.list",
+    params: { limit: 501 },
+  });
+  assert.equal(acceptedLimit.ok, true, JSON.stringify(acceptedLimit));
   const admitted = await call("asset.import", { path: input, requestId: randomUUID() });
   const imported = await ready(() => call("job.get", { jobId: admitted.jobId }));
   const asset = await call("asset.get", { assetId: imported.published.output.assetId });

@@ -288,28 +288,29 @@ test("source continuations pin every source identity dimension, generation and q
   const { read, store, metadata } = await fixture();
   const page = read.page({ limit: 1, range: { startUs: 100, endUs: 900 } });
   const search = read.search({ text: "hello", limit: 1 });
-  for (const field of [
-    "assetId",
-    "streamId",
-    "acquisitionId",
-    "generation",
-    "supportDigest",
+  // The selected source is a filter; generation and support are the pin.
+  for (const [field, code] of [
+    ["assetId", "INVALID_PARAMS"],
+    ["streamId", "INVALID_PARAMS"],
+    ["acquisitionId", "INVALID_PARAMS"],
+    ["generation", "ARTIFACT_CHANGED"],
+    ["supportDigest", "ARTIFACT_CHANGED"],
   ] as const) {
     expect(() => read.page({ cursor: { ...page.nextCursor, [field]: "different" } })).toThrow(
-      expect.objectContaining({ code: "ARTIFACT_CHANGED" }),
+      expect.objectContaining({ code }),
     );
     expect(() =>
       read.search({ text: "hello", cursor: { ...search.nextCursor, [field]: "different" } }),
-    ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+    ).toThrow(expect.objectContaining({ code }));
   }
   expect(() => read.page({ cursor: page.nextCursor, range: { startUs: 100, endUs: 800 } })).toThrow(
-    expect.objectContaining({ code: "ARTIFACT_CHANGED" }),
+    expect.objectContaining({ code: "INVALID_PARAMS" }),
   );
   expect(() => read.search({ text: "world", cursor: search.nextCursor })).toThrow(
-    expect.objectContaining({ code: "ARTIFACT_CHANGED" }),
+    expect.objectContaining({ code: "INVALID_PARAMS" }),
   );
   expect(() => read.page({ cursor: { ...page.nextCursor, acquisitionId: null } })).toThrow(
-    expect.objectContaining({ code: "ARTIFACT_CHANGED" }),
+    expect.objectContaining({ code: "INVALID_PARAMS" }),
   );
   const next = new SourceTranscriptRead(store, { ...metadata, generation: "next" });
   expect(() => next.page({ cursor: page.nextCursor })).toThrow(

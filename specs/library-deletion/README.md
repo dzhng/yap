@@ -17,7 +17,7 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 to 04 done. Slice 05 is in progress in its own worktree.
+**Status.** Slices 00 to 05 done.
 Choices made along the way are in [choices.md](choices.md).
 
 Slice 01 evidence: protocol, core, CLI and service suites, every package build and
@@ -27,9 +27,9 @@ Slice 02 adds the shared `LibraryDeletion` coordinator and idempotent deletion-p
 tables while keeping catalog format 29. Slice 03 fences tombstoned assets and
 acquisitions from new references, job admission and asset publish. Slice 04 adds the
 read-only `LibraryUsers.usersOf` query and the `inUseDetailsSchema` refusal shape.
+Slice 05 gives every listing and evidence read one opaque-cursor paging contract.
 
-**Pick up at** slice 05 (finishing in the API worktree), then 06 and 07. Slices 08+
-wait for 05-07.
+**Pick up at** slice 06, then 07. Slices 08+ wait for 06 and 07.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -38,11 +38,13 @@ wait for 05-07.
 - The macOS app reads changed shapes (`recording.get`, `assetId`, paging). Fix its
   decoders in the slice that changes the shape, never later.
 - Presets (`preset.list/get/create/update/delete`) landed from main after this spec
-  was written. Slice 05 pages `preset.list` like `model.list`; slices 06 and 07 apply
+  was written. Slice 05 paged `preset.list` like `model.list`; slices 06 and 07 apply
   their vocabulary and naming rules to the preset operations too. A preset is a
   local file, not a catalog row, so it stays outside the deletion coordinator.
-- Write the test first (red, then green) in every slice. Run the narrowest check
-  per change, and the full suite once, in slice 16.
+- Write the test first (red, then green) in every slice. Run `bun run check-types` in
+  each touched package (tests are outside the build tsconfig) and `bun run test:tools`
+  when scripts or the skill change. Run the narrowest check per change, and the full
+  suite once, in slice 16.
 
 **TODO**
 - [x] 00 Probes and open checks — [slices/00-probes.md](slices/00-probes.md)
@@ -50,7 +52,7 @@ wait for 05-07.
 - [x] 02 One deletion coordinator and deletion plans — [slices/02-deletion-coordinator.md](slices/02-deletion-coordinator.md)
 - [x] 03 Deletion fence and publish race — [slices/03-fence.md](slices/03-fence.md)
 - [x] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
-- [ ] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
+- [x] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
 - [ ] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
 - [ ] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
 - [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)

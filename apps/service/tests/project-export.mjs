@@ -522,17 +522,13 @@ test("export discovery pages pinned summaries without admitting work and binds c
       leaf: exportId + ".mp4",
     });
   const page = f.exports.list({ limit: 2, unfinishedOnly: true });
-  assert.deepEqual(page.nextCursor, {
-    projectId: null,
-    unfinishedOnly: true,
-    afterExportId: ids[1],
-  });
+  assert.equal(typeof page.nextCursor, "string");
   assert.deepEqual(
     page.exports.map((row) => row.exportId),
-    ids.slice(0, 2),
+    ids.slice(1).reverse(),
   );
   assert.deepEqual(page.exports[0], {
-    exportId: ids[0],
+    exportId: ids[2],
     projectId: f.projectId,
     kind: "video",
     revisionId: f.placed.revision.id,
@@ -540,26 +536,28 @@ test("export discovery pages pinned summaries without admitting work and binds c
     abandoning: false,
     cleanupPending: false,
   });
-  assert.throws(() => f.exports.list({ cursor: page.nextCursor }), /cursor.*filters/i);
   assert.throws(
-    () =>
-      f.exports.list({
-        unfinishedOnly: true,
-        projectId: f.projectId,
-        cursor: page.nextCursor,
-      }),
-    /cursor.*filters/i,
+    () => f.exports.list({ cursor: page.nextCursor }),
+    (error) => error.code === "INVALID_PARAMS",
+  );
+  assert.throws(
+    () => f.exports.list({ unfinishedOnly: true, projectId: f.projectId, cursor: page.nextCursor }),
+    (error) => error.code === "INVALID_PARAMS",
   );
   assert.deepEqual(
     f.exports
       .list({ unfinishedOnly: true, cursor: page.nextCursor })
       .exports.map((row) => row.exportId),
-    ids.slice(2),
+    [ids[0]],
   );
-  const continuation = { unfinishedOnly: true, cursor: page.nextCursor };
+  const continuation = { unfinishedOnly: true, cursor: page.nextCursor, limit: 100 };
   assert.deepEqual(
     operationSchema.parse({ operation: "export.list", params: continuation }).params,
     continuation,
+  );
+  assert.equal(
+    operationSchema.parse({ operation: "export.list", params: { limit: 1000 } }).params.limit,
+    1000,
   );
   const arrival = "00000000-0000-4000-8000-000000000000";
   await f.exports.create({
@@ -573,7 +571,7 @@ test("export discovery pages pinned summaries without admitting work and binds c
     f.exports
       .list({ unfinishedOnly: true, cursor: page.nextCursor })
       .exports.map((row) => row.exportId),
-    [ids[2]],
+    [ids[0]],
   );
   assert.equal(f.exports.list({ unfinishedOnly: true }).exports[0].exportId, arrival);
   assert.deepEqual(f.exports.list({ projectId: randomUUID() }).exports, []);
@@ -581,7 +579,7 @@ test("export discovery pages pinned summaries without admitting work and binds c
   await f.exports.abandon(ids[1]);
   assert.deepEqual(
     f.exports.list({}).exports.map((row) => row.exportId),
-    [ids[0], ids[2]],
+    [ids[2], ids[0]],
   );
   assert.deepEqual(await readdir(f.output), []);
   assert.equal(f.exports.status(ids[0]).state, "queued");

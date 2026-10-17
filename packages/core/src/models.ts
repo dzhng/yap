@@ -15,6 +15,7 @@ import { mkdir, open, rename, rm, realpath, type FileHandle } from "node:fs/prom
 import { dirname, join, isAbsolute } from "node:path";
 import { O_NOFOLLOW_ANY } from "./open-flags.js";
 import { CatalogError } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 import type {
   SpeechModelFile,
   SpeechEnginePins,
@@ -648,6 +649,10 @@ export class Models {
       throw new CatalogError("NOT_FOUND", "Model is not registered", { modelId, kind: "model" });
     return model;
   }
+  /** Registered models have no deletion tombstone; this keeps the listing-store contract uniform. */
+  listable(modelId: string): boolean {
+    return this.preparations.has(modelId);
+  }
   list() {
     return [...this.preparations].map(([modelId, model]) => ({
       modelId,
@@ -674,6 +679,25 @@ export class Models {
           ) ?? 0,
       },
     }));
+  }
+  page(input: { cursor?: string; limit?: number } = {}) {
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Model page limit must be 1–1000");
+    const position =
+      input.cursor === undefined ? undefined : pageCursor.decode("model.list", input.cursor, {});
+    const index = position === undefined ? 0 : (position as { index?: unknown }).index;
+    if (!Number.isSafeInteger(index) || (index as number) < 0)
+      throw new CatalogError("INVALID_PARAMS", "Invalid model cursor");
+    const models = this.list();
+    const rows = models.slice(index as number, (index as number) + limit + 1);
+    return {
+      models: rows.slice(0, limit),
+      nextCursor:
+        rows.length > limit
+          ? pageCursor.encode("model.list", { index: (index as number) + limit }, {})
+          : null,
+    };
   }
   async settled(): Promise<void> {
     await Promise.all([...this.preparations.values()].map((model) => model.settled()));

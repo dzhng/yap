@@ -152,6 +152,10 @@
       "types": "./dist/projects.d.ts",
       "default": "./dist/projects.js"
     },
+    "./page-cursor": {
+      "types": "./dist/page-cursor.d.ts",
+      "default": "./dist/page-cursor.js"
+    },
     "./project-preview": {
       "types": "./dist/project-preview.d.ts",
       "default": "./dist/project-preview.js"

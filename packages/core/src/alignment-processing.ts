@@ -388,11 +388,11 @@ export class AlignmentProcessing {
     );
   }
   async cleanup(signal: AbortSignal) {
-    let afterSequence = 0;
+    let cursor: string | undefined;
     let failure: unknown;
     for (;;) {
       signal.throwIfAborted();
-      const page = this.options.assets.list({ afterSequence, limit: 100 });
+      const page = this.options.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
       for (const asset of page.assets) {
         try {
           await this.cleanupAsset(asset.id, signal);
@@ -402,7 +402,7 @@ export class AlignmentProcessing {
         }
       }
       if (!page.nextCursor) break;
-      afterSequence = page.nextCursor.afterSequence;
+      cursor = page.nextCursor;
       await setImmediate(undefined, { signal });
     }
     if (failure) throw failure;

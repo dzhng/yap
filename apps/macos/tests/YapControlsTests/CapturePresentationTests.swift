@@ -216,7 +216,7 @@ func runSavedPagingTests() {
     let paging: Set<ControlsAction> = [.previousRecordings, .nextRecordings]
     precondition(LibraryPresentation.recordings(for: state).actions.filter { paging.contains($0.action) }.isEmpty,
                  "With one page there is no paging to offer")
-    state.library.nextRecordingCursor = .init(beforeSequence: 1)
+    state.library.nextRecordingCursor = "opaque-cursor"
     state.library.recordingsRefreshing = true
     let refreshing = LibraryPresentation.recordings(for: state).actions.filter { paging.contains($0.action) }
     precondition(refreshing.map(\.action) == [.nextRecordings] && !refreshing[0].enabled,

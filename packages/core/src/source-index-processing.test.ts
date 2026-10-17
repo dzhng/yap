@@ -8,6 +8,7 @@ import { encodeIndexRecord } from "./screenshot-index.js";
 import { readFile, unlink } from "node:fs/promises";
 import { CatalogError } from "./catalog.js";
 import { fixture, gate, png } from "./index-processing.fixture.js";
+import { expectPageTraversal } from "./page-traversal.fixture.js";
 function acquiredSelection(f: Awaited<ReturnType<typeof fixture>>) {
   const selection = { ...f.selection, acquisitionId: "selection" };
   f.catalog.catalog.prepare("INSERT OR REPLACE INTO acquisitions VALUES(?,?,?,?)").run(
@@ -647,7 +648,7 @@ test("complete source index files require a published matching generation", asyn
   expect(first.nextCursor).not.toBeNull();
   expect(() =>
     f.index.coverageSource({ ...reference, candidateOrdinal: 0, cursor: first.nextCursor! }),
-  ).toThrow("another index or filter");
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
   const next = f.index.coverageSource({ ...reference, cursor: first.nextCursor!, limit: 1 });
   expect(next.coverage[0]!.source.startUs).toBe(first.coverage[0]!.source.endUs);
   expect(() => f.index.frameSource({ ...reference, ordinal: metadata.candidateCount })).toThrow(
@@ -679,4 +680,66 @@ test("a plain source-index cursor cannot be relabeled as face evidence", async (
       cursor: first.page!.nextCursor!,
     }),
   ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+});
+
+test("source index, coverage and face-trajectory pages conform to the paging contract", async () => {
+  const f = await fixture();
+  const selection = acquiredSelection(f);
+  const faceObservations = { recipe: "vision-face-rectangles-v1" as const };
+  for (let pass = 0; pass < 2; pass++) {
+    f.index.requestSource({ ...selection, faceObservations });
+    await f.jobs.idle();
+  }
+  const generation = f.index.requestSource({ ...selection, faceObservations }).published!.evidence
+    .generation;
+  type EntryCursor = NonNullable<Parameters<typeof f.index.getSource>[0]["cursor"]>;
+  type CoverageCursor = NonNullable<Parameters<typeof f.index.coverageSource>[0]["cursor"]>;
+  const ordinal = (entry: unknown) =>
+    String((entry as { candidate: { ordinal: number } }).candidate.ordinal);
+  // index.get: the request's selection is bound into its continuation.
+  const entries = expectPageTraversal<EntryCursor>((limit, cursor) => {
+    const page = f.index.getSource({ ...selection, faceObservations, limit, cursor }).page!;
+    return { items: page.entries, nextCursor: page.nextCursor };
+  }, ordinal);
+  // face.trajectory.get: the same entries, read through an explicit retained generation.
+  const trajectory = expectPageTraversal<EntryCursor>((limit, cursor) => {
+    const page = f.index.getSource({ ...selection, generation, limit, cursor }).page!;
+    return { items: page.entries, nextCursor: page.nextCursor };
+  }, ordinal);
+  expect(trajectory.expected).toEqual(entries.expected);
+  for (const changed of [
+    { streamId: "w" },
+    { acquisitionId: "other" },
+    { generation: "other-generation" },
+  ])
+    expect(() =>
+      f.index.getSource({ ...selection, ...changed, cursor: trajectory.firstCursor, limit: 1 }),
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+  expect(() =>
+    f.index.getSource({
+      ...selection,
+      cursor: { ...trajectory.firstCursor, afterOrdinal: 99 },
+      limit: 1,
+    }),
+  ).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
+  // index.coverage: the candidate filter and the generation are bound into the continuation.
+  const reference = { ...selection, generation };
+  const coverage = expectPageTraversal<CoverageCursor>((limit, cursor) => {
+    const page = f.index.coverageSource({ ...reference, limit, cursor });
+    return { items: page.coverage, nextCursor: page.nextCursor };
+  });
+  expect(coverage.expected.length).toBeGreaterThanOrEqual(3);
+  expect(() =>
+    f.index.coverageSource({
+      ...reference,
+      candidateOrdinal: 0,
+      cursor: coverage.firstCursor,
+      limit: 1,
+    }),
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+  // Another selection cannot even resolve this index, so it refuses before reading the cursor.
+  for (const changed of [{ streamId: "w" }, { acquisitionId: "other" }])
+    expect(() =>
+      f.index.coverageSource({ ...reference, ...changed, cursor: coverage.firstCursor, limit: 1 }),
+    ).toThrow(CatalogError);
 });

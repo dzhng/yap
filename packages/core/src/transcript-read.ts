@@ -229,14 +229,20 @@ export class SourceTranscriptRead {
     this.traversal = new TranscriptTraversal(records, metadata);
   }
 
+  /** The selected source is the caller's filter; its generation and support are the pin. */
   private continuation<T extends typeof this.reference>(cursor: T | undefined): T | undefined {
-    if (
-      cursor &&
-      Object.entries(this.reference).some(([key, value]) => cursor[key as keyof T] !== value)
-    )
+    const differs = (keys: (keyof typeof this.reference)[]) =>
+      cursor !== undefined && keys.some((key) => cursor[key] !== this.reference[key]);
+    if (differs(["assetId", "streamId", "acquisitionId"]))
+      throw new CatalogError(
+        "INVALID_PARAMS",
+        "Transcript continuation belongs to another source",
+        this.reference,
+      );
+    if (differs(["generation", "supportDigest"]))
       throw new CatalogError(
         "ARTIFACT_CHANGED",
-        "Transcript continuation belongs to another source or generation",
+        "Transcript continuation belongs to another generation",
         this.reference,
       );
     return cursor;
@@ -254,7 +260,7 @@ export class SourceTranscriptRead {
       cursor &&
       (cursor.range?.startUs !== range?.startUs || cursor.range?.endUs !== range?.endUs)
     )
-      throw new CatalogError("ARTIFACT_CHANGED", "Transcript continuation used another range");
+      throw new CatalogError("INVALID_PARAMS", "Transcript continuation used another range");
     const whole = { startUs: 0, endUs: round(fromTime(this.metadata.source.durationUs)) };
     // The cursor keeps the requested range, so every page reports the same clamp.
     const admitted = range ? admitMicrosecondRange(range, whole) : null;
@@ -300,13 +306,13 @@ export class SourceTranscriptRead {
   }
 
   search(input: { text: string; cursor?: unknown; limit?: number | undefined }) {
-    const count = limit(input.limit, 100, 500);
+    const count = limit(input.limit, 100, 1000);
     const terms = transcriptSearchTerms(input.text);
     const cursor = this.continuation(
       input.cursor === undefined ? undefined : parse(sourceSearchCursor, input.cursor),
     );
     if (cursor && cursor.text !== input.text)
-      throw new CatalogError("ARTIFACT_CHANGED", "Transcript continuation searched other text");
+      throw new CatalogError("INVALID_PARAMS", "Transcript continuation searched other text");
     const { entries, last } = this.traversal.search(
       terms,
       count,

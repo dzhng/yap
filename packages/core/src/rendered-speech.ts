@@ -263,8 +263,8 @@ export class RenderedSpeech {
       );
     if (input.cursor && input.cursor.generation !== input.generation)
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
-        "Rendered recognition continuation changed generation",
+        "INVALID_PARAMS",
+        "Rendered recognition continuation belongs to another generation",
       );
     const speech = JSON.parse(retained.result) as RenderedSpeechEvidence;
     const origin = speech.pcm.origin;

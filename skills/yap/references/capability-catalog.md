@@ -9,6 +9,14 @@ yap --help
 yap <operation> --help
 ```
 
+All paged operations use the same contract: send `limit` from 1 through 1000
+(default 100) and pass the previous page's opaque base64url `nextCursor` as the
+next request's `cursor`. Results put the collection and `nextCursor` at the top
+level. Treat cursors as operation- and filter-specific values: repeat every other
+parameter on a continuation (only `limit` may change). A malformed or foreign
+cursor, or one reused with other filters, is an `INVALID_PARAMS` refusal;
+`ARTIFACT_CHANGED` means the evidence it pinned was republished.
+
 The catalog is grouped by the contract it owns. A name below is an advertised
 operation, not permission to infer parameters or readiness. Use its current
 help schema and preserve the returned JSON envelope.

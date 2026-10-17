@@ -74,7 +74,11 @@ export const speakerSource: SpeakerEvidenceSource = {
   },
 };
 
-export async function publishControlledObservation(home: string, input: SpeakerSourceInput) {
+export async function publishControlledObservation(
+  home: string,
+  input: SpeakerSourceInput,
+  lines?: string[],
+) {
   const library = join(home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
@@ -116,11 +120,7 @@ export async function publishControlledObservation(home: string, input: SpeakerS
       generation: "retained-control-g1",
       policy: "speaker-v1" as const,
     };
-    const staged = evidence.stage(
-      identity,
-      source,
-      nativeOutput(undefined, source.engine.modelSha256),
-    );
+    const staged = evidence.stage(identity, source, nativeOutput(lines, source.engine.modelSha256));
     const processing = new SpeakerProcessing({
       assets,
       acquisitions,

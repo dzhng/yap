@@ -44,6 +44,7 @@ import {
 } from "./package-workspace.js";
 import type { ManagedFiles } from "./managed-files.js";
 import type { MediaWorker } from "./worker.js";
+import { pageCursor } from "@yap/core/page-cursor";
 
 import type { MediaAudioInspection, PinnedProjectAudioExport } from "@yap/core/audio-inspection";
 
@@ -52,11 +53,6 @@ type Request = Extract<
   { operation: "export.create" }
 >["params"];
 type ExportOwner = Extract<JobOwner, { kind: "project" }>;
-type ExportCursor = {
-  projectId: string | null;
-  unfinishedOnly: boolean;
-  afterExportId: string;
-};
 type ReadyRendition = {
   cacheId: string;
   bytes: number;
@@ -198,6 +194,14 @@ export class MediaExports {
   onUpdateProgress: (() => void) | undefined;
   get updateBlocked(): boolean {
     return this.creating.size > 0 || this.retiring.size > 0 || this.admittingRecovery;
+  }
+  /** Export intents marked for abandonment are hidden from discoverable listings. */
+  listable(exportId: string): boolean {
+    return Boolean(
+      this.owners.catalog.catalog
+        .prepare("SELECT 1 FROM export_intents WHERE exportId=? AND abandoning=0")
+        .get(exportId),
+    );
   }
   private readonly references: ResourceReferences;
   private readonly creating = new Map<Promise<unknown>, string>();
@@ -770,7 +774,7 @@ export class MediaExports {
       projectId?: string | undefined;
       unfinishedOnly?: boolean | undefined;
       limit?: number | undefined;
-      cursor?: ExportCursor | undefined;
+      cursor?: string | undefined;
     } = {},
   ) {
     const projectId = input.projectId ?? null,
@@ -778,32 +782,34 @@ export class MediaExports {
       limit = input.limit ?? 100;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
       throw new CatalogError("INVALID_PARAMS", "Export page limit must be1–1000");
-    if (
-      input.cursor &&
-      (input.cursor.projectId !== projectId || input.cursor.unfinishedOnly !== unfinishedOnly)
-    )
-      throw new CatalogError("INVALID_PARAMS", "Export cursor does not match filters");
+    const filters = { projectId, unfinishedOnly };
+    const decoded = (
+      input.cursor === undefined
+        ? undefined
+        : pageCursor.decode("export.list", input.cursor, filters)
+    ) as { rowid?: unknown } | undefined;
     const owner: ExportOwner | undefined =
       projectId !== null ? { kind: "project", projectId } : undefined;
     // Keep the bounded ID page outside the lookup; SQLite may otherwise scan every summary.
     const rows = this.owners.catalog.catalog
       .prepare(
-        `SELECT selected.*,j.state FROM (SELECT exportId,targetKind,targetId,kind,
+        `SELECT selected.*,j.state FROM (SELECT rowid,exportId,targetKind,targetId,kind,
       json_extract(${statusSnapshotSql},'$.revisionId') AS revisionId,receipt IS NOT NULL AS receipt,abandoning,
       assembly IS NOT NULL AS assembly,staging IS NOT NULL AS staging,stagingCleared
-      FROM (SELECT exportId AS selectedExportId FROM export_intents WHERE exportId>?
+      FROM (SELECT rowid AS selectedRowid,exportId AS selectedExportId FROM export_intents WHERE rowid<?
         ${owner ? "AND targetKind=? AND targetId=?" : ""}
-        ${unfinishedOnly ? `AND ${unfinishedSql}` : ""} ORDER BY exportId LIMIT ?) page
-      CROSS JOIN export_intents INDEXED BY export_intents_status_projection ON exportId=page.selectedExportId) selected
+        ${unfinishedOnly ? `AND ${unfinishedSql}` : ""} ORDER BY rowid DESC LIMIT ?) page
+      CROSS JOIN export_intents INDEXED BY export_intents_status_projection ON rowid=page.selectedRowid) selected
       LEFT JOIN jobs j ON j.targetKind=selected.targetKind AND j.targetId=selected.targetId AND j.revisionId=selected.revisionId
-      AND j.artifact=? AND j.inputSha256=job_input_digest(selected.exportId) AND j.input=selected.exportId ORDER BY selected.exportId`,
+      AND j.artifact=? AND j.inputSha256=job_input_digest(selected.exportId) AND j.input=selected.exportId ORDER BY selected.rowid DESC`,
       )
       .all(
-        input.cursor?.afterExportId ?? "",
+        (decoded?.rowid as number | undefined) ?? 9223372036854775807,
         ...(owner ? ownerIdentity(owner) : []),
         limit + 1,
         artifact,
       ) as (Lifecycle & {
+      rowid: number;
       exportId: string;
       targetKind: Intent["targetKind"];
       targetId: string;
@@ -813,7 +819,7 @@ export class MediaExports {
     })[];
     const exports = rows
       .slice(0, limit)
-      .map(({ exportId, targetId, kind, revisionId, state, ...lifecycle }) => ({
+      .map(({ rowid: _rowid, exportId, targetId, kind, revisionId, state, ...lifecycle }) => ({
         exportId,
         projectId: targetId,
         kind,
@@ -824,11 +830,11 @@ export class MediaExports {
       exports,
       nextCursor:
         rows.length > limit
-          ? {
-              projectId,
-              unfinishedOnly,
-              afterExportId: exports.at(-1)!.exportId,
-            }
+          ? pageCursor.encode(
+              "export.list",
+              { rowid: (rows[limit - 1] as { rowid: number }).rowid },
+              filters,
+            )
           : null,
     };
   }

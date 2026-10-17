@@ -40,15 +40,15 @@ export function readRawCursor<Target extends CursorTarget>(
     (("packageHandle" in target
       ? cursor.packageHandle !== target.packageHandle || cursor.recordingId !== undefined
       : cursor.recordingId !== target.recordingId || cursor.packageHandle !== undefined) ||
-      cursor.sourceId !== metadata.sourceId ||
-      cursor.generation !== metadata.generation ||
       cursor.sourceRange.startUs !== startUs ||
       cursor.sourceRange.endUs !== endUs)
   )
-    throw new CatalogError(
-      "ARTIFACT_CHANGED",
-      "Cursor continuation belongs to different evidence or filters",
-    );
+    throw new CatalogError("INVALID_PARAMS", "Cursor continuation used other filters");
+  if (
+    cursor &&
+    (cursor.sourceId !== metadata.sourceId || cursor.generation !== metadata.generation)
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Cursor continuation evidence changed");
   const sourceRange = { startUs, endUs };
   const page = reader.page({
     ...metadata,

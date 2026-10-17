@@ -22,6 +22,7 @@ import { mkdir, open, link, unlink, opendir, rm, lstat } from "node:fs/promises"
 import { extname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { Catalog, CatalogError } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 import {
   copyImportedFile,
   fileIdentity,
@@ -395,24 +396,28 @@ export class AssetStore {
     id: string,
     streamId: string,
     input: {
-      cursor?: { assetId: string; streamId: string; afterOrdinal: number };
+      cursor?: string;
       limit?: number;
     } = {},
   ): {
     assetId: string;
     streamId: string;
     segments: (z.infer<typeof segment> & { ordinal: number })[];
-    nextCursor: { assetId: string; streamId: string; afterOrdinal: number } | null;
+    nextCursor: string | null;
   } {
-    const limit = input.limit ?? 250,
-      after = input.cursor?.afterOrdinal ?? -1;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("asset.segments", input.cursor, { assetId: id, streamId }),
+      decoded = position as { ordinal?: unknown } | undefined,
+      after = (decoded?.ordinal ?? -1) as number;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
       !Number.isSafeInteger(after) ||
-      after < -1 ||
-      (input.cursor && (input.cursor.assetId !== id || input.cursor.streamId !== streamId))
+      after < -1
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid asset segment cursor or page bounds");
     const asset = this.header(id);
@@ -438,25 +443,34 @@ export class AssetStore {
         .map((row) => ({ ordinal: row.ordinal as number, ...JSON.parse(row.value as string) })),
       nextCursor:
         rows.length > limit
-          ? { assetId: id, streamId, afterOrdinal: rows[limit - 1]!.ordinal as number }
+          ? pageCursor.encode(
+              "asset.segments",
+              { ordinal: rows[limit - 1]!.ordinal as number },
+              { assetId: id, streamId },
+            )
           : null,
     };
   }
   path(id: string): string {
     return join(this.directory, this.header(id).fileName);
   }
-  list(input: { afterSequence?: number; limit?: number } = {}): {
+  /** Assets have no tombstone column in the current catalog; an admitted row is listable. */
+  listable(id: string): boolean {
+    return Boolean(this.store.catalog.prepare("SELECT 1 FROM assets WHERE id=?").get(id));
+  }
+  list(input: { cursor?: string; limit?: number } = {}): {
     assets: AssetSummary[];
-    nextCursor: { afterSequence: number } | null;
+    nextCursor: string | null;
   } {
-    const limit = input.limit ?? 250,
-      after = input.afterSequence ?? 0;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined ? undefined : pageCursor.decode("asset.list", input.cursor, {}),
+      after = position === undefined ? undefined : (position as { sequence?: unknown }).sequence;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
-      !Number.isSafeInteger(after) ||
-      after < 0
+      (after !== undefined && (!Number.isSafeInteger(after) || (after as number) < 0))
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid asset page bounds");
     const rows = this.store.catalog
@@ -470,8 +484,8 @@ export class AssetStore {
           SELECT DISTINCT json_extract(value,'$.kind') AS kind
           FROM json_each(assets.metadata,'$.streams') ORDER BY kind
         )) AS mediaKinds
-        FROM assets WHERE sequence>? ORDER BY sequence LIMIT ?`)
-      .all(after, limit + 1);
+        FROM assets WHERE sequence < coalesce(?, 9223372036854775807) ORDER BY sequence DESC LIMIT ?`)
+      .all((after as number | undefined) ?? null, limit + 1);
     return {
       assets: rows.slice(0, limit).map(
         (row) =>
@@ -481,36 +495,50 @@ export class AssetStore {
           }) as AssetSummary,
       ),
       nextCursor:
-        rows.length > limit ? { afterSequence: rows[limit - 1]!.sequence as number } : null,
+        rows.length > limit
+          ? pageCursor.encode("asset.list", { sequence: rows[limit - 1]!.sequence as number }, {})
+          : null,
     };
   }
   origins(
     id: string,
-    input: { afterProvenance?: string; limit?: number } = {},
+    input: { cursor?: string; limit?: number } = {},
   ): {
     origins: AssetProvenance[];
-    nextCursor: { afterProvenance: string } | null;
+    nextCursor: string | null;
   } {
     this.header(id);
-    const limit = input.limit ?? 250;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("asset.origins", input.cursor, { assetId: id }),
+      decodedOrigin = position as { provenance?: unknown } | undefined,
+      afterProvenance = decodedOrigin?.provenance;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
-      (input.afterProvenance !== undefined && typeof input.afterProvenance !== "string")
+      (afterProvenance !== undefined && typeof afterProvenance !== "string")
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid provenance page bounds");
     const rows = this.store.catalog
       .prepare(
         "SELECT provenance FROM asset_origins WHERE assetId=? AND provenance>? ORDER BY provenance LIMIT ?",
       )
-      .all(id, input.afterProvenance ?? "", limit + 1);
+      .all(id, afterProvenance ?? "", limit + 1);
     return {
       origins: rows
         .slice(0, limit)
         .map((row) => JSON.parse(row.provenance as string) as AssetProvenance),
       nextCursor:
-        rows.length > limit ? { afterProvenance: rows[limit - 1]!.provenance as string } : null,
+        rows.length > limit
+          ? pageCursor.encode(
+              "asset.origins",
+              { provenance: rows[limit - 1]!.provenance as string },
+              { assetId: id },
+            )
+          : null,
     };
   }
   /** Call inside the revision/job transaction when references must commit with that owner. */

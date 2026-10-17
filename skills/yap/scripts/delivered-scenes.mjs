@@ -44,7 +44,7 @@ function exactDistance(a, b) {
   );
 }
 function eventRows(result) {
-  return result.page?.rows ?? [];
+  return result.rows ?? [];
 }
 async function readEvents(invoke, selection, budgets, label) {
   const rows = [];
@@ -77,7 +77,7 @@ async function readEvents(invoke, selection, budgets, label) {
     rows.push(...eventRows(result));
     if (rows.length > budgets.maxEvents)
       throw failure("OUTPUT_BUDGET_EXCEEDED", `${label} exceeded maxEvents`);
-    cursor = result.page?.nextCursor;
+    cursor = result.nextCursor;
     if (!cursor)
       return { state: "ready", rows, coverage, observations, complete: true, nextCursor: null };
   }

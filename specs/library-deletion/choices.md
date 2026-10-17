@@ -134,3 +134,40 @@ until they do).
 - **Results are project-level with a revision count** (sound, as the spec decided).
   Entries sort by id; acquisitions and derived assets use `{kind, acquisitionId}` and
   `{kind, assetId}`.
+
+## Slice 05: one paging contract
+
+- **A continuation repeats every request parameter except `limit`** (sound). The cursor
+  stores a digest of the request's filters (`pageFilters(params)`: everything but
+  `cursor` and `limit`, key order and undefined fields ignored). A mismatch is
+  `INVALID_PARAMS`; `ARTIFACT_CHANGED` is only a stale pin, meaning the evidence the
+  cursor pinned was republished or replaced. Filters are bound once in
+  `pageCursor.encode/decode`, so no reader checks them on its own. Several evidence
+  readers had answered a filter change with `ARTIFACT_CHANGED`; they were split into a
+  filter check and a pin check, and `speaker.get`'s description, `pageParams()` and the
+  skill now state the rule.
+- **Cursors are canonical JSON with a SHA-256 integrity digest, in base64url** (sound).
+  They detect tampering and foreign scopes; they are not secret, since the caller owns
+  the library.
+- **Library listings are newest first; ordered evidence keeps its meaningful order**
+  (sound). Projects and assets page by descending sequence, exports by descending rowid,
+  presets and models by id (neither has a creation sequence). Segments, revisions and
+  evidence keep ordinal order.
+- **Readers own the envelope** (sound). Each reader takes the opaque cursor and returns
+  `{<plural>, nextCursor, ...facts}` itself. The draft's service-side page flattener and a
+  runtime result re-validation keyed on a duplicated list of collection names were
+  removed; the conformance test is the proof.
+- **Index pages stop early at the response frame budget** (sound). `index.get` and
+  `face.trajectory.get` moved from a 200 cap to the shared 1–1000, so a page also ends
+  when its serialized size approaches `RESPONSE_FRAME_BYTES`, returning a cursor.
+- **Conformance is driven by the schema** (sound). `hasPageParams` finds every paged
+  operation; each needs a fixture or a named exclusion. 18 run against a live service.
+  Five (`index.get`, `index.coverage`, `face.trajectory.get`, `audio.pause.get`,
+  `transcript.render.get`) need native analysis to seed, and each exclusion names the
+  core reader test that runs the same checks.
+- **The conformance work found nine paging bugs** (sound, fixed). Among them:
+  `transcript.review` ignored its cursor; disfluency, `index.coverage` and correspondence
+  continuations were refused; `transcript.render.get` and `face.trajectory.get` dropped
+  their pinned generation; several readers capped limits below the schema's 1000.
+- **`preset.list` is paged** (sound). It landed from main after the spec; it pages like
+  `model.list`.

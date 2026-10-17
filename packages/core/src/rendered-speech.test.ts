@@ -15,6 +15,7 @@ import { readAudioWaveFile } from "./audio-wave.js";
 import { TranscriptStore, type SpeechTranscriptionRequest } from "./transcript.js";
 import { TranscriptProcessing, assetTranscriptOwner } from "./transcript-processing.js";
 import { RenderedSpeech } from "./rendered-speech.js";
+import { expectPageTraversal } from "./page-traversal.fixture.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -104,6 +105,10 @@ async function fixture() {
     failRender: false,
     failOriginal: true,
     hold: false,
+    words: [
+      { text: "rendered", source: { startUs: 100000, endUs: 300000 }, confidence: 0.8 },
+      { text: "landmark", source: { startUs: 500000, endUs: 700000 }, confidence: 0.8 },
+    ],
   };
   let reportStarted!: () => void;
   const started = new Promise<void>((resolve) => {
@@ -223,10 +228,7 @@ async function fixture() {
       if (state.failOriginal && request.track.source === assets.path(asset.id))
         throw Error("Failed original transcript");
       const source = request.track.available[0]!;
-      const words = [
-        { text: "rendered", source: { startUs: 100000, endUs: 300000 }, confidence: 0.8 },
-        { text: "landmark", source: { startUs: 500000, endUs: 700000 }, confidence: 0.8 },
-      ];
+      const words = state.words;
       const line = { ordinal: 0, source, owned: source, state: "transcribed", words };
       const raw = JSON.stringify(line) + "\n";
       await writeFile(request.output, raw);
@@ -512,7 +514,7 @@ test("model absence is retryable and retained output reads refuse foreign revisi
   const first = f.rendered.get({ ...read, limit: 1 });
   expect(() =>
     f.rendered.get({ ...read, cursor: { ...first.page.nextCursor!, generation: randomUUID() } }),
-  ).toThrow("changed generation");
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
   expect(f.state.renders).toBe(1);
 });
 
@@ -582,4 +584,35 @@ test("a retained rendered publication without the current transcript policy cann
   expect(ready.state).toBe("ready");
   expect(ready.published!.speech.transcript.engine.policy).not.toBe("historical-policy");
   expect(ready.published!.speech.generation).not.toBe(original.published!.speech.generation);
+});
+
+test("rendered speech pages conform to the paging contract", async () => {
+  const f = await fixture();
+  f.state.failOriginal = false;
+  f.state.words = ["rendered", "landmark", "marker", "anchor"].map((text, index) => ({
+    text,
+    source: { startUs: 100000 + index * 200000, endUs: 200000 + index * 200000 },
+    confidence: 0.8,
+  }));
+  f.rendered.prepare(f.selection);
+  await f.jobs.idle();
+  const ready = f.rendered.prepare(f.selection);
+  expect(ready.state, JSON.stringify(f.jobs.inspect(ready.jobId!))).toBe("ready");
+  const read = {
+    projectId: f.selection.projectId,
+    revisionId: f.selection.revisionId,
+    generation: ready.published!.speech.generation,
+  };
+  type Continuation = { generation: string; sourceCursor: unknown };
+  const { firstCursor } = expectPageTraversal<Continuation>((limit, cursor) => {
+    const page = f.rendered.get({ ...read, limit, ...(cursor ? { cursor } : {}) }).page;
+    return { items: page.rows, nextCursor: page.nextCursor };
+  });
+  expect(() => f.rendered.get({ ...read, cursor: { ...firstCursor, sourceCursor: 7 } })).toThrow(
+    expect.objectContaining({ code: "INVALID_PARAMS" }),
+  );
+  // The requested generation is a filter; a continuation from another one is refused.
+  expect(() =>
+    f.rendered.get({ ...read, cursor: { ...firstCursor, generation: randomUUID() } }),
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
 });

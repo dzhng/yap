@@ -96,12 +96,12 @@ final class LibraryController {
         Task { @MainActor in
             do throws(ServiceFailure) {
                 var params: [String: Any] = ["limit": 5]
-                if let cursor { params["cursor"] = ["beforeSequence": cursor.beforeSequence] }
+                if let cursor { params["cursor"] = cursor }
                 let page: Recordings = try await read("recording.list", params)
                 guard service == serviceGeneration && generation == recordingGeneration else { return }
                 guard page.recordings.count <= 5,
                     Set(page.recordings.map(\.recordingId)).count == page.recordings.count,
-                    page.nextCursor.map({ $0.beforeSequence > 0 && $0.beforeSequence < (cursor?.beforeSequence ?? Int.max) && !page.recordings.isEmpty }) ?? true else {
+                    page.nextCursor.map({ !$0.isEmpty && !page.recordings.isEmpty }) ?? true else {
                     throw Self.invalid("Unreadable recording page or cursor")
                 }
                 for take in page.recordings { try validate(take) }
@@ -141,12 +141,12 @@ final class LibraryController {
         Task { @MainActor in
             do throws(ServiceFailure) {
                 var params: [String: Any] = ["limit": 5]
-                if let cursor { params["cursor"] = ["afterSequence": cursor.afterSequence] }
+                if let cursor { params["cursor"] = cursor }
                 let page: Projects = try await read("project.list", params)
                 guard service == serviceGeneration && generation == projectGeneration else { return }
                 guard page.projects.count <= 5,
                     Set(page.projects.map(\.projectId)).count == page.projects.count,
-                    page.nextCursor.map({ $0.afterSequence > 0 && $0.afterSequence < (cursor?.afterSequence ?? Int.max) }) ?? true else {
+                    page.nextCursor.map({ !$0.isEmpty }) ?? true else {
                     throw Self.invalid("Unreadable project page or cursor")
                 }
                 state.projects = page.projects.filter { state.deletions[.project($0.projectId)] == nil }
@@ -287,7 +287,7 @@ final class LibraryController {
                 throw DecodingError.keyNotFound(Keys.nextCursor, .init(codingPath: decoder.codingPath, debugDescription: "Missing recording page cursor"))
             }
             recordings = try fields.decode([ControlsState.RecentTake].self, forKey: .recordings)
-            nextCursor = try fields.decodeIfPresent(LibraryState.RecordingCursor.self, forKey: .nextCursor)
+            nextCursor = try fields.decodeIfPresent(String.self, forKey: .nextCursor)
         }
     }
     private struct Projects: Decodable {
@@ -299,7 +299,7 @@ final class LibraryController {
                 throw DecodingError.keyNotFound(Keys.nextCursor, .init(codingPath: decoder.codingPath, debugDescription: "Missing project page cursor"))
             }
             projects = try fields.decode([LibraryState.Project].self, forKey: .projects)
-            nextCursor = try fields.decodeIfPresent(LibraryState.ProjectCursor.self, forKey: .nextCursor)
+            nextCursor = try fields.decodeIfPresent(String.self, forKey: .nextCursor)
         }
     }
     private struct Deletion: Decodable {

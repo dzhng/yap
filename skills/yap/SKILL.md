@@ -175,6 +175,11 @@ unavailable; do not claim it reopened or retry writes blindly.
    diagnose the returned reason and use the advertised retry only after the cause
    is resolved. Follow returned pagination cursors, including empty pages with a
    next cursor. Preserve the transcript generation when using word identities. An
+   opaque base64url cursor is operation- and filter-specific; pass it unchanged in
+   the next request's `cursor` with every other parameter repeated (only `limit`
+   may change), and read the collection plus `nextCursor` at the response top
+   level. Another filter set is `INVALID_PARAMS`; `ARTIFACT_CHANGED` means the
+   pinned evidence changed, so start a fresh traversal.
    empty transcript range does not prove silence, and an omitted filler does not
    prove the speaker did not say it.
    Before assembly, save a task-side selection sheet with asset/stream IDs,

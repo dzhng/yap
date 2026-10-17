@@ -287,12 +287,12 @@ it("project indexes use picture taps and retained references across paging and d
     { operation: "index.get", params: { projectId: "project" } },
     {
       operation: "index.get",
-      params: { projectId: "project", cursor: { ...reference, afterOrdinal: 0 } },
+      params: { projectId: "project", cursor: "opaque" },
     },
     { operation: "index.retry", params: { projectId: "project", tap: reference.tap } },
     {
       operation: "index.coverage",
-      params: { ...reference, cursor: { ...reference, afterSequence: 0, candidateOrdinal: null } },
+      params: { ...reference, cursor: "opaque" },
     },
     { operation: "index.frame", params: { ...reference, ordinal: 0 } },
     { operation: "index.frames", params: { ...reference, ordinals: [1, 0, 1] } },
@@ -319,7 +319,7 @@ it("retained index requests bound paging, references and media batches", () => {
   expect(
     operationSchema.safeParse({
       operation: "index.get",
-      params: { ...source, limit: 201 },
+      params: { ...source, limit: 1001 },
     }).success,
   ).toBe(false);
   expect(
@@ -347,7 +347,7 @@ it("retained index requests bound paging, references and media batches", () => {
   expect(
     operationSchema.safeParse({
       operation: "index.coverage",
-      params: { ...reference, cursor: { ...reference, afterSequence: 0, candidateOrdinal: null } },
+      params: { ...reference, cursor: "opaque" },
     }).success,
   ).toBe(true);
 });
@@ -405,17 +405,12 @@ it("audio inspection selects exactly one project or asset stream", () => {
 
 it("raw cursor target and continuation namespaces are exclusive", () => {
   const fields = { sourceRange: { startUs: 0, endUs: 1000 }, limit: 1 };
-  const position = {
-    cursor: { after: null, done: false },
-    pause: { after: null, done: false },
-    geometry: { after: null, done: false },
-    interruption: { after: null, done: false },
-  };
+  const position = "opaque";
   const source = { assetId: "asset", streamId: "video", acquisitionId: "capture" };
   expect(
     operationSchema.safeParse({
       operation: "cursor.raw",
-      params: { ...source, ...fields, cursor: { reference: "pinned", position } },
+      params: { ...source, ...fields, cursor: position },
     }).success,
   ).toBe(true);
   for (const params of [
@@ -423,8 +418,8 @@ it("raw cursor target and continuation namespaces are exclusive", () => {
     { ...fields, recordingId: "library", packageHandle: "package" },
     { ...fields, packageHandle: "package", latest: true },
     { ...fields, packageHandle: "package", revisionId: "r1" },
-    { ...fields, packageHandle: "package", cursor: { recordingId: "library", ...position } },
-    { ...fields, recordingId: "library", cursor: { packageHandle: "package", ...position } },
+    { ...fields, packageHandle: "package", cursor: { recordingId: "library", position } },
+    { ...fields, recordingId: "library", cursor: { packageHandle: "package", position } },
     ...["recordingId", "packageHandle"].flatMap((field) => [
       { ...source, ...fields, [field]: "foreign-owner" },
       {
@@ -443,7 +438,7 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
       operation,
       params: { assetId: "asset", streamId: "audio", ...params },
     });
-  expect(parse("transcript.get", {})).toMatchObject({ data: { params: { limit: 250 } } });
+  expect(parse("transcript.get", {})).toMatchObject({ data: { params: { limit: 100 } } });
   expect(parse("transcript.search", { text: "hello" })).toMatchObject({
     data: { params: { limit: 100 } },
   });
@@ -468,30 +463,18 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
       "transcript.get",
       {
         speaker,
-        cursor: {
-          ...position,
-          afterSourceUs: 0,
-          afterOrdinal: null,
-          range: null,
-          speaker: { ...speaker, bindingDigest: "a".repeat(64) },
-        },
+        cursor: "opaque",
       },
     ],
     ["transcript.search", { text: "x".repeat(200), limit: 500 }],
-    [
-      "transcript.search",
-      { text: "hello", cursor: { ...position, afterSourceUs: 0, afterOrdinal: 3, text: "hello" } },
-    ],
+    ["transcript.search", { text: "hello", cursor: "opaque" }],
   ];
   for (const [operation, params] of accepted)
     expect(parse(operation, params).success, JSON.stringify(params)).toBe(true);
   const refused: [string, Record<string, unknown>][] = [
     ["transcript.get", { limit: 1001 }],
-    ["transcript.get", { cursor: { ...position, afterSourceUs: 0, afterOrdinal: null } }],
     ["transcript.search", { text: "" }],
     ["transcript.search", { text: "x".repeat(201) }],
-    ["transcript.search", { text: "hello", limit: 501 }],
-    ["transcript.search", { text: "hello", cursor: { ...position, afterSourceUs: 0 } }],
   ];
   for (const [operation, params] of refused)
     expect(parse(operation, params).success, JSON.stringify(params)).toBe(false);
@@ -557,16 +540,7 @@ it("source capture continuations retain every reader head through both public op
       acquisitionId: "capture",
       sourceRange: { startUs: 0, endUs: 1000 },
       limit: 1,
-      cursor: {
-        reference: "pinned",
-        position:
-          operation === "timeline.events"
-            ? {
-                capture: position,
-                scene: { after: { actualSourceUs: 999, ordinal: 0 }, done: false },
-              }
-            : position,
-      },
+      cursor: "opaque",
     };
     expect(operationSchema.parse({ operation, params })).toEqual({ operation, params });
     expect(
@@ -650,7 +624,7 @@ it("pause evidence accepts source and project selections with optional detector 
         revisionId: "revision",
         range: { startUs: 0, endUs: 1_000_000 },
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
-        cursor: { offset: 100 },
+        cursor: "opaque",
         limit: 50,
       },
     }).success,
@@ -801,7 +775,7 @@ it("ordinary project index references remain usable without face observations", 
     { operation: "index.frame", params: { ...reference, ordinal: 0 } },
     {
       operation: "index.get",
-      params: { projectId: "p", cursor: { ...reference, afterOrdinal: 0 } },
+      params: { projectId: "p", cursor: "opaque" },
     },
   ])
     expect(operationSchema.parse(request).params).toMatchObject(request.params);

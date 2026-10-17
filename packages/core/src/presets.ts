@@ -18,6 +18,7 @@ import type { PresetRefresh, RefreshState } from "./preset-refresh.js";
 import type { InstallReport } from "./preset-install.js";
 import { isValidReference } from "./preset-format.js";
 import { CatalogError } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 
 export type Trash = (path: string) => Promise<void>;
 const productionTrash: Trash = (path) =>
@@ -62,6 +63,28 @@ export class Presets {
           })()
         : { checkedAt: null, commit: null, error: this.installError, available: [], bytesDone: 0 },
       instructions: render(LIST_INSTRUCTIONS_TEMPLATE, {}),
+    };
+  }
+
+  page(input: { cursor?: string; limit?: number } = {}) {
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Preset page limit must be 1–1000");
+    const position =
+      input.cursor === undefined
+        ? 0
+        : (pageCursor.decode("preset.list", input.cursor, {}) as { index?: unknown }).index;
+    if (!Number.isSafeInteger(position) || (position as number) < 0)
+      throw new CatalogError("INVALID_PARAMS", "Invalid preset page cursor");
+    const listed = this.list();
+    const presets = listed.presets.slice(position as number, (position as number) + limit + 1);
+    return {
+      ...listed,
+      presets: presets.slice(0, limit),
+      nextCursor:
+        presets.length > limit
+          ? pageCursor.encode("preset.list", { index: (position as number) + limit }, {})
+          : null,
     };
   }
 

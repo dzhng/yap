@@ -1,18 +1,17 @@
 import { createServer, createConnection, type Socket } from "node:net";
 import { once } from "node:events";
-import { chmod, mkdir, writeFile, truncate, lstat, readFile, realpath } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { chmod, mkdir, writeFile, readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
-import { createHash } from "node:crypto";
-import { Models, parakeetModel } from "@yap/core/models";
+import { parakeetModel } from "@yap/core/models";
 import type { SpeechTranscriptionRequest } from "@yap/core/transcript";
 import type { SourceTranscriptRow } from "@yap/core/transcript-read";
 import { callLocal } from "@yap/client";
 import { REQUEST_FRAME_BYTES, type OperationRequest, type OperationResponse } from "@yap/protocol";
 import { projectServiceFixture } from "./project-service.fixture.js";
-import type { MediaWorker } from "./worker.js";
 import { publishControlledObservation, speakerSource } from "./speaker.fixture.js";
+import { controlledSpeech, modelMetadata } from "./transcript.fixture.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -307,131 +306,6 @@ test("package-root refusal does not revoke unrelated canonical project dispatch"
   expect((await callLocal(f.service.socketPath, f.request)).ok).toBe(true);
 });
 
-// Sparse sizes and stat-bound receipts exercise actual Models metadata/readiness only.
-// These are not model weights; the controlled transcription edge never reads them.
-async function modelMetadata(library: string) {
-  const root = join(library, "models", "parakeet", parakeetModel.revision);
-  const files: Record<string, { modifiedNs: string; inode: string }> = {};
-  for (const file of parakeetModel.files) {
-    const path = join(root, parakeetModel.folderName, file.path);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, "");
-    await truncate(path, file.bytes);
-    const info = await lstat(path, { bigint: true });
-    files[file.path] = { modifiedNs: String(info.mtimeNs), inode: String(info.ino) };
-  }
-  const receipt = join(root, "receipt.json");
-  await writeFile(
-    receipt,
-    JSON.stringify({
-      modelDigest: new Models(library).transcription("parakeet").modelDigest,
-      files,
-    }),
-  );
-  return { directory: join(root, parakeetModel.folderName), receipt };
-}
-const spoken = [
-  { text: "Open", startUs: 200000, endUs: 500000 },
-  { text: "the", startUs: 500000, endUs: 700000 },
-  { text: "Settings", startUs: 800000, endUs: 1400000 },
-  { text: "panel.", startUs: 1500000, endUs: 2000000 },
-  { text: "Um,", startUs: 4100000, endUs: 4300000 },
-  { text: "press", startUs: 4500000, endUs: 5000000 },
-  { text: "record", startUs: 5100000, endUs: 5800000 },
-];
-/** A controlled native edge: probe two audio streams and transcribe `spoken`, with raw line issues. */
-function controlledSpeech(
-  requests: SpeechTranscriptionRequest[],
-  lineIssues: Record<string, unknown>[] = [],
-): MediaWorker {
-  return async (operation, params) => {
-    if (operation === "media.probe")
-      return {
-        ok: true,
-        data: {
-          originUs: 48675,
-          streams: [
-            {
-              id: "track:1",
-              kind: "audio",
-              codec: "pcm",
-              decodable: true,
-              startUs: 0,
-              endUs: 10000000,
-              segments: [
-                { startUs: 0, endUs: 3000000, empty: false },
-                { startUs: 3000000, endUs: 4000000, empty: true },
-                { startUs: 4000000, endUs: 6000000, empty: false },
-                { startUs: 6000000, endUs: 10000000, empty: true },
-              ],
-            },
-            {
-              id: "audio",
-              kind: "audio",
-              codec: "pcm",
-              decodable: true,
-              channels: 2,
-              sampleRate: 16000,
-              startUs: 0,
-              endUs: 40000000,
-              segments: [{ startUs: 0, endUs: 40000000, empty: false }],
-            },
-          ],
-        },
-      };
-    expect(operation).toBe("speech.transcribe");
-    const request = params as SpeechTranscriptionRequest;
-    requests.push(request);
-    const lines = request.track.available.map((source, ordinal) => {
-      const words = spoken
-        .filter(
-          (word) => word.startUs >= Number(source.startUs) && word.endUs <= Number(source.endUs),
-        )
-        .map(({ text, ...range }) => ({
-          text,
-          source: range,
-          confidence: 0.9,
-          startSeconds: (range.startUs - Number(source.startUs)) / 1e6,
-          endSeconds: (range.endUs - Number(source.startUs)) / 1e6,
-        }));
-      return {
-        ordinal,
-        source,
-        owned: source,
-        state: "transcribed" as const,
-        words,
-        ...(ordinal === 0 && lineIssues.length ? { issues: lineIssues } : {}),
-      };
-    });
-    const raw = lines.map((line) => JSON.stringify(line) + "\n").join("");
-    await writeFile(request.output, raw);
-    return {
-      ok: true,
-      data: {
-        output: {
-          file: request.output,
-          bytes: Buffer.byteLength(raw),
-          sha256: createHash("sha256").update(raw).digest("hex"),
-        },
-        engine: {
-          ...parakeetModel.engine,
-          encoderPrecision: "int8",
-          computeUnits: "cpuAndNeuralEngine",
-        },
-        execution: request.execution,
-        available: request.track.available,
-        segments: lines.map(({ ordinal, source, state, words }) => ({
-          ordinal,
-          source,
-          owned: source,
-          state,
-          wordCount: words.length,
-        })),
-        wordCount: spoken.length,
-      },
-    };
-  };
-}
 test("selected-source transcript preserves filler, phrase and ready retry through actual model metadata", async () => {
   const requests: SpeechTranscriptionRequest[] = [];
   const f = await projectServiceFixture(cleanups, controlledSpeech(requests));
@@ -449,7 +323,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const selection = { assetId: ready.published!.output.assetId, streamId: "track:1" };
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
-    data: { state: "not_requested", jobId: null, page: null },
+    data: { state: "not_requested", jobId: null },
   });
   const created = await f.call("project.create", { requestId: "cached-read", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
@@ -481,7 +355,6 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     data: {
       state: "not_ready",
       reason: "source_evidence_not_ready",
-      page: null,
       dependencies: [{ state: "not_requested", jobId: null }],
     },
   });
@@ -517,34 +390,33 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       ],
     }),
   ).toMatchObject({ ok: true });
+  const attributedSpeaker = {
+    streamId: speakerInput.streamId,
+    channel: speakerInput.channel,
+    modelId: speakerInput.modelId,
+    observationRange: speakerInput.sourceRange,
+    generation: speakerMetadata.generation,
+  };
   const attributed = await f.call("transcript.get", {
     ...selection,
     limit: 4,
-    speaker: {
-      streamId: speakerInput.streamId,
-      channel: speakerInput.channel,
-      modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
-      generation: speakerMetadata.generation,
-    },
+    speaker: attributedSpeaker,
   });
   expect(attributed).toMatchObject({
     ok: true,
     data: {
-      page: {
-        rows: [
-          { id: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
-          { id: "w1", speaker: { state: "overlap", slots: [0, 1] } },
-          { id: "w2", speaker: { state: "overlap", slots: [0, 1] } },
-          { id: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
-        ],
-        nextCursor: expect.any(Object),
-      },
+      rows: [
+        { id: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
+        { id: "w1", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w2", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
+      ],
+      nextCursor: expect.any(String),
     },
   });
   if (!attributed.ok) throw new Error(JSON.stringify(attributed));
-  const attributedCursor = (attributed.data as { page: { nextCursor: unknown } }).page.nextCursor;
-  expect(attributedCursor).toMatchObject({ speaker: { bindingDigest: expect.any(String) } });
+  const attributedCursor = (attributed.data as { nextCursor: string }).nextCursor;
+  expect(attributedCursor).toEqual(expect.any(String));
   const reorderedSpeaker = {
     generation: speakerMetadata.generation,
     observationRange: speakerInput.sourceRange,
@@ -560,6 +432,10 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       cursor: attributedCursor,
     }),
   ).toMatchObject({ ok: true });
+  // The speaker request is part of the filter set; a continuation must repeat it.
+  expect(
+    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await f.call("speaker.bind", {
       assetId: speakerInput.assetId,
@@ -575,7 +451,12 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     }),
   ).toMatchObject({ ok: true });
   expect(
-    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
+    await f.call("transcript.get", {
+      ...selection,
+      limit: 4,
+      speaker: attributedSpeaker,
+      cursor: attributedCursor,
+    }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
     await f.call("speaker.bind", {
@@ -592,18 +473,21 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     }),
   ).toMatchObject({ ok: true });
   expect(
-    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
+    await f.call("transcript.get", {
+      ...selection,
+      limit: 4,
+      speaker: attributedSpeaker,
+      cursor: attributedCursor,
+    }),
   ).toMatchObject({
     ok: true,
     data: {
-      page: {
-        rows: [
-          { type: "gap", reason: "not_acquired" },
-          { id: "w4", speaker: { state: "unknown" } },
-          { id: "w5", speaker: { state: "unknown" } },
-          { id: "w6", speaker: { state: "unknown" } },
-        ],
-      },
+      rows: [
+        { type: "gap", reason: "not_acquired" },
+        { id: "w4", speaker: { state: "unknown" } },
+        { id: "w5", speaker: { state: "unknown" } },
+        { id: "w6", speaker: { state: "unknown" } },
+      ],
     },
   });
   const rows: SourceTranscriptRow[] = [];
@@ -618,12 +502,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     if (!page.ok) throw new Error(JSON.stringify(page));
     const data = page.data as {
       generation: string;
-      page: { rows: SourceTranscriptRow[]; nextCursor: unknown };
+      rows: SourceTranscriptRow[];
+      nextCursor: unknown;
     };
     generation ??= data.generation;
     expect(data.generation).toBe(generation);
-    rows.push(...data.page.rows);
-    cursor = data.page.nextCursor;
+    rows.push(...data.rows);
+    cursor = data.nextCursor;
   } while (cursor);
   await save("source-transcript", { requests, rows, generation });
   expect(
@@ -648,10 +533,8 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       ok: true,
       data: {
         generation,
-        page: {
-          entries: [{ wordIds: ["w2", "w3"], sourceRange: { startUs: 800000, endUs: 2000000 } }],
-          nextCursor: null,
-        },
+        entries: [{ wordIds: ["w2", "w3"], sourceRange: { startUs: 800000, endUs: 2000000 } }],
+        nextCursor: null,
       },
     },
   );

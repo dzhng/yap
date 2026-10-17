@@ -105,9 +105,9 @@ export class VoiceGenerationJobs {
     const parsed = assetOriginSchema.safeParse(value);
     if (!parsed.success)
       throw new CatalogError("INVALID_PARAMS", "Reference origin is not typed asset provenance");
-    let afterProvenance: string | undefined;
+    let cursor: string | undefined;
     do {
-      const page = this.owners.assets.origins(assetId, afterProvenance ? { afterProvenance } : {});
+      const page = this.owners.assets.origins(assetId, cursor ? { cursor } : {});
       for (const origin of page.origins)
         if (isDeepStrictEqual(assetOriginSchema.parse(origin), parsed.data)) {
           const selected = parsed.data;
@@ -120,8 +120,8 @@ export class VoiceGenerationJobs {
             );
           return selected;
         }
-      afterProvenance = page.nextCursor?.afterProvenance;
-    } while (afterProvenance);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
     throw new CatalogError(
       "INVALID_PARAMS",
       "Selected reference origin is not stored on this asset",

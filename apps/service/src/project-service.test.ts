@@ -1445,18 +1445,17 @@ test("selected-source transcript reads report unprepared models without download
       reason: "model_not_prepared",
       retryable: true,
       jobId: null,
-      page: null,
     },
   });
   expect(
     await f.call("transcript.review", { ...selection, range: { startUs: 0, endUs: 1_000_000 } }),
   ).toMatchObject({
     ok: true,
-    data: { state: "preparing", model: { state: "preparing" }, page: null },
+    data: { state: "preparing", model: { state: "preparing" } },
   });
   expect(await f.call("transcript.search", { ...selection, text: "hello" })).toMatchObject({
     ok: true,
-    data: { reason: "model_not_prepared", page: null },
+    data: { reason: "model_not_prepared" },
   });
   expect(await f.call("transcript.retry", selection)).toMatchObject({
     ok: false,
@@ -1589,7 +1588,8 @@ test("project transcript paging uses shared jobs and returns an empty historical
       revisionId: revision.id,
       state: "ready",
       dependencies: [],
-      page: { rows: [], nextCursor: null },
+      rows: [],
+      nextCursor: null,
     },
   });
   const searching = await f.call("transcript.search", { ...params, text: "missing words" });
@@ -1601,7 +1601,8 @@ test("project transcript paging uses shared jobs and returns an empty historical
       projectId: project.projectId,
       revisionId: revision.id,
       state: "ready",
-      page: { entries: [], nextCursor: null },
+      entries: [],
+      nextCursor: null,
     },
   });
   expect(await f.call("transcript.get", { projectId: "missing" })).toMatchObject({
@@ -2033,18 +2034,20 @@ test("model discovery crosses the public wire before either model is prepared", 
   const f = await setup(async () => ({ ok: true, data: {} }));
   expect(await f.call("model.list", {})).toMatchObject({
     ok: true,
-    data: expect.arrayContaining([
-      expect.objectContaining({
-        modelId: "parakeet",
-        purpose: "transcription",
-        descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
-      }),
-      expect.objectContaining({
-        modelId: "qwen3-tts-icl-v1",
-        purpose: "voice",
-        preparation: expect.objectContaining({ runtimeSourceRequired: true }),
-      }),
-    ]),
+    data: {
+      models: expect.arrayContaining([
+        expect.objectContaining({
+          modelId: "parakeet",
+          purpose: "transcription",
+          descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+        expect.objectContaining({
+          modelId: "qwen3-tts-icl-v1",
+          purpose: "voice",
+          preparation: expect.objectContaining({ runtimeSourceRequired: true }),
+        }),
+      ]),
+    },
   });
   expect(await f.call("model.status", { modelId: "qwen3-tts-icl-v1" })).toMatchObject({
     ok: true,

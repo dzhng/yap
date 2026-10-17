@@ -652,13 +652,8 @@ export class ProjectEvidenceInspection {
       (cursor.projectId !== input.projectId ||
         (input.revisionId !== undefined && input.revisionId !== cursor.revisionId))
     )
-      throw changed();
-    const maximum =
-      input.domain === "cursor"
-        ? 5000
-        : input.domain === "events" || input.text !== undefined
-          ? 500
-          : 1000;
+      throw new CatalogError("INVALID_PARAMS", "Project evidence continuation used other filters");
+    const maximum = input.domain === "cursor" ? 5000 : 1000;
     const limit = input.limit ?? 250;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum)
       throw new CatalogError("INVALID_PARAMS", `Limit must be 1 to ${maximum}`);
@@ -677,7 +672,9 @@ export class ProjectEvidenceInspection {
         manifest?.query?.policy !==
         policy(input.domain ?? (input.text === undefined ? "transcript" : "transcript.search"))
       )
-        throw changed();
+        throw cursor && manifest
+          ? new CatalogError("INVALID_PARAMS", "Project evidence continuation is another read's")
+          : changed();
       const plan = this.pagePlan(
         {
           ...input,
@@ -689,11 +686,12 @@ export class ProjectEvidenceInspection {
         },
         input.range === undefined,
       );
-      if (
-        manifest.queryDigest !== plan.queryDigest ||
-        (cursor && cursor.queryDigest !== plan.queryDigest)
-      )
-        throw changed();
+      if (cursor && cursor.queryDigest !== plan.queryDigest)
+        throw new CatalogError(
+          "INVALID_PARAMS",
+          "Project evidence continuation used other filters",
+        );
+      if (manifest.queryDigest !== plan.queryDigest) throw changed();
       const selections = manifest.dependencies.map(({ selection }) => selection);
       const expectedPins = digest(this.pins(manifest.dependencies));
       const validate = () => {

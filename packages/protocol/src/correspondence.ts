@@ -1,5 +1,6 @@
 import { processingTapSchema, selectionRangeSchema, signedTimeValueSchema } from "@yap/composition";
 import { z } from "zod";
+import { pageParams } from "./paging.js";
 
 const id = z.string().min(1);
 const sourceEndpointSchema = z.strictObject({
@@ -154,12 +155,8 @@ export const correspondencePrepareParamsSchema = z.strictObject({
   right: correspondenceEndpointSchema,
   measurement: correspondenceMeasurementSchema,
 });
-export const correspondenceGetParamsSchema = z.strictObject({
+export const correspondenceGetParamsSchema = pageParams({
   evidenceId: id,
   generation: id,
   packageHandle: id.optional(),
-  limit: z.int().min(1).max(128).optional(),
-  cursor: z
-    .strictObject({ evidenceId: id, generation: id, afterAnchor: z.int().min(-1) })
-    .optional(),
 });

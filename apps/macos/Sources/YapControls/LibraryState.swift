@@ -16,15 +16,8 @@ public struct LibraryState: Equatable, Sendable {
     public var projectFailure: String?
     public var deletions: [MediaTarget: DeleteRequest] = [:]
 
-    public struct RecordingCursor: Codable, Equatable, Sendable {
-        public let beforeSequence: Int
-        public init(beforeSequence: Int) { self.beforeSequence = beforeSequence }
-    }
-    public struct ProjectCursor: Codable, Equatable, Sendable {
-        /// The last sequence in a newest-first page; the next page contains lower sequences.
-        public let afterSequence: Int
-        public init(afterSequence: Int) { self.afterSequence = afterSequence }
-    }
+    public typealias RecordingCursor = String
+    public typealias ProjectCursor = String
     public struct Project: Decodable, Equatable, Sendable {
         public let projectId: String
         public let title: String

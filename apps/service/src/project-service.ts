@@ -6,6 +6,8 @@ import { recordingRetirement } from "./recording-retirement.js";
 import { projectRetirement } from "./project-retirement.js";
 import { CaptureCleanup } from "./capture-cleanup.js";
 import { ManagedStorage } from "@yap/core/storage";
+import { filteredPage, pageCursor, pageEnvelope, pageFilters } from "@yap/core/page-cursor";
+
 import { VoiceGenerationJobs } from "@yap/core/voice-generation";
 import { voiceRenderer } from "./voice.js";
 import { AudioExtraction } from "@yap/core/audio-extraction";
@@ -150,21 +152,6 @@ type TranscriptSpeakerCursor = TranscriptSpeakerRequest & { bindingDigest?: stri
  */
 function sourceTranscriptPublication(published: { generation: number | string; issues: Issue[] }) {
   return { generation: published.generation, issues: published.issues };
-}
-
-function sameTranscriptSpeakerRequest(
-  a: TranscriptSpeakerRequest,
-  b: TranscriptSpeakerRequest,
-): boolean {
-  return (
-    a.streamId === b.streamId &&
-    a.acquisitionId === b.acquisitionId &&
-    a.channel === b.channel &&
-    a.modelId === b.modelId &&
-    a.generation === b.generation &&
-    a.observationRange.startUs === b.observationRange.startUs &&
-    a.observationRange.endUs === b.observationRange.endUs
-  );
 }
 
 function importedAlignmentView(
@@ -1166,11 +1153,28 @@ export async function startProjectService(options: {
             if (!receipt)
               return operationError("NOT_FOUND", "Correspondence receipt is not retained");
             const checked = verifyCorrespondenceReceipt(receipt);
-            const after = operation.params.cursor?.afterAnchor ?? -1;
-            const limit = operation.params.limit ?? 128;
+            const correspondencePosition =
+              operation.params.cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "correspondence.get",
+                    operation.params.cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    afterAnchor?: unknown;
+                  });
+            const after = (correspondencePosition?.afterAnchor ?? -1) as number;
+            if (
+              correspondencePosition &&
+              (!Number.isSafeInteger(after) ||
+                after < 0 ||
+                after >= checked.measurement.anchors.length)
+            )
+              throw new CatalogError("INVALID_PARAMS", "Invalid correspondence page cursor");
+            const limit = operation.params.limit;
             const anchors = checked.measurement.anchors.slice(after + 1, after + 1 + limit);
             const next =
-              after + anchors.length < checked.measurement.anchors.length
+              after + 1 + anchors.length < checked.measurement.anchors.length
                 ? after + anchors.length
                 : null;
             return {
@@ -1180,16 +1184,16 @@ export async function startProjectService(options: {
                 evidenceId: checked.evidenceId,
                 generation: checked.generation,
                 verdict: checked.measurement.verdict,
+                anchors,
                 measurement: { ...checked.measurement, anchors },
-                ...(next === null
-                  ? {}
-                  : {
-                      nextCursor: {
-                        evidenceId: checked.evidenceId,
-                        generation: checked.generation,
-                        afterAnchor: next,
-                      },
-                    }),
+                nextCursor:
+                  next === null
+                    ? null
+                    : pageCursor.encode(
+                        "correspondence.get",
+                        { afterAnchor: next },
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1295,18 +1299,48 @@ export async function startProjectService(options: {
           }
           case "index.get": {
             const params = operation.params;
-            if ("projectId" in params) return { ok: true, data: indexes.getProject(params) };
-            return { ok: true, data: indexes.getSource(params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      "index.get",
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            if ("projectId" in normalized)
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  indexes.getProject(normalized as never),
+                  "index.get",
+                  pageFilters(operation.params),
+                ),
+              };
+            return {
+              ok: true,
+              data: pageEnvelope(
+                indexes.getSource(normalized as never),
+                "index.get",
+                pageFilters(operation.params),
+              ),
+            };
           }
           case "face.trajectory.get": {
             const { generation, maxGapUs, prediction, limit, cursor, ...selection } =
               operation.params;
+            const trajectoryCursor =
+              cursor === undefined
+                ? undefined
+                : pageCursor.decode("face.trajectory.get", cursor, pageFilters(operation.params));
             const page = indexes.getSource({
               ...selection,
               generation,
               ...(limit === undefined ? {} : { limit }),
-              ...(cursor === undefined ? {} : { cursor }),
-            });
+              ...(trajectoryCursor === undefined ? {} : { cursor: trajectoryCursor }),
+            } as never);
             if (!page.page) return { ok: true, data: { ...page, trajectory: null } };
             const entries = page.page.entries;
             if (entries.length === 0)
@@ -1317,7 +1351,14 @@ export async function startProjectService(options: {
                   generation,
                   trajectory: null,
                   reason: "no_face_observations",
-                  nextCursor: page.page.nextCursor,
+                  nextCursor:
+                    page.page.nextCursor === null
+                      ? null
+                      : pageCursor.encode(
+                          "face.trajectory.get",
+                          page.page.nextCursor,
+                          pageFilters(operation.params),
+                        ),
                 },
               };
             const observations = entries.map((entry) => entry.frame.faceObservations);
@@ -1328,7 +1369,14 @@ export async function startProjectService(options: {
                   state: "unavailable",
                   reason: "face_observations_unavailable",
                   generation,
-                  nextCursor: page.page.nextCursor,
+                  nextCursor:
+                    page.page.nextCursor === null
+                      ? null
+                      : pageCursor.encode(
+                          "face.trajectory.get",
+                          page.page.nextCursor,
+                          pageFilters(operation.params),
+                        ),
                 },
               };
             const supportDigest = entries[0]?.frame.supportDigest;
@@ -1360,7 +1408,14 @@ export async function startProjectService(options: {
                 state: "ready",
                 generation,
                 trajectory,
-                nextCursor: page.page.nextCursor,
+                nextCursor:
+                  page.page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "face.trajectory.get",
+                        page.page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1378,8 +1433,35 @@ export async function startProjectService(options: {
           }
           case "index.coverage": {
             const params = operation.params;
-            if ("projectId" in params) return { ok: true, data: indexes.coverageProject(params) };
-            return { ok: true, data: indexes.coverageSource(params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      "index.coverage",
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            const page =
+              "projectId" in normalized
+                ? indexes.coverageProject(normalized as never)
+                : indexes.coverageSource(normalized as never);
+            return {
+              ok: true,
+              data: {
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "index.coverage",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
+              },
+            };
           }
           case "index.frame": {
             const params = operation.params;
@@ -1411,9 +1493,25 @@ export async function startProjectService(options: {
             };
           }
           case "model.list":
-            return { ok: true, data: models.list() };
+            return {
+              ok: true,
+              data: models.page({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
+            };
           case "preset.list":
-            return { ok: true, data: presets.list() };
+            return {
+              ok: true,
+              data: presets.page({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
+            };
           case "preset.get":
             return { ok: true, data: presets.get(operation.params.id) };
           case "preset.update":
@@ -1511,7 +1609,14 @@ export async function startProjectService(options: {
                   sourceRange: params.sourceRange,
                   thresholdRMS: params.thresholdRMS,
                   limit: params.limit,
-                  cursor: params.cursor,
+                  cursor:
+                    params.cursor === undefined
+                      ? undefined
+                      : (pageCursor.decode(
+                          "alignment.get",
+                          params.cursor,
+                          pageFilters(operation.params),
+                        ) as string),
                 },
                 sourcePage = new SourceAlignmentRead(
                   alignmentRecords,
@@ -1558,11 +1663,32 @@ export async function startProjectService(options: {
                 },
               };
             }
-            const { assetId, generation, packageHandle, ...query } = params;
+            const { assetId, generation, packageHandle, cursor, ...queryParams } = params;
+            const query = {
+              ...queryParams,
+              ...(cursor === undefined
+                ? {}
+                : {
+                    cursor: pageCursor.decode(
+                      "alignment.get",
+                      cursor,
+                      pageFilters(operation.params),
+                    ),
+                  }),
+            };
             if (packageHandle)
               return {
                 ok: true,
-                data: projectPackages.sourceAlignment(packageHandle, assetId, generation, query),
+                data: pageEnvelope(
+                  projectPackages.sourceAlignment(
+                    packageHandle,
+                    assetId,
+                    generation,
+                    query as never,
+                  ),
+                  "alignment.get",
+                  pageFilters(operation.params),
+                ),
               };
             const identity = {
               owner: { kind: "asset" as const, assetId },
@@ -1582,13 +1708,22 @@ export async function startProjectService(options: {
                 throw error;
               }
             })();
+            const page = new SourceAlignmentRead(alignmentRecords, metadata).page(query as never);
             return {
               ok: true,
               data: {
                 assetId,
                 state: "wordCount" in metadata ? "ready" : "captured",
                 generation,
-                page: new SourceAlignmentRead(alignmentRecords, metadata).page(query),
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "alignment.get",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1687,14 +1822,18 @@ export async function startProjectService(options: {
               if (operation.params.packageHandle !== undefined)
                 return {
                   ok: true,
-                  data: projectPackages.projectSpeakers(
-                    operation.params.packageHandle,
-                    (() => {
-                      const input = { ...operation.params };
-                      delete input.packageHandle;
-                      delete input.view;
-                      return input;
-                    })(),
+                  data: pageEnvelope(
+                    projectPackages.projectSpeakers(
+                      operation.params.packageHandle,
+                      (() => {
+                        const input = { ...operation.params };
+                        delete input.packageHandle;
+                        delete input.view;
+                        return input;
+                      })(),
+                    ),
+                    "speaker.get",
+                    pageFilters(operation.params),
                   ),
                 };
               const result = await projectEvidence.speakers(operation.params);
@@ -1719,12 +1858,16 @@ export async function startProjectService(options: {
               });
               return {
                 ok: true,
-                data: {
-                  ...result,
-                  ...(result.page === null || rows === undefined
-                    ? {}
-                    : { page: { ...result.page, rows } }),
-                },
+                data: pageEnvelope(
+                  {
+                    ...result,
+                    ...(result.page === null || rows === undefined
+                      ? {}
+                      : { page: { ...result.page, rows } }),
+                  },
+                  "speaker.get",
+                  pageFilters(operation.params),
+                ),
               };
             }
             const {
@@ -1736,18 +1879,32 @@ export async function startProjectService(options: {
               packageHandle,
               ...selection
             } = operation.params;
+            const decodedSpeakerCursor =
+              cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "speaker.get",
+                    cursor,
+                    pageFilters(operation.params),
+                  ) as string);
             if (packageHandle !== undefined)
               return {
                 ok: true,
-                data: projectPackages.sourceSpeakers(
-                  packageHandle,
-                  { ...selection, sourceRange: observationRange },
-                  {
-                    ...(sourceRange === undefined ? {} : { sourceRange }),
-                    ...(view === undefined ? {} : { view }),
-                    ...(limit === undefined ? {} : { limit }),
-                    ...(cursor === undefined ? {} : { cursor }),
-                  },
+                data: pageEnvelope(
+                  projectPackages.sourceSpeakers(
+                    packageHandle,
+                    { ...selection, sourceRange: observationRange },
+                    {
+                      ...(sourceRange === undefined ? {} : { sourceRange }),
+                      ...(view === undefined ? {} : { view }),
+                      ...(limit === undefined ? {} : { limit }),
+                      ...(decodedSpeakerCursor === undefined
+                        ? {}
+                        : { cursor: decodedSpeakerCursor }),
+                    },
+                  ),
+                  "speaker.get",
+                  pageFilters(operation.params),
                 ),
               };
             const current = speakers.sourceStatus({ ...selection, sourceRange: observationRange });
@@ -1757,7 +1914,7 @@ export async function startProjectService(options: {
                   "ARTIFACT_CHANGED",
                   "Speaker observation is no longer published",
                 );
-              return { ok: true, data: { ...current, page: null } };
+              return { ok: true, data: { ...current } };
             }
             const metadata = current.published.evidence;
             const labels = new Map(
@@ -1771,7 +1928,7 @@ export async function startProjectService(options: {
               ...(sourceRange === undefined ? {} : { sourceRange }),
               ...(view === undefined ? {} : { view }),
               ...(limit === undefined ? {} : { limit }),
-              ...(cursor === undefined ? {} : { cursor }),
+              ...(decodedSpeakerCursor === undefined ? {} : { cursor: decodedSpeakerCursor }),
             });
             const labeledPage =
               view === "scores"
@@ -1790,7 +1947,15 @@ export async function startProjectService(options: {
                 ...selection,
                 state: "ready",
                 generation: metadata.generation,
-                page: labeledPage,
+                ...labeledPage,
+                nextCursor:
+                  labeledPage.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "speaker.get",
+                        labeledPage.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1835,8 +2000,32 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "transcript.render.get":
-            return { ok: true, data: renderedSpeech.get(operation.params) };
+          case "transcript.render.get": {
+            const { cursor, ...params } = operation.params;
+            const decoded =
+              cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "transcript.render.get",
+                    cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    generation: string;
+                    sourceCursor: unknown;
+                  });
+            return {
+              ok: true,
+              data: pageEnvelope(
+                renderedSpeech.get({
+                  ...params,
+                  // The continuation keeps its own generation so a different request refuses.
+                  ...(decoded === undefined ? {} : { cursor: decoded }),
+                }),
+                "transcript.render.get",
+                pageFilters(operation.params),
+              ),
+            };
+          }
           case "transcript.import": {
             const source: ImportedTranscriptSource = {
               assetId: operation.params.assetId,
@@ -1898,7 +2087,13 @@ export async function startProjectService(options: {
             };
           }
           case "transcript.disfluency.get": {
-            const { generation, range, limit = 100, cursor, ...selection } = operation.params;
+            const { generation, range, limit, cursor, ...selection } = operation.params;
+            const page = filteredPage("transcript.disfluency.get", {
+              cursor,
+              limit,
+              filters: pageFilters(operation.params),
+            });
+            const disfluent = (kind: string) => ["filler", "vocalization"].includes(kind);
             const source: ImportedTranscriptSource = {
               assetId: selection.assetId,
               streamId: selection.streamId,
@@ -1918,23 +2113,21 @@ export async function startProjectService(options: {
                     }
                   })();
             if (imported) {
-              const rows = imported.cues
-                .flatMap((cue) =>
-                  cue.words
-                    .filter(
-                      (word) =>
-                        !range ||
-                        (word.source.endUs > range.startUs && word.source.startUs < range.endUs),
-                    )
-                    .filter((word) => ["filler", "vocalization"].includes(wordKind(word.text)))
-                    .map((word) => ({
-                      type: "word" as const,
-                      text: word.text,
-                      sourceRange: word.source,
-                      kind: wordKind(word.text),
-                    })),
-                )
-                .slice(cursor ? Number(cursor) : 0, (cursor ? Number(cursor) : 0) + limit);
+              const rows = imported.cues.flatMap((cue) =>
+                cue.words
+                  .filter(
+                    (word) =>
+                      !range ||
+                      (word.source.endUs > range.startUs && word.source.startUs < range.endUs),
+                  )
+                  .filter((word) => disfluent(wordKind(word.text)))
+                  .map((word) => ({
+                    type: "word" as const,
+                    text: word.text,
+                    sourceRange: word.source,
+                    kind: wordKind(word.text),
+                  })),
+              );
               return {
                 ok: true,
                 data: {
@@ -1942,7 +2135,7 @@ export async function startProjectService(options: {
                   generation: imported.generation,
                   method: "word-kind-v1",
                   coverage: "complete",
-                  page: { rows, nextCursor: null },
+                  ...page.read(imported.generation, () => ({ rows, nextCursor: null })),
                 },
               };
             }
@@ -1950,16 +2143,8 @@ export async function startProjectService(options: {
               ...selection,
               ...(generation ? { generation } : {}),
             });
-            if (!current.published) return { ok: true, data: { ...current, page: null } };
+            if (!current.published) return { ok: true, data: { ...current } };
             const read = new SourceTranscriptRead(transcriptStore, current.published.transcript);
-            const page = read.page({
-              range,
-              limit: Math.max(limit, 1000),
-              ...(cursor ? { cursor: JSON.parse(cursor) } : {}),
-            });
-            const rows = page.rows.filter(
-              (row) => row.type === "word" && ["filler", "vocalization"].includes(row.kind),
-            );
             return {
               ok: true,
               data: {
@@ -1967,10 +2152,16 @@ export async function startProjectService(options: {
                 generation: current.published.transcript.generation,
                 method: "word-kind-v1",
                 coverage: "complete",
-                page: {
-                  rows: rows.slice(0, limit),
-                  nextCursor: rows.length > limit ? JSON.stringify(page.nextCursor) : null,
-                },
+                ...page.read(
+                  current.published.transcript.generation,
+                  (sourceCursor) =>
+                    read.page({
+                      range,
+                      limit: 1000,
+                      ...(sourceCursor === undefined ? {} : { cursor: sourceCursor as never }),
+                    }),
+                  (row) => row.type === "word" && disfluent(row.kind),
+                ),
               },
             };
           }
@@ -1997,14 +2188,34 @@ export async function startProjectService(options: {
           case "transcript.get":
           case "transcript.search": {
             const params = operation.params;
-            if ("projectId" in params)
+            if ("projectId" in params) {
+              const projectParams =
+                params.cursor === undefined
+                  ? params
+                  : {
+                      ...params,
+                      cursor: pageCursor.decode(
+                        operation.operation,
+                        params.cursor,
+                        pageFilters(operation.params),
+                      ),
+                    };
               return {
                 ok: true,
                 data:
                   "text" in params
-                    ? await projectEvidence.search(params)
-                    : await projectEvidence.get(params),
+                    ? pageEnvelope(
+                        await projectEvidence.search(projectParams as never),
+                        "transcript.search",
+                        pageFilters(operation.params),
+                      )
+                    : pageEnvelope(
+                        await projectEvidence.get(projectParams as never),
+                        "transcript.get",
+                        pageFilters(operation.params),
+                      ),
               };
+            }
             const selection = {
               assetId: params.assetId,
               streamId: params.streamId,
@@ -2012,22 +2223,27 @@ export async function startProjectService(options: {
                 ? {}
                 : { acquisitionId: params.acquisitionId }),
             };
-            const generation = params.generation ?? params.cursor?.generation;
+            const transcriptPosition =
+              params.cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    operation.operation,
+                    params.cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    generation?: unknown;
+                    sourceCursor?: unknown;
+                    speaker?: TranscriptSpeakerCursor;
+                  });
+            const generation =
+              params.generation ?? (transcriptPosition?.generation as string | undefined);
             const sourceParams = params as typeof params & {
               speaker?: TranscriptSpeakerRequest;
               cursor?: { speaker?: TranscriptSpeakerCursor } & Record<string, unknown>;
             };
-            const cursorSpeaker = sourceParams.cursor?.speaker;
-            const speakerRequest = sourceParams.speaker ?? cursorSpeaker;
-            if (
-              sourceParams.speaker &&
-              cursorSpeaker &&
-              !sameTranscriptSpeakerRequest(sourceParams.speaker, cursorSpeaker)
-            )
-              throw new CatalogError(
-                "ARTIFACT_CHANGED",
-                "Transcript continuation used another speaker generation",
-              );
+            // The cursor binds the speaker request as a filter and keeps the binding digest as a pin.
+            const cursorSpeaker = transcriptPosition?.speaker;
+            const speakerRequest = sourceParams.speaker;
             const importedSource: ImportedTranscriptSource = {
               assetId: selection.assetId,
               streamId: selection.streamId,
@@ -2069,30 +2285,28 @@ export async function startProjectService(options: {
                     state: "ready",
                     generation: imported.generation,
                     origin: imported.origin,
-                    page: {
-                      entries: joined.cues
-                        .filter((cue) => {
-                          const words = (
-                            cue.words.length
-                              ? cue.words.map((word) => word.text)
-                              : cue.text.split(/\s+/)
-                          ).map((word) =>
-                            word.toLowerCase().replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, ""),
-                          );
-                          return (
-                            terms.length > 0 &&
-                            words.some((_, index) =>
-                              terms.every((term, offset) => words[index + offset] === term),
-                            )
-                          );
-                        })
-                        .slice(0, params.limit ?? 100)
-                        .map((cue) => ({
-                          wordIds: cue.words.map((_, index) => `imported:${cue.ordinal}:${index}`),
-                          sourceRange: cue.source,
-                        })),
-                      nextCursor: null,
-                    },
+                    entries: joined.cues
+                      .filter((cue) => {
+                        const words = (
+                          cue.words.length
+                            ? cue.words.map((word) => word.text)
+                            : cue.text.split(/\s+/)
+                        ).map((word) =>
+                          word.toLowerCase().replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, ""),
+                        );
+                        return (
+                          terms.length > 0 &&
+                          words.some((_, index) =>
+                            terms.every((term, offset) => words[index + offset] === term),
+                          )
+                        );
+                      })
+                      .slice(0, params.limit ?? 100)
+                      .map((cue) => ({
+                        wordIds: cue.words.map((_, index) => `imported:${cue.ordinal}:${index}`),
+                        sourceRange: cue.source,
+                      })),
+                    nextCursor: null,
                   },
                 };
               }
@@ -2121,7 +2335,8 @@ export async function startProjectService(options: {
                   state: "ready",
                   generation: imported.generation,
                   origin: imported.origin,
-                  page: { rows, nextCursor: null },
+                  rows,
+                  nextCursor: null,
                 },
               };
             }
@@ -2135,13 +2350,13 @@ export async function startProjectService(options: {
                   "ARTIFACT_CHANGED",
                   "Transcript generation is no longer published",
                 );
-              return { ok: true, data: { ...current, page: null } };
+              return { ok: true, data: { ...current } };
             }
             const metadata = current.published.transcript;
             const read = new SourceTranscriptRead(transcriptStore, metadata);
-            const sourceCursor = sourceParams.cursor
-              ? omit(sourceParams.cursor, "speaker")
-              : undefined;
+            const sourceCursor = transcriptPosition?.sourceCursor as
+              | Record<string, unknown>
+              | undefined;
             const { issues, ...page } =
               "text" in params
                 ? {
@@ -2232,26 +2447,41 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                page: {
-                  transcript: metadata,
-                  ...attributedPage,
-                  ...(pinnedSpeaker === undefined ? {} : { speaker: pinnedSpeaker }),
-                  ...(attributedPage.nextCursor === null
-                    ? {}
-                    : {
-                        nextCursor: {
-                          ...attributedPage.nextCursor,
+                transcript: metadata,
+                ...(attributedPage.nextCursor === null
+                  ? { nextCursor: null }
+                  : {
+                      nextCursor: pageCursor.encode(
+                        operation.operation,
+                        {
+                          generation: metadata.generation,
+                          sourceCursor: attributedPage.nextCursor,
                           ...(pinnedSpeaker === undefined ? {} : { speaker: pinnedSpeaker }),
                         },
-                      }),
-                },
+                        pageFilters(operation.params),
+                      ),
+                    }),
+                ...("rows" in attributedPage
+                  ? { rows: attributedPage.rows }
+                  : { entries: attributedPage.entries }),
               },
             };
           }
           case "transcript.review": {
             const params = operation.params;
             if ("projectId" in params) {
-              const requested = projectEvidence.request({ ...params, prepare: true });
+              const projectParams =
+                params.cursor === undefined
+                  ? params
+                  : {
+                      ...params,
+                      cursor: pageCursor.decode(
+                        "transcript.review",
+                        params.cursor,
+                        pageFilters(operation.params),
+                      ),
+                    };
+              const requested = projectEvidence.request({ ...projectParams, prepare: true });
               const pending = requested.dependencies.filter(
                 (dependency) =>
                   dependency.state === "unavailable" && dependency.reason === "model_not_prepared",
@@ -2269,7 +2499,6 @@ export async function startProjectService(options: {
                           ? "failed"
                           : "preparing",
                     model,
-                    page: null,
                   },
                 };
               }
@@ -2277,9 +2506,16 @@ export async function startProjectService(options: {
                 if (dependency.transcript || dependency.reason === "no_audio") continue;
                 transcripts.prepareSource(dependency.selection);
               }
-              const ready = projectEvidence.request({ ...params, prepare: true });
-              if (!ready.published) return { ok: true, data: { ...ready, page: null } };
-              return { ok: true, data: await projectEvidence.get(params) };
+              const ready = projectEvidence.request({ ...projectParams, prepare: true });
+              if (!ready.published) return { ok: true, data: { ...ready } };
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  await projectEvidence.get(projectParams),
+                  "transcript.review",
+                  pageFilters(operation.params),
+                ),
+              };
             }
             const selection = {
               assetId: params.assetId,
@@ -2288,13 +2524,18 @@ export async function startProjectService(options: {
                 ? {}
                 : { acquisitionId: params.acquisitionId }),
             };
+            // Decode before any readiness work so another filter set never reaches a transcript.
+            const reviewCursor =
+              params.cursor === undefined
+                ? undefined
+                : pageCursor.decode("transcript.review", params.cursor, pageFilters(params));
+            const reviewRange = params.range;
             const reviewSelection = {
               ...selection,
-              ...(params.range === undefined ? {} : { executionRange: params.range }),
+              ...(reviewRange === undefined ? {} : { executionRange: reviewRange }),
             };
             let current = transcripts.sourceStatus(reviewSelection);
-            if (current.reason === "no_audio")
-              return { ok: true, data: { ...current, page: null } };
+            if (current.reason === "no_audio") return { ok: true, data: { ...current } };
             if (current.reason === "model_not_prepared") {
               const model = ensureReviewModel();
               return {
@@ -2303,7 +2544,6 @@ export async function startProjectService(options: {
                   ...current,
                   state: model.state === "failed" ? "failed" : "preparing",
                   model,
-                  page: null,
                 },
               };
             }
@@ -2311,10 +2551,14 @@ export async function startProjectService(options: {
               transcripts.prepareSource(reviewSelection);
               current = transcripts.sourceStatus(reviewSelection);
             }
-            if (!current.published) return { ok: true, data: { ...current, page: null } };
+            if (!current.published) return { ok: true, data: { ...current } };
             const metadata = current.published.transcript;
             const read = new SourceTranscriptRead(transcriptStore, metadata);
-            const { issues, ...page } = read.page({ range: params.range, limit: params.limit });
+            const { issues, ...page } = read.page({
+              range: reviewRange,
+              limit: params.limit,
+              ...(reviewCursor === undefined ? {} : { cursor: reviewCursor as never }),
+            });
             return {
               ok: true,
               data: {
@@ -2323,7 +2567,16 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                page: { transcript: metadata, ...page },
+                transcript: metadata,
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "transcript.review",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -2331,12 +2584,36 @@ export async function startProjectService(options: {
           case "cursor.raw": {
             const params = operation.params;
             const method = operation.operation === "timeline.events" ? "events" : "cursor";
-            if ("projectId" in params)
-              return { ok: true, data: await projectEvidence[method](params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      operation.operation,
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            if ("projectId" in normalized)
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  await projectEvidence[method](normalized as never),
+                  operation.operation,
+                  pageFilters(operation.params),
+                ),
+              };
             if ("assetId" in params)
               return {
                 ok: true,
-                data: method === "events" ? sourceEvents.events(params) : capture.cursor(params),
+                data: pageEnvelope(
+                  method === "events"
+                    ? sourceEvents.events(normalized as never)
+                    : capture.cursor(normalized as never),
+                  operation.operation,
+                  pageFilters(operation.params),
+                ),
               };
             return operationError(
               "NOT_READY",
@@ -2521,28 +2798,28 @@ export async function startProjectService(options: {
             };
           }
           case "audio.pause.get": {
-            const { limit = 100, cursor, ...selection } = operation.params;
+            const { limit, cursor, ...selection } = operation.params;
+            // Refuse a foreign continuation before admitting analysis work.
+            const page = filteredPage("audio.pause.get", {
+              cursor,
+              limit,
+              filters: pageFilters(operation.params),
+            });
             const status = await acoustics.request({ ...selection, kind: "pause" });
             const allIntervals =
               status.published?.artifact.analysis.kind === "pause"
                 ? status.published.artifact.analysis.intervals
                 : [];
+            const { rows: intervals, nextCursor } = page.read(
+              status.published ? status.published.generation : null,
+              () => ({ rows: allIntervals, nextCursor: null }),
+            );
             const published = status.published
               ? {
                   ...status.published,
                   artifact: {
                     ...status.published.artifact,
-                    analysis: {
-                      ...status.published.artifact.analysis,
-                      intervals: allIntervals.slice(
-                        cursor?.offset ?? 0,
-                        (cursor?.offset ?? 0) + limit,
-                      ),
-                    },
-                    nextCursor:
-                      (cursor?.offset ?? 0) + limit < allIntervals.length
-                        ? { offset: (cursor?.offset ?? 0) + limit }
-                        : null,
+                    analysis: { ...status.published.artifact.analysis, intervals },
                   },
                 }
               : null;
@@ -2551,6 +2828,7 @@ export async function startProjectService(options: {
               data: {
                 ...status,
                 published: publishedOutput(published, (value) => value.artifact),
+                intervals,
                 delivery: published
                   ? delivery.open(
                       "projectId" in status
@@ -2559,6 +2837,7 @@ export async function startProjectService(options: {
                       () => cache.acquire(published.artifact.cacheId),
                     )
                   : null,
+                nextCursor,
               },
             };
           }
@@ -2736,7 +3015,9 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: projects.list({
-                ...operation.params.cursor,
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
@@ -2868,7 +3149,7 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: assets.origins(operation.params.assetId, {
-                ...operation.params.cursor,
+                ...(operation.params.cursor ? { cursor: operation.params.cursor } : {}),
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
@@ -2876,7 +3157,9 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: assets.list({
-                ...operation.params.cursor,
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
@@ -2977,7 +3260,9 @@ export async function startProjectService(options: {
       }
     };
     const serve: LocalHandler = (request, signal) => {
-      const task = Promise.resolve(handle(request, signal));
+      const task = Promise.resolve(handle(request, signal)).then((result) => {
+        return result;
+      });
       pending.add(task);
       void task.then(
         () => {

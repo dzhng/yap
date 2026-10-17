@@ -1,4 +1,5 @@
 import { Catalog, CatalogError } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 import {
   readCapturePublication,
   type CapturePublication,
@@ -85,7 +86,7 @@ export function isSettled(state: RecordingState): boolean {
 const unsettledStates = (Object.keys(nextStates) as RecordingState[]).filter(
   (state) => !isSettled(state),
 );
-export type RecordingCursor = Readonly<{ beforeSequence: number }>;
+export type RecordingCursor = string;
 /** What a caller asks a take to be allocated for, canonically, so a replay can be recognized. */
 export type AllocationRequest = Readonly<{
   requestId: string;
@@ -332,11 +333,16 @@ export class CaptureStore extends Catalog {
   /** Creation sequences never move: later takes cannot enter an existing traversal. */
   list(
     cursor: RecordingCursor | null = null,
-    limit = 20,
+    limit = 100,
   ): { recordings: readonly Recording[]; nextCursor: RecordingCursor | null } {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
-      throw new CatalogError("INVALID_PARAMS", "Recording page size must be 1–100");
-    if (cursor && (!Number.isSafeInteger(cursor.beforeSequence) || cursor.beforeSequence < 1))
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Recording page size must be 1–1000");
+    const position = cursor === null ? undefined : pageCursor.decode("recording.list", cursor, {});
+    const before =
+      position === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : (position as { sequence?: unknown }).sequence;
+    if (!Number.isSafeInteger(before) || (before as number) < 1)
       throw new CatalogError("INVALID_PARAMS", "Invalid recording page cursor");
     const rows = this.catalog
       .prepare(
@@ -344,13 +350,17 @@ export class CaptureStore extends Catalog {
        WHERE state!='canceled' AND recordingId NOT IN (SELECT recordingId FROM recording_deletions) AND creationSequence < ?
        ORDER BY creationSequence DESC LIMIT ?`,
       )
-      .all(cursor?.beforeSequence ?? Number.MAX_SAFE_INTEGER, limit + 1) as RecordingRow[];
+      .all(before as number, limit + 1) as RecordingRow[];
     const recordings = rows.slice(0, limit).map(readRecording);
     return {
       recordings,
       nextCursor:
         rows.length > limit
-          ? { beforeSequence: recordings[recordings.length - 1]!.creationSequence }
+          ? pageCursor.encode(
+              "recording.list",
+              { sequence: recordings[recordings.length - 1]!.creationSequence },
+              {},
+            )
           : null,
     };
   }
@@ -388,6 +398,16 @@ export class CaptureStore extends Catalog {
       )
       .get() as RecordingRow | undefined;
     return row ? readRecording(row) : null;
+  }
+  /** A canceled or deleting take is hidden from recording discovery. */
+  listable(recordingId: string): boolean {
+    return Boolean(
+      this.catalog
+        .prepare(
+          "SELECT 1 FROM recordings WHERE recordingId=? AND state!='canceled' AND recordingId NOT IN (SELECT recordingId FROM recording_deletions)",
+        )
+        .get(recordingId),
+    );
   }
   /** One retained finalization for status when no current recovery or native take owns the view. */
   pendingFinalization(): Recording | null {

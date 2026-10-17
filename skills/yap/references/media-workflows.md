@@ -27,6 +27,8 @@ Use `asset.get` to discover immutable stream headers and each stream's
 `segmentCount`. Read full physical timing with `asset.segments`, preserving every
 returned ordinal and empty gap. Follow the complete `nextCursor` until null; a
 cursor belongs to its asset and stream. Headers never embed partial segment arrays.
+The cursor is an opaque base64url string; send it unchanged in the next request's
+`cursor` field and keep the collection plus `nextCursor` at the response top level.
 These rows describe source media, not project time or newly inferred capture support.
 Preserve returned fractional bounds and signed origins exactly when placing or
 replacing media. To request complete raw audio, omit its range or use the discovered

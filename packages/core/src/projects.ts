@@ -22,6 +22,7 @@ import { seedTextOperations, textSeeds, validateTextSeeds } from "./text-seeds.j
 import { Catalog, CatalogError } from "./catalog.js";
 import { AssetStore, compositionAsset } from "./assets.js";
 import { speakerCorrectionSchema, type SpeakerCorrection } from "./speaker-attribution.js";
+import { pageCursor } from "./page-cursor.js";
 
 export type Project = {
   projectId: string;
@@ -129,11 +130,7 @@ function editResult(
   // Historical request receipts may contain the same document inside edit.
   return { revision: result.revision, edit: omit(result.edit, "document") };
 }
-export type ProjectHistoryCursor = {
-  projectId: string;
-  afterOrdinal: number;
-  throughOrdinal: number;
-};
+export type ProjectHistoryCursor = string;
 const projectColumns = "projectId,title,createdAt,currentRevisionId";
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>
@@ -251,24 +248,37 @@ export class ProjectStore {
     if (!row) throw new CatalogError("NOT_FOUND", "Project does not exist", { projectId });
     return row as Project;
   }
-  /** Pages are newest first; afterSequence anchors the next page below the prior page's tail. */
-  list(input: { afterSequence?: number; limit?: number } = {}) {
-    const limit = input.limit ?? 250,
-      after = input.afterSequence;
+  /** A deleting project is never discoverable through library listings. */
+  listable(projectId: string): boolean {
+    return Boolean(
+      this.store.catalog
+        .prepare("SELECT 1 FROM projects WHERE projectId=? AND deletedAt IS NULL")
+        .get(projectId),
+    );
+  }
+  /** Pages are newest first; the opaque continuation anchors below the prior page's tail. */
+  list(input: { cursor?: string; limit?: number } = {}) {
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("project.list", input.cursor, {}),
+      after = position === undefined ? undefined : (position as { sequence?: unknown }).sequence;
     pageLimit(limit);
-    if (after !== undefined && (!Number.isSafeInteger(after) || after < 0))
+    if (after !== undefined && (!Number.isSafeInteger(after) || (after as number) < 0))
       throw new CatalogError("INVALID_PARAMS", "Invalid project cursor");
-    const where =
-      after === undefined || after === 0 ? "deletedAt IS NULL" : "deletedAt IS NULL AND sequence<?";
+    const where = "deletedAt IS NULL AND sequence<?";
     const rows = this.store.catalog
       .prepare(
         `SELECT sequence,${projectColumns} FROM projects WHERE ${where} ORDER BY sequence DESC LIMIT ?`,
       )
-      .all(...(after === undefined || after === 0 ? [limit + 1] : [after, limit + 1]));
+      .all(after === undefined ? Number.MAX_SAFE_INTEGER : (after as number), limit + 1);
     return {
       projects: rows.slice(0, limit).map((row) => omit(row, "sequence") as Project),
       nextCursor:
-        rows.length > limit ? { afterSequence: rows[limit - 1]!.sequence as number } : null,
+        rows.length > limit
+          ? pageCursor.encode("project.list", { sequence: rows[limit - 1]!.sequence as number }, {})
+          : null,
     };
   }
   /** The marker fences all readers and new work before asynchronous owners drain. */
@@ -513,17 +523,26 @@ export class ProjectStore {
     );
     return { projectId, revisionId: revision.id, target, steps: getProcessing(model, target) };
   }
-  history(projectId: string, cursor: ProjectHistoryCursor | null = null, limit = 250) {
+  history(projectId: string, cursor: ProjectHistoryCursor | null = null, limit = 100) {
     this.get(projectId);
     pageLimit(limit);
-    const afterOrdinal = cursor?.afterOrdinal ?? -1;
+    const position =
+      cursor === null ? undefined : pageCursor.decode("revision.history", cursor, { projectId });
+    const decoded = position as { afterOrdinal?: unknown; throughOrdinal?: unknown } | undefined;
+    const afterOrdinal = (decoded?.afterOrdinal ?? -1) as number;
     const throughOrdinal =
-      cursor?.throughOrdinal ??
+      (decoded?.throughOrdinal as number | undefined) ??
       (this.store.catalog
         .prepare("SELECT MAX(ordinal) AS ordinal FROM project_revisions WHERE projectId=?")
         .get(projectId)!.ordinal as number);
+    if (decoded) {
+      const currentThrough = this.store.catalog
+        .prepare("SELECT MAX(ordinal) AS ordinal FROM project_revisions WHERE projectId=?")
+        .get(projectId)!.ordinal as number;
+      if (throughOrdinal > currentThrough)
+        throw new CatalogError("ARTIFACT_CHANGED", "Project history pin is stale");
+    }
     if (
-      (cursor && cursor.projectId !== projectId) ||
       !Number.isSafeInteger(afterOrdinal) ||
       afterOrdinal < -1 ||
       !Number.isSafeInteger(throughOrdinal) ||
@@ -542,7 +561,11 @@ export class ProjectStore {
       revisions,
       nextCursor:
         rows.length > limit
-          ? { projectId, afterOrdinal: revisions.at(-1)!.ordinal, throughOrdinal }
+          ? pageCursor.encode(
+              "revision.history",
+              { afterOrdinal: revisions.at(-1)!.ordinal, throughOrdinal },
+              { projectId },
+            )
           : null,
     };
   }
@@ -562,7 +585,11 @@ export class ProjectStore {
     checkProjectJsonBytes(usage.bytes);
     const history = this.history(
       projectId,
-      { projectId, afterOrdinal: -1, throughOrdinal: selected.ordinal },
+      pageCursor.encode(
+        "revision.history",
+        { afterOrdinal: -1, throughOrdinal: selected.ordinal },
+        { projectId },
+      ),
       archiveLimits.history,
     );
     if (history.nextCursor)

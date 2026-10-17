@@ -46,8 +46,8 @@ const params = JSON.parse(text), operation = process.argv[2];
 if (params.projectId !== 'opaque-project-719' || params.revisionId !== 'opaque-revision-531' || params.prepare === true) process.exit(9);
 let data;
 if (operation === 'revision.get') data = ${JSON.stringify(revision.data)};
-else if (operation === 'transcript.get') data = {projectId: params.projectId, revisionId: params.revisionId, state:'ready', page:{rows:[{type:'word',text:params.cursor?'second':'first',segment:0,generation:'generation-8',ordinal:params.cursor?1:0,assetId:'asset-9',streamId:'audio-7',clipId:'clip-6',trackId:'speech-5',sourceRange:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000},fragments:[{source:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000},project:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000}}]}], nextCursor:params.cursor?null:{checkpointId:'opaque-checkpoint-131'}}};
-else if (operation === 'timeline.events') data = {revisionId:params.revisionId,state:'ready',coverage:{cuts:{state:'ready'}},page:{rows:[],nextCursor:null}};
+else if (operation === 'transcript.get') data = {projectId: params.projectId, revisionId: params.revisionId, state:'ready', rows:[{type:'word',text:params.cursor?'second':'first',segment:0,generation:'generation-8',ordinal:params.cursor?1:0,assetId:'asset-9',streamId:'audio-7',clipId:'clip-6',trackId:'speech-5',sourceRange:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000},fragments:[{source:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000},project:{startUs:params.cursor?400000:0,endUs:params.cursor?800000:400000}}]}], nextCursor:params.cursor?null:'opaque-checkpoint-131'};
+else if (operation === 'timeline.events') data = {revisionId:params.revisionId,state:'ready',coverage:{cuts:{state:'ready'}},rows:[],nextCursor:null};
 else if (operation === 'waveform.get') data = {revisionId:params.revisionId,state:'failed',reason:'controlled_decoder_failure'};
 else process.exit(10);
 console.log(JSON.stringify({ok:true,data}));
@@ -70,7 +70,7 @@ console.log(JSON.stringify({ok:true,data}));
       projectId: "opaque-project-719",
       revisionId: "opaque-revision-531",
     });
-    assert.deepEqual(first.continuation.cursor, { checkpointId: "opaque-checkpoint-131" });
+    assert.equal(first.continuation.cursor, "opaque-checkpoint-131");
     await writeFile(join(scratch, "compact.json"), JSON.stringify(first));
     const second = helper("compact-transcripts", run(examples["transcript-continuation"], scratch));
     assert.equal(second.continuation, null);

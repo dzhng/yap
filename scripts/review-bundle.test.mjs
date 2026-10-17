@@ -25,7 +25,8 @@ function fixture(cuts = {}) {
         revisionId: params.revisionId,
         state: "ready",
         coverage: { cuts: { state: "ready", basis: "revision" } },
-        page: { rows: cuts[params.revisionId] ?? [], nextCursor: null },
+        rows: cuts[params.revisionId] ?? [],
+        nextCursor: null,
       };
     assert.ok(["waveform.get", "transcript.get"].includes(operation));
     if (operation === "transcript.get") assert.equal(params.prepare, false);
@@ -129,7 +130,8 @@ test("incomplete cut pagination never reports unchanged and preserves pending ev
           state: "processing",
           dependencies: [{ jobId: "pending-scenes" }],
           coverage: { cuts: { state: "ready", basis: "revision" } },
-          page: { rows: [], nextCursor: "opaque-next" },
+          rows: [],
+          nextCursor: "opaque-next",
         }
       : f.invoke(op, params);
   const result = await reviewBundle({ ...base, maxEventPages: 1, maxWindows: 1 }, invoke);
@@ -159,10 +161,28 @@ test("cut occurrence identifiers are provenance while changed revision receipts 
       ? {
           revisionId: "concurrent-head",
           coverage: { cuts: { state: "ready" } },
-          page: { rows: [], nextCursor: null },
+          rows: [],
+          nextCursor: null,
         }
       : f.invoke(op, params),
   );
   assert.equal(wrong.comparison.cutEvidenceChanged, null);
   assert.equal(wrong.revisions[0].events.error.error.code, "ARTIFACT_CHANGED");
+});
+
+test("a pending event read without a returned page never completes the cut scan", async () => {
+  const f = fixture();
+  const invoke = async (op, params) =>
+    op === "timeline.events"
+      ? {
+          projectId: "p",
+          revisionId: params.revisionId,
+          state: "processing",
+          jobId: "pending-scenes",
+          coverage: { cuts: { state: "ready", basis: "revision" } },
+        }
+      : f.invoke(op, params);
+  const result = await reviewBundle({ ...base, timeline: { frames: 0, maxEventPages: 1 } }, invoke);
+  assert.equal(result.revisions[0].events.complete, false);
+  assert.equal(result.comparison.state, "partial");
 });

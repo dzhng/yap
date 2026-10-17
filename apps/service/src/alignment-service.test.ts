@@ -14,7 +14,12 @@ import {
   alignmentGenerationResource,
 } from "@yap/core/alignment-evidence";
 import { selectAlignmentSource } from "@yap/core/source-alignment";
-import { alignmentSource, alignmentOutput } from "./alignment.fixture.js";
+import {
+  alignmentProbe as probe,
+  alignmentSource,
+  alignmentOutput,
+  publishRetainedAlignment,
+} from "./alignment.fixture.js";
 import { projectServiceFixture } from "./project-service.fixture.js";
 import { jsonWorker } from "./worker.js";
 
@@ -175,8 +180,8 @@ test.runIf(process.platform === "darwin")(
         .packageHandle;
     const packaged = await target.call("alignment.get", { ...query, packageHandle });
     if (!original.ok || !packaged.ok) throw Error(JSON.stringify({ original, packaged }));
-    const originalPage = (original.data as { page: { rows: unknown[]; nextCursor: string } }).page,
-      portablePage = (packaged.data as { page: { rows: unknown[]; nextCursor: string } }).page;
+    const originalPage = original.data as { rows: unknown[]; nextCursor: string },
+      portablePage = packaged.data as { rows: unknown[]; nextCursor: string };
     expect(portablePage.rows).toEqual(originalPage.rows);
     expect(
       await target.call("alignment.get", {
@@ -184,7 +189,7 @@ test.runIf(process.platform === "darwin")(
         packageHandle,
         cursor: originalPage.nextCursor,
       }),
-    ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
+    ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
     const continued = await target.call("alignment.get", {
       ...query,
       packageHandle,
@@ -193,7 +198,7 @@ test.runIf(process.platform === "darwin")(
     expect(continued).toMatchObject({
       ok: true,
       data: {
-        page: { rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "active" }] },
+        rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "active" }],
       },
     });
     const raw = await target.call("alignment.get", {
@@ -205,7 +210,7 @@ test.runIf(process.platform === "darwin")(
     });
     expect(raw).toMatchObject({
       ok: true,
-      data: { page: { bytesBase64: Buffer.from(operands.report).toString("base64") } },
+      data: { bytesBase64: Buffer.from(operands.report).toString("base64") },
     });
     const adopted = await wait(
       target,
@@ -229,22 +234,6 @@ test.runIf(process.platform === "darwin")(
   },
   30000,
 );
-const probe = {
-  originUs: 0,
-  streams: [
-    {
-      id: "a1",
-      kind: "audio",
-      codec: "control",
-      decodable: true,
-      channels: 2,
-      sampleRate: 16000,
-      startUs: 0,
-      endUs: 2000000,
-      segments: [{ startUs: 0, endUs: 2000000, empty: false }],
-    },
-  ],
-};
 test("public alignment preparation refuses unavailable runtime and incomplete support without inference", async () => {
   const requests: string[] = [];
   const f = await projectServiceFixture(cleanup, async (operation) => {
@@ -364,41 +353,11 @@ test("public pinned pages, thresholds and original bytes survive restart without
     assetId = job.published!.output.assetId;
   const library = join(f.home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
-  const assets = new AssetStore(catalog, library),
-    acquisitions = new AcquisitionStore(catalog),
-    models = new Models(library);
-  const selected = selectAlignmentSource(assets, acquisitions, {
+  const { evidence, source, values, identity } = publishRetainedAlignment(
+    catalog,
+    library,
     assetId,
-    streamId: "a1",
-    channel: 0,
-    sourceRange: alignmentSource.observationRange,
-    text: alignmentSource.text,
-    modelId: "nemo-ctc110",
-  });
-  const evidence = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
-  const source = {
-    ...alignmentSource,
-    supportDigest: selected.supportDigest,
-    engine: models.alignment("nemo-ctc110").engine,
-  };
-  const values = alignmentOutput();
-  for (const field of ["nativeReceipt", "report"] as const) {
-    const value = JSON.parse(values[field]);
-    value.modelSha256 = source.engine.modelSha256;
-    values[field] = JSON.stringify(value);
-  }
-  const identity = {
-    owner: { kind: "asset" as const, assetId },
-    generation: "retained-alignment-g1",
-    policy: "alignment-v1" as const,
-  };
-  const staged = evidence.stage(identity, source, values);
-  catalog.transaction(() => {
-    staged.publish();
-    new ResourceReferences(catalog).retain("alignment-generation", { kind: "asset", id: assetId }, [
-      alignmentGenerationResource(identity),
-    ]);
-  });
+  );
   const failedIdentity = { ...identity, generation: "retained-alignment-failed" };
   const failedOperands = { ...values, report: "{}", correspondence: "" };
   evidence.capture(failedIdentity, source, failedOperands);
@@ -419,7 +378,8 @@ test("public pinned pages, thresholds and original bytes survive restart without
     ok: true,
     data: {
       state: "captured",
-      page: { evidence: { verified: false }, bytesBase64: Buffer.from("{}").toString("base64") },
+      evidence: { verified: false },
+      bytesBase64: Buffer.from("{}").toString("base64"),
     },
   });
   expect(
@@ -438,14 +398,12 @@ test("public pinned pages, thresholds and original bytes survive restart without
     data: {
       state: "ready",
       generation: identity.generation,
-      page: {
-        rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "quiet" }],
-        nextCursor: expect.any(String),
-      },
+      rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "quiet" }],
+      nextCursor: expect.any(String),
     },
   });
   if (!first.ok) throw new Error(JSON.stringify(first));
-  const cursor = (first.data as { page: { nextCursor: string } }).page.nextCursor;
+  const cursor = (first.data as { nextCursor: string }).nextCursor;
   const next = await f.call("alignment.get", { ...query, cursor });
   await f.service.close();
   const restarted = await projectServiceFixture(
@@ -458,7 +416,7 @@ test("public pinned pages, thresholds and original bytes survive restart without
   expect(await restarted.call("alignment.get", { ...query, cursor })).toEqual(next);
   expect(
     await restarted.call("alignment.get", { ...query, cursor, thresholdRMS: 0.2 }),
-  ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await restarted.call("alignment.get", {
       assetId,
@@ -468,7 +426,7 @@ test("public pinned pages, thresholds and original bytes survive restart without
     }),
   ).toMatchObject({
     ok: true,
-    data: { page: { bytesBase64: Buffer.from(values.report).toString("base64") } },
+    data: { bytesBase64: Buffer.from(values.report).toString("base64") },
   });
   expect(await restarted.call("alignment.get", { assetId, generation: "other" })).toMatchObject({
     ok: false,
