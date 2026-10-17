@@ -302,7 +302,9 @@ test("same-provenance project deletion and package close revoke only their own d
     { projectIndexDomain },
     { projectComposition },
     { selectSource },
-    { ProjectDeletion },
+    { LibraryDeletion },
+    { projectRetirement },
+    { DeletionPlans },
     { ManagedFiles },
   ] = await Promise.all([
     import("../../../packages/core/dist/cache.js"),
@@ -311,7 +313,9 @@ test("same-provenance project deletion and package close revoke only their own d
     import("../../../packages/core/dist/project-index.js"),
     import("../../../packages/core/dist/project-window.js"),
     import("../../../packages/core/dist/source-selection.js"),
-    import("../dist/project-deletion.js"),
+    import("../dist/library-deletion.js"),
+    import("../dist/project-retirement.js"),
+    import("../../../packages/core/dist/deletion-plans.js"),
     import("../dist/managed-files.js"),
   ]);
   const f = await fixture(t),
@@ -337,14 +341,18 @@ test("same-provenance project deletion and package close revoke only their own d
   });
   await cache.reconcile();
   // No exports exist; export retirement is the external edge, not a simulated project deletion.
-  const deletion = new ProjectDeletion(
-    f.projects,
-    f.jobs,
-    cache,
-    new ManagedFiles(f.home, worker),
-    f.delivery,
-    { retireOwner: async () => {} },
-    index,
+  const deletion = new LibraryDeletion(new DeletionPlans(f.store));
+  deletion.register(
+    projectRetirement({
+      catalog: f.store,
+      store: f.projects,
+      jobs: f.jobs,
+      cache,
+      files: new ManagedFiles(f.home, worker),
+      delivery: f.delivery,
+      exports: { retireOwner: async () => {} },
+      index,
+    }),
   );
   try {
     await f.registry.recover();
@@ -364,7 +372,7 @@ test("same-provenance project deletion and package close revoke only their own d
     const sibling = f.delivery.open({ kind: "package", id: second }, () => lease(second));
     const library = f.delivery.open({ kind: "project", id: projectId }, () => lease(first));
     assert.deepEqual(f.registry.lookup(first).manifest.snapshot, f.snapshot);
-    await deletion.delete(projectId);
+    await deletion.delete({ kind: "project", id: projectId });
     assert.throws(() => f.projects.get(projectId), { code: "NOT_FOUND" });
     assert.deepEqual(f.assets.get(f.asset.id), f.asset);
     assert.throws(() => f.delivery.read(library.token, 0, 20), { code: "ARTIFACT_EXPIRED" });

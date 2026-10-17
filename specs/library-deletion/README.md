@@ -17,7 +17,7 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 and 01 done. Choices made along the way are in
+**Status.** Slices 00, 01 and 02 done. Choices made along the way are in
 [choices.md](choices.md).
 
 Slice 01 evidence: protocol, core, CLI and service suites, every package build and
@@ -25,9 +25,11 @@ typecheck, the Swift build and the native node suites are green. `YapCaptureTest
 flaky (`LIVE_VERIFICATION_MISSING`, `REPEATED_CAMERA_SNAPSHOT`) on the pre-slice
 revision `a82dea44` too: it failed 3 of 4 runs there and 1 of 3 on slice 01, with the
 same two errors, on an unloaded machine with free disk. Slice 01 does not touch capture.
+Slice 02 adds the shared `LibraryDeletion` coordinator and idempotent deletion-plan
+tables while keeping catalog format 29.
 The flake is fixed separately, outside this spec's slices.
 
-**Pick up at** slices 02 and 05, in parallel worktrees.
+**Pick up at** slices 03 and 05, in parallel worktrees.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -41,7 +43,7 @@ The flake is fixed separately, outside this spec's slices.
 **TODO**
 - [x] 00 Probes and open checks — [slices/00-probes.md](slices/00-probes.md)
 - [x] 01 Retryability per error code — [slices/01-error-ledger.md](slices/01-error-ledger.md)
-- [ ] 02 One deletion coordinator and deletion plans — [slices/02-deletion-coordinator.md](slices/02-deletion-coordinator.md)
+- [x] 02 One deletion coordinator and deletion plans — [slices/02-deletion-coordinator.md](slices/02-deletion-coordinator.md)
 - [ ] 03 Deletion fence and publish race — [slices/03-fence.md](slices/03-fence.md)
 - [ ] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
 - [ ] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)

@@ -7,7 +7,9 @@ import { TranscriptProcessing } from "@yap/core/transcript-processing";
 import { IndexProcessing } from "@yap/core/index-processing";
 import { sourceIndexDomain } from "@yap/core/source-index";
 import { Models } from "@yap/core/models";
-import { ProjectDeletion } from "../../dist/project-deletion.js";
+import { LibraryDeletion } from "../../dist/library-deletion.js";
+import { projectRetirement } from "../../dist/project-retirement.js";
+import { DeletionPlans } from "../../../../packages/core/dist/deletion-plans.js";
 import { DerivativeDelivery } from "../../dist/delivery.js";
 import { ManagedStorage } from "@yap/core/storage";
 import { ScreenshotIndexStore } from "@yap/core/screenshot-index";
@@ -356,7 +358,19 @@ export async function fixture(
     delivery,
   });
   domain.package = packages;
-  const deletion = new ProjectDeletion(projects, jobs, cache, files, delivery, exports, index);
+  const deletion = new LibraryDeletion(new DeletionPlans(catalog));
+  deletion.register(
+    projectRetirement({
+      catalog,
+      store: projects,
+      jobs,
+      cache,
+      files,
+      delivery,
+      exports,
+      index,
+    }),
+  );
   const storage = new ManagedStorage(null, cache, home, (signal) =>
     exports.usage(undefined, signal),
   );

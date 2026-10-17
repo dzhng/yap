@@ -12,7 +12,9 @@ import { JobQueue, type JobExecutor } from "@yap/core/jobs";
 import { CaptureService } from "./capture.js";
 import { DerivativeDelivery } from "./delivery.js";
 import { openDirectoryLease } from "@yap/core/files";
-import { RecordingDeletion } from "./deletion.js";
+import { DeletionPlans } from "@yap/core/deletion-plans";
+import { LibraryDeletion, type DeletionFault, type DeletionPhase } from "./library-deletion.js";
+import { recordingRetirement } from "./recording-retirement.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,6 +31,7 @@ async function fixture(
   execute: JobExecutor = async () => "ready",
   directoryReady = Promise.resolve(),
   existingHome?: string,
+  fault?: DeletionFault,
 ) {
   const home = existingHome ?? (await mkdtemp("/tmp/yap-delete-"));
   const store = new CaptureStore(join(home, "catalog.sqlite"), {
@@ -96,10 +99,11 @@ async function fixture(
       },
     },
   };
-  const deletion = new RecordingDeletion({
+  const deletion = new LibraryDeletion(new DeletionPlans(store), fault ? { fault } : {});
+  deletion.register(recordingRetirement({
     ...owners,
     sources: new CaptureSources(store, acquisitions, jobs, home, owners.files),
-  });
+  }));
   let closed = false;
   async function closeOwners() {
     if (closed) return;
@@ -171,11 +175,11 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
   let finished: Promise<unknown> = Promise.resolve();
   try {
     let deleted = false;
-    const first = f.deletion.delete(target.recordingId).then((result) => {
+    const first = f.deletion.delete({ kind: "recording", id: target.recordingId }).then((result) => {
       deleted = true;
       return result;
     });
-    const second = f.deletion.delete(target.recordingId);
+    const second = f.deletion.delete({ kind: "recording", id: target.recordingId });
     finished = Promise.allSettled([first, second]);
     expect(() => f.delivery.read(lease.token, 0, 1)).toThrow(
       expect.objectContaining({ code: "ARTIFACT_EXPIRED" }),
@@ -202,8 +206,8 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     expect(f.removed).toEqual([target.recordingId]);
     expect(f.jobs.status(request).jobId).toBeNull();
     expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
-    await expect(f.deletion.delete(target.recordingId)).resolves.toMatchObject({ deleted: true });
-    await expect(f.deletion.delete("../outside")).resolves.toMatchObject({ deleted: true });
+    await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).resolves.toMatchObject({ deleted: true });
+    await expect(f.deletion.delete({ kind: "recording", id: "../outside" })).resolves.toMatchObject({ deleted: true });
   } finally {
     finish.resolve("late result");
     await finished;
@@ -218,13 +222,65 @@ test("delete removes donor files but never sibling donors or prepared speech mod
   await mkdir(model, { recursive: true });
   await writeFile(join(model, "README.md"), "model card");
 
-  await expect(f.deletion.delete(target.recordingId)).resolves.toEqual({
+  await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).resolves.toEqual({
     recordingId: target.recordingId,
     deleted: true,
   });
   await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
   expect(await readFile(join(model, "README.md"), "utf8")).toBe("model card");
+});
+
+test("recording plans resume every phase boundary with the real retirement registration", async () => {
+  const boundaries: Array<[DeletionPhase, "before" | "after"]> = [
+    ["check", "before"],
+    ["plan", "before"],
+    ["plan", "after"],
+    ["tombstone", "before"],
+    ["tombstone", "after"],
+    ["drain", "before"],
+    ["drain", "after"],
+    ["files", "before"],
+    ["files", "after"],
+    ["rows", "before"],
+    ["rows", "after"],
+    ["clear", "before"],
+    ["clear", "after"],
+  ];
+  for (const [failedPhase, failedTiming] of boundaries) {
+    const home = await mkdtemp("/tmp/yap-delete-real-plan-");
+    let armed = true;
+    const f = await fixture(
+      undefined,
+      undefined,
+      home,
+      (phase, _subject, timing) => {
+        if (armed && phase === failedPhase && timing === failedTiming) {
+          armed = false;
+          throw new Error(`fault:${phase}:${timing}`);
+        }
+      },
+    );
+    const target = await f.take();
+    await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).rejects.toMatchObject({
+      code: "DELETE_FAILED",
+    });
+    await f.closeOwners();
+
+    const resumed = await fixture(undefined, undefined, home);
+    const failures: unknown[] = [];
+    await resumed.deletion.resume((error) => failures.push(error));
+    if (failedPhase === "check" || failedPhase === "plan")
+      await expect(
+        resumed.deletion.delete({ kind: "recording", id: target.recordingId }),
+      ).resolves.toMatchObject({ recordingId: target.recordingId, deleted: true });
+    expect(failures, `${failedPhase}:${failedTiming}`).toEqual([]);
+    await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(resumed.store.deletionsPage().recordings).toEqual([]);
+    expect(resumed.store.catalog.prepare("SELECT * FROM deletion_plans").all()).toEqual([]);
+    await resumed.closeOwners();
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("source directory lifetime gates removal; a failed path keeps intent for retry", async () => {
@@ -237,7 +293,7 @@ test("source directory lifetime gates removal; a failed path keeps intent for re
   await rm(target.directory, { recursive: true });
   await symlink(sibling.directory, target.directory);
   let settled = false;
-  const result = f.deletion.delete(target.recordingId).finally(() => {
+  const result = f.deletion.delete({ kind: "recording", id: target.recordingId }).finally(() => {
     settled = true;
   });
   void result.catch(() => {});
@@ -251,7 +307,7 @@ test("source directory lifetime gates removal; a failed path keeps intent for re
     await rm(target.directory);
     await mkdir(target.directory);
     await writeFile(original, "owned leftover");
-    await expect(f.deletion.delete(target.recordingId)).resolves.toMatchObject({ deleted: true });
+    await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).resolves.toMatchObject({ deleted: true });
     await expect(lstat(original)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
   } finally {
@@ -308,7 +364,7 @@ test("failure after file removal retains restart intent until catalog cleanup su
   f.store.catalog.exec(
     "CREATE TRIGGER block_final_delete BEFORE DELETE ON recordings BEGIN SELECT RAISE(ABORT, 'fixture cleanup fault'); END",
   );
-  await expect(f.deletion.delete(target.recordingId)).rejects.toMatchObject({
+  await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).rejects.toMatchObject({
     code: "DELETE_FAILED",
     retryable: true,
   });
@@ -321,7 +377,7 @@ test("failure after file removal retains restart intent until catalog cleanup su
   await reopened.deletion.resume((error) => failures.push(error));
   expect(failures).toEqual([]);
   expect(reopened.store.markDeleting(target.recordingId)).toBeNull();
-  await expect(reopened.deletion.delete(target.recordingId)).resolves.toMatchObject({
+  await expect(reopened.deletion.delete({ kind: "recording", id: target.recordingId })).resolves.toMatchObject({
     deleted: true,
   });
 });
@@ -346,7 +402,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
   });
   await entered.promise;
   let settled = false;
-  const result = f.deletion.delete(target.recordingId).finally(() => {
+  const result = f.deletion.delete({ kind: "recording", id: target.recordingId }).finally(() => {
     settled = true;
   });
   void result.catch(() => {});
@@ -368,7 +424,7 @@ test("close joins a held source-directory acquisition and aborts before removing
   const ready = deferred<void>();
   const f = await fixture(undefined, ready.promise);
   const target = await f.take();
-  const result = f.deletion.delete(target.recordingId);
+  const result = f.deletion.delete({ kind: "recording", id: target.recordingId });
   void result.catch(() => {});
   await f.directoryEntered;
   let closed = false;
@@ -378,7 +434,7 @@ test("close joins a held source-directory acquisition and aborts before removing
   try {
     await setImmediate();
     expect(closed).toBe(false);
-    expect(() => f.deletion.delete(target.recordingId)).toThrow(
+    expect(() => f.deletion.delete({ kind: "recording", id: target.recordingId })).toThrow(
       expect.objectContaining({ code: "SERVICE_STOPPED" }),
     );
     ready.resolve();
@@ -401,7 +457,7 @@ test("close waits for the native deletion receipt before allowing the catalog to
     entered.resolve();
     await finish.promise;
   };
-  const result = f.deletion.delete(target.recordingId);
+  const result = f.deletion.delete({ kind: "recording", id: target.recordingId });
   void result.catch(() => {});
   await entered.promise;
   let closed = false;

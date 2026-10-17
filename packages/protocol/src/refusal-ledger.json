@@ -412,8 +412,7 @@
       "category": "execution-failure",
       "retryable": true,
       "files": {
-        "apps/service/src/deletion.ts": 1,
-        "apps/service/src/project-deletion.ts": 1,
+        "apps/service/src/library-deletion.ts": 1,
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
       }
@@ -899,6 +898,7 @@
         "apps/service/src/asset-conversion.ts": 1,
         "apps/service/src/exports.ts": 4,
         "apps/service/src/join-verification.ts": 4,
+        "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/loudness.ts": 1,
         "apps/service/src/portable-speakers.ts": 2,
         "apps/service/src/project-service.ts": 4,
@@ -1960,9 +1960,8 @@
       "files": {
         "apps/service/src/capture.ts": 1,
         "apps/service/src/control.ts": 2,
-        "apps/service/src/deletion.ts": 1,
         "apps/service/src/exports.ts": 3,
-        "apps/service/src/project-deletion.ts": 1,
+        "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/project-service.ts": 5,
         "packages/core/src/jobs.ts": 1
       }

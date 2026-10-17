@@ -75,3 +75,23 @@ until they do).
   Recording deletion, export retirement and failed workspace admission keep their pinned
   codes and take the ledger's retryability for them; their intents stay durable, so
   startup resumes them regardless.
+
+## Slice 02: deletion coordinator and plans
+
+- **Plan phases are `planned`, `tombstoned`, `drained`, `files` and `rows`** (sound).
+  Each phase is written only after its work is complete, so a restart repeats at most
+  an idempotent phase and never reports success before the plan row is cleared.
+- **The test seam reports boundaries as `check`, `plan`, `tombstone`, `drain`,
+  `files`, `rows` and `clear`, before and after each durable phase write** (sound).
+  The hook is constructor-only and has no public operation or persisted effect.
+- **Project `deletedAt` remains its durable tombstone** (sound). Project row
+  retention is existing request/history behavior; clearing the deletion plan is the
+  coordinator's terminal cleanup for projects, while recording tombstones are removed
+  by their existing final row cleanup.
+- **Existing tombstones are adopted as `tombstoned` plans** (sound). This keeps
+  legacy markers on the same active-map, scoped retirement and paged resume path
+  without a second cleanup implementation.
+- **Recording source retirement owns one scope across all post-tombstone phases**
+  (sound). Queue drain happens immediately before `CaptureSources.retire`; its
+  lifetime and retiring fence then cover quiesce, file removal, row cleanup and
+  finish, including retries after a phase fault.

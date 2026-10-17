@@ -1,7 +1,9 @@
 import { verifyJoin } from "./join-verification.js";
 import { AssetConversionJobs, assetConversionRuntime } from "./asset-conversion.js";
 import { UpdateAdmission } from "./update-admission.js";
-import { RecordingDeletion } from "./deletion.js";
+import { LibraryDeletion } from "./library-deletion.js";
+import { recordingRetirement } from "./recording-retirement.js";
+import { projectRetirement } from "./project-retirement.js";
 import { CaptureCleanup } from "./capture-cleanup.js";
 import { ManagedStorage } from "@yap/core/storage";
 import { VoiceGenerationJobs } from "@yap/core/voice-generation";
@@ -62,12 +64,12 @@ import { clearRenderWorkspace, withRenderedFile } from "./render.js";
 import { DerivativeDelivery } from "./delivery.js";
 import { DerivedCache } from "@yap/core/cache";
 import { ManagedFiles } from "./managed-files.js";
-import { ProjectDeletion } from "./project-deletion.js";
 import { ProjectStore } from "@yap/core/projects";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
 import { CatalogError, dependencyRefusal } from "@yap/core/catalog";
+import { DeletionPlans } from "@yap/core/deletion-plans";
 import { CaptureStore, isSettled } from "@yap/core/capture-store";
 import { CaptureService } from "./capture.js";
 import { CaptureSources } from "./capture-sources.js";
@@ -229,8 +231,7 @@ export async function startProjectService(options: {
   let catalog: CaptureStore | undefined;
   let jobs: JobQueue | undefined;
   let listenerStarting: Promise<LocalListener> | undefined;
-  let deletion: ProjectDeletion | undefined;
-  let recordingDeletion: RecordingDeletion | undefined;
+  let deletion: LibraryDeletion | undefined;
   let exports: MediaExports | undefined;
   let packages: ProjectPackages | undefined;
   let storage: ManagedStorage | undefined;
@@ -266,7 +267,7 @@ export async function startProjectService(options: {
       if (jobs?.updateBlocked) blockers.push("jobs");
       if (captureControl?.updateBlocked) blockers.push("capture");
       if (exports?.updateBlocked) blockers.push("publication");
-      if (deletion?.updateBlocked || recordingDeletion?.updateBlocked) blockers.push("deletion");
+      if (deletion?.updateBlocked) blockers.push("deletion");
       if (packages?.updateBlocked) blockers.push("packages");
       if (delivery.updateBlocked) blockers.push("delivery");
       if (modelsOwner?.updateBlocked || modelPreparations.size) blockers.push("models");
@@ -281,7 +282,6 @@ export async function startProjectService(options: {
       if (modelsOwner) modelsOwner.onUpdateProgress = callback;
       if (storage) storage.onUpdateProgress = callback;
       if (deletion) deletion.onUpdateProgress = callback;
-      if (recordingDeletion) recordingDeletion.onUpdateProgress = callback;
       if (exports) exports.onUpdateProgress = callback;
       if (packages) packages.onUpdateProgress = callback;
       if (captureControl) captureControl.onUpdateProgress = callback;
@@ -306,7 +306,6 @@ export async function startProjectService(options: {
         reconciliation,
         jobs?.close(),
         deletion?.close(),
-        recordingDeletion?.close(),
         exports?.close(),
         packages?.close(),
         storage?.close(),
@@ -1061,17 +1060,21 @@ export async function startProjectService(options: {
     await speakers.cleanup(modelLifetime.signal);
     await alignments.cleanup(modelLifetime.signal);
     await indexes.cleanup(modelLifetime.signal);
-    const projectDeletion = new ProjectDeletion(
-      projects,
-      queue,
-      cache,
-      files,
-      delivery,
-      mediaExports,
-      projectIndex,
+    const plans = new DeletionPlans(captures);
+    const libraryDeletion = new LibraryDeletion(plans);
+    deletion = libraryDeletion;
+    libraryDeletion.register(
+      projectRetirement({
+        catalog: captures,
+        store: projects,
+        jobs: queue,
+        cache,
+        files,
+        delivery,
+        exports: mediaExports,
+        index: projectIndex,
+      }),
     );
-    deletion = projectDeletion;
-    await projectDeletion.resume((error) => console.error(error));
     const status = (jobId: string) => queue.inspect(jobId);
     const describeCapture = captureSources.describe.bind(captureSources);
     const handle: LocalHandler = async (request, requestSignal): Promise<OperationResult> => {
@@ -1165,7 +1168,7 @@ export async function startProjectService(options: {
           case "recording.delete":
             return {
               ok: true,
-              data: await recordingDeletion!.delete(operation.params.recordingId),
+              data: await deletion!.delete({ kind: "recording", id: operation.params.recordingId }),
             };
           case "recording.cleanup":
             return { ok: true, data: captureCleanup.request(operation.params.recordingId) };
@@ -2654,7 +2657,10 @@ export async function startProjectService(options: {
               }),
             };
           case "project.delete":
-            return { ok: true, data: await projectDeletion.delete(operation.params.projectId) };
+            return {
+              ok: true,
+              data: await deletion!.delete({ kind: "project", id: operation.params.projectId }),
+            };
           case "project.get":
             return { ok: true, data: projects.get(operation.params.projectId) };
           case "project.list":
@@ -2943,14 +2949,16 @@ export async function startProjectService(options: {
       captureSources,
     );
     captureControl = captureCoordinator;
-    recordingDeletion = new RecordingDeletion({
-      store: captures,
-      jobs: queue,
-      capture: captureCoordinator,
-      delivery,
-      files,
-      sources: captureSources,
-    });
+    deletion!.register(
+      recordingRetirement({
+        store: captures,
+        jobs: queue,
+        capture: captureCoordinator,
+        delivery,
+        files,
+        sources: captureSources,
+      }),
+    );
     listenerStarting = listenLocal({
       runtimeDirectory: runtime,
       handler: serve,
@@ -3000,7 +3008,7 @@ export async function startProjectService(options: {
     reconciliation = closing
       ? Promise.resolve()
       : (async () => {
-          await recordingDeletion!.resume((error) => console.error(error));
+          await deletion!.resume((error) => console.error(error));
           queue.start();
           await captureCoordinator.reconcileStranded();
         })();

@@ -14,10 +14,13 @@ import { JobQueue } from "@yap/core/jobs";
 import { AcquisitionStore } from "@yap/core/acquisitions";
 import { SceneEvidenceStore, assetSceneOwner } from "@yap/core/scene-evidence";
 import { ScreenshotIndexStore } from "@yap/core/screenshot-index";
-import { projectIndexDomain, projectIndexPlan } from "@yap/core/project-index";
+import { projectIndexDomain, projectIndexPlan, type ProjectIndexRecords } from "@yap/core/project-index";
 import { projectComposition } from "@yap/core/project-window";
 import { DerivativeDelivery } from "./delivery.js";
-import { ProjectDeletion } from "./project-deletion.js";
+import { DeletionPlans } from "@yap/core/deletion-plans";
+import { LibraryDeletion } from "./library-deletion.js";
+import { projectRetirement } from "./project-retirement.js";
+import { type DeletionFault, type DeletionPhase } from "./library-deletion.js";
 
 function deferred() {
   let resolve!: () => void;
@@ -91,7 +94,19 @@ test("deletion drains canceled executors before releasing shared media; interrup
   };
   const delivery = new DerivativeDelivery();
   const exports = { retireOwner: async () => {} };
-  const deletion = new ProjectDeletion(projects, queue, cache, files, delivery, exports, index);
+  const deletion = new LibraryDeletion(new DeletionPlans(catalog));
+  deletion.register(
+    projectRetirement({
+      catalog,
+      store: projects,
+      jobs: queue,
+      cache,
+      files,
+      delivery,
+      exports,
+      index,
+    }),
+  );
   let releaseRead: (() => void) | undefined;
   try {
     await assets.recover();
@@ -180,8 +195,8 @@ test("deletion drains canceled executors before releasing shared media; interrup
     releaseRead = () => read.release();
     const job = queue.submit({ target, artifact: "fixture", lane: "heavy", input: "input" });
     await started.promise;
-    const removing = deletion.delete(target.projectId);
-    expect(deletion.delete(target.projectId)).toBe(removing);
+    const removing = deletion.delete({ kind: "project", id: target.projectId });
+    expect(deletion.delete({ kind: "project", id: target.projectId })).toBe(removing);
     await aborted.promise;
     expect(await readFile(unfinishedPicture, "utf8")).toBe("unpublished worker output");
     expect(() => delivery.read(delivered.token, 0, 32)).toThrow(
@@ -207,7 +222,19 @@ test("deletion drains canceled executors before releasing shared media; interrup
     await failed;
     await closing;
     expect(projects.deletionsPage().projectIds).toEqual([target.projectId]);
-    const resumed = new ProjectDeletion(projects, queue, cache, files, delivery, exports, index);
+    const resumed = new LibraryDeletion(new DeletionPlans(catalog));
+    resumed.register(
+      projectRetirement({
+        catalog,
+        store: projects,
+        jobs: queue,
+        cache,
+        files,
+        delivery,
+        exports,
+        index,
+      }),
+    );
     try {
       const failures: unknown[] = [];
       await resumed.resume((error) => failures.push(error));
@@ -246,7 +273,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
       expect(assets.get(asset.id)).toEqual(asset);
       expect(() => queue.job(job.jobId)).toThrow(/not found|does not exist/i);
       expect(projects.revision(two.project.projectId)).toEqual(second.revision);
-      expect(await resumed.delete(target.projectId)).toEqual({
+      expect(await resumed.delete({ kind: "project", id: target.projectId })).toEqual({
         projectId: target.projectId,
         deleted: true,
       });
@@ -264,6 +291,57 @@ test("deletion drains canceled executors before releasing shared media; interrup
   }
 });
 
+test("project plans resume every phase boundary with the real retirement registration", async () => {
+  const boundaries: Array<[DeletionPhase, "before" | "after"]> = [
+    ["check", "before"],
+    ["plan", "before"],
+    ["plan", "after"],
+    ["tombstone", "before"],
+    ["tombstone", "after"],
+    ["drain", "before"],
+    ["drain", "after"],
+    ["files", "before"],
+    ["files", "after"],
+    ["rows", "before"],
+    ["rows", "after"],
+    ["clear", "before"],
+    ["clear", "after"],
+  ];
+  for (const [failedPhase, failedTiming] of boundaries) {
+    const home = await mkdtemp(join(tmpdir(), "sr-project-plan-"));
+    let armed = true;
+    const first = await projectPlanFixture(home, (phase, _subject, timing) => {
+      if (armed && phase === failedPhase && timing === failedTiming) {
+        armed = false;
+        throw new Error(`fault:${phase}:${timing}`);
+      }
+    });
+    const project = first.projects.create({
+      requestId: "phase-plan",
+      canvas: { width: 160, height: 96, fps: { numerator: 30, denominator: 1 }, background: "#000000ff" },
+    }).project;
+    await expect(first.deletion.delete({ kind: "project", id: project.projectId })).rejects.toMatchObject({
+      code: "DELETE_FAILED",
+    });
+    await first.close();
+    const resumed = await projectPlanFixture(home);
+    const failures: unknown[] = [];
+    await resumed.deletion.resume((error) => failures.push(error));
+    if (failedPhase === "check" || failedPhase === "plan")
+      await expect(
+        resumed.deletion.delete({ kind: "project", id: project.projectId }),
+      ).resolves.toMatchObject({ projectId: project.projectId, deleted: true });
+    expect(failures, `${failedPhase}:${failedTiming}`).toEqual([]);
+    expect(resumed.projects.deletionsPage().projectIds).toEqual([]);
+    expect(resumed.catalog.catalog.prepare("SELECT * FROM deletion_plans").all()).toEqual([]);
+    expect(
+      resumed.catalog.catalog.prepare("SELECT * FROM project_revisions WHERE projectId=?").all(project.projectId),
+    ).toEqual([]);
+    await resumed.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
 function projectStoreFixture(catalog: Catalog, assets: AssetStore, home: string) {
   const acquisitions = new AcquisitionStore(catalog);
   return new ProjectStore(
@@ -272,4 +350,61 @@ function projectStoreFixture(catalog: Catalog, assets: AssetStore, home: string)
     new TranscriptStore(catalog, home, assetTranscriptOwner(assets, acquisitions)),
     acquisitions,
   );
+}
+
+async function projectPlanFixture(home: string, fault?: DeletionFault) {
+  const catalog = new Catalog(join(home, "catalog.sqlite"));
+  const assets = new AssetStore(catalog, home);
+  const projects = projectStoreFixture(catalog, assets, home);
+  const queue = new JobQueue({
+    store: catalog,
+    providers: { newId: randomUUID },
+    targets: {
+      pin(target) {
+        if (target.kind !== "project") throw new Error("Expected project");
+        projects.revision(target.projectId, target.revisionId);
+        return target;
+      },
+      isAvailable(target) {
+        if (target.kind !== "project") return false;
+        try {
+          projects.revision(target.projectId, target.revisionId);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isCapturing: () => false,
+    },
+    execute: async () => "ready",
+  });
+  const cache = new DerivedCache(catalog, home, (owner) => {
+    if (owner.kind !== "project") throw new Error("Expected project cache owner");
+    projects.get(owner.projectId);
+  });
+  await cache.reconcile();
+  const deletion = new LibraryDeletion(new DeletionPlans(catalog), fault ? { fault } : {});
+  deletion.register(
+    projectRetirement({
+      catalog,
+      store: projects,
+      jobs: queue,
+      cache,
+      files: { removeCacheFiles: async () => {} },
+      delivery: new DerivativeDelivery(),
+      exports: { retireOwner: async () => {} },
+      index: { reclaim: async () => {} } as unknown as ScreenshotIndexStore<ProjectIndexRecords>,
+    }),
+  );
+  return {
+    catalog,
+    projects,
+    deletion,
+    async close() {
+      await deletion.close();
+      await queue.close();
+      catalog.close();
+    },
+  };
 }

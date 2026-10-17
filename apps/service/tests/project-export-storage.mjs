@@ -39,7 +39,7 @@ test("storage totals include failed private exports and exclude the committed ex
   await f.jobs.idle();
   assert.equal(f.exports.status(successful).state, "committed");
   assert.equal((await f.storage.usage()).otherBytes, before.otherBytes + bytes);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.equal((await f.storage.usage()).otherBytes, before.otherBytes);
   assert.ok((await stat(join(f.output, "export.mp4"))).size > 0);
   assert.equal(await readFile(join(f.output, "taken.mp4"), "utf8"), "external sentinel");

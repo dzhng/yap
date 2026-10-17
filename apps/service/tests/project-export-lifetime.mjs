@@ -53,7 +53,7 @@ test("project deletion needs no removed, moved or replaced export destination", 
   await mkdir(foreign, { recursive: true, mode: 0o700 });
   await writeFile(join(foreign, "payload"), "not this export's");
   assert.equal((await f.storage.usage()).otherBytes, 0);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
   assert.equal(await readFile(join(foreign, "payload"), "utf8"), "not this export's");
@@ -96,7 +96,7 @@ test("abandonment fences retries and project deletion joins its drain after exte
   removing.then(() => {
     abandoned = true;
   });
-  const deleting = f.deletion.delete(f.projectId).then(() => {
+  const deleting = f.deletion.delete({ kind: "project", id: f.projectId }).then(() => {
     deleted = true;
   });
   let cleanupClosed = false;
@@ -194,7 +194,7 @@ test("deletion drains the exporter and its validated cache descriptor before rem
     (e) => e.code === "CACHE_BUSY",
   );
   let deleted = false;
-  const done = f.deletion.delete(f.projectId).then(() => {
+  const done = f.deletion.delete({ kind: "project", id: f.projectId }).then(() => {
     deleted = true;
   });
   await new Promise(setImmediate);
@@ -227,7 +227,7 @@ test("committed history survives external removal or replacement without silentl
   const replaced = await f.exports.retry(exportId);
   assert.deepEqual(replaced.receipt, committed.receipt);
   assert.equal(await readFile(file, "utf8"), "user replacement");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.equal(await readFile(file, "utf8"), "user replacement");
 });
 
@@ -249,7 +249,7 @@ test("one unsafe export staging entry does not prevent retiring independent inte
   await rename(stage, stage + "-original");
   await mkdir(stage, { mode: 0o700 });
   await writeFile(join(stage, "sentinel"), "keep");
-  await assert.rejects(f.deletion.delete(f.projectId), (e) => e.code === "DELETE_FAILED");
+  await assert.rejects(f.deletion.delete({ kind: "project", id: f.projectId }), (e) => e.code === "DELETE_FAILED");
   const discovery = f.exports.list({}).exports;
   assert.deepEqual(
     discovery.map((row) => row.exportId),
@@ -282,7 +282,7 @@ test("an unreadable unrelated destination never prevents deleting owned private 
   });
   await f.jobs.idle();
   assert.equal(f.exports.status(exportId).state, "failed");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(await readdir(f.output), ["unreadable.mp4"]);
   const after = await stat(destination, { bigint: true });
   assert.equal(after.ino, before.ino);
@@ -327,12 +327,12 @@ test("lost retirement acknowledgement resumes real project deletion after the st
   await f.jobs.idle();
   assert.equal(f.exports.status(exportId).cleanupPending, true);
   await assert.rejects(
-    f.deletion.delete(f.projectId),
+    f.deletion.delete({ kind: "project", id: f.projectId }),
     (e) => e.code === "DELETE_FAILED" && /lost retirement response/.test(e.message),
   );
   assert.deepEqual(f.projects.deletionsPage().projectIds, [f.projectId]);
   assert.deepEqual(await readdir(f.output), ["retained.mp4"]);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
 });
@@ -387,7 +387,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
   await f.exports.retry(overflow.exportId);
   await f.jobs.idle();
   assert.equal(f.exports.status(overflow.exportId).state, "committed");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual((await readdir(f.output)).sort(), ["bounded-0.mp4", "overflow.mp4"]);
 });
 
@@ -405,7 +405,7 @@ test("managed source directories cannot be selected as allegedly external export
     (e) => e.code === "INVALID_STORAGE",
   );
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.deepEqual(await readdir(f.output), []);
 });

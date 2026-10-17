@@ -42,7 +42,7 @@ test("actual owner death between external commit and catalog acknowledgement rec
     assert.equal(reopened.jobs.job(status.jobId).state, "failed");
     assert.equal(sha(await readFile(join(f.output, "recovered.mp4"))), sha(before));
     assert.deepEqual(await readdir(f.output), ["recovered.mp4"]);
-    await reopened.deletion.delete(f.projectId);
+    await reopened.deletion.delete({ kind: "project", id: f.projectId });
     assert.deepEqual(await readdir(f.output), ["recovered.mp4"]);
   } finally {
     await reopened.close();
@@ -317,7 +317,7 @@ test("interrupted allocation refuses nonempty substituted staging and keeps dele
     await reopened.jobs.idle();
     assert.equal(reopened.exports.status(exportId).state, "failed");
     await assert.rejects(
-      reopened.deletion.delete(f.projectId),
+      reopened.deletion.delete({ kind: "project", id: f.projectId }),
       (e) => e.code === "DELETE_FAILED" && /requires empty private staging/i.test(e.message),
     );
     assert.deepEqual(reopened.projects.deletionsPage().projectIds, [f.projectId]);
@@ -367,7 +367,7 @@ test("native death during receipt writing leaves unprepared evidence that the sa
     "committed",
     JSON.stringify(f.exports.status(exportId)),
   );
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(await readdir(f.output), ["retry.mp4"]);
 });
 
@@ -391,7 +391,7 @@ test("project deletion removes a receipt interrupted before its canonical public
   const { f, exportId, stage } = await receiptCrash(t);
   assert.equal(f.exports.status(exportId).state, "failed");
   assert.equal((await readFile(join(stage, "receipt.pending"))).length, 1);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(await readdir(f.output), []);
 });
 
