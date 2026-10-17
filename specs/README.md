@@ -74,6 +74,10 @@ the mechanics; the archived document owns the reasons and explicit evidence limi
 route: the agent places the app, and the app installs and keeps current the `yap`
 command, the skill and the PATH line. It is built and awaiting its release-day checks.
 
+[Presets](presets/README.md) adds style-specific, skill-like bundles that `yap`
+returns to agents (`preset.list`, `preset.get`, `preset.update`), shipped with the
+app and downloadable from this repository. It is specified but not implemented.
+
 ## Future proposals
 
 These directories hold planning questions, not unfinished implementation slices.

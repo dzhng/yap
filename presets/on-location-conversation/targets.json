@@ -1,0 +1,10 @@
+{
+ "$about": "Ranges an export must land in, widened from the measured examples (see examples/*/profile.json). Run: node ../kit/measure.mjs export.mp4 --sample-every 15 --out p.json && node ../kit/check.mjs p.json targets.json",
+ "durationSeconds": { "range": [900, 4200], "why": "long form; the example runs 51 min" },
+ "shots.longestSeconds": { "range": [300, 4000], "why": "at least one location runs as one unbroken take; the example's longest is ~15.5 min" },
+ "picture.ylow": { "range": [30, 60], "why": "lifted, faded blacks; the example averages 43" },
+ "picture.yhigh": { "range": [180, 215], "why": "rolled highlights, no clipped sky; the example averages 202" },
+ "picture.satavg": { "range": [4, 11], "why": "muted daylight; the example averages 7.5" },
+ "loudness.integratedLufs": { "range": [-28, -19], "why": "natural, unpushed speech; the example is −27.1, aim higher for phones" },
+ "loudness.truePeakDbfs": { "range": [-12, -1], "why": "headroom" }
+}

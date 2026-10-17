@@ -1,0 +1,11 @@
+{
+ "$about": "Ranges an export must land in, widened from the measured examples (see examples/*/profile.json). Run: node ../kit/measure.mjs export.mp4 --sample-every 1 --scene 0.2 --out p.json && node ../kit/check.mjs p.json targets.json",
+ "durationSeconds": { "range": [30, 60], "why": "a short film; the example runs 42 s" },
+ "shots.count": { "range": [4, 10], "why": "few, long shots; the example has 4 shots (3 hard cuts) with dissolves inside" },
+ "shots.medianSeconds": { "range": [4, 12], "why": "each shot lingers; the example's median is 7.7 s" },
+ "picture.yavg": { "range": [130, 185], "why": "bright window light; the example averages 167" },
+ "picture.ylow": { "range": [90, 140], "why": "soft, lifted shadows; the example's average low is 116" },
+ "picture.satavg": { "range": [8, 18], "why": "muted colour; the example averages 13" },
+ "loudness.integratedLufs": { "range": [-18, -15], "why": "music-only film for social; the example is −16.9" },
+ "loudness.truePeakDbfs": { "range": [-12, -1], "why": "headroom for platform encoding" }
+}

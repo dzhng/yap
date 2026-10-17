@@ -1,0 +1,7 @@
+{
+ "$about": "Ranges an export must land in, widened from the examples' profile.json files. Every example must pass.",
+ "durationSeconds": { "range": [0, 0], "why": "" },
+ "shots.medianSeconds": { "range": [0, 0], "why": "" },
+ "picture.yavg": { "range": [0, 255], "why": "" },
+ "loudness.integratedLufs": { "range": [-24, -14], "why": "" }
+}
