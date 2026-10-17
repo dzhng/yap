@@ -11,7 +11,15 @@ import type { CaptureStore } from "@yap/core/capture-store";
 import type { JobQueue } from "@yap/core/jobs";
 
 test("a failed phase resumes from its durable plan without reporting success early", async () => {
-  const boundaries: DeletionPhase[] = ["check", "plan", "tombstone", "drain", "files", "rows", "clear"];
+  const boundaries: DeletionPhase[] = [
+    "check",
+    "plan",
+    "tombstone",
+    "drain",
+    "files",
+    "rows",
+    "clear",
+  ];
   for (const failedBoundary of boundaries) {
     const home = await mkdtemp("/tmp/yap-library-deletion-");
     const path = join(home, "catalog.sqlite");
@@ -65,7 +73,11 @@ test("a failed phase resumes from its durable plan without reporting success ear
     fail = false;
     deletion = new LibraryDeletion(plans);
     deletion.register(registration);
-    await expect(deletion.resume((error) => { throw error; })).resolves.toBeUndefined();
+    await expect(
+      deletion.resume((error) => {
+        throw error;
+      }),
+    ).resolves.toBeUndefined();
     if (["check", "plan"].includes(failedBoundary))
       await expect(deletion.delete({ kind: "fixture", id: "one" })).resolves.toEqual({
         fixtureId: "one",
@@ -95,7 +107,11 @@ test("recording source admission stays fenced between file and row phases", asyn
   } as unknown as CaptureStore;
   const jobs = { drainOwner: async () => {}, forgetOwner: async () => {} } as unknown as JobQueue;
   const sources = {
-    retire: async (_id: string, _signal: AbortSignal, run: (lifetime: undefined) => Promise<void>) => {
+    retire: async (
+      _id: string,
+      _signal: AbortSignal,
+      run: (lifetime: undefined) => Promise<void>,
+    ) => {
       sourceAdmissionAllowed = false;
       try {
         await run(undefined);
@@ -107,8 +123,7 @@ test("recording source admission stays fenced between file and row phases", asyn
   } as unknown as CaptureSources;
   const deletion = new LibraryDeletion(new DeletionPlans(catalog), {
     fault: (phase, _subject, timing) => {
-      if (phase === "files" && timing === "after")
-        expect(sourceAdmissionAllowed).toBe(false);
+      if (phase === "files" && timing === "after") expect(sourceAdmissionAllowed).toBe(false);
     },
   });
   const delivery = new DerivativeDelivery();

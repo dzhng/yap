@@ -249,7 +249,10 @@ test("one unsafe export staging entry does not prevent retiring independent inte
   await rename(stage, stage + "-original");
   await mkdir(stage, { mode: 0o700 });
   await writeFile(join(stage, "sentinel"), "keep");
-  await assert.rejects(f.deletion.delete({ kind: "project", id: f.projectId }), (e) => e.code === "DELETE_FAILED");
+  await assert.rejects(
+    f.deletion.delete({ kind: "project", id: f.projectId }),
+    (e) => e.code === "DELETE_FAILED",
+  );
   const discovery = f.exports.list({}).exports;
   assert.deepEqual(
     discovery.map((row) => row.exportId),

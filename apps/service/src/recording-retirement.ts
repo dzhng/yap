@@ -24,8 +24,7 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       if (recording) owners.delivery.revoke({ kind: "recording", id: subject.id });
       return recording !== null;
     },
-    scope: (subject, signal, run) =>
-      owners.sources.retire(subject.id, signal, run),
+    scope: (subject, signal, run) => owners.sources.retire(subject.id, signal, run),
     beforeScope: async (subject, signal) => {
       await owners.jobs.drainOwner({ kind: "recording", recordingId: subject.id });
       signal.throwIfAborted();
@@ -50,10 +49,13 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
     markersPage: (afterId = "") => {
       const page = owners.store.deletionsPage(afterId);
       return {
-        subjects: page.recordings.map((recording) => ({
-          kind: "recording",
-          id: recording.recordingId,
-        } satisfies LibrarySubject)),
+        subjects: page.recordings.map(
+          (recording) =>
+            ({
+              kind: "recording",
+              id: recording.recordingId,
+            }) satisfies LibrarySubject,
+        ),
         nextAfterId: page.nextAfterId,
       };
     },

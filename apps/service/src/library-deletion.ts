@@ -3,14 +3,7 @@ import { CatalogError } from "@yap/core/catalog";
 import type { DeletionPlan, DeletionPlans } from "@yap/core/deletion-plans";
 
 export type LibrarySubject = { kind: string; id: string };
-export type DeletionPhase =
-  | "check"
-  | "plan"
-  | "tombstone"
-  | "drain"
-  | "files"
-  | "rows"
-  | "clear";
+export type DeletionPhase = "check" | "plan" | "tombstone" | "drain" | "files" | "rows" | "clear";
 export type DeletionBoundaryTiming = "before" | "after";
 export type DeletionFault = (
   boundary: DeletionPhase,
@@ -22,7 +15,10 @@ export type DeletionLifetime = { readonly fd: number } | undefined;
 export type DeletionRegistration = {
   kind: string;
   errorMode?: "preserve-catalog" | "delete-failed";
-  checkUsers?: (subject: LibrarySubject, cascade: boolean) =>
+  checkUsers?: (
+    subject: LibrarySubject,
+    cascade: boolean,
+  ) =>
     | readonly { memberKind: string; memberId: string }[]
     | Promise<readonly { memberKind: string; memberId: string }[]>;
   tombstone: (subject: LibrarySubject) => boolean | Promise<boolean>;
@@ -32,9 +28,21 @@ export type DeletionRegistration = {
     run: (lifetime: DeletionLifetime) => Promise<void>,
   ) => Promise<void>;
   beforeScope?: (subject: LibrarySubject, signal: AbortSignal) => void | Promise<void>;
-  drain: (subject: LibrarySubject, signal: AbortSignal, lifetime?: DeletionLifetime) => void | Promise<void>;
-  files: (subject: LibrarySubject, signal: AbortSignal, lifetime?: DeletionLifetime) => void | Promise<void>;
-  rows: (subject: LibrarySubject, signal: AbortSignal, lifetime?: DeletionLifetime) => boolean | Promise<boolean>;
+  drain: (
+    subject: LibrarySubject,
+    signal: AbortSignal,
+    lifetime?: DeletionLifetime,
+  ) => void | Promise<void>;
+  files: (
+    subject: LibrarySubject,
+    signal: AbortSignal,
+    lifetime?: DeletionLifetime,
+  ) => void | Promise<void>;
+  rows: (
+    subject: LibrarySubject,
+    signal: AbortSignal,
+    lifetime?: DeletionLifetime,
+  ) => boolean | Promise<boolean>;
   clearTombstone?: (subject: LibrarySubject) => void | Promise<void>;
   markersPage?: (afterId?: string) => { subjects: LibrarySubject[]; nextAfterId: string | null };
   result?: (subject: LibrarySubject) => Record<string, unknown>;
@@ -62,7 +70,10 @@ export class LibraryDeletion {
     this.registrations.set(registration.kind, registration);
   }
 
-  delete(subject: LibrarySubject, options: { cascade?: boolean } = {}): Promise<Record<string, unknown>> {
+  delete(
+    subject: LibrarySubject,
+    options: { cascade?: boolean } = {},
+  ): Promise<Record<string, unknown>> {
     if (this.lifetime.signal.aborted)
       throw new CatalogError("SERVICE_STOPPED", "Library deletion is closed", {});
     const registration = this.requireRegistration(subject.kind);
@@ -86,11 +97,8 @@ export class LibraryDeletion {
       let plan = this.plans.get(subject.kind, subject.id);
       if (!plan) {
         const checked = registration.checkUsers?.(subject, cascade);
-        const members = checked === undefined
-          ? []
-          : checked instanceof Promise
-            ? await checked
-            : checked;
+        const members =
+          checked === undefined ? [] : checked instanceof Promise ? await checked : checked;
         if (this.options.fault) await this.boundary("check", subject, "before");
         if (this.options.fault) await this.boundary("plan", subject, "before");
         plan = this.plans.create(subject.kind, subject.id, cascade, members);
@@ -98,7 +106,9 @@ export class LibraryDeletion {
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
-          return registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true };
+          return (
+            registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true }
+          );
         }
         if (this.options.fault) await this.boundary("tombstone", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "tombstoned");
@@ -109,7 +119,10 @@ export class LibraryDeletion {
       return registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true };
     } catch (error) {
       if (registration.errorMode !== "delete-failed" && error instanceof CatalogError)
-        throw new CatalogError(error.code, error.message, { ...error.details, [subject.kind + "Id"]: subject.id });
+        throw new CatalogError(error.code, error.message, {
+          ...error.details,
+          [subject.kind + "Id"]: subject.id,
+        });
       throw new CatalogError(
         "DELETE_FAILED",
         `${subject.kind} deletion could not finish: ${error instanceof Error ? error.message : String(error)}`,
@@ -169,10 +182,10 @@ export class LibraryDeletion {
       }
     };
     if (registration.scope) {
-      if (plan.phase === "tombstoned") await registration.beforeScope?.(subject, this.lifetime.signal);
+      if (plan.phase === "tombstoned")
+        await registration.beforeScope?.(subject, this.lifetime.signal);
       await registration.scope(subject, this.lifetime.signal, run);
-    }
-    else await run(undefined);
+    } else await run(undefined);
   }
 
   private async boundary(
@@ -185,7 +198,8 @@ export class LibraryDeletion {
 
   private requireRegistration(kind: string): DeletionRegistration {
     const registration = this.registrations.get(kind);
-    if (!registration) throw new CatalogError("INVALID_PARAMS", `Unknown deletion subject kind: ${kind}`);
+    if (!registration)
+      throw new CatalogError("INVALID_PARAMS", `Unknown deletion subject kind: ${kind}`);
     return registration;
   }
 
@@ -195,7 +209,10 @@ export class LibraryDeletion {
       const registration = this.registrations.get(plan.subjectKind);
       if (!registration) continue;
       try {
-        await this.delete({ kind: plan.subjectKind, id: plan.subjectId }, { cascade: plan.cascade });
+        await this.delete(
+          { kind: plan.subjectKind, id: plan.subjectId },
+          { cascade: plan.cascade },
+        );
       } catch (error) {
         reportFailure(error);
       }

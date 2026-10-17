@@ -58,7 +58,6 @@ function fixture(t, records, prefix = join(tmpdir(), "cursor-evidence-")) {
   return { root, directory, journal, text, output: join(root, "evidence.jsonl") };
 }
 
-
 test("worker exports display-space observations and preserves source", (t) => {
   const f = fixture(t, [
     { event: "displaySpace", data: { hostUs: 123, zeroOriginHeight: 900 } },

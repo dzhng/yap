@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 
 // Native refusals carry only a code; the shared refusal ledger owns retryability.
 const ledger = JSON.parse(
-  readFileSync(new URL("../../../packages/protocol/src/refusal-ledger.json", import.meta.url), "utf8"),
+  readFileSync(
+    new URL("../../../packages/protocol/src/refusal-ledger.json", import.meta.url),
+    "utf8",
+  ),
 );
 
 /** The ledger's retryability for a native refusal, which must not state its own. */

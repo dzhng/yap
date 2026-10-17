@@ -14,7 +14,11 @@ import { JobQueue } from "@yap/core/jobs";
 import { AcquisitionStore } from "@yap/core/acquisitions";
 import { SceneEvidenceStore, assetSceneOwner } from "@yap/core/scene-evidence";
 import { ScreenshotIndexStore } from "@yap/core/screenshot-index";
-import { projectIndexDomain, projectIndexPlan, type ProjectIndexRecords } from "@yap/core/project-index";
+import {
+  projectIndexDomain,
+  projectIndexPlan,
+  type ProjectIndexRecords,
+} from "@yap/core/project-index";
 import { projectComposition } from "@yap/core/project-window";
 import { DerivativeDelivery } from "./delivery.js";
 import { DeletionPlans } from "@yap/core/deletion-plans";
@@ -318,9 +322,16 @@ test("project plans resume every phase boundary with the real retirement registr
     });
     const project = first.projects.create({
       requestId: "phase-plan",
-      canvas: { width: 160, height: 96, fps: { numerator: 30, denominator: 1 }, background: "#000000ff" },
+      canvas: {
+        width: 160,
+        height: 96,
+        fps: { numerator: 30, denominator: 1 },
+        background: "#000000ff",
+      },
     }).project;
-    await expect(first.deletion.delete({ kind: "project", id: project.projectId })).rejects.toMatchObject({
+    await expect(
+      first.deletion.delete({ kind: "project", id: project.projectId }),
+    ).rejects.toMatchObject({
       code: "DELETE_FAILED",
     });
     await first.close();
@@ -335,7 +346,9 @@ test("project plans resume every phase boundary with the real retirement registr
     expect(resumed.projects.deletionsPage().projectIds).toEqual([]);
     expect(resumed.catalog.catalog.prepare("SELECT * FROM deletion_plans").all()).toEqual([]);
     expect(
-      resumed.catalog.catalog.prepare("SELECT * FROM project_revisions WHERE projectId=?").all(project.projectId),
+      resumed.catalog.catalog
+        .prepare("SELECT * FROM project_revisions WHERE projectId=?")
+        .all(project.projectId),
     ).toEqual([]);
     await resumed.close();
     await rm(home, { recursive: true, force: true });
