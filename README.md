@@ -71,7 +71,7 @@ The full picture, including what's possible today and what isn't yet, is in
 ## How it works
 
 <p align="center">
-  <img src=".github/readme/01-you-ask-agent-edits.png" alt="1. record, 2. ask in your own words, 3. the agent edits" width="85%">
+  <img src=".github/readme/01-you-ask-agent-edits.png" alt="A person hands over a note in plain words while Xiaohei cuts the recorded film with huge scissors" width="85%">
 </p>
 
 1. **Yap.** Record from the menu bar (screen, microphone, system audio and an
@@ -113,7 +113,7 @@ can undo.
 ## What your agent gets
 
 <p align="center">
-  <img src=".github/readme/02-evidence-not-opinions.png" alt="The toolkit supplies transcript, waveform and frames; the agent decides" width="85%">
+  <img src=".github/readme/02-evidence-not-opinions.png" alt="A toolbox holds the transcript, waveform and frames while Xiaohei, on a stool, marks the cut" width="85%">
 </p>
 
 Every capability is there to help the message land. Yap itself makes **zero
@@ -134,7 +134,7 @@ Everything runs on your Mac. Recordings, transcripts and voice models stay local
 ## Your originals are never touched
 
 <p align="center">
-  <img src=".github/readme/03-originals-untouched.png" alt="The original stays put while the agent edits revisions it can undo" width="85%">
+  <img src=".github/readme/03-originals-untouched.png" alt="The original reel sits under a glass dome while Xiaohei pegs revisions on a line it can undo" width="85%">
 </p>
 
 Edits are non-destructive. The agent works on revisions of a project, and the

@@ -15,7 +15,11 @@ as plain text at `/llms.txt` for agents.
   differs from the prompt in the README's "Get started" section. Change both
   together.
 - **Artwork has one home.** Illustrations are copied from `.github/readme` at
-  build time; the site keeps no copies.
+  build time; the site keeps no copies. The art is black ink on opaque white, so
+  it stays readable in the README on GitHub's dark theme; the page frames
+  nothing and multiplies the art onto its paper, so it reads as drawn there.
+  New art is Xiaohei-style line drawing (generated with `gpt-image-2.5-flare`),
+  cropped to the drawing plus an even margin and quantized to a small palette.
 - **Video stays out of the repository.** Every deploy clones the repository, so
   the launch film streams from the `justyap-media` Vercel Blob store and
   [content.mjs](content.mjs) holds its URL; only its poster ships with the site.

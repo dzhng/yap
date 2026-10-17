@@ -33,6 +33,11 @@ export const meta = {
     "Yap gives Claude Code, Codex and any agent the eyes, ears and hands to record, understand and edit video on your Mac. Free, local, and your originals are never touched.",
 };
 
+export const heroArt = {
+  image: "header.png",
+  alt: "A person just talks; Xiaohei, the agent, irons the tangle into a finished video",
+};
+
 /**
  * The launch film: one take, four cameras, edited by an agent with Yap. The film is a web encode
  * on the justyap Vercel Blob store, kept out of the repository; the poster ships with the site.
@@ -41,7 +46,7 @@ export const launchVideo = {
   src: "https://dgl4bh1uqqy7y9zf.public.blob.vercel-storage.com/launch/yap-launch-v3.mp4",
   poster: "launch-poster.jpg",
   label: "made with yap",
-  caption: "Four cameras, one take, zero manual editing. An agent cut this launch video with Yap.",
+  caption: "An agent edited this launch video end to end with Yap.",
 };
 
 export const asks = [
@@ -72,19 +77,22 @@ export const promises = [
 export const howItWorks = [
   {
     image: "01-you-ask-agent-edits.png",
-    alt: "1. record, 2. ask in your own words, 3. the agent edits",
+    alt: "A person hands over a note in plain words while Xiaohei cuts the recorded film with huge scissors",
+    kicker: "in plain words",
     title: "Yap, ask, done",
     body: "Record from the menu bar, or hand over a video you already have. Ask in plain words. Your agent reads the transcript, looks at the frames, listens to the audio, then cuts, captions and exports.",
   },
   {
     image: "02-evidence-not-opinions.png",
-    alt: "The toolkit supplies transcript, waveform and frames; the agent decides",
+    alt: "A toolbox holds the transcript, waveform and frames while Xiaohei, on a stool, marks the cut",
+    kicker: "the agent decides",
     title: "Evidence, not opinions",
     body: "Word-timed transcripts, frames, waveforms, scene and cursor events, loudness. Yap supplies the facts; your agent makes the calls, so the result follows your intent, not a house style.",
   },
   {
     image: "03-originals-untouched.png",
-    alt: "The original stays put while the agent edits revisions it can undo",
+    alt: "The original reel sits under a glass dome while Xiaohei pegs revisions on a line it can undo",
+    kicker: "non-destructive",
     title: "Nothing to lose",
     body: "The agent works on revisions. Preview, compare, undo or restore any of them. Letting an agent edit carries no risk.",
   },
