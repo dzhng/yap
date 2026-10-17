@@ -227,8 +227,8 @@ test("unreadable journal remains a retryable wire failure until access is restor
       ),
     );
     assert.equal(response.ok, false);
-    assert.equal(response.error.code, "JOURNAL_UNAVAILABLE");
-    assert.equal(response.error.retryable, true);
+    assert.equal(response.error.code, "RECOVERY_FAILED");
+    assert.equal(response.error.details.cause, "JOURNAL_UNAVAILABLE");
     chmodSync(journal, 0o600);
     assert.equal(recover(directory).journal.header.sessionID, "access");
   } finally {

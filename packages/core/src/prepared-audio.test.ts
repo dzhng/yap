@@ -357,7 +357,7 @@ test("renaming the normalization implementation re-keys a failed preparation ins
   });
   const input = { projectId: f.input.projectId, revisionId: normalized.revision.id };
   f.setHold(async () => {
-    throw new CatalogError("NORMALIZATION_NOT_FEASIBLE", "Normalization misses its targets");
+    throw new CatalogError("INVALID_PARAMS", "Normalization misses its targets");
   });
   await f.current.prepared.request(input);
   await f.current.jobs.idle();

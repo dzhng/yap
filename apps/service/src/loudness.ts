@@ -62,9 +62,9 @@ export function ffmpegLoudnessAnalyzer(
     implementationId: `ffmpeg-ebur128-v1:${installation?.receiptSha256 ?? "unavailable"}`,
     async measure({ source, audio, channelInterpretation, truePeak }, signal) {
       if (!ownerExecutable)
-        throw new CatalogError("NOT_READY", "Native CLI lifetime owner is unavailable", {}, true);
+        throw new CatalogError("NOT_READY", "Native CLI lifetime owner is unavailable", {});
       const tools = await inspectFFmpegTools(installation, signal, ownerExecutable);
-      if (!tools.available) throw new CatalogError(tools.code, tools.message, {}, true);
+      if (!tools.available) throw new CatalogError(tools.code, tools.message, {});
       if (channelInterpretation === "dual-mono" && audio.channels !== 1)
         throw new CatalogError("INVALID_PARAMS", "Dual-mono interpretation requires mono PCM");
       const receipt = nativeResult(

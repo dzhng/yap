@@ -869,7 +869,7 @@ test("state channel admission refuses wider and unknown probes without blocking 
     });
     await expect(f.inspection.request({ projectId: f.projectId })).rejects.toThrow(
       expect.objectContaining({
-        code: "NOT_READY",
+        code: "PREREQUISITE_MISSING",
         details: {
           stateInputs: [
             {

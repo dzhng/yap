@@ -13,11 +13,11 @@ enum ManagedFiles {
             var here = stat()
             guard fstat(current, &here) == 0, here.st_mode & S_IFMT == S_IFDIR else {
                 throw NativeFailure(
-                    "INVALID_STORAGE", "Destination must be a directory.", retryable: false)
+                    "INVALID_STORAGE", "Destination must be a directory.")
             }
             guard InodeIdentity(here) != ancestor else {
                 throw NativeFailure(
-                    "INVALID_STORAGE", "Destination must be outside managed storage.", retryable: false)
+                    "INVALID_STORAGE", "Destination must be outside managed storage.")
             }
             let parent = openat(current, "..", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
             guard parent >= 0 else { throw DirectoryContents.failure("Inspect destination ancestry") }
@@ -28,7 +28,7 @@ enum ManagedFiles {
             current = parent
         }
         throw NativeFailure(
-            "LIMIT_EXCEEDED", "Destination ancestry exceeds 256 directories.", retryable: false)
+            "LIMIT_EXCEEDED", "Destination ancestry exceeds 256 directories.")
     }
 
     static func externalDirectory(_ params: [String: Any]) throws -> [String: String] {
@@ -163,22 +163,20 @@ enum ManagedFiles {
         guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFDIR,
             info.st_uid == getuid(), info.st_mode & 0o777 == 0o700 else {
             throw NativeFailure("INVALID_STORAGE",
-                "Workspace must be a private directory owned by this user.",
-                retryable: false)
+                "Workspace must be a private directory owned by this user.")
         }
         guard flock(fd, (shared ? LOCK_SH : LOCK_EX) | LOCK_NB) == 0 else {
             let number = errno
             if let busyCode, number == EWOULDBLOCK || number == EAGAIN {
-                throw NativeFailure(busyCode, "Workspace is still held by a live owner.", retryable: true)
+                throw NativeFailure(busyCode, "Workspace is still held by a live owner.")
             }
             throw NativeFailure("INVALID_STORAGE",
-                "Required workspace lock could not be acquired.",
-                retryable: false)
+                "Required workspace lock could not be acquired.")
         }
     }
 
     private static func invalidRequest(_ message: String) -> NativeFailure {
-        NativeFailure("INVALID_REQUEST", message, retryable: false)
+        NativeFailure("INVALID_REQUEST", message)
     }
 
 }

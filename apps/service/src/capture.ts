@@ -93,7 +93,7 @@ export class CaptureService {
    */
   private serialize<T>(run: () => Promise<T>): Promise<T> {
     const next = this.queue.then(() => {
-      if (this.stopping) throw new CatalogError("SERVICE_STOPPED", "Capture service is closing");
+      if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
       return run();
     });
     this.queue = next.catch(() => undefined);
@@ -177,7 +177,6 @@ export class CaptureService {
             "CAPTURE_RECOVERY_PENDING",
             "The previous take is still finalizing; inspect it before restarting",
             { recordingId: discarded.recordingId },
-            true,
           );
       } catch (error) {
         // The take this restart named could not be discarded, so its replacement never reached
@@ -202,7 +201,6 @@ export class CaptureService {
         "UNRESOLVED_START",
         "This take's start is still unproved; retry the same request",
         { recordingId: settled.recordingId, state: settled.state },
-        true,
       );
     return settled;
   }
@@ -282,7 +280,6 @@ export class CaptureService {
           "CAPTURE_NOT_QUIET",
           "Native capture has not proved this take stopped",
           { recordingId },
-          true,
         );
       this.observed(this.store.settleDeletingCapture(recordingId));
     });
@@ -295,7 +292,7 @@ export class CaptureService {
 
   /** Reconcile takes in order while releasing control between owned recovery attempts. */
   async reconcileStranded(): Promise<void> {
-    if (this.stopping) throw new CatalogError("SERVICE_STOPPED", "Capture service is closing");
+    if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
     for (const recording of this.store.unsettled()) {
       if (this.stopping) break;
       if (this.store.isDeleting(recording.recordingId)) continue;
@@ -344,12 +341,10 @@ export class CaptureService {
     if (answer.ok) return this.apply(recording, answer.data);
     if (!unanswered(answer.error.code)) throw this.refused(recording, fromNative(answer));
     const failed = await this.abandon(recording);
-    throw new CatalogError(
-      answer.error.code,
-      answer.error.message,
-      { recordingId: failed.recordingId, state: failed.state },
-      answer.error.retryable,
-    );
+    throw new CatalogError(answer.error.code, answer.error.message, {
+      recordingId: failed.recordingId,
+      state: failed.state,
+    });
   }
 
   /**
@@ -367,12 +362,10 @@ export class CaptureService {
       message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
       sourceDurationUs: null,
     });
-    return new CatalogError(
-      code,
-      (error as Error).message,
-      { recordingId: failed.recordingId, state: failed.state },
-      refusal?.retryable ?? false,
-    );
+    return new CatalogError(code, (error as Error).message, {
+      recordingId: failed.recordingId,
+      state: failed.state,
+    });
   }
 
   /**
@@ -485,7 +478,6 @@ export class CaptureService {
         "CAPTURE_RECOVERY_PENDING",
         "A take is still finalizing; inspect its status before starting another",
         { recordingId: this.recovery.recordingId },
-        true,
       );
   }
 
@@ -500,7 +492,6 @@ export class CaptureService {
         "CAPTURE_NOT_QUIET",
         "Native capture has not proved recovery can begin",
         { recordingId: recording.recordingId, deviceRecordingId: device.recordingId },
-        true,
       );
     const current = this.store.get(recording.recordingId);
     if (isSettled(current.state)) return current;
@@ -544,7 +535,6 @@ export class CaptureService {
               "CAPTURE_RECOVERY_UNRESOLVED",
               "Source bytes remain but recovery could not prove their outcome",
               { recordingId: current.recordingId },
-              true,
             );
           const canceled = this.author(selected, { state: "canceled" });
           if (this.sourceLifetime)
@@ -657,10 +647,14 @@ export class CaptureService {
         } catch (error) {
           // An outer media refusal does not establish invalid provenance. Keep it retry-visible;
           // a sibling's exclusive closure proof can still admit that independently verified source.
+          // Recovery refuses with a classified code and names the specific cause in details.
+          const cause = error instanceof CatalogError ? error.details.cause : undefined;
           const code =
-            error instanceof CatalogError && error.code.length <= 128
-              ? error.code
-              : "RECOVERY_FAILED";
+            typeof cause === "string" && cause.length <= 128
+              ? cause
+              : error instanceof CatalogError && error.code.length <= 128
+                ? error.code
+                : "RECOVERY_FAILED";
           outcomes.set(kind, {
             inputsClosed: false,
             outcome: {
@@ -682,16 +676,11 @@ export class CaptureService {
     for (const [kind, value] of outcomes) {
       if (!value.inputsClosed || value.outcome === null)
         throw new CatalogError(
-          "MEDIA_WORKER_FAILED",
+          "INVALID_RESPONSE",
           `Recovery did not establish ${kind} source authority`,
         );
       if (value.outcome.state === "pending")
-        throw new CatalogError(
-          value.outcome.error.code,
-          value.outcome.error.message,
-          { kind },
-          value.outcome.error.retryable,
-        );
+        throw new CatalogError(value.outcome.error.code, value.outcome.error.message, { kind });
     }
     return (results[0] as PromiseFulfilledResult<ReturnType<typeof readRecoveryReceipt>>).value;
   }
@@ -854,16 +843,11 @@ function allocationArguments(
  * Every other code is native's own answer, and so is proof of what it did.
  */
 function unanswered(code: string): boolean {
-  return code === "TIMEOUT" || code === "SERVICE_STOPPED" || code === "INVALID_RESPONSE";
+  return code === "TIMEOUT" || code === "SERVICE_STOPPED" || code === "CONTROL_RESPONSE_INVALID";
 }
 
 function fromNative(result: OperationResult & { ok: false }): CatalogError {
-  return new CatalogError(
-    result.error.code,
-    result.error.message,
-    result.error.details,
-    result.error.retryable,
-  );
+  return new CatalogError(result.error.code, result.error.message, result.error.details);
 }
 
 /** Recovery may begin only when native proves that no capture or source is still active. */

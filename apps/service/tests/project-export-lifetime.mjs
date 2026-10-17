@@ -366,7 +366,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
     directory: f.output,
     leaf: "overflow.mp4",
   };
-  await assert.rejects(f.exports.create(overflow), { code: "LIMIT_EXCEEDED" });
+  await assert.rejects(f.exports.create(overflow), { code: "CAPACITY_EXCEEDED" });
   assert.equal(
     f.catalog.catalog
       .prepare("SELECT COUNT(*) AS count FROM export_intents WHERE receipt IS NULL")
@@ -378,7 +378,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
   await f.exports.create(overflow);
   f.exports.cancel(overflow.exportId);
   await assert.rejects(f.exports.create({ ...overflow, exportId: randomUUID() }), {
-    code: "LIMIT_EXCEEDED",
+    code: "CAPACITY_EXCEEDED",
   });
   await f.jobs.closeContext(hold);
   await f.exports.retry(ids[0]);

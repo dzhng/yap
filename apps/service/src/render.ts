@@ -54,7 +54,6 @@ async function withLockedRenderWorkspace<T>(
         "RENDER_WORKSPACE_BUSY",
         "Another render still owns this workspace",
         {},
-        true,
       );
     throw error;
   });

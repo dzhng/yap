@@ -355,7 +355,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
     expect(settled).toBe(false);
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
     finish.resolve("late");
-    await expect(result).rejects.toMatchObject({ code: "INVALID_STATE", retryable: true });
+    await expect(result).rejects.toMatchObject({ code: "INVALID_STATE", retryable: false });
     expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
   } finally {

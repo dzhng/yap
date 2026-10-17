@@ -31,15 +31,21 @@ export async function writeArchive(
     descriptors: [workspace.handle.fd],
     timeoutMs: options.timeoutMs ?? publicationDeadlineMs(input.bytes),
   };
-  nativeConfirmed(
-    await worker(
-      "archive.prepare",
-      { identity },
-      { ...nativeOptions, ...(options.signal ? { signal: options.signal } : {}) },
-    ),
-    "empty",
-    "ZIP workspace admission was not confirmed",
-  );
+  try {
+    nativeConfirmed(
+      await worker(
+        "archive.prepare",
+        { identity },
+        { ...nativeOptions, ...(options.signal ? { signal: options.signal } : {}) },
+      ),
+      "empty",
+      "ZIP workspace admission was not confirmed",
+    );
+  } catch (error) {
+    if (error instanceof CatalogError && error.code === "INVALID_STORAGE")
+      throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", error.message, error.details);
+    throw error;
+  }
   let files: IdentifiedFiles | undefined;
   let closed = false;
   const close = async () => {
@@ -53,8 +59,9 @@ export async function writeArchive(
     closed = true;
   };
   try {
-    const receipt = verifyArchiveWriteReceipt(
-      nativeResult(
+    let nativeReceipt: unknown;
+    try {
+      nativeReceipt = nativeResult(
         await worker(
           "archive.write",
           {
@@ -70,9 +77,13 @@ export async function writeArchive(
             ...(options.signal ? { signal: options.signal } : {}),
           },
         ),
-      ),
-      limits,
-    );
+      );
+    } catch (error) {
+      if (error instanceof CatalogError && error.code === "INVALID_STORAGE")
+        throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", error.message, error.details);
+      throw error;
+    }
+    const receipt = verifyArchiveWriteReceipt(nativeReceipt, limits);
     if (receipt.expandedBytes !== input.bytes)
       throw new CatalogError(
         "INVALID_NATIVE_RESPONSE",
@@ -92,7 +103,6 @@ export async function writeArchive(
           operationError: String(failure),
           cleanupError: String(cleanup),
         },
-        true,
       );
     }
     throw failure;

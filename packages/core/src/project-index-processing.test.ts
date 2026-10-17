@@ -229,7 +229,7 @@ test("project recipes pin both selected scene generations while queued and retai
 test("failed project frames keep both scene inputs until an explicit retry succeeds", async () => {
   const f = await fixture({
     beforeFrame: async (call) => {
-      if (call === 1) throw new CatalogError("TEMPORARY", "fixture decoder failed", {}, true);
+      if (call === 1) throw new CatalogError("MEDIA_WORKER_FAILED", "fixture decoder failed", {});
     },
   });
   videos(f);

@@ -31,7 +31,7 @@ export class ProjectDeletion {
 
   delete(projectId: string): Promise<Deleted> {
     if (this.lifetime.signal.aborted)
-      throw new CatalogError("SERVICE_STOPPED", "Project deletion is closed", {}, true);
+      throw new CatalogError("SERVICE_STOPPED", "Project deletion is closed", {});
     const existing = this.active.get(projectId);
     if (existing) return existing;
     if (!this.store.markDeleting(projectId)) return Promise.resolve({ projectId, deleted: true });
@@ -69,7 +69,6 @@ export class ProjectDeletion {
         "DELETE_FAILED",
         `Project deletion could not finish: ${error instanceof Error ? error.message : String(error)}`,
         { projectId },
-        true,
       );
     }
   }

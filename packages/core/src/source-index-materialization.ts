@@ -1,7 +1,7 @@
 import { ceil, fromTime, type TimeValue, type SelectionRange } from "@yap/composition";
 import { SourceIndexStillness, sourceIndexPoints } from "./source-index-equality.js";
 import { waitForIndexFrame, retainIndexFrame } from "./index-frame.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import type { DerivedCache } from "./cache.js";
 import type {
   MediaFrameInspection,
@@ -80,8 +80,8 @@ export async function materializeSourceIndex(
           observation: { kind: "frame", frame: frames.sourceUnavailable(input) },
         };
       } catch (error) {
-        if (error instanceof CatalogError && error.code === "NOT_READY")
-          throw new CatalogError(
+        if (error instanceof CatalogError && error.code === "PREREQUISITE_MISSING")
+          throw dependencyRefusal(
             "FRAME_FAILED",
             status.reason ?? "Picture unavailable without physical observation",
             { dependency },
@@ -91,7 +91,7 @@ export async function materializeSourceIndex(
       }
     }
     if (!status.published)
-      throw new CatalogError(
+      throw dependencyRefusal(
         "FRAME_FAILED",
         status.reason ?? "Picture preparation did not publish",
         { dependency },

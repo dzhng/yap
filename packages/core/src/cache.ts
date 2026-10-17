@@ -133,8 +133,7 @@ export class DerivedCache {
     ).value;
   }
   private requireReady(): void {
-    if (!this.ready)
-      throw new CatalogError("NOT_READY", "Cache reconciliation is pending", {}, true);
+    if (!this.ready) throw new CatalogError("NOT_READY", "Cache reconciliation is pending", {});
   }
   reserve(owner: JobOwner): Readonly<{ id: string; path: string }> {
     this.requireReady();
@@ -192,7 +191,7 @@ export class DerivedCache {
     this.requireReady();
     const opened = this.open(id, true);
     if (!opened)
-      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {}, true);
+      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {});
     try {
       return await consume({ fd: opened.file.fd, bytes: opened.read.bytes });
     } finally {
@@ -260,7 +259,7 @@ export class DerivedCache {
         this.checkRoot();
         for (const row of rows)
           if (this.held.has(row.id))
-            throw new CatalogError("CACHE_BUSY", "Derivative is being read", {}, true);
+            throw new CatalogError("CACHE_BUSY", "Derivative is being read", {});
         const root = this.directories.at(-1)!;
         await removeFiles({
           ids: rows.map((row) => row.id),
@@ -280,8 +279,7 @@ export class DerivedCache {
   }
   private removeFile(id: string): void {
     this.checkRoot();
-    if (this.held.has(id))
-      throw new CatalogError("CACHE_BUSY", "Derivative is being read", {}, true);
+    if (this.held.has(id)) throw new CatalogError("CACHE_BUSY", "Derivative is being read", {});
     if (!this.row(id)) return;
     try {
       unlinkSync(this.path(id));
@@ -301,8 +299,7 @@ export class DerivedCache {
         .prepare(`SELECT * FROM derived_cache WHERE bytes IS NOT NULL
         AND touched<? AND (touched>? OR (touched=? AND id>?)) ORDER BY touched,id LIMIT 1`)
         .get(cutoff, touched, touched, id) as Row | undefined;
-      if (!row)
-        throw new CatalogError("CACHE_BUSY", "Cache budget is held by active readers", {}, true);
+      if (!row) throw new CatalogError("CACHE_BUSY", "Cache budget is held by active readers", {});
       touched = row.touched;
       id = row.id;
       if (!this.held.has(id)) {

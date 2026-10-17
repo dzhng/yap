@@ -338,7 +338,7 @@ test("missing geometry, reference and generation remain explicit and scene cance
       },
       signal(),
     ),
-  ).rejects.toMatchObject({ code: "NOT_READY" });
+  ).rejects.toMatchObject({ code: "PREREQUISITE_MISSING" });
   const controller = new AbortController();
   const sample: VisualSampler = async (params) => {
     controller.abort();

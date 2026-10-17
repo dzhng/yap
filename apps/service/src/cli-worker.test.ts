@@ -53,7 +53,7 @@ it("noisy diagnostics and malformed JSON fail within the output bound", async ()
       { executable: "/ignored", ownerExecutable: noisy, args: [] },
       { maxBytes: 100 },
     ),
-  ).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_FAILED" } });
+  ).toMatchObject({ ok: false, error: { code: "LIMIT_EXCEEDED" } });
   expect(
     await cliWorker(
       { executable: "/ignored", ownerExecutable: runner, args: [] },
@@ -61,7 +61,7 @@ it("noisy diagnostics and malformed JSON fail within the output bound", async ()
     ),
   ).toMatchObject({
     ok: false,
-    error: { code: "MEDIA_WORKER_FAILED", message: "CLI returned malformed JSON" },
+    error: { code: "INVALID_RESPONSE", message: "CLI returned malformed JSON" },
   });
 });
 it("nonzero exit cannot certify buffered output", async () => {
@@ -91,7 +91,7 @@ it("JSON decoding refuses invalid UTF-8 rather than changing returned facts", as
       { executable: "/ignored", ownerExecutable: invalid, args: [] },
       { output: "json" },
     ),
-  ).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_FAILED" } });
+  ).toMatchObject({ ok: false, error: { code: "INVALID_RESPONSE" } });
 });
 
 it("cancellation remains visible while completed command ownership retires", async () => {
@@ -130,7 +130,7 @@ it("malformed and duplicated private completion cannot certify a command", async
       await cliWorker({ executable: "/ignored", ownerExecutable: invalid, args: [] }),
     ).toMatchObject({
       ok: false,
-      error: { code: "MEDIA_WORKER_FAILED", message: "CLI completion is malformed or duplicated" },
+      error: { code: "INVALID_RESPONSE", message: "CLI completion is malformed or duplicated" },
     });
   }
 });

@@ -6,7 +6,7 @@ import YapMedia
 
 public enum NativeWire {
     /// One registered operation. `unexpected` states what a failure this boundary does not
-    /// recognise means for that operation; a `NativeFailure` carries its own code and retryability.
+    /// recognise means for that operation; the service assigns retryability from the code.
     private struct Operation: Sendable {
         let run: @Sendable ([String: Any]) async throws -> Any
         let unexpected: @Sendable (Error) -> NativeFailure
@@ -21,7 +21,7 @@ public enum NativeWire {
             Operation(
                 run: run,
                 unexpected: { NativeFailure(
-                    "DELETE_FAILED", $0.localizedDescription, retryable: true) })
+                    "DELETE_FAILED", $0.localizedDescription) })
         }
         var table: [String: Operation] = [
             "system.ping": Operation(
@@ -78,8 +78,11 @@ public enum NativeWire {
                     return try json(RecoveryReceipt(await MediaRecovery.recover(directory: request.directory, sourceAuthority: request.sourceAuthority)))
                 } catch is CancellationError { throw CancellationError() }
                 catch {
+                    // Recovery classifies its own failures; the wire carries that as one code, so the
+                    // ledger's single answer per code never contradicts a recovery decision.
                     let failure = CaptureFinalizationError(error)
-                    throw NativeFailure(failure.code, failure.message, retryable: failure.retryable)
+                    throw NativeFailure(failure.retryable ? "RECOVERY_FAILED" : "RECOVERY_REFUSED",
+                        failure.message, details: ["cause": failure.code])
                 }
             },
             "media.cleanupCapture": Operation(
@@ -92,11 +95,10 @@ public enum NativeWire {
                     } catch is CancellationError { throw CancellationError() }
                     catch let error as NativeFailure { throw error }
                     catch let error as CaptureFailure {
-                        throw NativeFailure(error.code, error.message,
-                            retryable: ["CAPTURE_BUSY", "JOURNAL_UNAVAILABLE", "MEDIA_UNAVAILABLE"].contains(error.code))
+                        throw NativeFailure(error.code, error.message)
                     } catch {
                         if CaptureFinalizationError.isOperationalRead(error) {
-                            throw NativeFailure("CLEANUP_UNAVAILABLE", error.localizedDescription, retryable: true)
+                            throw NativeFailure("CLEANUP_UNAVAILABLE", error.localizedDescription)
                         }
                         throw error
                     }
@@ -110,11 +112,10 @@ public enum NativeWire {
                             await SourceEvidenceExport.write(directory: request.directory, output: request.output, canonical: request.canonical, sourceAuthority: request.sourceAuthority))
                     } catch let failure as NativeFailure { throw failure }
                     catch let failure as CaptureFailure {
-                        throw NativeFailure(failure.code, failure.message,
-                            retryable: ["MEDIA_UNAVAILABLE", "JOURNAL_UNAVAILABLE", "CAPTURE_BUSY"].contains(failure.code))
+                        throw NativeFailure(failure.code, failure.message)
                     } catch {
                         if CaptureFinalizationError.isOperationalRead(error) {
-                            throw NativeFailure("MEDIA_UNAVAILABLE", error.localizedDescription, retryable: true)
+                            throw NativeFailure("MEDIA_UNAVAILABLE", error.localizedDescription)
                         }
                         throw error
                     }
@@ -124,7 +125,7 @@ public enum NativeWire {
             "speech.transcribe": Operation(
                 run: { try json(await SpeechOperation.transcribe($0)) },
                 unexpected: { NativeFailure(
-                    "TRANSCRIPTION_FAILED", $0.localizedDescription, retryable: true) }),
+                    "TRANSCRIPTION_FAILED", $0.localizedDescription) }),
             "storage.recordingDirectory": deletion { try ManagedFiles.recordingDirectory($0) },
             "storage.externalDirectory": deletion { try ManagedFiles.externalDirectory($0) },
             "storage.clearRenderWorkspace": deletion {
@@ -200,8 +201,8 @@ public enum NativeWire {
         [
             "id": id as Any? ?? NSNull(), "ok": false,
             "error": [
-                "code": failure.code, "message": failure.message, "retryable": failure.retryable,
-                "details": details,
+                "code": failure.code, "message": failure.message,
+                "details": details.merging(failure.details) { current, _ in current },
             ],
         ]
     }

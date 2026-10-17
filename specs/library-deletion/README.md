@@ -17,12 +17,32 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Planned; no code yet. The plan was synthesized from four independent
-drafts: fewest slices (Claude), risk first (Codex), seam quality (Claude) and
-agent consumer (Codex).
+**Status.** Slice 00 done. Slice 01 is implemented and committed as a checkpoint, but
+its native verification is incomplete (see Blockers). Choices made along the way are in
+[choices.md](choices.md).
 
-**Pick up at** [00 Probes](slices/00-probes.md). Record each result in its table
-before slice 02 starts.
+Slice 01 evidence, on the checkpoint commit:
+- **Green:** protocol, core, CLI and service suites (including the service node tests),
+  every package build and typecheck, the Swift build, and the native node suites
+  (`source-frame`, `speech`, `wire`, `source-evidence`, `recovery`, `source-audio`).
+- **Not green end to end:** the `apps/macos` test chain. `YapCaptureTests` passed in two
+  full-chain runs and one standalone run, then failed in 2 of the next 3 runs with
+  camera timing checks (`LIVE_VERIFICATION_MISSING`, earlier `REPEATED_CAMERA_SNAPSHOT`).
+  `YapFrameTests` passed earlier and then timed out. Both happened while the disk was
+  100% full and another project's VM lab was running. The pre-slice revision's capture
+  tests passed in a single run; a fair comparison needs several runs on an unloaded
+  machine. Nothing in slice 01 touches camera verification.
+
+**Pick up at** re-running `bun run test` in `apps/macos` on a machine with free disk.
+Then compare `YapCaptureTests` against `a82dea44` over several runs. If the pre-slice
+revision fails the same way, record the failures as pre-existing and fix them under
+fix-all-failures. Otherwise find what slice 01 changed. Then mark slice 01 done and start
+slices 02 and 05 in parallel worktrees.
+
+**Blockers.**
+- The disk filled twice during slice 01 (0 bytes, then 3.7 GB free). About 170 GB is
+  `localbox-vmlab-*` images in `$TMPDIR` from another project, which this work did not
+  touch. Native verification is unreliable until there is room.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -34,7 +54,7 @@ before slice 02 starts.
   per change, and the full suite once, in slice 16.
 
 **TODO**
-- [ ] 00 Probes and open checks — [slices/00-probes.md](slices/00-probes.md)
+- [x] 00 Probes and open checks — [slices/00-probes.md](slices/00-probes.md)
 - [ ] 01 Retryability per error code — [slices/01-error-ledger.md](slices/01-error-ledger.md)
 - [ ] 02 One deletion coordinator and deletion plans — [slices/02-deletion-coordinator.md](slices/02-deletion-coordinator.md)
 - [ ] 03 Deletion fence and publish race — [slices/03-fence.md](slices/03-fence.md)

@@ -112,7 +112,7 @@ test("full result capacity refuses before dispatch while maintenance drains the 
   expect(mutations).toBe(32);
   expect(refused).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   const request = (operation: string, params: Record<string, unknown>) =>
     callLocal(f.server.socketPath, {

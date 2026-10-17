@@ -20,7 +20,7 @@ enum PackageWorkspace {
                     || (name.map { UUID(uuidString: $0) != nil && $0.utf8.count == 36 } ?? false)
             else {
                 throw NativeFailure(
-                    "INVALID_REQUEST", "Invalid recovery request.", retryable: false)
+                    "INVALID_REQUEST", "Invalid recovery request.")
             }
             try InodeIdentity(params["parent"]).check(3)
             try ManagedFiles.lockPrivateDirectory(3, busyCode: "RECOVERY_BUSY")
@@ -35,7 +35,7 @@ enum PackageWorkspace {
             name.utf8.count == 36
         else {
             throw NativeFailure(
-                "INVALID_REQUEST", "Invalid package workspace request.", retryable: false)
+                "INVALID_REQUEST", "Invalid package workspace request.")
         }
         try InodeIdentity(params["parent"]).check(3)
         try ManagedFiles.lockPrivateDirectory(3)
@@ -76,8 +76,7 @@ enum PackageWorkspace {
             let name = String(cString: entry)
             guard UUID(uuidString: name) != nil, name.utf8.count == 36, names.count < maximum else {
                 throw NativeFailure(
-                    "INVALID_STORAGE", "Workspace root contains unexpected or too many entries.",
-                    retryable: false)
+                    "INVALID_STORAGE", "Workspace root contains unexpected or too many entries.")
             }
             names.append(name)
             return true
@@ -114,7 +113,7 @@ enum PackageWorkspace {
     }
 
     private static func failure(_ action: String) -> NativeFailure {
-        NativeFailure(
-            "INVALID_STORAGE", "\(action): \(String(cString: strerror(errno)))", retryable: true)
+        let code = errno == ELOOP || errno == ENOTDIR ? "INVALID_STORAGE" : "PACKAGE_STORAGE_UNAVAILABLE"
+        return NativeFailure(code, "\(action): \(String(cString: strerror(errno)))")
     }
 }

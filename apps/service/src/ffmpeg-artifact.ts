@@ -77,7 +77,6 @@ export async function withFfmpegArtifact<Evidence, Result>(
           completion.error.code,
           completion.error.message,
           completion.error.details,
-          completion.error.retryable,
         );
       const allocation = (completion.data as { allocatedOutput: { device: string; inode: string } })
         .allocatedOutput;

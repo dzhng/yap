@@ -425,7 +425,7 @@ export class JobQueue {
   createContext(execute: ContextJobExecutor): JobContext {
     this.requireOpen();
     if (this.activeContexts.size >= contextLimit)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many package contexts are open", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many package contexts are open", {});
     const context = Object.freeze({ contextId: this.newId() }) as JobContext;
     const state: ContextState = { id: context.contextId, execute, jobs: new Map(), closed: false };
     this.contexts.set(context, state);
@@ -542,7 +542,7 @@ export class JobQueue {
       job.state === "running" ||
       [...this.attempts.values()].some((attempt) => attempt.jobId === jobId)
     )
-      throw new CatalogError("PROCESSING_BUSY", "Package job is still active", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Package job is still active", {});
     state.jobs.delete(jobId);
   }
   closeContext(context: JobContext): Promise<void> {
@@ -738,7 +738,7 @@ export class JobQueue {
   }
 
   private requireOpen(): void {
-    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "The job queue is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "The job queue is closed", {});
   }
 
   private existing(identity: Pick<Job, "target" | "artifact" | "input">): Job | null {
@@ -862,7 +862,6 @@ export class JobQueue {
           "PROCESSING_BUSY",
           "Local work already owns this publication identity",
           {},
-          true,
         );
       throw new CatalogError(
         "INVALID_PACKAGE",
@@ -991,7 +990,7 @@ export class JobQueue {
         ["waiting", "queued", "running"].includes(job.state) ||
         [...this.attempts.values()].some((attempt) => attempt.jobId === jobId)
       )
-        throw new CatalogError("PROCESSING_BUSY", "Job is still active", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Job is still active", {});
       this.store.catalog
         .prepare(
           "DELETE FROM artifacts WHERE targetKind=? AND targetId=? AND revisionId=? AND artifact=? AND inputSha256=? AND input=?",
@@ -1063,7 +1062,7 @@ export class JobQueue {
         )
         .get(...ownerIdentity(owner))
     )
-      throw new CatalogError("PROCESSING_BUSY", "Target jobs have not finished closing", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Target jobs have not finished closing", {});
     for (;;) {
       const jobs = this.store.catalog
         .prepare("SELECT jobId FROM jobs WHERE targetKind=? AND targetId=? LIMIT 256")
@@ -1248,8 +1247,7 @@ export class JobQueue {
               .run(++this.sequence, row.jobId);
           }
         } catch (error) {
-          if (error instanceof CatalogError && error.code === "LIMIT_EXCEEDED" && error.retryable)
-            continue;
+          if (error instanceof CatalogError && error.code === "CAPACITY_EXCEEDED") continue;
           if (this.job(row.jobId).state !== "waiting") continue;
           this.store.transaction(() => this.fail(row.jobId, error));
           this.scheduleAdmission();
@@ -1267,10 +1265,9 @@ export class JobQueue {
       .get() as { count: number };
     if (row.count >= waitingLimit)
       throw new CatalogError(
-        "LIMIT_EXCEEDED",
+        "CAPACITY_EXCEEDED",
         "Too much dependency work is already waiting",
         {},
-        true,
       );
   }
 
@@ -1285,10 +1282,9 @@ export class JobQueue {
     );
     if (queued + contextQueued >= queuedLimit)
       throw new CatalogError(
-        "LIMIT_EXCEEDED",
+        "CAPACITY_EXCEEDED",
         "Too much work is already waiting; retry once the queue drains",
         { queued: queued + contextQueued },
-        true,
       );
   }
 

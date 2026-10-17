@@ -199,12 +199,7 @@ export class ScreenshotIndexStore<
     if (rows.length > limit)
       throw new CatalogError("LIMIT_EXCEEDED", "Retained index inventory exceeds its limit");
     if (rows.some((row) => row.state !== "complete"))
-      throw new CatalogError(
-        "PROCESSING_BUSY",
-        "Screenshot index generation is incomplete",
-        {},
-        true,
-      );
+      throw new CatalogError("PROCESSING_BUSY", "Screenshot index generation is incomplete", {});
     return rows.map((row) => metadata<D>(row));
   }
   portableImage(identity: D["identity"], ordinal: number): IdentifiedFile {

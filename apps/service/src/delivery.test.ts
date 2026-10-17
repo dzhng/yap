@@ -125,7 +125,7 @@ test("lease limit is explicit and dispose releases every reader and refuses reop
     throw new Error("Acquisition ran before admission");
   };
   expect(() => f.delivery.open({ kind: "recording", id: f.recordingId }, forbiddenAcquire)).toThrow(
-    expect.objectContaining({ code: "LIMIT_EXCEEDED" }),
+    expect.objectContaining({ code: "CAPACITY_EXCEEDED", retryable: true }),
   );
   f.delivery.close(leases[0]!.token);
   f.delivery.open({ kind: "recording", id: f.recordingId }, () => f.cache.acquire(f.file.id));
@@ -133,7 +133,7 @@ test("lease limit is explicit and dispose releases every reader and refuses reop
   f.delivery.dispose();
   expect(() => f.cache.remove(f.file.id)).not.toThrow();
   expect(() => f.delivery.open({ kind: "recording", id: f.recordingId }, forbiddenAcquire)).toThrow(
-    expect.objectContaining({ code: "SERVICE_STOPPED" }),
+    expect.objectContaining({ code: "OWNER_CLOSED", retryable: false }),
   );
 });
 

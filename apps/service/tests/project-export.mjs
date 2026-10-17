@@ -325,7 +325,7 @@ test("polling and export retry leave unrelated failed preview dependencies alone
   const f = await fixture(t, {
     render: async (request, signal, ordinary) => {
       renders++;
-      if (fail) throw new CatalogError("DECODE_FAILED", "fixture dependency", {}, true);
+      if (fail) throw new CatalogError("DECODE_FAILED", "fixture dependency");
       return ordinary(request, signal);
     },
   });
@@ -364,7 +364,7 @@ test("stale export implementation absence does not retry a newer decode failure"
     admission: false,
     render: async (request, signal, ordinary) => {
       renders++;
-      if (fail) throw new CatalogError("DECODE_FAILED", "newer failure", {}, true);
+      if (fail) throw new CatalogError("DECODE_FAILED", "newer failure");
       return ordinary(request, signal);
     },
   });
@@ -408,7 +408,7 @@ test("staged project bytes retry after renderer replacement without rendering ag
     },
     wrap: (worker) => async (operation, params, options) => {
       if (operation === "publication.commit" && rejectCommit)
-        throw new CatalogError("FIXTURE_COMMIT_INTERRUPTED", "Staged before commit", {}, true);
+        throw new CatalogError("STORAGE_BUSY", "Staged before commit");
       return worker(operation, params, options);
     },
   });

@@ -49,7 +49,7 @@ while let line = readLine() {
     } catch {
         let failure = error as? NativeFailure ?? NativeFailure("FIXTURE_FAILURE", error.localizedDescription)
         response["ok"] = false
-        response["error"] = ["code": failure.code, "message": failure.message, "retryable": failure.retryable, "details": [:]]
+        response["error"] = ["code": failure.code, "message": failure.message, "details": [:]]
     }
     FileHandle.standardOutput.write(try! JSONSerialization.data(withJSONObject: response))
     FileHandle.standardOutput.write(Data([0x0a]))

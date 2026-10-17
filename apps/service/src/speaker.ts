@@ -65,7 +65,6 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
                   result.error.code,
                   result.error.message,
                   result.error.details,
-                  result.error.retryable,
                 ),
               }),
         };

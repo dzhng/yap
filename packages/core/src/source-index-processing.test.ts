@@ -324,7 +324,7 @@ test("shared jobs publish source PNGs and exact gap coverage with bounded canoni
 test("terminal child failure settles the parent and only explicit retry attempts the child again", async () => {
   const f = await fixture({
     beforeFrame: async (n) => {
-      if (n === 1) throw new CatalogError("NATIVE_DECODE_FAILED", "decoder failed", {}, true);
+      if (n === 1) throw new CatalogError("DECODE_FAILED", "decoder failed", {});
     },
   });
   const { pending } = await f.prepare();
@@ -497,8 +497,7 @@ test("retrying an index with a failed scene dependency retries that dependency e
   let calls = 0;
   const f = await fixture({
     beforeScene: () => {
-      if (++calls === 1)
-        throw new CatalogError("NATIVE_DECODE_FAILED", "scene decoder failed", {}, true);
+      if (++calls === 1) throw new CatalogError("DECODE_FAILED", "scene decoder failed", {});
     },
   });
   f.index.requestSource(f.selection);
@@ -603,8 +602,7 @@ test("reading an adopted source index preserves its generation without a donor j
 test("partial source index pictures stay private until explicit retry publishes complete coverage", async () => {
   const f = await fixture({
     beforeFrame: async (n) => {
-      if (n === 2)
-        throw new CatalogError("NATIVE_DECODE_FAILED", "second decoder interrupted", {}, true);
+      if (n === 2) throw new CatalogError("DECODE_FAILED", "second decoder interrupted", {});
     },
   });
   const { pending } = await f.prepare();

@@ -153,9 +153,9 @@ export async function withAudioProcessing<T>(
     return consume(request.worker, [], [], []);
   const runtime = request.runtime;
   if (!runtime)
-    throw new CatalogError("NOT_READY", "Bundled typed audio processing is unavailable", {}, true);
+    throw new CatalogError("NOT_READY", "Bundled typed audio processing is unavailable", {});
   const tools = await inspectFFmpegTools(runtime.installation, signal, runtime.ownerExecutable);
-  if (!tools.available) throw new CatalogError(tools.code, tools.message, {}, true);
+  if (!tools.available) throw new CatalogError(tools.code, tools.message, {});
   const order: number[] = [],
     status = new Uint8Array(domains.length);
   for (let start = 0; start < domains.length; start++) {
@@ -198,7 +198,7 @@ export async function withAudioProcessing<T>(
       frames = domain.sampleRange.end - domain.sampleRange.start;
     const implementationId = runtime.processors[recipe.type];
     if (!implementationId)
-      throw new CatalogError("NOT_READY", "Audio recipe implementation is unavailable");
+      throw new CatalogError("PREREQUISITE_MISSING", "Audio recipe implementation is unavailable");
     const expected = request.window.manifest.requirements.filter(
       (item) => item.kind === "processor" && item.processor.type === recipe.type,
     );
@@ -208,7 +208,7 @@ export async function withAudioProcessing<T>(
       )
     )
       throw new CatalogError(
-        "NOT_READY",
+        "PREREQUISITE_MISSING",
         "Audio processing implementation differs from its pinned requirement",
       );
     const prefixes: {

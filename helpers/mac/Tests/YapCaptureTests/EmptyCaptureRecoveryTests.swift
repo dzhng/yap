@@ -71,8 +71,12 @@ private func emptyRecoveryRefusals(root: URL, source: URL, params: [String: Any]
         let response = try await emptyRecoveryWire(params, root: root, name: name)
         precondition(response["ok"] as? Bool == false && response["data"] == nil,
             "\(name) cannot infer closure or source outcome: \(response)")
+        let error = response["error"] as! [String: Any]
+        // Retryability belongs to the shared refusal ledger; native carries only the code.
+        precondition(error["retryable"] == nil, "\(name) must not state its own retryability: \(response)")
         if let retryable {
-            precondition((response["error"] as! [String: Any])["retryable"] as? Bool == retryable)
+            let expected = retryable ? "RECOVERY_FAILED" : "RECOVERY_REFUSED"
+            precondition(error["code"] as? String == expected, "\(name) must refuse as \(expected): \(response)")
         }
     }
     for name in ["unknown.bin", "camera.raw.mov", "camera.mapping.jsonl"] {

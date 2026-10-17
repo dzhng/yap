@@ -212,7 +212,7 @@ enum ArchiveOperation {
         digest.map { String(format: "%02x", $0) }.joined()
     }
     static func error(_ code: String, _ message: String) -> NativeFailure {
-        NativeFailure(code, message, retryable: false)
+        NativeFailure(code, message)
     }
     static func io(_ action: String) -> NativeFailure {
         error("INVALID_STORAGE", "\(action): \(String(cString: strerror(errno)))")

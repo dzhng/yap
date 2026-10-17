@@ -89,7 +89,10 @@ test("recovery rejects linked or nonprivate children and preserves every orphan"
   await writeFile(join(target, "sentinel"), "foreign");
   const linked = join(f.parent.directory, randomUUID());
   await symlink(target, linked);
-  await assert.rejects(recoverPackageWorkspaces(f.parent, worker), { code: "INVALID_STORAGE" });
+  await assert.rejects(recoverPackageWorkspaces(f.parent, worker), {
+    code: "INVALID_STORAGE",
+    retryable: false,
+  });
   assert.equal(await readFile(join(a.path, "data"), "utf8"), a.name);
   assert.equal(await readFile(join(target, "sentinel"), "utf8"), "foreign");
   await rm(linked);
@@ -126,7 +129,7 @@ test("failed provision cleanup retains exact identity and rejects a replacement"
       return {
         ok: false,
         error: {
-          code: "WORKER_FAILED",
+          code: "MEDIA_WORKER_FAILED",
           message: "generated failure",
           retryable: true,
           details: {},
@@ -149,7 +152,8 @@ test("failed provision cleanup retains exact identity and rejects a replacement"
   await mkdir(directory, { mode: 0o700 });
   await writeFile(join(directory, "sentinel"), "foreign");
   await assert.rejects(cleanupFailedPackageWorkspace(f.parent, name, failure, worker), {
-    code: "INVALID_STORAGE",
+    code: "STORAGE_CHANGED",
+    retryable: true,
   });
   assert.equal(await readFile(join(directory, "sentinel"), "utf8"), "foreign");
   await rm(directory, { recursive: true });

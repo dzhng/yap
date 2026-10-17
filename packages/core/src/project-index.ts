@@ -266,7 +266,7 @@ export function projectIndexDomain(
     }),
     begin(identity, admission) {
       if (admission === "produced" && identity.implementationId !== support.implementationId)
-        throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {}, true);
+        throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {});
       if (!identity.generation || identity.selectionPolicy !== projectIndexPolicy.id)
         invalid("Project index selection identity is unavailable");
       const { plan } = resolve(identity, admission);

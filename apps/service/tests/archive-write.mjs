@@ -156,12 +156,18 @@ test("substituted or modified inputs fail and only private ZIP bytes are cleaned
 test("writer refuses foreign scratch and symlink ancestors", async (t) => {
   const f = await fixture(t, { "nested/source.bin": "expected bytes" });
   await writeFile(join(f.paths.scratch, "foreign"), "untouched");
-  await assert.rejects(writeArchive(f.input, f.workspace, worker), { code: "INVALID_STORAGE" });
+  await assert.rejects(writeArchive(f.input, f.workspace, worker), {
+    code: "PACKAGE_STORAGE_UNAVAILABLE",
+    retryable: true,
+  });
   assert.equal(await readFile(join(f.paths.scratch, "foreign"), "utf8"), "untouched");
   await rm(join(f.paths.scratch, "foreign"));
   await rename(join(f.paths.input, "nested"), join(f.root, "moved"));
   await symlink(join(f.root, "moved"), join(f.paths.input, "nested"));
-  await assert.rejects(writeArchive(f.input, f.workspace, worker), { code: "INVALID_STORAGE" });
+  await assert.rejects(writeArchive(f.input, f.workspace, worker), {
+    code: "PACKAGE_STORAGE_UNAVAILABLE",
+    retryable: true,
+  });
   assert.equal(await readFile(join(f.root, "moved/source.bin"), "utf8"), "expected bytes");
 });
 test("a writer refused after opening its ZIP answers without touching freed memory", async (t) => {
@@ -180,7 +186,10 @@ test("a writer refused after opening its ZIP answers without touching freed memo
   const f = await fixture(t, { "nested/source.bin": "expected bytes" });
   await rename(join(f.paths.input, "nested"), join(f.root, "moved"));
   await symlink(join(f.root, "moved"), join(f.paths.input, "nested"));
-  await assert.rejects(writeArchive(f.input, f.workspace, guarded), { code: "INVALID_STORAGE" });
+  await assert.rejects(writeArchive(f.input, f.workspace, guarded), {
+    code: "PACKAGE_STORAGE_UNAVAILABLE",
+    retryable: true,
+  });
   assert.deepEqual(await readdir(f.paths.scratch), []);
 });
 test("observed ZIP output limit refuses a partial archive and drains cleanup", async (t) => {

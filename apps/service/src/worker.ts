@@ -8,6 +8,7 @@ import {
   JsonLineReader,
   encodeJsonLine,
   operationError,
+  refusalRetryable,
   resultSchema,
   type OperationResult,
 } from "@yap/protocol";
@@ -52,16 +53,33 @@ export type MediaWorker = (
   options?: { signal?: AbortSignal; timeoutMs?: number; descriptors?: readonly number[] },
 ) => Promise<OperationResult>;
 
-/** A refused native call surfaces native's own code, details and retryability. */
+/** A refused native call derives retryability from the shared refusal ledger. */
 export function nativeResult(result: OperationResult): unknown {
   if (!result.ok)
-    throw new CatalogError(
-      result.error.code,
-      result.error.message,
-      result.error.details,
-      result.error.retryable,
-    );
+    throw new CatalogError(result.error.code, result.error.message, result.error.details);
   return result.data;
+}
+
+/** Native replies carry a code; retryability is owned by the shared refusal ledger. */
+function normalizeNativeResult(value: unknown): unknown {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("ok" in value) ||
+    value.ok !== false ||
+    !("error" in value) ||
+    !value.error ||
+    typeof value.error !== "object"
+  )
+    return value;
+  const error = value.error as Record<string, unknown>;
+  return {
+    ...value,
+    error: {
+      ...error,
+      retryable: refusalRetryable(typeof error.code === "string" ? error.code : ""),
+    },
+  };
 }
 
 /** Native answers `{ [field]: true }` only after it has finished; any other success is not proof. */
@@ -186,7 +204,7 @@ function ownedProcess(
     const deadline = setTimeout(
       () =>
         finish(
-          operationError("MEDIA_WORKER_TIMEOUT", operation + " did not answer in time", true, {
+          operationError("MEDIA_WORKER_TIMEOUT", operation + " did not answer in time", {
             operation,
             timeoutMs,
           }),
@@ -196,10 +214,12 @@ function ownedProcess(
     child.on("error", (error: NodeJS.ErrnoException) =>
       finish(
         operationError(
-          "MEDIA_WORKER_UNAVAILABLE",
+          // Descriptor or process exhaustion drains, so a retry can succeed; any other
+          // spawn failure means the worker itself cannot run.
+          ["EMFILE", "ENFILE", "EAGAIN"].includes(error.code ?? "")
+            ? "MEDIA_WORKER_UNAVAILABLE"
+            : "MEDIA_WORKER_NOT_RUNNABLE",
           "Cannot run worker: " + error.message,
-          // Descriptor or process exhaustion drains; a retry can succeed.
-          ["EMFILE", "ENFILE", "EAGAIN"].includes(error.code ?? ""),
         ),
       ),
     );
@@ -255,7 +275,7 @@ function ownedProcess(
         const value = protocol.stdout(chunk);
         if (value) finish(value);
       } catch (error) {
-        finish(operationError("MEDIA_WORKER_FAILED", (error as Error).message));
+        finish(operationError("INVALID_RESPONSE", (error as Error).message));
       }
     });
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -293,13 +313,12 @@ export function jsonWorker(
         stdout: (chunk) => {
           const value = reader.push(chunk);
           if (value === undefined) return;
-          const parsed = resultSchema.safeParse(value);
+          const parsed = resultSchema.safeParse(normalizeNativeResult(value));
           return parsed.success
             ? parsed.data
-            : operationError("MEDIA_WORKER_FAILED", operation + " returned an unreadable result");
+            : operationError("INVALID_RESPONSE", operation + " returned an unreadable result");
         },
-        completed: () =>
-          operationError("MEDIA_WORKER_FAILED", operation + " produced no result", true),
+        completed: () => operationError("MEDIA_WORKER_FAILED", operation + " produced no result"),
       },
     );
   };
@@ -388,7 +407,7 @@ export function cliWorker(
   const capture = (chunks: Buffer[], chunk: Buffer) => {
     size += chunk.length;
     if (size > maximum)
-      return operationError("MEDIA_WORKER_FAILED", "CLI output exceeds its byte bound");
+      return operationError("LIMIT_EXCEEDED", "CLI output exceeds its byte bound");
     chunks.push(chunk);
   };
   return ownedProcess(
@@ -410,7 +429,7 @@ export function cliWorker(
       group: true,
       completion: (chunk) => {
         if (completion.length + chunk.length > (allocation ? 256 : 4) || commandExit !== undefined)
-          return operationError("MEDIA_WORKER_FAILED", "CLI completion is malformed or duplicated");
+          return operationError("INVALID_RESPONSE", "CLI completion is malformed or duplicated");
         completion = Buffer.concat([completion, chunk]);
         if (!completion.includes(10)) return;
         const text = completion.toString("utf8");
@@ -435,14 +454,11 @@ export function cliWorker(
             allocatedOutput = value.output;
             commandExit = value.exitCode;
           } catch {
-            return operationError("MEDIA_WORKER_FAILED", "CLI allocation completion is malformed");
+            return operationError("INVALID_RESPONSE", "CLI allocation completion is malformed");
           }
         } else {
           if (!/^(0|[1-9][0-9]{0,2})\n$/.test(text) || Number(text) > 255)
-            return operationError(
-              "MEDIA_WORKER_FAILED",
-              "CLI completion is malformed or duplicated",
-            );
+            return operationError("INVALID_RESPONSE", "CLI completion is malformed or duplicated");
           commandExit = Number(text);
         }
         return true;
@@ -456,11 +472,10 @@ export function cliWorker(
           return operationError(
             "MEDIA_WORKER_FAILED",
             "CLI owner exited without command completion",
-            true,
             { exitCode: wrapperExit, stderr: diagnostic },
           );
         if (exitCode !== 0)
-          return operationError("MEDIA_WORKER_FAILED", "CLI exited unsuccessfully", true, {
+          return operationError("MEDIA_WORKER_FAILED", "CLI exited unsuccessfully", {
             exitCode,
             stderr: diagnostic,
           });
@@ -477,7 +492,7 @@ export function cliWorker(
               },
             };
           } catch {
-            return operationError("MEDIA_WORKER_FAILED", "CLI returned malformed JSON", false, {
+            return operationError("INVALID_RESPONSE", "CLI returned malformed JSON", {
               stderr: diagnostic,
             });
           }

@@ -309,7 +309,7 @@ export class AlignmentEvidenceStore {
       validateOwner,
     );
     if (!owned && this.row(identity)?.complete !== 1)
-      throw new CatalogError("PROCESSING_BUSY", "Alignment generation is being prepared", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Alignment generation is being prepared", {});
     let rows: ReturnType<typeof alignmentOperandRows>;
     try {
       rows = alignmentOperandRows(source, operands);
@@ -384,7 +384,7 @@ export class AlignmentEvidenceStore {
     const identity = alignmentIdentitySchema.strip().parse(input),
       row = this.row(identity);
     if (!row || row.complete !== 1)
-      throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {}, true);
+      throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {});
     const metadata = alignmentEvidenceMetadataSchema.parse(JSON.parse(row.metadata));
     this.validateOwner(metadata, metadata.source);
     return metadata;

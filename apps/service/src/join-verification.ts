@@ -51,7 +51,8 @@ export async function verifyJoin(
 ) {
   const { composition } = owners;
   const prepared = owners.preparedAudio.resolve(composition, input.tap, input.preparedResourceId);
-  if (!prepared) throw new CatalogError("NOT_READY", "Prepared join-review tap is unavailable");
+  if (!prepared)
+    throw new CatalogError("PREREQUISITE_MISSING", "Prepared join-review tap is unavailable");
   const boundary = createProjectCuts(composition.model).boundary(input.boundary);
   if (boundary.mediaKind !== "audio")
     throw new CatalogError("INVALID_PARAMS", "Join speech review requires an audio track");
@@ -204,12 +205,9 @@ export async function verifyJoin(
       .map((range) => ({ clipId: entry.clipId, range })),
   );
   if (unavailable.length)
-    throw new CatalogError(
-      "NOT_READY",
-      "Prepared join-review audio contains unavailable samples",
-      { unavailable },
-      true,
-    );
+    throw new CatalogError("NOT_READY", "Prepared join-review audio contains unavailable samples", {
+      unavailable,
+    });
   const preparedFile = owners.preparedAudio.open(prepared.resourceId, prepared.audio.sampleRange);
   const retained: RetainedRead = {
     bytes: prepared.audio.bytes,

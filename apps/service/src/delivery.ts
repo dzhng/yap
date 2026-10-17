@@ -44,10 +44,10 @@ export class DerivativeDelivery {
   }
 
   private requireCapacity(): void {
-    if (this.disposed) throw new CatalogError("SERVICE_STOPPED", "Derivative delivery is closed");
+    if (this.disposed) throw new CatalogError("OWNER_CLOSED", "Derivative delivery is closed");
     this.expire();
     if (this.leases.size + this.reservations.size >= maximumLeases)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many derivative deliveries are open", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many derivative deliveries are open");
   }
 
   open(
@@ -58,7 +58,7 @@ export class DerivativeDelivery {
     const retainedOwner = { ...owner };
     const handle = acquire();
     if (!handle)
-      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {}, true);
+      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {});
     try {
       const token = randomUUID();
       const expiresAt = Date.now() + lifetimeMs;
@@ -97,7 +97,6 @@ export class DerivativeDelivery {
             "ARTIFACT_EXPIRED",
             "Derivative ended before its published size",
             {},
-            true,
           );
         received += count;
       }
@@ -126,12 +125,7 @@ export class DerivativeDelivery {
     const lease = this.leases.get(token);
     if (!lease || Date.now() >= lease.expiresAt) {
       this.close(token);
-      throw new CatalogError(
-        "ARTIFACT_EXPIRED",
-        "Derivative delivery has expired or closed",
-        {},
-        true,
-      );
+      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative delivery has expired or closed", {});
     }
     return lease;
   }

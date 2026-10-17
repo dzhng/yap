@@ -165,8 +165,8 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   assert.throws(() => context.files.open(f.mediaPath), { code: "CONTEXT_CLOSED" });
   await f.registry.close(admission.id);
   await f.registry.dispose();
-  await assert.rejects(f.registry.open(f.input), { code: "SERVICE_STOPPED" });
-  await assert.rejects(f.registry.recover(), { code: "SERVICE_STOPPED" });
+  await assert.rejects(f.registry.open(f.input), { code: "OWNER_CLOSED" });
+  await assert.rejects(f.registry.recover(), { code: "OWNER_CLOSED" });
 });
 
 test("64 GiB admission pool admits two exact-bound sparse reservations, refuses a third and releases canceled work", async (t) => {
@@ -180,7 +180,7 @@ test("64 GiB admission pool admits two exact-bound sparse reservations, refuses 
   const second = await f.registry.open(f.input);
   assert.equal(f.registry.status(second.id).state, "queued");
   assert.equal(f.registry.usage().budgetBytes, 64 * 1024 ** 3);
-  await assert.rejects(f.registry.open(f.input), { code: "LIMIT_EXCEEDED" });
+  await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   assert.equal(f.registry.usage().owners, 2);
   assert.deepEqual(await readdir(f.directory), []);
   await f.registry.close(first.id);
@@ -200,7 +200,7 @@ test("four same-content resource owners stay independent and failed close retain
   const handles = await Promise.all(admissions.map((value) => ready(f, value.id)));
   assert.equal(new Set(handles).size, 4);
   const before = f.registry.usage();
-  await assert.rejects(f.registry.open(f.input), { code: "LIMIT_EXCEEDED" });
+  await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   const directory = join(f.directory, admissions[0].id);
   await chmod(directory, 0o500);
   try {
@@ -211,7 +211,7 @@ test("four same-content resource owners stay independent and failed close retain
     assert.equal(f.registry.status(admissions[0].id).state, "cleanup_failed");
     assert.equal(f.registry.usage().owners, 4);
     assert.equal(f.registry.usage().budgetBytes, before.budgetBytes);
-    await assert.rejects(f.registry.open(f.input), { code: "LIMIT_EXCEEDED" });
+    await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
     const sibling = f.registry.lookup(handles[1]).files.open(f.mediaPath);
     assert.ok(sibling.fd >= 0);
     sibling.close();
@@ -610,7 +610,7 @@ test("default peak reservations block a fourth pending open but validated steady
   const admissions = [];
   for (let i = 0; i < 3; i++) admissions.push(await f.registry.open(f.input));
   assert.equal(f.registry.usage().budgetBytes, 3 * ((await stat(f.input)).size + 16 * 1024 ** 3));
-  await assert.rejects(f.registry.open(f.input), { code: "LIMIT_EXCEEDED" });
+  await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   f.store.ingestLifecycle(capture.recordingId, {
     sourceId: capture.sourceId,
     sequence: 1,

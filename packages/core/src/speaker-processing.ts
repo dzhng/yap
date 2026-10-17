@@ -168,7 +168,7 @@ export class SpeakerProcessing {
     const selected = this.selected(input),
       descriptor = this.descriptor(selected);
     if (!descriptor.decoder)
-      throw new CatalogError("NOT_READY", "Native speaker decoder is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Native speaker decoder is unavailable", {});
     if (job.target.assetId !== input.assetId || this.identity(input).input !== job.input)
       throw new CatalogError("ARTIFACT_CHANGED", "Speaker source or execution inputs changed");
     signal.throwIfAborted();

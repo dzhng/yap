@@ -55,7 +55,6 @@ async function fixture(outputFrames = 6000) {
           "MODEL_NOT_PREPARED",
           "Controlled execution prerequisite unavailable",
           {},
-          true,
         );
       return {
         python: "unused",
@@ -304,7 +303,7 @@ test("reference transcript, desired text and requested settings distinguish froz
 
 test("failure has no published asset and explicit retry uses the frozen request", async () => {
   const f = await fixture();
-  f.setFailure(new CatalogError("WORKER_FAILED", "controlled", {}, true));
+  f.setFailure(new CatalogError("MEDIA_WORKER_FAILED", "controlled", {}));
   const started = await f.current.owner.request(f.input);
   await expect.poll(() => f.current.jobs.job(started.jobId!).state).toBe("failed");
   const frozen = f.current.jobs.job(started.jobId!).input;

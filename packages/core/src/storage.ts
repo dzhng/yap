@@ -123,7 +123,6 @@ export class ManagedStorage {
             "STORAGE_CHANGED",
             "Managed directory changed during inspection",
             {},
-            true,
           );
       }
     };
@@ -164,7 +163,6 @@ export class ManagedStorage {
             "STORAGE_CHANGED",
             "Managed path became a symbolic link during inspection",
             {},
-            true,
           );
         if (!missing(error)) throw error;
       }
@@ -270,14 +268,9 @@ export class ManagedStorage {
       if (this.lifetime.signal.aborted)
         throw new CatalogError("CANCELED", "Storage inspection was canceled");
       if (error instanceof CatalogError) throw error;
-      throw new CatalogError(
-        "STORAGE_IO",
-        "Cannot inspect managed storage",
-        {
-          cause: (error as NodeJS.ErrnoException).code ?? "UNKNOWN",
-        },
-        true,
-      );
+      throw new CatalogError("STORAGE_IO", "Cannot inspect managed storage", {
+        cause: (error as NodeJS.ErrnoException).code ?? "UNKNOWN",
+      });
     }
     usage.observedAt = new Date().toISOString();
     return usage;

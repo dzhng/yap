@@ -458,8 +458,7 @@ test("image reads do not retry failed work; explicit retry reuses the pinned fra
   const f = await imageFixture({
     ...imageRenderer,
     async render(request, signal) {
-      if (failure)
-        throw new CatalogError("DECODE_FAILED", "fixture transient decode failure", {}, true);
+      if (failure) throw new CatalogError("DECODE_FAILED", "fixture transient decode failure", {});
       return imageRenderer.render(request, signal);
     },
   });

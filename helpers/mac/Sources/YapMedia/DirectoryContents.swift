@@ -49,7 +49,7 @@ public enum DirectoryContents {
         }
         guard depth < 64 else {
             throw NativeFailure(
-                "LIMIT_EXCEEDED", "Managed directory nesting exceeds 64 levels.", retryable: false)
+                "LIMIT_EXCEEDED", "Managed directory nesting exceeds 64 levels.")
         }
         let fd = openat(parent, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         if fd < 0 {
@@ -60,8 +60,7 @@ public enum DirectoryContents {
         var opened = stat()
         guard fstat(fd, &opened) == 0 else { throw failure("Inspect opened directory") }
         guard opened.st_dev == info.st_dev, opened.st_ino == info.st_ino else {
-            throw NativeFailure(
-                "INVALID_STORAGE", "Managed directory changed while opening.", retryable: true)
+            throw NativeFailure("STORAGE_CHANGED", "Managed directory changed while opening.")
         }
         try removeContents(fd, depth: depth)
         if unlinkat(parent, name, AT_REMOVEDIR) != 0 && errno != ENOENT {
@@ -82,6 +81,6 @@ public enum DirectoryContents {
     public static func failure(_ action: String) -> NativeFailure {
         let number = errno
         let code = number == ELOOP || number == ENOTDIR ? "INVALID_STORAGE" : "DELETE_FAILED"
-        return NativeFailure(code, "\(action): \(String(cString: strerror(number))).", retryable: true)
+        return NativeFailure(code, "\(action): \(String(cString: strerror(number))).")
     }
 }

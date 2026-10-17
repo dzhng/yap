@@ -101,7 +101,7 @@ it("pre-canceled work never starts and spawn failure settles", async () => {
   });
   expect(await run("hold", {})).toMatchObject({
     ok: false,
-    error: { code: "MEDIA_WORKER_UNAVAILABLE" },
+    error: { code: "MEDIA_WORKER_NOT_RUNNABLE" },
   });
 });
 

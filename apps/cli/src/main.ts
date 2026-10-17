@@ -52,10 +52,9 @@ function failure(
   id: string,
   code: string,
   message: string,
-  retryable = false,
   details: Record<string, unknown> = {},
 ): Extract<OperationResponse, { ok: false }> {
-  return { id, ...operationError(code, message, retryable, details) };
+  return { id, ...operationError(code, message, details) };
 }
 
 function capabilities(operation?: string) {
@@ -89,17 +88,9 @@ class UsageError extends Error {
 }
 
 function errorResult(id: string, error: unknown): Extract<OperationResponse, { ok: false }> {
-  if (error instanceof ArtifactDeliveryError)
-    return failure(id, error.code, error.message, error.retryable);
-  if (error instanceof UsageError)
-    return failure(id, error.code, error.message, false, error.details);
-  if (error instanceof LocalTransportError)
-    return failure(
-      id,
-      error.code,
-      error.message,
-      error.code === "TIMEOUT" || error.code === "UPDATING" || error.code.startsWith("CONNECTION_"),
-    );
+  if (error instanceof ArtifactDeliveryError) return failure(id, error.code, error.message);
+  if (error instanceof UsageError) return failure(id, error.code, error.message, error.details);
+  if (error instanceof LocalTransportError) return failure(id, error.code, error.message);
   if (error instanceof FrameError)
     return failure(
       id,

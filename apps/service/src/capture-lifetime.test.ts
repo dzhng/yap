@@ -67,7 +67,7 @@ test("closing capture aborts recovery and waits for its worker before releasing 
       state: "finalizing",
       finalizationError: { code: "RECOVERY_CANCELED" },
     });
-    await expect(service.reconcileStranded()).rejects.toMatchObject({ code: "SERVICE_STOPPED" });
+    await expect(service.reconcileStranded()).rejects.toMatchObject({ code: "OWNER_CLOSED" });
   } finally {
     finish?.({
       ok: false,

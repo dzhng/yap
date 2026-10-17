@@ -161,7 +161,9 @@ it.each(["malformed", "crash"])(
           throw new Error("must not consume");
         },
       ),
-    ).rejects.toMatchObject({ code: "MEDIA_WORKER_FAILED" });
+    ).rejects.toMatchObject({
+      code: source === "malformed" ? "INVALID_RESPONSE" : "MEDIA_WORKER_FAILED",
+    });
     expect(await readdir(parent)).toEqual([]);
   },
 );

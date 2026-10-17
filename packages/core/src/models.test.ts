@@ -467,7 +467,11 @@ test("runtime source and registered identity are explicit, and discovery needs n
   const f = await voiceFixture(),
     models = f.owner();
   expect(models.list().map((entry) => entry.modelId)).toEqual(["tiny", "voice"]);
-  await expect(models.status("unknown")).rejects.toMatchObject({ code: "UNKNOWN_MODEL" });
+  await expect(models.status("unknown")).rejects.toMatchObject({
+    code: "NOT_FOUND",
+    details: { kind: "model" },
+    retryable: false,
+  });
   await expect(models.prepare("voice", new AbortController().signal)).rejects.toMatchObject({
     code: "MODEL_SOURCE_REQUIRED",
   });

@@ -1,3 +1,4 @@
+import { refusalRetryable } from "./refusal-ledger.js";
 import { z } from "zod";
 import { RESPONSE_FRAME_BYTES } from "./framing.js";
 import { operationSchema } from "./operations.js";
@@ -85,10 +86,9 @@ export type OperationFailure = Extract<OperationResult, { ok: false }>;
 export function operationError(
   code: string,
   message: string,
-  retryable = false,
   details: Record<string, unknown> = {},
 ): OperationFailure {
-  return { ok: false, error: { code, message, retryable, details } };
+  return { ok: false, error: { code, message, retryable: refusalRetryable(code), details } };
 }
 
 /**
@@ -100,7 +100,7 @@ export function admitOperation(
 ): { ok: true; data: z.infer<typeof operationSchema> } | OperationFailure {
   const parsed = operationSchema.safeParse(request);
   if (parsed.success) return { ok: true, data: parsed.data };
-  return operationError("INVALID_PARAMS", "Parameters do not match the operation schema", false, {
+  return operationError("INVALID_PARAMS", "Parameters do not match the operation schema", {
     invalid: parsed.error.issues
       .slice(0, 20)
       .map((issue) => ({ path: issue.path.join("."), message: issue.message })),
@@ -143,6 +143,7 @@ export { boundedIssues, issueCount, type Issue } from "@yap/composition";
 export * from "./capture.js";
 export * from "./framing.js";
 export * from "./layout.js";
+export * from "./refusal-ledger.js";
 export * from "./operations.js";
 export * from "./tools.js";
 export * from "./update.js";

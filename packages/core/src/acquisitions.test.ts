@@ -270,7 +270,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
     f.importer.executeImport(changed.acquisitionId, "changed", f.native, signal()),
   ).rejects.toMatchObject({ code: "SOURCE_CHANGED" });
   expect(() => f.acquisitions.get(changed.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "NOT_READY" }),
+    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
   );
   const fresh = await f.admit("fresh");
   const controller = new AbortController();
@@ -293,7 +293,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
   ).rejects.toThrow("cancel import");
   expect(probes).toBe(2);
   expect(() => f.acquisitions.get(fresh.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "NOT_READY" }),
+    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
   );
   for (const asset of f.assets.list().assets) expect(f.assets.references(asset.id)).toEqual([]);
   expect(() =>
@@ -306,7 +306,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
       "narration",
       { startUs: 0, endUs: 300 },
     ),
-  ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+  ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   await f.importer.recover(signal());
   const value = await f.importer.executeImport(fresh.acquisitionId, "retried", f.native, signal());
   expect(value.evidence.generation).toBe("retried");
@@ -337,7 +337,7 @@ test("identical captured role files share one usable binding only when their sup
     if (conflict) {
       await expect(result).rejects.toMatchObject({ code: "UNSUPPORTED_MEDIA" });
       expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
-        expect.objectContaining({ code: "NOT_READY" }),
+        expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
       );
     } else {
       const value = await result;
@@ -383,7 +383,7 @@ test("unacquired audio remains empty and ambiguous capture streams refuse public
     ),
   ).rejects.toMatchObject({ code: "UNSUPPORTED_MEDIA" });
   expect(() => f.acquisitions.get(fresh.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "NOT_READY" }),
+    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
   );
   await expect(
     f.importer.executeImport(ambiguous.acquisitionId, "changed", f.native, signal()),

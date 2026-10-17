@@ -63,7 +63,7 @@ async function fixture() {
       return {
         ok: false,
         error: {
-          code: "NATIVE_DECODE_FAILED",
+          code: "DECODE_FAILED",
           message: "controlled picture failure",
           retryable: true,
           details: {},

@@ -83,7 +83,10 @@ export class VoiceGenerationJobs {
   private model(modelId: string): ModelIdentity {
     const registered = this.owners.models.list().find((model) => model.modelId === modelId);
     if (!registered || registered.purpose !== "voice" || !registered.runtimeDigest)
-      throw new CatalogError("UNKNOWN_MODEL", "Model is not a registered voice model", { modelId });
+      throw new CatalogError("NOT_FOUND", "Model is not a registered voice model", {
+        modelId,
+        kind: "model",
+      });
     if (registered.generationProfile?.id !== voiceProfile.id)
       throw new CatalogError(
         "UNSUPPORTED_MODEL",

@@ -143,7 +143,10 @@ export function openControl(options: {
         if (typeof id === "string")
           settle(
             id,
-            operationError("INVALID_RESPONSE", "The app answered with an unreadable result", true),
+            operationError(
+              "CONTROL_RESPONSE_INVALID",
+              "The app answered with an unreadable result",
+            ),
           );
         return;
       }
@@ -183,10 +186,7 @@ export function openControl(options: {
     options.input.pause();
     // Settling deletes the entry it answers, which a live Map iteration tolerates.
     for (const id of pending.keys())
-      settle(
-        id,
-        operationError("SERVICE_STOPPED", "The control channel closed before an answer", true),
-      );
+      settle(id, operationError("SERVICE_STOPPED", "The control channel closed before an answer"));
     options.onEnd();
   };
   for (const event of ["end", "close", "error"] as const) options.input.on(event, close);
@@ -209,7 +209,7 @@ export function openControl(options: {
     call: (operation, params, callOptions) =>
       new Promise<OperationResult>((resolve) => {
         if (ended) {
-          resolve(operationError("SERVICE_STOPPED", "The control channel is closed", true));
+          resolve(operationError("SERVICE_STOPPED", "The control channel is closed"));
           return;
         }
         if (pending.size >= MAX_PENDING_CONTROL_CALLS) {
@@ -219,7 +219,7 @@ export function openControl(options: {
         outbound += 1;
         const id = `service-${outbound}`;
         const timer = setTimeout(
-          () => settle(id, operationError("TIMEOUT", `${operation} did not answer in time`, true)),
+          () => settle(id, operationError("TIMEOUT", `${operation} did not answer in time`)),
           callOptions?.timeoutMs ?? timeoutMs,
         );
         pending.set(id, (result) => {

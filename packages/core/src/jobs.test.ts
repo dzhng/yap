@@ -516,7 +516,7 @@ test("waiting work is bounded, while work already admitted still answers", async
       break;
     }
   }
-  expect(refused).toMatchObject({ code: "LIMIT_EXCEEDED", retryable: true });
+  expect(refused).toMatchObject({ code: "CAPACITY_EXCEEDED", retryable: true });
   expect(queue.job(running.jobId).state).toBe("running");
   const oldest = queued[0]!;
   expect(queue.job(oldest.jobId).state).toBe("queued");
@@ -899,7 +899,7 @@ test("cache regeneration preserves the published artifact when queue admission i
       input: `pending-${i}`,
     });
   expect(() => queue.regenerate(job.jobId, job.generation)).toThrow(
-    expect.objectContaining({ code: "LIMIT_EXCEEDED" }),
+    expect.objectContaining({ code: "CAPACITY_EXCEEDED" }),
   );
   expect(
     queue.status({
@@ -1563,7 +1563,7 @@ test("admission failures stay terminal, isolate siblings, and never retry depend
     lane: "heavy",
   });
   (await started(dependency.attemptId)).fail(
-    new CatalogError("SOURCE_BAD", "bad source", {}, true),
+    new CatalogError("MEDIA_WORKER_FAILED", "bad source", {}),
   );
   await queue.idle();
   const bad = queue.submitDeferred({
@@ -1587,7 +1587,7 @@ test("admission failures stay terminal, isolate siblings, and never retry depend
         lane: "heavy",
       });
       expect(source.attemptId).toBe(dependency.attemptId);
-      throw new CatalogError("DEPENDENCY_FAILED", source.reason!, {}, true);
+      throw new CatalogError("DEPENDENCY_FAILED", source.reason!, {});
     }
     return { state: "ready" };
   });
@@ -1905,7 +1905,10 @@ test("typed preparation failures survive restart and attempt transitions clear e
   });
   (await reopened.started(transient.attemptId)).fail(new Error("worker failed"));
   await reopened.queue.idle();
-  expect(reopened.queue.job(transient.jobId).errorCode).toBe("JOB_FAILED");
+  expect(reopened.queue.job(transient.jobId)).toMatchObject({
+    errorCode: "JOB_FAILED",
+    retryable: true,
+  });
   const canceled = reopened.queue.retry(transient.jobId);
   expect(canceled.errorCode).toBeNull();
   expect(canceled.errorDetails).toBeNull();
@@ -2020,12 +2023,12 @@ test("failure diagnostics remain bounded and cannot break settlement", async () 
       input: "frozen",
     });
     (await f.started(job.attemptId)).fail(
-      new CatalogError("UNSUPPORTED_MEDIA", "Cannot import source", details, true),
+      new CatalogError("MEDIA_WORKER_FAILED", "Cannot import source", details),
     );
     await f.queue.idle();
     expect(f.queue.job(job.jobId)).toMatchObject({
       state: "failed",
-      errorCode: "UNSUPPORTED_MEDIA",
+      errorCode: "MEDIA_WORKER_FAILED",
       reason: "Cannot import source",
       errorDetails: { truncated: true },
     });
@@ -2077,7 +2080,7 @@ test("admission rolls back domain writes when capacity is exhausted", async () =
       store.catalog.prepare("INSERT INTO admission_owners VALUES (?)").run("refused");
       return request("refused");
     }),
-  ).toThrow(expect.objectContaining({ code: "LIMIT_EXCEEDED" }));
+  ).toThrow(expect.objectContaining({ code: "CAPACITY_EXCEEDED" }));
   expect(store.catalog.prepare("SELECT id FROM admission_owners").all()).toEqual([
     { id: "accepted" },
   ]);
@@ -2164,7 +2167,7 @@ test("retryable failures and restart keep inputs while permanent failures releas
     },
     (job) => queue.retainInputs(job.jobId, "scene-generation", ["frozen"]),
   );
-  (await started(job.attemptId)).fail(new CatalogError("NOT_READY", "try later", {}, true));
+  (await started(job.attemptId)).fail(new CatalogError("NOT_READY", "try later", {}));
   await queue.idle();
   expect(queue.retainsInput("scene-generation", "frozen")).toBe(true);
   const retried = queue.retry(job.jobId);
@@ -2257,7 +2260,7 @@ test("settling one job cannot release a scene still pinned by another retryable 
     );
   const first = submit("first"),
     second = submit("second");
-  (await started(second.attemptId)).fail(new CatalogError("TEMPORARY", "try later", {}, true));
+  (await started(second.attemptId)).fail(new CatalogError("MEDIA_WORKER_FAILED", "try later", {}));
   (await started(first.attemptId)).finish("ready");
   await queue.idle();
   expect(refs.owners("scene-generation", "shared")).toEqual([
@@ -2345,10 +2348,9 @@ test("permanent admission size limits fail while transient queue pressure remain
   queue.startAdmission((job) => {
     visits++;
     throw new CatalogError(
-      "LIMIT_EXCEEDED",
+      job.input === "pressure" ? "CAPACITY_EXCEEDED" : "LIMIT_EXCEEDED",
       job.input,
       { bound: 10, observed: 11 },
-      job.input === "pressure",
     );
   });
   expect(queue.job(permanent.jobId)).toMatchObject({
@@ -2433,7 +2435,7 @@ test.each(["UNAVAILABLE", "LIMIT_EXCEEDED"] as const)(
         lane: "heavy",
       });
       if (["unavailable", "failed"].includes(child.state))
-        throw new CatalogError(child.errorCode!, child.reason!, {}, child.retryable);
+        throw new CatalogError(child.errorCode!, child.reason!, {});
       return { state: "waiting", dependency: child.jobId };
     });
     await queue.idle();
@@ -2719,7 +2721,7 @@ test("source-owned targets survive reopen, retry, cancellation and owner deletio
   };
   const first = f.queue.submit(request);
   (await f.started(first.attemptId)).fail(
-    new CatalogError("MEDIA_UNAVAILABLE", "access denied", {}, true),
+    new CatalogError("MEDIA_UNAVAILABLE", "access denied", {}),
   );
   await f.queue.idle();
   await f.queue.close();

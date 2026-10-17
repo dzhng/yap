@@ -322,12 +322,9 @@ export class IndexProcessing {
       throw new CatalogError("UNSUPPORTED_JOB", "Index admission requires a project index");
     const input = JSON.parse(job.input) as ProjectIndexRecipe;
     if (input.implementationId !== this.project.frames.projectSupport.implementationId)
-      throw new CatalogError(
-        "NOT_READY",
-        "Pinned picture renderer is unavailable",
-        { implementationId: input.implementationId },
-        true,
-      );
+      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {
+        implementationId: input.implementationId,
+      });
     const plan = this.projectPlan({
       ...input,
       observations: input.observationRequest,

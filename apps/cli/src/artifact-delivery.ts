@@ -14,6 +14,7 @@ import {
   resultSchema,
   publishedOutputSchema,
   type OperationResponse,
+  refusalRetryable,
 } from "@yap/protocol";
 
 export const batchReferences = new Map<string, "atUs" | "ordinal">([
@@ -36,12 +37,13 @@ export const artifactOperations = new Set([
 ]);
 
 export class ArtifactDeliveryError extends Error {
+  readonly retryable: boolean;
   constructor(
     readonly code: string,
     message: string,
-    readonly retryable = false,
   ) {
     super(message);
+    this.retryable = refusalRetryable(code);
   }
 }
 const receipt = z.object({
@@ -131,19 +133,14 @@ async function consumeArtifact<T>(
     let offset = 0;
     while (offset < bytes) {
       if (Date.now() >= expiresAt)
-        throw new ArtifactDeliveryError("ARTIFACT_EXPIRED", "Media delivery expired", true);
+        throw new ArtifactDeliveryError("ARTIFACT_EXPIRED", "Media delivery expired");
       if (expiresAt - Date.now() < 5000) {
         const renewal = await callLocal(
           socket,
           { id: randomUUID(), operation: "artifact.renew", params: { token } },
           selection.signal ? { signal: selection.signal } : {},
         );
-        if (!renewal.ok)
-          throw new ArtifactDeliveryError(
-            renewal.error.code,
-            renewal.error.message,
-            renewal.error.retryable,
-          );
+        if (!renewal.ok) throw new ArtifactDeliveryError(renewal.error.code, renewal.error.message);
         const renewed = receipt.safeParse(renewal.data);
         if (
           !renewed.success ||
@@ -167,11 +164,7 @@ async function consumeArtifact<T>(
         selection.signal ? { signal: selection.signal } : {},
       );
       if (!response.ok)
-        throw new ArtifactDeliveryError(
-          response.error.code,
-          response.error.message,
-          response.error.retryable,
-        );
+        throw new ArtifactDeliveryError(response.error.code, response.error.message);
       const parsedChunk = chunk.safeParse(response.data);
       if (!parsedChunk.success)
         throw new ArtifactDeliveryError("INVALID_RESPONSE", "Malformed media chunk");

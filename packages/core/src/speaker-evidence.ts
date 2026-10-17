@@ -443,7 +443,7 @@ export class SpeakerEvidenceStore {
       validateOwner,
     );
     if (!owned && this.row(identity)?.complete !== 1)
-      throw new CatalogError("PROCESSING_BUSY", "Speaker generation is being prepared", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Speaker generation is being prepared", {});
     let result: ReturnType<typeof normalized>;
     try {
       result = normalized(source, operands);
@@ -563,7 +563,7 @@ export class SpeakerEvidenceStore {
   metadata(identity: SpeakerEvidenceIdentity): SpeakerEvidenceMetadata {
     const row = this.row(identity);
     if (!row || row.complete !== 1)
-      throw new CatalogError("NOT_READY", "Speaker evidence is not ready", {}, true);
+      throw new CatalogError("NOT_READY", "Speaker evidence is not ready", {});
     return JSON.parse(row.metadata) as SpeakerEvidenceMetadata;
   }
   operands(identity: SpeakerEvidenceIdentity): SpeakerOperands {

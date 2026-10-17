@@ -193,7 +193,7 @@ export type AcousticRenderer = {
   implementationId: string;
   render(request: AcousticImageRequest, signal: AbortSignal): Promise<unknown>;
 };
-const lost = (message: string) => new CatalogError("ARTIFACT_CHANGED", message, {}, true);
+const lost = (message: string) => new CatalogError("DEPENDENCY_LOST", message);
 function audioUnavailableSamples(audio: AudioArtifact) {
   return "projectId" in audio
     ? audio.unavailable.flatMap((entry) => entry.ranges)
@@ -223,8 +223,7 @@ export class AcousticInspection {
           "Loudness returns measurements without an image rendition",
         );
       const analyzer = this.owners.loudness;
-      if (!analyzer)
-        throw new CatalogError("NOT_READY", "Loudness analyzer is unavailable", {}, true);
+      if (!analyzer) throw new CatalogError("NOT_READY", "Loudness analyzer is unavailable", {});
       const recipe = this.owners.audio.recipe(selection);
       if (channelInterpretation === "dual-mono" && recipe.channels !== 1)
         throw new CatalogError("INVALID_PARAMS", "Dual-mono interpretation requires a mono signal");
@@ -431,7 +430,7 @@ export class AcousticInspection {
   private async image(input: AcousticInput) {
     const renderer = this.owners.renderer;
     if (!renderer)
-      throw new CatalogError("NOT_READY", "Acoustic image renderer is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Acoustic image renderer is unavailable", {});
     const measurement = await this.measurements(input, false);
     if (!measurement.published) return measurement;
     const source = this.owners.jobs.job(measurement.jobId!);
@@ -509,7 +508,7 @@ export class AcousticInspection {
     const options = imageOptions.parse(raw),
       renderer = this.owners.renderer;
     if (!renderer || renderer.implementationId !== options.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned acoustic renderer is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Pinned acoustic renderer is unavailable", {});
     const measurement = this.measurement(job, options),
       lease = this.owners.cache.acquire(measurement.value.cacheId);
     if (!lease)
@@ -517,7 +516,6 @@ export class AcousticInspection {
         "ARTIFACT_EXPIRED",
         "Acoustic measurements were evicted; retry image preparation",
         {},
-        true,
       );
     let output: ReturnType<DerivedCache["reserve"]> | undefined;
     try {
@@ -595,7 +593,6 @@ export class AcousticInspection {
         "ARTIFACT_EXPIRED",
         "Pinned PCM bytes were evicted; retry acoustic preparation",
         {},
-        true,
       );
     let output: ReturnType<DerivedCache["reserve"]> | undefined;
     try {
@@ -705,12 +702,7 @@ export class AcousticInspection {
         assertLoudnessCoverage(audio);
         const analyzer = this.owners.loudness;
         if (!analyzer || analyzer.implementationId !== options.implementationId)
-          throw new CatalogError(
-            "NOT_READY",
-            "Pinned loudness implementation is unavailable",
-            {},
-            true,
-          );
+          throw new CatalogError("NOT_READY", "Pinned loudness implementation is unavailable", {});
         validateAudioWave(lease, audio);
         const measurement = loudnessMeasurementSchema.parse(
           await this.owners.cache.withDescriptor(audio.cacheId, (source) =>

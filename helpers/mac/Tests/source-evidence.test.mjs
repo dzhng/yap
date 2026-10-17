@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { retryable } from "./refusal.mjs";
 const executable =
   process.env.YAP_NATIVE ?? new URL("../.build/debug/yap-native", import.meta.url).pathname;
 function request(directory, output, extra = {}) {
@@ -56,6 +57,8 @@ function fixture(t, records, prefix = join(tmpdir(), "cursor-evidence-")) {
   writeFileSync(journal, text);
   return { root, directory, journal, text, output: join(root, "evidence.jsonl") };
 }
+
+
 test("worker exports display-space observations and preserves source", (t) => {
   const f = fixture(t, [
     { event: "displaySpace", data: { hostUs: 123, zeroOriginHeight: 900 } },
@@ -518,8 +521,8 @@ test("source evidence retries actual journal access failures without changing so
       chmodSync(path, path === f.directory ? 0o700 : 0o600);
     }
     assert.equal(denied.ok, false);
-    assert.equal(denied.error.retryable, true, JSON.stringify(denied));
-    assert.equal(denied.error.code, "JOURNAL_UNAVAILABLE");
+    assert.equal(denied.error.code, "JOURNAL_UNAVAILABLE", JSON.stringify(denied));
+    assert.equal(retryable(denied.error), true);
     assert.equal(existsSync(f.output), false);
   }
   assert.equal(request(f.directory, f.output).ok, true);
@@ -534,8 +537,8 @@ test("a linked journal is invalid input rather than an operational retry", (t) =
   symlinkSync(original, f.journal);
   const refused = request(f.directory, f.output);
   assert.equal(refused.ok, false);
-  assert.equal(refused.error.retryable, false);
   assert.equal(refused.error.code, "INVALID_JOURNAL");
+  assert.equal(retryable(refused.error), false);
   assert.equal(readFileSync(original, "utf8"), f.text);
   assert.equal(existsSync(f.output), false);
 });

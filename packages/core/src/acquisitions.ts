@@ -256,10 +256,14 @@ function deferredReadFailure(error: unknown, frozen: boolean): never {
     typeof filesystemCode === "string" &&
     !["ENOENT", "ENOTDIR", "ELOOP"].includes(filesystemCode)
   )
-    throw new CatalogError(error.code, error.message, error.details, true);
+    throw new CatalogError(
+      error.code === "INVALID_PATH" ? "ACQUISITION_PATH_UNAVAILABLE" : error.code,
+      error.message,
+      error.details,
+    );
   if (frozen) throw new CatalogError("SOURCE_CHANGED", error.message, error.details);
   if (error.code === "NOT_FOUND")
-    throw new CatalogError(error.code, error.message, error.details, true);
+    throw new CatalogError("ACQUISITION_NOT_FOUND", error.message, error.details);
   throw error;
 }
 
@@ -480,12 +484,7 @@ export class AcquisitionStore {
       .get(acquisitionId);
     if (existing) {
       if (existing.metadata === null)
-        throw new CatalogError(
-          "PROCESSING_BUSY",
-          "Acquisition is already being prepared",
-          {},
-          true,
-        );
+        throw new CatalogError("PROCESSING_BUSY", "Acquisition is already being prepared", {});
       return { existing: JSON.parse(existing.metadata as string) as Acquisition, requestId: null };
     }
     const requestId = randomUUID();
@@ -518,7 +517,7 @@ export class AcquisitionStore {
     if (metadata === undefined)
       throw new CatalogError("NOT_FOUND", "Acquisition does not exist", { acquisitionId });
     if (metadata === null)
-      throw new CatalogError("NOT_READY", "Acquisition import has not completed", {
+      throw new CatalogError("PREREQUISITE_MISSING", "Acquisition import has not completed", {
         acquisitionId,
       });
     return JSON.parse(metadata);
@@ -591,12 +590,10 @@ export class AcquisitionImporter {
       (error: NodeJS.ErrnoException) => {
         if (error instanceof CatalogError) throw error;
         if (["EAGAIN", "EWOULDBLOCK"].includes(error.code ?? ""))
-          throw new CatalogError(
-            "RECORDING_BUSY",
-            "Capture donor is being retired",
-            { recordingId, filesystemCode: error.code },
-            true,
-          );
+          throw new CatalogError("RECORDING_BUSY", "Capture donor is being retired", {
+            recordingId,
+            filesystemCode: error.code,
+          });
         throw new CatalogError(
           missing(error) ? "NOT_FOUND" : "INVALID_PATH",
           "Cannot lease capture donor directory",
@@ -1257,7 +1254,6 @@ export class AcquisitionImporter {
             "ACQUISITION_BUSY",
             "An acquisition worker still owns this library; retry startup after it exits",
             {},
-            true,
           );
         throw error;
       },

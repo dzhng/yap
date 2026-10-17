@@ -861,13 +861,13 @@ test("fresh service owns capture facts without enabling capture or creating span
   };
   expect(await f.call("capture.start", start)).toMatchObject({
     ok: false,
-    error: { code: "NOT_READY" },
+    error: { code: "PREREQUISITE_MISSING" },
   });
   expect(
     await f.call("capture.start", { ...start, cameraDeviceId: "selected-camera" }),
   ).toMatchObject({
     ok: false,
-    error: { code: "NOT_READY" },
+    error: { code: "PREREQUISITE_MISSING" },
   });
   await f.service.close();
   const database = new DatabaseSync(join(f.home, "library/catalog.sqlite"), { readOnly: true });
@@ -1118,7 +1118,7 @@ test("queue capacity refusal leaves no frozen import receipt to poison a later a
     const requestId = `capacity-${index}`;
     const response = await f.call("asset.import", { requestId, path: f.path });
     if (!response.ok) {
-      expect(response.error.code).toBe("LIMIT_EXCEEDED");
+      expect(response.error.code).toBe("CAPACITY_EXCEEDED");
       refusedRequest = requestId;
       break;
     }
@@ -1413,7 +1413,9 @@ test("project transcript review reports a failed default model download as faile
   vi.stubGlobal("fetch", async () => {
     throw new Error("offline");
   });
-  cleanups.push(async () => vi.unstubAllGlobals());
+  cleanups.push(async () => {
+    vi.unstubAllGlobals();
+  });
   const f = await setup(async (operation) => {
     if (operation === "storage.clearRenderWorkspace") return { ok: true, data: { removed: true } };
     return {

@@ -257,7 +257,7 @@ export class AlignmentProcessing {
     }
     const decoder = this.options.decoder;
     if (!decoder)
-      throw new CatalogError("NOT_READY", "Native alignment decoder is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Native alignment decoder is unavailable", {});
     if (
       !project &&
       (job.target.kind !== "asset" ||

@@ -724,7 +724,7 @@ it("settles a native call whose answer is unreadable as soon as that answer arri
   const started = Date.now();
   expect(await service.call("capture.status")).toMatchObject({
     ok: false,
-    error: { code: "INVALID_RESPONSE", retryable: true },
+    error: { code: "CONTROL_RESPONSE_INVALID", retryable: true },
   });
   expect(Date.now() - started).toBeLessThan(DEFAULT_CALL_TIMEOUT_MS);
 });

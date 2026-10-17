@@ -93,7 +93,7 @@ export function sourceExporter(
             )
           )
             throw new CatalogError(
-              "NOT_READY",
+              "PREREQUISITE_MISSING",
               "Canonical video metadata lacks current native alpha facts; source re-admission is required",
             );
           const actual = mediaProbeSchema.parse(
@@ -107,7 +107,10 @@ export function sourceExporter(
               (stream) => stream.kind === "video" && stream.hasAlpha === undefined,
             )
           )
-            throw new CatalogError("NOT_READY", "Native worker lacks required video alpha facts");
+            throw new CatalogError(
+              "PREREQUISITE_MISSING",
+              "Native worker lacks required video alpha facts",
+            );
           if (!isDeepStrictEqual(actual, expected.metadata))
             throw new CatalogError(
               "INVALID_PACKAGE",
@@ -142,7 +145,7 @@ export function sourceExporter(
         !(error instanceof CatalogError) &&
         ["EACCES", "EPERM", "EIO"].includes((error as NodeJS.ErrnoException)?.code ?? "")
       )
-        throw new CatalogError("MEDIA_UNAVAILABLE", "Cannot read source evidence input", {}, true);
+        throw new CatalogError("MEDIA_UNAVAILABLE", "Cannot read source evidence input", {});
       throw error;
     } finally {
       await Promise.all(handles.map((file) => file.close()));

@@ -298,7 +298,7 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
-    errorCode: "NOT_FOUND",
+    errorCode: "ACQUISITION_NOT_FOUND",
     retryable: true,
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -344,7 +344,10 @@ test("a changed frozen journal refuses before observing newly available video", 
   const job = f.admit(f.recording.recordingId);
   f.queue.start();
   await f.queue.idle();
-  expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "failed", errorCode: "NOT_FOUND" });
+  expect(f.queue.inspect(job.jobId)).toMatchObject({
+    state: "failed",
+    errorCode: "ACQUISITION_NOT_FOUND",
+  });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
   const frozen = f.acquisitions.intent(job.target.acquisitionId);
   await writeFile(journal, JSON.stringify({ sessionID: "changed" }));
@@ -487,7 +490,10 @@ test.each(["source", "parent"])(
     const job = f.admit(f.recording.recordingId);
     f.queue.start();
     await f.queue.idle();
-    expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "failed", errorCode: "NOT_FOUND" });
+    expect(f.queue.inspect(job.jobId)).toMatchObject({
+      state: "failed",
+      errorCode: "ACQUISITION_NOT_FOUND",
+    });
     if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
     const frozen = f.acquisitions.intent(job.target.acquisitionId);
     await writeFile(join(f.donor, "video.mov"), "video");
@@ -498,7 +504,7 @@ test.each(["source", "parent"])(
       await f.queue.idle();
       expect(f.queue.inspect(job.jobId)).toMatchObject({
         state: "failed",
-        errorCode: "INVALID_PATH",
+        errorCode: "ACQUISITION_PATH_UNAVAILABLE",
         retryable: true,
       });
       expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
@@ -536,7 +542,7 @@ test("post-freeze donor copy access failure preserves the acquisition for explic
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
       state: "failed",
-      errorCode: "INVALID_PATH",
+      errorCode: "ACQUISITION_PATH_UNAVAILABLE",
       retryable: true,
       published: null,
     });

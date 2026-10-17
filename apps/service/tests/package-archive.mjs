@@ -502,7 +502,7 @@ test("copy barrier reports preparation failure instead of leaving its wait pendi
           await held;
         },
       ),
-      { code: "MEDIA_WORKER_UNAVAILABLE" },
+      { code: "MEDIA_WORKER_NOT_RUNNABLE" },
     );
     assert.deepEqual(await readdir(f.directory), []);
   } finally {

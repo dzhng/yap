@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { refusalRetryable } from "@yap/protocol";
 /**
  * The persisted contract shared by catalog owners. Additive tables are created idempotently.
  * Changes to existing shapes or required ownership records need a bump and an explicit
@@ -8,14 +9,33 @@ import { DatabaseSync } from "node:sqlite";
 export const catalogFormat = 29;
 export const minimumSupportedCatalogFormat = 29;
 export class CatalogError extends Error {
+  readonly retryable: boolean;
   constructor(
     readonly code: string,
     message: string,
     readonly details: Record<string, unknown> = {},
-    readonly retryable = false,
   ) {
     super(message);
+    this.retryable = refusalRetryable(this.code);
   }
+}
+
+/**
+ * A refusal that reports a dependency's failure. Retryability belongs to the code, so the
+ * dependency's own code is kept only when the ledger agrees with how that dependency can be
+ * retried; otherwise the generic dependency code with the matching retryability is reported.
+ */
+export function dependencyRefusal(
+  code: string,
+  message: string,
+  details: Record<string, unknown>,
+  retryable: boolean,
+): CatalogError {
+  if (refusalRetryable(code) === retryable) return new CatalogError(code, message, details);
+  return new CatalogError(retryable ? "DEPENDENCY_FAILED" : "DEPENDENCY_REFUSED", message, {
+    ...details,
+    dependencyCode: code,
+  });
 }
 
 /** One SQLite connection and transaction boundary, shared by the library owners. */
@@ -54,7 +74,7 @@ export class Catalog {
     } catch (error) {
       if (began) this.catalog.exec("ROLLBACK");
       if (error && typeof error === "object" && "errcode" in error && error.errcode === 5)
-        throw new CatalogError("STORAGE_BUSY", "Catalog is locked; retry the request", {}, true);
+        throw new CatalogError("STORAGE_BUSY", "Catalog is locked; retry the request", {});
       throw error;
     }
   }

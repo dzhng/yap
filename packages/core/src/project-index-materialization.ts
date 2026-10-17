@@ -1,6 +1,6 @@
 import { setImmediate } from "node:timers/promises";
 import type { Issue } from "@yap/composition";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import { JobDependencyLost, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import { pictureTextIssues, type MediaFrameInspection } from "./frame-inspection.js";
@@ -164,7 +164,7 @@ export async function materializeProjectIndex(
         signal,
       );
       if (!status.published)
-        throw new CatalogError(
+        throw dependencyRefusal(
           "FRAME_FAILED",
           status.reason ?? "Picture preparation did not publish",
           { dependency: { artifact: "frame", jobId: status.jobId, ...input } },

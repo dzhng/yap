@@ -37,17 +37,12 @@ class FailedWorkspaceProvision extends CatalogError {
     cause: unknown,
     cleanup: unknown,
   ) {
-    super(
-      "INVALID_STORAGE",
-      "Workspace admission and cleanup failed",
-      {
-        name: workspaceName,
-        identity: childIdentity,
-        cause: String(cause),
-        cleanup: String(cleanup),
-      },
-      true,
-    );
+    super("INVALID_STORAGE", "Workspace admission and cleanup failed", {
+      name: workspaceName,
+      identity: childIdentity,
+      cause: String(cause),
+      cleanup: String(cleanup),
+    });
   }
 }
 
@@ -84,10 +79,9 @@ export async function provisionPackageWorkspace(
     receipt = nativeResult(await call("packageWorkspace.create")) as typeof receipt;
   } catch (cause) {
     throw new CatalogError(
-      "INVALID_STORAGE",
+      "PACKAGE_STORAGE_UNAVAILABLE",
       "Workspace creation failed; reservation may need recovery",
       { name, cause: String(cause) },
-      true,
     );
   }
   if (

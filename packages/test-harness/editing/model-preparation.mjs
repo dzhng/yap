@@ -50,7 +50,7 @@ try {
     assert.deepEqual(await call("model.status", { modelId }), { state: "absent" });
   assert.equal(
     (await call("model.status", { modelId: "missing" }, { error: true })).code,
-    "UNKNOWN_MODEL",
+    "NOT_FOUND",
   );
   const params = {
     modelId: "qwen3-tts-icl-v1",

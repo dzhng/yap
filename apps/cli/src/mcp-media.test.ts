@@ -499,7 +499,7 @@ test("complete admission counts actual escaped RPC identity at the wire boundary
     rpcId,
     (error) => {
       if (!(error instanceof ArtifactDeliveryError)) throw error;
-      return { id: answer.id, ...operationError(error.code, error.message, error.retryable) };
+      return { id: answer.id, ...operationError(error.code, error.message) };
     },
   );
   expect(deferred).toEqual({

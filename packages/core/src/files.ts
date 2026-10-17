@@ -134,7 +134,7 @@ export class IdentifiedFiles implements FileAccess {
     const expected = this.entries.get(file);
     if (!expected) throw new CatalogError("NOT_FOUND", "File is not admitted to this package");
     if (this.leases.size >= this.maximumOpen)
-      throw new CatalogError("LIMIT_EXCEEDED", "Package open-file limit exceeded", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Package open-file limit exceeded", {});
     const fd = openSync(
       this.path(file),
       (writable ? constants.O_RDWR : constants.O_RDONLY) | constants.O_NONBLOCK | O_NOFOLLOW_ANY,
@@ -306,7 +306,6 @@ export async function copyImportedFile(
         "SOURCE_CHANGED",
         "Import source no longer matches the frozen request; create a new import",
         {},
-        false,
       );
     if (!before.isFile() || before.size > BigInt(maximumBytes))
       throw new CatalogError(
@@ -324,7 +323,7 @@ export async function copyImportedFile(
         if (!read.bytesRead) break;
         bytes += read.bytesRead;
         if (BigInt(bytes) > before.size)
-          throw new CatalogError("SOURCE_CHANGED", "Import source grew during copying", {}, false);
+          throw new CatalogError("SOURCE_CHANGED", "Import source grew during copying", {});
         hash.update(buffer.subarray(0, read.bytesRead));
         let written = 0;
         while (written < read.bytesRead) {
@@ -342,7 +341,7 @@ export async function copyImportedFile(
         after.mtimeNs !== before.mtimeNs ||
         after.ctimeNs !== before.ctimeNs
       )
-        throw new CatalogError("SOURCE_CHANGED", "Import source changed during copying", {}, false);
+        throw new CatalogError("SOURCE_CHANGED", "Import source changed during copying", {});
       await output.chmod(0o400);
       await output.sync();
     } finally {

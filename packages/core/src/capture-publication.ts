@@ -91,7 +91,7 @@ export function readCaptureSourceOutcome(value: unknown): CaptureSourceOutcome |
   const parsed = outcome.nullable().safeParse(value);
   if (!parsed.success)
     throw new CatalogError(
-      "MEDIA_WORKER_FAILED",
+      "INVALID_RESPONSE",
       "Source recovery returned an invalid publication outcome",
     );
   return parsed.data;
@@ -109,7 +109,7 @@ export type RecoveryReceipt = {
 export function readRecoveryReceipt(value: unknown): RecoveryReceipt {
   const parsed = recoveryReceipt.safeParse(value);
   if (!parsed.success)
-    throw new CatalogError("MEDIA_WORKER_FAILED", "Recovery returned an invalid outcome");
+    throw new CatalogError("INVALID_RESPONSE", "Recovery returned an invalid outcome");
   const completion = parsed.data.journal?.completion;
   const roleFailure = parsed.data.tracks
     ?.map((track) => track.failure ?? undefined)

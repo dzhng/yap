@@ -13,7 +13,7 @@ import {
 import { JobDependencyLost, type JobAdmission, type JobExecution, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import { pointerPreparationLimits } from "./composition-pointer.js";
 
 const recipeSchema = z.strictObject({
@@ -139,7 +139,7 @@ export class PointerPreparation {
       const status = this.request(selection);
       if (status.published) continue;
       if (["failed", "unavailable", "not_requested"].includes(status.state))
-        throw new CatalogError(
+        throw dependencyRefusal(
           status.state === "unavailable" ? "UNAVAILABLE" : "DEPENDENCY_FAILED",
           status.reason ?? "Pointer history is unavailable",
           { dependency: status.jobId },
@@ -186,12 +186,7 @@ export class PointerPreparation {
         "Pointer history job does not name its acquisition",
       );
     if (parsed.data.implementationId !== this.owners.renderer.implementationId)
-      throw new CatalogError(
-        "NOT_READY",
-        "Pinned pointer history renderer is unavailable",
-        {},
-        true,
-      );
+      throw new CatalogError("NOT_READY", "Pinned pointer history renderer is unavailable", {});
     const plan = this.plan(parsed.data.selection);
     if (!isDeepStrictEqual(plan.recipe, parsed.data))
       throw new CatalogError("ARTIFACT_CHANGED", "Pinned pointer history inputs changed");

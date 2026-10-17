@@ -114,7 +114,7 @@ async function fixture() {
     async render({ window, output }) {
       state.renders++;
       if (state.failRender)
-        throw new CatalogError("RENDER_FAILED", "Controlled render failure", {}, true);
+        throw new CatalogError("MEDIA_WORKER_FAILED", "Controlled render failure", {});
       const frames = window.manifest.sampleRange.end - window.manifest.sampleRange.start;
       const bytes = wave(frames, 48000, 2);
       await writeFile(output, bytes);
@@ -523,7 +523,7 @@ test("explicit rendered retry recovers a failed extraction prerequisite", async 
   await f.jobs.idle();
   expect(f.jobs.inspect(pending.jobId!)).toMatchObject({
     state: "failed",
-    errorCode: "RENDER_FAILED",
+    errorCode: "MEDIA_WORKER_FAILED",
     retryable: true,
     errorDetails: { state: "failed", dependencyJobId: expect.any(String) },
   });

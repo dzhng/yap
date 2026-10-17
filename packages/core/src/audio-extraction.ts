@@ -165,7 +165,7 @@ export class AudioExtraction {
     if (!isDeepStrictEqual(job.target, request.recipe.target))
       throw new CatalogError("ARTIFACT_CHANGED", "Extraction target differs from its recipe");
     if (request.conversionImplementationId !== this.owners.converter.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned PCM converter is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Pinned PCM converter is unavailable", {});
     const current = this.owners.audio.recipe(request.selection);
     if (
       !isDeepStrictEqual(current.identity, request.recipe) ||

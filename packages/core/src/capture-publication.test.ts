@@ -11,7 +11,7 @@ test("recovery receipt rejects unknown top-level fields", () => {
       sourcePublication: { state: "unavailable", error: { code: "NO_SOURCE", message: "empty" } },
       unexpected: true,
     }),
-  ).toThrowError(expect.objectContaining({ code: "MEDIA_WORKER_FAILED" }));
+  ).toThrowError(expect.objectContaining({ code: "INVALID_RESPONSE" }));
 });
 
 test("recovery receipt preserves completion and cleanup diagnostics", () => {
@@ -62,5 +62,5 @@ test("recovery receipt rejects a completion message without a completion code", 
       inputsClosed: true,
       sourcePublication: null,
     }),
-  ).toThrowError(expect.objectContaining({ code: "MEDIA_WORKER_FAILED" }));
+  ).toThrowError(expect.objectContaining({ code: "INVALID_RESPONSE" }));
 });

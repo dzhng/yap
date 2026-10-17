@@ -541,7 +541,7 @@ export class TranscriptStore implements TranscriptRecords {
       stale: string[] = [];
     for (const row of rows) {
       if (row.state !== "complete")
-        throw new CatalogError("PROCESSING_BUSY", "Transcript generation is incomplete", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Transcript generation is incomplete", {});
       const value = readable(row);
       if (value && currentTranscript(value)) generations.push(portableTranscript(value));
       else stale.push(row.generation);
@@ -648,7 +648,6 @@ export class TranscriptStore implements TranscriptRecords {
           "PROCESSING_BUSY",
           "Transcript generation is already being staged",
           {},
-          true,
         );
       const existing = readable(prior);
       if (

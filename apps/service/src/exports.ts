@@ -16,7 +16,7 @@ import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
-import { CatalogError, type Catalog } from "@yap/core/catalog";
+import { CatalogError, dependencyRefusal, type Catalog } from "@yap/core/catalog";
 import type { DerivedCache, DirectoryIdentity } from "@yap/core/cache";
 import {
   JobDependencyLost,
@@ -245,8 +245,7 @@ export class MediaExports {
   }
   private projectAudio() {
     const audio = this.owners.project.audio;
-    if (!audio)
-      throw new CatalogError("NOT_READY", "Project audio exports are unavailable", {}, true);
+    if (!audio) throw new CatalogError("NOT_READY", "Project audio exports are unavailable");
     return audio;
   }
   private prepareProjectMedia(
@@ -271,7 +270,10 @@ export class MediaExports {
   private projectPackage() {
     const packages = this.owners.project.package;
     if (!packages)
-      throw new CatalogError("NOT_READY", "Project packages are unavailable in this service");
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        "Project packages are unavailable in this service",
+      );
     return packages;
   }
   private owner(intent: Pick<Intent, "targetId">): ExportOwner {
@@ -324,8 +326,7 @@ export class MediaExports {
   }
 
   abandon(exportId: string): Promise<void> {
-    if (this.closed)
-      throw new CatalogError("SERVICE_STOPPED", "Export cleanup is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Export cleanup is closed");
     this.owners.catalog.catalog
       .prepare("UPDATE export_intents SET abandoning=1 WHERE exportId=?")
       .run(exportId);
@@ -386,7 +387,9 @@ export class MediaExports {
         } catch (error) {
           if (
             error instanceof CatalogError &&
-            (error.code === "LIMIT_EXCEEDED" || error.code === "SERVICE_STOPPED")
+            (error.code === "LIMIT_EXCEEDED" ||
+              error.code === "CAPACITY_EXCEEDED" ||
+              error.code === "SERVICE_STOPPED")
           )
             break;
           errors.push(error);
@@ -474,14 +477,14 @@ export class MediaExports {
         parent.identity.dev !== reservation.parent.dev ||
         parent.identity.ino !== reservation.parent.ino
       )
-        throw new CatalogError("INVALID_STORAGE", "Assembly parent changed");
+        throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", "Assembly parent changed");
       for (const child of [reservation.input, reservation.zip])
         await removePackageWorkspace(parent, child.name, child.identity, this.owners.worker);
       intent.assembly = null;
       this.saveAssembly(intent);
     } catch (error) {
       if (error instanceof CatalogError)
-        throw new CatalogError(error.code, error.message, error.details, true);
+        throw new CatalogError(error.code, error.message, error.details);
       throw error;
     } finally {
       await parent?.handle.close();
@@ -548,7 +551,7 @@ export class MediaExports {
       status.state === "unavailable" ||
       status.state === "not_requested"
     )
-      throw new CatalogError(
+      throw dependencyRefusal(
         status.state === "unavailable" ? "UNAVAILABLE" : "DEPENDENCY_FAILED",
         status.reason ?? "Required evidence is unavailable",
         { dependency: status.jobId },
@@ -567,8 +570,7 @@ export class MediaExports {
     return pending;
   }
   private requireAdmission(exportId: string): void {
-    if (this.closed)
-      throw new CatalogError("SERVICE_STOPPED", "Export admission is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Export admission is closed", {});
     if (this.retiring.has(exportId))
       throw new CatalogError("EXPORT_ABANDONING", "Export cleanup is pending; retry abandonment", {
         exportId,
@@ -719,10 +721,9 @@ export class MediaExports {
         .get() as { count: number };
       if (pending.count >= 32)
         throw new CatalogError(
-          "LIMIT_EXCEEDED",
+          "CAPACITY_EXCEEDED",
           "Too many uncommitted exports retain their prerequisites",
           {},
-          true,
         );
       this.owners.catalog.catalog
         .prepare(
@@ -781,7 +782,7 @@ export class MediaExports {
       input.cursor &&
       (input.cursor.projectId !== projectId || input.cursor.unfinishedOnly !== unfinishedOnly)
     )
-      throw new CatalogError("INVALID_CURSOR", "Export cursor does not match filters");
+      throw new CatalogError("INVALID_PARAMS", "Export cursor does not match filters");
     const owner: ExportOwner | undefined =
       projectId !== null ? { kind: "project", projectId } : undefined;
     // Keep the bounded ID page outside the lookup; SQLite may otherwise scan every summary.
@@ -1247,7 +1248,6 @@ export class MediaExports {
           "DESTINATION_UNAVAILABLE",
           "Export destination directory is missing or replaced; restore it or abandon the export",
           { exportId },
-          true,
         );
       if (presence === "absent") this.markStagingCleared(exportId);
       else {
@@ -1301,12 +1301,11 @@ export class MediaExports {
       .then(() => this.remove(exportId))
       .catch((error) => {
         if (error instanceof CatalogError)
-          throw new CatalogError(error.code, error.message, { ...error.details, exportId }, true);
+          throw new CatalogError(error.code, error.message, { ...error.details, exportId });
         throw new CatalogError(
           "EXPORT_CLEANUP_FAILED",
           `Export cleanup could not finish: ${error instanceof Error ? error.message : String(error)}`,
           { exportId },
-          true,
         );
       })
       .finally(() => {

@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { retryable } from "./refusal.mjs";
 
 const executable =
   process.env.YAP_NATIVE ?? fileURLToPath(new URL("../.build/debug/yap-native", import.meta.url));
@@ -146,7 +147,7 @@ test("malformed, relative and unsafe requests are refused before models are read
   for (const [index, reply] of replies.entries()) {
     assert.equal(reply.ok, false, `case ${index}`);
     assert.equal(reply.error.code, "INVALID_REQUEST", `case ${index}: ${reply.error.message}`);
-    assert.equal(reply.error.retryable, false, `case ${index}`);
+    assert.equal(retryable(reply.error), false, `case ${index}`);
   }
   assert.deepEqual(snapshot(home), before);
 });
@@ -191,7 +192,7 @@ test("absent model files are unavailable and changed ones invalid, before any lo
     const [reply] = transcribe(request);
     assert.equal(reply.ok, false, code);
     assert.equal(reply.error.code, code, reply.error.message);
-    assert.equal(reply.error.retryable, false);
+    assert.equal(retryable(reply.error), false);
     // Nothing was created or repaired: no output, no staging, no model folder, no download.
     assert.deepEqual(snapshot(home), before, reply.error.message);
     assert.deepEqual(readdirSync(attempt), []);
@@ -211,7 +212,7 @@ test("verified models still refuse an occupied output and report unreadable narr
   assert.equal(occupied.error.code, "INVALID_OUTPUT", occupied.error.message);
   assert.equal(readFileSync(params.output, "utf8"), "earlier");
   assert.equal(unreadable.error.code, "NATIVE_DECODE_FAILED", unreadable.error.message);
-  assert.equal(unreadable.error.retryable, true);
+  assert.equal("retryable" in unreadable.error, false);
   assert.deepEqual(readdirSync(attempt), ["raw.jsonl"]);
 });
 
@@ -296,7 +297,7 @@ test("a verified model that cannot load fails retryably and is left exactly as i
   assert.deepEqual(rest, [""], "Nothing but the response reaches standard output");
   const reply = JSON.parse(line);
   assert.equal(reply.error.code, "TRANSCRIPTION_FAILED", reply.error.message);
-  assert.equal(reply.error.retryable, true);
+  assert.equal(retryable(reply.error), true);
   // FluidAudio would purge and download a model that failed to load; the worker forbids both.
   assert.deepEqual(snapshot(directory), before);
   assert.deepEqual(readdirSync(attempt), []);

@@ -169,12 +169,15 @@ test("canonical video metadata requires current alpha facts without inventing so
     });
   const oldStream = omit(actual.streams[0]!, "hasAlpha");
   await expect(run({ originUs: 0, streams: [oldStream] })).rejects.toMatchObject({
-    code: "NOT_READY",
+    code: "PREREQUISITE_MISSING",
     retryable: false,
   });
   await expect(run(actual)).resolves.toMatchObject({ marker: "verified" });
   emitAlpha = false;
-  await expect(run(actual)).rejects.toMatchObject({ code: "NOT_READY", retryable: false });
+  await expect(run(actual)).rejects.toMatchObject({
+    code: "PREREQUISITE_MISSING",
+    retryable: false,
+  });
   emitAlpha = true;
   await expect(
     run({ ...actual, streams: [{ ...actual.streams[0]!, hasAlpha: true }] }),

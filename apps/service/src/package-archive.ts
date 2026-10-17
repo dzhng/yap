@@ -94,7 +94,6 @@ async function extractArchive<T extends ArchiveManifest>(
           operationError: failure === undefined ? null : describe(failure),
           cleanupError: describe(cleanup),
         },
-        true,
       );
     }
   };

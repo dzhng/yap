@@ -63,7 +63,10 @@ function picturePayload(
     );
     if (!requirements.length) continue;
     if (!identity || requirements.some((item) => item.implementationId !== identity))
-      throw new CatalogError("NOT_READY", `The bound native ${type} recipe is unavailable`);
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        `The bound native ${type} recipe is unavailable`,
+      );
     payload[field] = identity;
   }
   return payload;
@@ -101,12 +104,7 @@ function retimePayload(window: AudioWindowInput["window"], identity?: string) {
   const requirements = window.manifest.requirements.filter((item) => item.kind === "retime");
   if (!requirements.length) return {};
   if (!identity || requirements.some((item) => item.implementationId !== identity))
-    throw new CatalogError(
-      "NOT_READY",
-      "The bound native retiming recipe is unavailable",
-      {},
-      true,
-    );
+    throw new CatalogError("NOT_READY", "The bound native retiming recipe is unavailable", {});
   return { retimeImplementationId: identity };
 }
 function nativeAudioSupport(
@@ -201,13 +199,17 @@ function statePayload(
 ) {
   const state = window.audioState();
   if (!state) return {};
-  if (!identity) throw new CatalogError("NOT_READY", "The native RNNoise recipe is unavailable");
+  if (!identity)
+    throw new CatalogError("PREREQUISITE_MISSING", "The native RNNoise recipe is unavailable");
   const external = state.domains.some(
     (domain) =>
       domain.recipe.type !== "rnnoise" && domain.sampleRange.end > domain.sampleRange.start,
   );
   if (external && !preparationId)
-    throw new CatalogError("NOT_READY", "The native audio state preparation recipe is unavailable");
+    throw new CatalogError(
+      "PREREQUISITE_MISSING",
+      "The native audio state preparation recipe is unavailable",
+    );
   return {
     ...(external ? { statePreparationImplementationId: preparationId } : {}),
     state: { ...state, processing: nativeProcessing(state.processing), implementationId: identity },

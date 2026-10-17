@@ -145,7 +145,6 @@ export class Publication {
             "PUBLICATION_BUSY",
             "A publisher still owns this staging directory",
             {},
-            true,
           );
         throw error;
       },
@@ -170,7 +169,6 @@ export class Publication {
               "PUBLICATION_BUSY",
               "Another publisher holds this destination",
               {},
-              true,
             );
           throw error;
         },
@@ -283,7 +281,7 @@ export class Publication {
       return Promise.reject(new CatalogError("INVALID_STATE", "Publication is closed"));
     if (this.pending)
       return Promise.reject(
-        new CatalogError("PUBLICATION_BUSY", "Publication operation is still running", {}, true),
+        new CatalogError("PUBLICATION_BUSY", "Publication operation is still running", {}),
       );
     const pending = action();
     this.pending = pending;

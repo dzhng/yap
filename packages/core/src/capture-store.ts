@@ -201,7 +201,7 @@ export class CaptureStore extends Catalog {
         cause: outcome.error.code,
       });
     if (!recording.publication?.inputsClosed || outcome?.state !== "published")
-      throw new CatalogError("NOT_READY", "Capture source has not published", { sourceId }, true);
+      throw new CatalogError("NOT_READY", "Capture source has not published", { sourceId });
     return outcome.source;
   }
   /** Physical inputs, including drain, retain queue priority; publication after closure does not. */

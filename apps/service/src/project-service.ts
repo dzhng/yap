@@ -67,7 +67,7 @@ import { ProjectStore } from "@yap/core/projects";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
-import { CatalogError } from "@yap/core/catalog";
+import { CatalogError, dependencyRefusal } from "@yap/core/catalog";
 import { CaptureStore, isSettled } from "@yap/core/capture-store";
 import { CaptureService } from "./capture.js";
 import { CaptureSources } from "./capture-sources.js";
@@ -430,7 +430,8 @@ export async function startProjectService(options: {
               "Source-owned work requires a settled available recording",
             );
           return { ...target, revisionId: null };
-        } else throw new CatalogError("NOT_READY", "Unsupported project service job target");
+        } else
+          throw new CatalogError("PREREQUISITE_MISSING", "Unsupported project service job target");
         return target;
       },
       isAvailable(target) {
@@ -547,7 +548,7 @@ export async function startProjectService(options: {
           return JSON.stringify({ acquisitionId: acquisition.id });
         }
         if (job.target.kind !== "import" || job.artifact !== "asset.import")
-          throw new CatalogError("NOT_READY", "Unsupported preparation job");
+          throw new CatalogError("PREREQUISITE_MISSING", "Unsupported preparation job");
         const asset = await assets.executeImport(job.target.importId, probe, signal, {
           kind: "job",
           id: job.jobId,
@@ -600,16 +601,11 @@ export async function startProjectService(options: {
           const admitted = admitProjectRange(composition.model.durationUs, input.range);
           const prepared = preparedAudio.resolve(composition, input.tap, input.preparedResourceId);
           if (!prepared)
-            throw new CatalogError(
-              "NOT_READY",
-              "Prepared project tap is not ready",
-              {
-                projectId: input.projectId,
-                revisionId: composition.revisionId,
-                preparedResourceId: input.preparedResourceId,
-              },
-              true,
-            );
+            throw new CatalogError("NOT_READY", "Prepared project tap is not ready", {
+              projectId: input.projectId,
+              revisionId: composition.revisionId,
+              preparedResourceId: input.preparedResourceId,
+            });
           const asset = assets.get(prepared.audio.assetId),
             stream = asset.streams.find((value) => value.kind === "audio");
           if (!stream)
@@ -1079,7 +1075,7 @@ export async function startProjectService(options: {
     const status = (jobId: string) => queue.inspect(jobId);
     const describeCapture = captureSources.describe.bind(captureSources);
     const handle: LocalHandler = async (request, requestSignal): Promise<OperationResult> => {
-      if (closing) return operationError("SERVICE_STOPPED", "Service is closing", true);
+      if (closing) return operationError("SERVICE_STOPPED", "Service is closing");
       if (!operationNames.has(request.operation))
         return operationError("UNKNOWN_OPERATION", "Unknown service operation");
       if (appOperations.has(request.operation))
@@ -1110,7 +1106,6 @@ export async function startProjectService(options: {
               return operationError(
                 "NOT_READY",
                 "Correspondence package reads are not available for service-local receipts",
-                true,
               );
             const key = `${operation.params.evidenceId}:${operation.params.generation}`;
             const receipt = correspondenceReceipts.get(key);
@@ -1425,16 +1420,11 @@ export async function startProjectService(options: {
                 params.preparedResourceId,
               );
               if (!prepared)
-                throw new CatalogError(
-                  "NOT_READY",
-                  "Prepared project tap is not ready",
-                  {
-                    projectId: params.projectId,
-                    revisionId: composition.revisionId,
-                    preparedResourceId: params.preparedResourceId,
-                  },
-                  true,
-                );
+                throw new CatalogError("NOT_READY", "Prepared project tap is not ready", {
+                  projectId: params.projectId,
+                  revisionId: composition.revisionId,
+                  preparedResourceId: params.preparedResourceId,
+                });
               // The display range is a project read range: clamped to the revision, with its issue.
               const admitted = admitProjectRange(composition.model.durationUs, params.range),
                 range = admitted.range;
@@ -1573,7 +1563,6 @@ export async function startProjectService(options: {
               return operationError(
                 "NOT_READY",
                 "Continuity package reads are not available for service-local receipts",
-                true,
               );
             const key = `${operation.params.assetId}:${operation.params.streamId}:${operation.params.channel}:${operation.params.modelId}:${operation.params.generation}`;
             const retained = continuityReceipts.get(key);
@@ -2106,7 +2095,7 @@ export async function startProjectService(options: {
                 sourceRange: speakerRequest.observationRange,
               });
               if (!speakerStatus.published) {
-                throw new CatalogError(
+                throw dependencyRefusal(
                   "NOT_READY",
                   "Speaker evidence is not ready for transcript attribution",
                   {},
@@ -2595,7 +2584,6 @@ export async function startProjectService(options: {
                     reason: "reason" in transcript ? transcript.reason : null,
                     dependencies: transcript.dependencies,
                   },
-                  "retryable" in transcript && transcript.retryable === true,
                 );
               }
               if (transcript.page.nextCursor !== null) {
@@ -2643,7 +2631,6 @@ export async function startProjectService(options: {
                   "details" in error && error.details && typeof error.details === "object"
                     ? (error.details as Record<string, unknown>)
                     : {},
-                  "retryable" in error && error.retryable === true,
                 );
               throw error;
             }
@@ -2747,7 +2734,7 @@ export async function startProjectService(options: {
               operation.params.requestId,
               operation.params.path,
             );
-            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {}, true);
+            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {});
             const job = queue.submit(() => {
               const intent = acquisitions.admitImport(prepared);
               return {
@@ -2766,7 +2753,7 @@ export async function startProjectService(options: {
               operation.params.requestId,
               operation.params.path,
             );
-            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {}, true);
+            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {});
             const job = queue.submit(() => {
               const intent = assets.admitImport(prepared);
               return {
@@ -2892,7 +2879,10 @@ export async function startProjectService(options: {
             await queue.drainJob(operation.params.jobId);
             return { ok: true, data: status(operation.params.jobId) };
           default:
-            return operationError("NOT_READY", "Operation is not available in the project service");
+            return operationError(
+              "PREREQUISITE_MISSING",
+              "Operation is not available in the project service",
+            );
         }
       } catch (error) {
         const failure = operationFailure(error);
@@ -2927,7 +2917,8 @@ export async function startProjectService(options: {
       return task;
     };
     function requireCaptureControl(): CaptureService {
-      if (!controller) throw new CatalogError("NOT_READY", "No capture controller is connected");
+      if (!controller)
+        throw new CatalogError("PREREQUISITE_MISSING", "No capture controller is connected");
       return captureCoordinator;
     }
     const captureCoordinator = new CaptureService(
@@ -2936,7 +2927,9 @@ export async function startProjectService(options: {
       (operation, params, options) =>
         controller
           ? controller.call(operation, params, options)
-          : Promise.resolve(operationError("NOT_READY", "No capture controller is connected")),
+          : Promise.resolve(
+              operationError("PREREQUISITE_MISSING", "No capture controller is connected"),
+            ),
       worker,
       console.error,
       () => {
@@ -2969,7 +2962,7 @@ export async function startProjectService(options: {
         ...options.control,
         admission,
         dispatch: async (request) => {
-          if (closing) return operationError("SERVICE_STOPPED", "Service is closing", true);
+          if (closing) return operationError("SERVICE_STOPPED", "Service is closing");
           if (updateControlOperations.has(request.operation)) {
             const parsed = updateControlSchema.safeParse({
               operation: request.operation,
@@ -3015,12 +3008,7 @@ export async function startProjectService(options: {
     boundListener = listener;
     if (closing) {
       await close();
-      throw new CatalogError(
-        "SERVICE_STOPPED",
-        "Capture controller closed during startup",
-        {},
-        true,
-      );
+      throw new CatalogError("SERVICE_STOPPED", "Capture controller closed during startup", {});
     }
     controller?.emit({ event: "started", pid: process.pid, socketPath: listener.socketPath });
     void reconciliation

@@ -154,7 +154,7 @@ export class ProjectPackages {
   private closed = false;
   constructor(private readonly owners: Owners) {}
   private async prepare() {
-    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Project packages are closed");
+    if (this.closed) throw new CatalogError("OWNER_CLOSED", "Project packages are closed");
     if (this.preparing) return this.preparing;
     if (this.registry) return;
     this.preparing = (async () => {
@@ -421,7 +421,7 @@ export class ProjectPackages {
         value.metadata.owner.assetId === assetId &&
         value.metadata.generation === generation,
     );
-    if (!resource) throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {}, true);
+    if (!resource) throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {});
     return {
       assetId,
       state: "ready",

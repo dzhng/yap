@@ -120,7 +120,6 @@ export class CaptureCleanup {
           "CLEANUP_UNAVAILABLE",
           "Cannot access recording cleanup inputs; retry after access is restored",
           {},
-          true,
         );
       throw error;
     } finally {

@@ -156,7 +156,10 @@ export class AssetConversionJobs {
     if (saved) return saved;
     const runtime = await this.owners.runtime(signal);
     if (!runtime)
-      throw new CatalogError("NOT_READY", "Bundled HDR conversion runtime is unavailable");
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        "Bundled HDR conversion runtime is unavailable",
+      );
     const identity = {
       target: { kind: "asset" as const, assetId: asset.id },
       artifact: "asset-conversion",

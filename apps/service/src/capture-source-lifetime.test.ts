@@ -282,7 +282,12 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
       refused = true;
       return {
         ok: false,
-        error: { code: "ACCESS_REFUSED", message: "scratch refusal", details: {}, retryable: true },
+        error: {
+          code: "MEDIA_UNAVAILABLE",
+          message: "scratch refusal",
+          details: {},
+          retryable: true,
+        },
       };
     }
     return operation.startsWith("storage.")
@@ -295,7 +300,7 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
     .toMatchObject({ ok: true, data: { state: "ready" } });
   expect(await f.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
     ok: false,
-    error: { code: "ACCESS_REFUSED", retryable: true },
+    error: { code: "MEDIA_UNAVAILABLE", retryable: true },
   });
   expect(await f.call("recording.list")).toMatchObject({ ok: true, data: { recordings: [] } });
   expect(await readFile(join(take.directory, "video.mov"), "utf8")).toBe("borrowed source bytes");
@@ -508,7 +513,7 @@ test("public discard fences and drains queued managed imports before native canc
   });
   expect(
     await f.call("acquisition.get", { acquisitionId: imported.target.acquisitionId }),
-  ).toMatchObject({ ok: false, error: { code: "NOT_READY" } });
+  ).toMatchObject({ ok: false, error: { code: "PREREQUISITE_MISSING" } });
   expect(await f.call("capture.cancel", { recordingId })).toMatchObject({
     ok: true,
     data: { state: "canceled" },

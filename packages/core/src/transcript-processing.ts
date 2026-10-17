@@ -12,7 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource, sourceSelectionSchema, type SourceSelection } from "./source-selection.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import {
   retainedPublicationSchema,
   type JobExecution,
@@ -344,7 +344,7 @@ export class TranscriptProcessing {
     const status = this.sourceStatus(selection);
     if (!status.jobId && status.state === "ready") return status;
     if (!status.jobId)
-      throw new CatalogError(
+      throw dependencyRefusal(
         status.reason === "model_not_prepared" ? "MODEL_NOT_PREPARED" : "UNAVAILABLE",
         status.reason ?? "Source transcript has not been requested; use transcript.transcribe",
         status.reason === "model_not_prepared" ? (this.models.notPrepared?.().details ?? {}) : {},
@@ -356,7 +356,7 @@ export class TranscriptProcessing {
     )
       throw (
         this.models.notPrepared?.() ??
-        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true)
+        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {})
       );
     this.jobs.retry(status.jobId);
     return this.sourceStatus(selection);
@@ -382,7 +382,7 @@ export class TranscriptProcessing {
     if (this.models.status().state !== "ready")
       throw (
         this.models.notPrepared?.() ??
-        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true)
+        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {})
       );
     await this.cleanupAsset(selection.assetId, signal);
     return this.transcribeSource(
@@ -412,7 +412,7 @@ export class TranscriptProcessing {
       throw new CatalogError("ARTIFACT_CHANGED", "Transcript source or model inputs changed");
     if (!selected.track.available.length) throw new CatalogError("UNAVAILABLE", "no_audio");
     if (this.models.status().state !== "ready")
-      throw new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true);
+      throw new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {});
     await this.cleanupAsset(selection.assetId, signal);
     const { transcript, issues } = await this.transcribeSource(
       {

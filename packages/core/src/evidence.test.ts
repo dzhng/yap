@@ -214,7 +214,7 @@ test("malformed camera gaps refuse the whole receipt", async () => {
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE", message: "Invalid verified camera gaps" });
     expect(() =>
       f.evidence.page({ ...f.identity, generation, range: { startUs: 0, endUs: 100 } }),
-    ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+    ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   }
 });
 
@@ -578,7 +578,7 @@ test("malformed overlapping audio intervals and wrong timing receipts never beco
       }),
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE" });
     expect(() => f.evidence.audio(f.identity, "narration", { startUs: 0, endUs: 200 })).toThrow(
-      expect.objectContaining({ code: "NOT_READY" }),
+      expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
     );
   }
 });
@@ -916,6 +916,6 @@ test("malformed terminal provenance refuses evidence publication", async () => {
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE" });
     expect(() =>
       f.evidence.page({ ...identity, range: { startUs: 0, endUs: 100 }, limit: 10 }),
-    ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+    ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   }
 });

@@ -400,7 +400,7 @@ test("a failed dependency retain rolls back the job and earlier asset retain tog
     f.catalog.catalog.prepare("UPDATE acquisitions SET metadata=NULL WHERE id=?").run("mask");
   });
   await expect(f.inspection.request({ ...f.selection, acquisitionId: "mask" })).rejects.toThrow(
-    expect.objectContaining({ code: "NOT_READY" }),
+    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
   );
   expect(f.assets.references(f.asset.id)).toEqual([]);
   expect(f.acquisitions.references("mask")).toEqual([]);
@@ -722,7 +722,7 @@ test("audio generation changes cannot publish stale waveform work and cancellati
   await f.jobs.idle();
   expect(f.jobs.job(pending.jobId!)).toMatchObject({
     state: "failed",
-    errorCode: "ARTIFACT_CHANGED",
+    errorCode: "DEPENDENCY_LOST",
   });
   const next = await f.waveform.request(f.selection);
   f.jobs.cancel(next.jobId!);

@@ -173,9 +173,8 @@ export async function listenLocal(options: {
       if (inFlight >= maxInFlight) {
         reply(
           operationError(
-            "LIMIT_EXCEEDED",
+            "CAPACITY_EXCEEDED",
             "Local service request capacity is full; retry after existing work finishes",
-            true,
           ),
         );
         return;
@@ -183,7 +182,9 @@ export async function listenLocal(options: {
       try {
         if (deferred) {
           if (!options.delivery) {
-            reply(operationError("NOT_READY", "Operation result delivery is unavailable"));
+            reply(
+              operationError("PREREQUISITE_MISSING", "Operation result delivery is unavailable"),
+            );
             return;
           }
           releaseResult = options.delivery.reserve();

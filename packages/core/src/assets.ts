@@ -652,7 +652,6 @@ export class AssetStore {
                 "STORAGE_BUSY",
                 "Asset publication changed during staging; retry publication",
                 {},
-                true,
               );
             if (
               existing.bytes !== candidate.bytes ||

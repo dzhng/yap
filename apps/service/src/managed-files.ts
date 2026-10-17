@@ -64,7 +64,6 @@ export class ManagedFiles {
             "RECORDING_BUSY",
             "A native worker still owns this recording; retry after it exits",
             { recordingId },
-            true,
           );
         throw error;
       },

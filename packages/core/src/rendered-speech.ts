@@ -4,7 +4,7 @@ import type { AssetStore } from "./assets.js";
 import type { Catalog } from "./catalog.js";
 import type { ProjectStore } from "./projects.js";
 import type { AudioExtraction, AudioExtractionInput, ExtractedAudio } from "./audio-extraction.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import type {
   ArtifactStatus,
   Job,
@@ -143,7 +143,7 @@ export class RenderedSpeech {
       const job = this.owners.jobs.job(status.jobId);
       if (["waiting", "queued", "running"].includes(job.state))
         return { state: "waiting", dependency: job.jobId };
-      throw new CatalogError(
+      throw dependencyRefusal(
         job.errorCode ?? "DEPENDENCY_FAILED",
         job.reason ?? "Rendered speech dependency failed",
         {
@@ -154,7 +154,7 @@ export class RenderedSpeech {
         job.retryable,
       );
     }
-    throw new CatalogError(
+    throw dependencyRefusal(
       status.reason === "model_not_prepared" ? "MODEL_NOT_PREPARED" : "UNAVAILABLE",
       status.reason ?? "Rendered speech dependency is unavailable",
       {},
@@ -191,7 +191,6 @@ export class RenderedSpeech {
         "MODEL_NOT_PREPARED",
         "Speech model is not prepared; model.prepare will download/acquire and verify the transcription model/runtime files.",
         this.owners.transcripts.recognitionNotPrepared(),
-        true,
       );
     return { state: "ready" };
   }
@@ -200,7 +199,7 @@ export class RenderedSpeech {
     const current = this.status(input, admitted);
     if (current.published) return current;
     if (!current.jobId)
-      throw new CatalogError("NOT_READY", "Use transcript.render.prepare before retry");
+      throw new CatalogError("PREREQUISITE_MISSING", "Use transcript.render.prepare before retry");
     const parent = this.owners.jobs.job(current.jobId);
     if (["waiting", "queued", "running"].includes(parent.state)) return current;
     const extracted = this.owners.extraction.request(admitted.applied);
@@ -213,7 +212,7 @@ export class RenderedSpeech {
     const input = this.selection(job),
       extracted = this.owners.extraction.request(input);
     if (!extracted.published)
-      throw new CatalogError("ARTIFACT_CHANGED", "Rendered PCM dependency disappeared", {}, true);
+      throw new CatalogError("DEPENDENCY_LOST", "Rendered PCM dependency disappeared", {});
     const pcm = this.pcm(extracted);
     const resourceId = transcriptGenerationResource({
       owner: { kind: "asset", assetId: pcm.assetId },

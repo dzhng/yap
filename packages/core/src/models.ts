@@ -161,7 +161,6 @@ class Preparation {
         retryable: true,
         retryOperation: operation,
       },
-      true,
     );
   }
 
@@ -554,12 +553,10 @@ class Preparation {
     const target = join(folder, file.path);
     await stored(() => mkdir(dirname(target), { recursive: true, mode: 0o700 }));
     const failed = (reason: string, details: Record<string, unknown> = {}) =>
-      new CatalogError(
-        "MODEL_DOWNLOAD_FAILED",
-        `Model download failed: ${reason}`,
-        { path: file.path, ...details },
-        true,
-      );
+      new CatalogError("MODEL_DOWNLOAD_FAILED", `Model download failed: ${reason}`, {
+        path: file.path,
+        ...details,
+      });
     const mismatch = (details: Record<string, unknown>) =>
       new CatalogError("MODEL_HASH_MISMATCH", "Downloaded model file does not match its pin", {
         path: file.path,
@@ -647,7 +644,8 @@ export class Models {
   }
   private selected(modelId: string): Preparation {
     const model = this.preparations.get(modelId);
-    if (!model) throw new CatalogError("UNKNOWN_MODEL", "Model is not registered", { modelId });
+    if (!model)
+      throw new CatalogError("NOT_FOUND", "Model is not registered", { modelId, kind: "model" });
     return model;
   }
   list() {

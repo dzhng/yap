@@ -401,7 +401,7 @@ test("source admission failure remains discoverable through stop replay and serv
             kind: "primary",
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND", retryable: true },
+            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND", retryable: true },
           },
         ],
       },
@@ -503,7 +503,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND" },
+            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND" },
           },
         ],
       },
@@ -615,7 +615,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
   expect(probes).toBe(0);
   expect(await f.call("asset.import", { requestId: "over-capacity", path })).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED" },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   await f.call("capture.stop", { recordingId });
   expect(
@@ -645,7 +645,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND" },
+            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND" },
           },
         ],
       },

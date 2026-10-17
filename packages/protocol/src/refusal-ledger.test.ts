@@ -34,7 +34,10 @@ const gateWords = /UNMET|FEASIBLE|DISAGREEMENT|TOLERANCE|THRESHOLD|QUALITY/;
 type Ledger = {
   rules: string;
   refusedStatus: Record<string, string>;
-  codes: Record<string, { category: string | null; files: Record<string, number> }>;
+  codes: Record<
+    string,
+    { category: string | null; retryable: boolean; files: Record<string, number> }
+  >;
 };
 
 function exists(dir: string) {
@@ -84,10 +87,17 @@ const text = new Map(files.map((file) => [file, readFileSync(join(root, file), "
 function scan() {
   const codes = new Map<string, Record<string, number>>();
   for (const [file, source] of text) {
-    for (const [, code] of source.matchAll(/"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g)) {
-      const perFile = codes.get(code!) ?? {};
+    const found = [
+      ...[...source.matchAll(/"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g)].map((match) => match[1]!),
+      // A single-word code carries no underscore, so it is recognised only where a refusal is built.
+      ...[...source.matchAll(/(?:Error|operationError|NativeFailure)\(\s*"([A-Z][A-Z0-9]+)"/g)].map(
+        (match) => match[1]!,
+      ),
+    ];
+    for (const code of found) {
+      const perFile = codes.get(code) ?? {};
       perFile[file] = (perFile[file] ?? 0) + 1;
-      codes.set(code!, perFile);
+      codes.set(code, perFile);
     }
   }
   return codes;
@@ -101,6 +111,7 @@ if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
   for (const code of [...scanned.keys()].sort()) {
     codes[code] = {
       category: ledger.codes[code]?.category ?? null,
+      retryable: ledger.codes[code]?.retryable ?? false,
       files: Object.fromEntries(Object.entries(scanned.get(code)!).sort()),
     };
   }
@@ -124,6 +135,25 @@ describe("refusal ledger", () => {
       ([, entry]) => !entry.category || !categories.has(entry.category),
     );
     expect(unclassified.map(([code]) => code)).toEqual([]);
+  });
+
+  it("declares one retryability for every code", () => {
+    const missing = Object.entries(ledger.codes)
+      .filter(([, entry]) => typeof entry.retryable !== "boolean")
+      .map(([code]) => code);
+    expect(missing).toEqual([]);
+  });
+
+  it("registers every Swift NativeFailure code", () => {
+    const nativeCodes = new Set<string>();
+    for (const file of files.filter((file) => file.startsWith("helpers/mac/Sources/"))) {
+      const source = text.get(file)!;
+      for (const [, code] of source.matchAll(
+        /NativeFailure(?:\.decodeFailed)?\s*\(\s*"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g,
+      ))
+        nativeCodes.add(code!);
+    }
+    expect([...nativeCodes].filter((code) => !(code in ledger.codes))).toEqual([]);
   });
 
   it("never names a quality gate as a refusal", () => {

@@ -28,7 +28,7 @@ export class RecordingDeletion {
 
   delete(recordingId: string): Promise<Deleted> {
     if (this.lifetime.signal.aborted)
-      throw new CatalogError("SERVICE_STOPPED", "Recording deletion is closed", {}, true);
+      throw new CatalogError("SERVICE_STOPPED", "Recording deletion is closed", {});
     const existing = this.active.get(recordingId);
     if (existing) return existing;
     const recording = this.owners.store.markDeleting(recordingId);
@@ -53,12 +53,11 @@ export class RecordingDeletion {
       });
     } catch (error) {
       if (error instanceof CatalogError)
-        throw new CatalogError(error.code, error.message, { ...error.details, recordingId }, true);
+        throw new CatalogError(error.code, error.message, { ...error.details, recordingId });
       throw new CatalogError(
         "DELETE_FAILED",
         `Recording deletion could not finish: ${error instanceof Error ? error.message : String(error)}`,
         { recordingId },
-        true,
       );
     }
   }

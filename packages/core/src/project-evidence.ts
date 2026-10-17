@@ -15,7 +15,7 @@ import {
   type SourceWindowOccurrence,
 } from "@yap/composition";
 import { AssetStore, compositionAsset } from "./assets.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import { ProjectStore } from "./projects.js";
 import type { JobExecution, JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
@@ -481,7 +481,7 @@ export class ProjectEvidenceInspection {
   retry(input: QueryInput) {
     const status = this.request(input);
     if (!status.jobId)
-      throw new CatalogError(
+      throw dependencyRefusal(
         "NOT_READY",
         "Source evidence is not ready",
         { dependencies: status.dependencies },

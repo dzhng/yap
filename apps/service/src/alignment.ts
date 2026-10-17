@@ -72,7 +72,6 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
               result.error.code,
               result.error.message,
               result.error.details,
-              result.error.retryable,
             ),
           };
         try {

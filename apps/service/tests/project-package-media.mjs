@@ -62,7 +62,7 @@ async function adoptedMedia(t, kind) {
         return {
           ok: false,
           error: {
-            code: "WORKER_EXIT",
+            code: "MEDIA_WORKER_FAILED",
             message: "Injected native worker failure",
             retryable: true,
             details: {},

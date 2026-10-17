@@ -102,7 +102,7 @@ export class FileSourceEvidence extends SourceEvidenceReader {
       identity.sourceId !== expected.sourceId ||
       identity.generation !== expected.generation
     )
-      throw new CatalogError("NOT_READY", "Evidence generation is not indexed");
+      throw new CatalogError("PREREQUISITE_MISSING", "Evidence generation is not indexed");
   }
   protected records(identity: EvidenceIdentity, query: RecordQuery): RecordRow[] {
     this.requireComplete(identity);

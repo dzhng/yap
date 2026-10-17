@@ -134,14 +134,13 @@ export class PackageRegistry<
   }
   recover(): Promise<void> {
     if (this.phase === "disposed")
-      return Promise.reject(new CatalogError("SERVICE_STOPPED", "Package registry is closed"));
+      return Promise.reject(new CatalogError("OWNER_CLOSED", "Package registry is closed"));
     if (this.entries.size)
       return Promise.reject(
         new CatalogError(
           "PROCESSING_BUSY",
           "Package resources must close before startup recovery",
           {},
-          true,
         ),
       );
     if (this.recovering) return this.recovering;
@@ -162,11 +161,11 @@ export class PackageRegistry<
   }
   async open(path: string): Promise<PackageAdmission> {
     if (this.phase === "disposed")
-      throw new CatalogError("SERVICE_STOPPED", "Package registry is closed");
+      throw new CatalogError("OWNER_CLOSED", "Package registry is closed");
     if (this.phase !== "ready")
-      throw new CatalogError("PROCESSING_BUSY", "Package admission awaits recovery", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Package admission awaits recovery", {});
     if (this.entries.size >= packageRegistryLimits.owners)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many package resources are owned", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many package resources are owned", {});
     const input = admitArchive(path);
     if (input.bytes > this.limits.compressedBytes) {
       input.close();
@@ -175,12 +174,7 @@ export class PackageRegistry<
     const budget = input.bytes + this.limits.expandedBytes;
     if (this.usage().budgetBytes + budget > this.bytes) {
       input.close();
-      throw new CatalogError(
-        "LIMIT_EXCEEDED",
-        "Package pool cannot reserve this admission",
-        {},
-        true,
-      );
+      throw new CatalogError("CAPACITY_EXCEEDED", "Package pool cannot reserve this admission", {});
     }
     let entry!: Entry<T>;
     let context: JobContext;

@@ -521,7 +521,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
         )
         .get(ownerKind, ownerId, sourceId, generation)
     )
-      throw new CatalogError("NOT_READY", "Evidence generation is not indexed");
+      throw new CatalogError("PREREQUISITE_MISSING", "Evidence generation is not indexed");
   }
 
   protected records(identity: EvidenceIdentity, query: RecordQuery): RecordRow[] {

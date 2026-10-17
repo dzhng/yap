@@ -154,13 +154,13 @@ it("keeps abandoned work in the admission bound until its handler actually finis
     });
   expect(await rejected()).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   cancel.abort();
   expect(await held).toMatchObject({ code: "ABORTED" });
   expect(await rejected()).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   events.emit("release");
   // Yield through the handler's completion before asking for its released slot.

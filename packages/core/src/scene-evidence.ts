@@ -405,7 +405,7 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
       throw new CatalogError("LIMIT_EXCEEDED", "Scene dependency inventory exceeds its limit");
     return rows.map((row) => {
       if (row.complete !== 1)
-        throw new CatalogError("PROCESSING_BUSY", "Scene generation is incomplete", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Scene generation is incomplete", {});
       return portableSceneMetadataSchema.parse(metadata(row));
     });
   }
@@ -413,12 +413,7 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
     const expected = portableSceneMetadataSchema.parse(value),
       existing = this.get(expected);
     if (existing && existing.complete !== 1)
-      throw new CatalogError(
-        "PROCESSING_BUSY",
-        "Scene generation is already being prepared",
-        {},
-        true,
-      );
+      throw new CatalogError("PROCESSING_BUSY", "Scene generation is already being prepared", {});
     if (existing && !isDeepStrictEqual(metadata(existing), expected))
       invalid("Retained scene metadata conflicts with package");
     let owned = false,

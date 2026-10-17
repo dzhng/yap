@@ -93,7 +93,7 @@ export class SourceAlignmentRead {
       };
     }
     if (!("wordCount" in this.metadata))
-      throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {}, true);
+      throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {});
     const page = this.records.page(this.metadata, view, after, parsed.limit ?? 250);
     const rows = page.rows
       .filter((row) => {
