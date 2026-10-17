@@ -161,17 +161,13 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     ["projectId", "text"],
     ["assetId", "streamId", "text"],
   ]);
-  expect(required("transcript.retry")).toEqual([["assetId", "streamId"], ["projectId"]]);
   expect(required("audio.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
-  expect(required("audio.retry")).toEqual(required("audio.get"));
   expect(required("waveform.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
-  expect(required("waveform.retry")).toEqual(required("waveform.get"));
   expect(required("frame.get")).toEqual([
     ["projectId", "atUs"],
     ["assetId", "streamId", "atUs"],
     ["assetId", "streamId"],
   ]);
-  expect(required("frame.retry")).toEqual(required("frame.get"));
   expect(required("frame.batch")).toEqual([
     ["projectId", "atUs"],
     ["assetId", "streamId", "atUs"],
@@ -182,7 +178,6 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     ["projectId", "atUs", "trailUs"],
     ["assetId", "streamId", "atUs", "trailUs"],
   ]);
-  expect(required("cursor.render.retry")).toEqual(required("cursor.render"));
   expect(required("transcript.review")).toEqual([["projectId"], ["assetId", "streamId"]]);
   expect(required("model.prepare")).toEqual(["modelId"]);
   expect(tools.filter((tool) => !tool.description).map((tool) => tool.name)).toEqual([]);
@@ -1111,7 +1106,7 @@ it("selected-frame CLI and MCP deliver image bytes while metadata-only responses
     reads = 0;
   const envelope = (ordinal: number) =>
     ordinal === 9
-      ? { state: "processing", published: null }
+      ? { state: "running", published: null }
       : {
           state: "ready",
           published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },

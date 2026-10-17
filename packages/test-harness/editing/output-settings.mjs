@@ -275,7 +275,7 @@ try {
   const pending = await call("preview.get", { projectId, settings: cancellationSettings });
   await hit();
   await call("job.cancel", { jobId: pending.jobId });
-  await call("preview.retry", { projectId, settings: cancellationSettings });
+  await call("job.retry", { jobId: pending.jobId });
   await preview(projectId, cancellationSettings, "retry");
   await call("edit.apply", {
     projectId,
@@ -324,7 +324,7 @@ try {
   await call("export.create", request);
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "export",
   );
   assert.equal(hash(await readFile(exported.output)), hash(await readFile(override.path)));

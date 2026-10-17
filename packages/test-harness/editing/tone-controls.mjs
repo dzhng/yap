@@ -186,7 +186,7 @@ try {
         });
         const result = await poll(
           () => call("export.status", { exportId }),
-          (v) => v.state === "committed" && !v.cleanupPending,
+          (v) => v.state === "ready" && !v.cleanupPending,
           name,
         );
         return { result, rgb: await pixels(result.output, true) };

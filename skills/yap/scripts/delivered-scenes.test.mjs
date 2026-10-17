@@ -85,7 +85,7 @@ describe("associateDeliveredScenes", () => {
         calls.push([operation, params]);
         if (operation === "export.status")
           return {
-            state: "committed",
+            state: "ready",
             output,
             projectId: "project",
             snapshot: { revisionId: "revision" },

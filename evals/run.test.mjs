@@ -100,7 +100,10 @@ test("README and health trials stage complete controlled inputs without preinsta
       assert.equal(evidence.service, undefined);
     }
     assert.deepEqual(health[0].update.blockers, ["capture", "delivery"]);
-    assert.equal(health[1].update.state, "disabled");
+    assert.equal(health[0].update.state, "queued");
+    assert.equal(health[0].update.availability, "available");
+    assert.equal(health[1].update.state, "unavailable");
+    assert.equal(health[1].update.availability, "disabled");
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }

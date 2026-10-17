@@ -25,7 +25,7 @@ final class HomeLifecycle: AgentSetup {
     }
 
     /// Called on the main thread once a background skill install or removal settles, so the
-    /// Settings status line can stop reading "updating".
+    /// Settings status line can stop reading the running state.
     var settled: (() -> Void)?
 
     /// Install or remove both: at launch and from Settings. The command is synchronous; the skill
@@ -40,7 +40,7 @@ final class HomeLifecycle: AgentSetup {
     /// One line for Settings, from what is on disk now; it runs no installer.
     func summary() -> String {
         let cli = command.status()
-        if cli.state == .installed, cli.onPath, skill.summaryState == "installed" {
+        if cli.state == .installed, cli.onPath, skill.summaryState == "ready" {
             return "yap command + skill, kept current. All good ✓"
         }
         let commandText: String
@@ -54,8 +54,8 @@ final class HomeLifecycle: AgentSetup {
         let skillText: String
         switch skill.summaryState {
         case "installed": skillText = "skill installed"
-        case "updating": skillText = "skill updating"
-        case "needs_attention": skillText = "skill needs attention"
+        case "running": skillText = "skill updating"
+        case "failed": skillText = "skill needs attention"
         default: skillText = "skill not installed"
         }
         return "\(commandText); \(skillText)."

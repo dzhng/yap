@@ -187,7 +187,10 @@ try {
     { timeout: 120000 },
   );
   await service.start();
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   for (const rate of [44100, 48000]) {
     const path = join(media, `selected-${rate}.mov`);
     const asset = await imported(path, `selected-${rate}`);
@@ -276,7 +279,7 @@ try {
     assert.equal(canceled.published, null);
     assert.equal(canceled.delivery, null);
     assert.equal((await call("audio.get", cancelInput)).jobId, pending.jobId);
-    await call("audio.retry", cancelInput, { transport: "mcp" });
+    await call("job.retry", { jobId: canceledJob.jobId }, { transport: "mcp" });
     const retried = await ready(cancelInput);
     assert.ok(retried.published.generation > canceledJob.generation);
     const first = Math.floor((10 * rate) / 1e6),
@@ -467,7 +470,10 @@ try {
     referenceTailSha256: await digest(referencePath),
     cliStreamedBytes: bytes,
   };
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   for (const [path, before] of originals) assert.equal(await digest(path), before);
   report.originals = [...originals].map(([path, sha256]) => ({ name: basename(path), sha256 }));
   report.checks.originalsUnchangedNoModelDownload = true;

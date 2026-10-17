@@ -1043,7 +1043,7 @@ try {
   );
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "linked export",
   );
   // A later export may use a prepared operand and a new container creation time.
@@ -1077,7 +1077,7 @@ try {
   });
   const packaged = await poll(
     () => call("export.status", { exportId: packageId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "retained package",
   );
   for (const asset of report.inputs) assert.equal(hash(await readFile(asset.path)), asset.sha256);

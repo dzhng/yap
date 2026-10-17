@@ -391,7 +391,7 @@ test("public source audio keeps native failure until explicit retry after restor
     hidden = undefined;
     assert.deepEqual(await readFile(registered), original);
     for (let i = 0; i < 3; i++) assert.deepEqual(await call("audio.get", params), failed);
-    const retry = await call("audio.retry", params);
+    const retry = await call("job.retry", params);
     assert.equal(retry.jobId, failed.jobId);
     assert.notEqual(retry.state, "failed");
     const samples = (path) =>
@@ -403,7 +403,7 @@ test("public source audio keeps native failure until explicit retry after restor
     assert.equal(result.published.generation, 2);
     assert.equal(result.published.output.frames, 48000);
     assert.deepEqual(await readFile(registered), original);
-    const repeated = await call("audio.retry", params);
+    const repeated = await call("job.retry", params);
     assert.deepEqual(repeated.published, result.published);
     await call("artifact.close", { token: repeated.delivery.token });
   } finally {

@@ -116,7 +116,7 @@ import YapControls
                 content.clearPageFilter()
             }
             if name == "exports" {
-                let retry = content.actionItem(identifier: "export.retry.fixture-export")!
+                let retry = content.actionItem(identifier: "export.jobRetry.fixture-export")!
                 precondition(retry.title == "Retry Cleanup", "Committed export actions retain cleanup meaning")
                 NSApplication.shared.sendAction(retry.action!, to: retry.target, from: retry)
                 precondition(actions.last == .retryExport("fixture-export"))

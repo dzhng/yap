@@ -373,7 +373,7 @@ export async function captionTimedMotion({
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "motion export",
   );
   assert.deepEqual(await readFile(paths.full), await readFile(exported.output));

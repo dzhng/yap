@@ -97,7 +97,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
     const admitted = await call("export.create", request);
     const receipt = await poll(
       () => call("export.status", { exportId: request.exportId }),
-      (v) => v.state === "committed" && !v.cleanupPending,
+      (v) => v.state === "ready" && !v.cleanupPending,
       codec,
     );
     const path = receipt.output;

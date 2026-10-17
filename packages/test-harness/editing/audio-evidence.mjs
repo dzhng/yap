@@ -401,12 +401,12 @@ async function unitRateJourney() {
     "image cancellation",
   );
   const terminal = await call("waveform.get", { ...retryParams, format: "image" });
-  assert.equal(terminal.state, "not_requested");
+  assert.equal(terminal.state, "idle");
   assert.equal(terminal.reason, "canceled");
   assert.equal(terminal.jobId, pending.jobId);
   assert.equal(terminal.retryable, true);
   const repeated = await call("waveform.get", { ...retryParams, format: "image" });
-  assert.equal(repeated.state, "not_requested");
+  assert.equal(repeated.state, "idle");
   assert.equal(repeated.reason, "canceled");
   const stillCanceled = await call("job.get", { jobId: pending.jobId });
   assert.equal(stillCanceled.state, "canceled");
@@ -416,7 +416,7 @@ async function unitRateJourney() {
     [],
     "canceled image attempt leaked",
   );
-  await call("waveform.retry", { ...retryParams, format: "image" });
+  await call("job.retry", { jobId: pending.jobId });
   const retried = await delivered("waveform.get", { ...retryParams, format: "image" });
   assert.equal(retried.jobId, pending.jobId);
   assert.deepEqual(await readdir(join(home, "library/render")), [], "retried image attempt leaked");

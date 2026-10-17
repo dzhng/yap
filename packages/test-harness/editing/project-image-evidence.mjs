@@ -173,7 +173,7 @@ try {
   await call("export.create", request);
   const exported = await poll(
     () => call("export.status", { exportId: request.exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "image export",
   );
   assert.ok((await readFile(movie)).equals(await readFile(exported.output)));

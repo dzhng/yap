@@ -88,19 +88,26 @@ try {
   assert.equal(streams.length, 2);
   assert.equal(asset.originUs, 250000);
   const selections = streams.map((s) => ({ assetId, streamId: s.id }));
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   const absent = await call("transcript.get", selections[0]);
   assert.equal(absent.state, "unavailable");
   assert.equal(absent.reason, "model_not_prepared");
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }, { transport: "mcp" }), {
-    state: "absent",
-  });
+  assert.partialDeepStrictEqual(
+    await call("model.status", { modelId: "parakeet" }, { transport: "mcp" }),
+    { state: "unavailable", presence: "absent" },
+  );
   report.checks.noImplicitDownload = true;
   const {
     params: { models },
   } = JSON.parse(await readFile(join(frozen, "first-physical-selected-request.json"), "utf8"));
   report.models = await copyModels(home, models);
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "ready" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "ready",
+    presence: "ready",
+  });
   report.fixture = {
     asset,
     originalHash,
@@ -284,11 +291,11 @@ try {
     "cancel transcript",
   );
   const canceled = await call("transcript.get", contexts[0].selection);
-  assert.equal(canceled.state, "not_requested");
+  assert.equal(canceled.state, "idle");
   assert.equal(canceled.reason, "canceled");
   assert.equal(canceled.published, null);
   assert.equal(canceled.jobId, preparing.jobId);
-  await call("transcript.retry", contexts[0].selection, { transport: "mcp" });
+  await call("job.retry", { jobId: preparing.jobId }, { transport: "mcp" });
   for (const [index, item] of contexts.entries()) {
     await call("transcript.transcribe", item.selection);
     const result = await poll(

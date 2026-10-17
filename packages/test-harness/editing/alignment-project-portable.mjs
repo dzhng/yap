@@ -152,7 +152,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (j) => j.state === "committed",
+    (j) => j.state === "ready",
     "export",
   );
   report.checks.export = exported;

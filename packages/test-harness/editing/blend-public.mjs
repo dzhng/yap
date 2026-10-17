@@ -220,7 +220,7 @@ try {
     await call("export.create", exportRequest);
     const exported = await poll(
       () => call("export.status", { exportId }, { transport: "mcp" }),
-      (value) => value.state === "committed",
+      (value) => value.state === "ready",
       "public export",
     );
     assert.equal(exported.output, join(directory, exportRequest.leaf));

@@ -472,7 +472,7 @@ test.runIf(process.platform === "darwin")(
         { ordinal: 1, slot: 1, partial: false },
       ],
     });
-    await ready("export.status", { exportId }, "committed");
+    await ready("export.status", { exportId }, "ready");
     const target = await projectServiceFixture(cleanup, async (operation, params, options) => {
       if (operation.startsWith("media."))
         throw Error(`Package preservation cannot execute media: ${operation}`);

@@ -380,7 +380,7 @@ try {
             await call("export.create", request);
             const exported = await poll(
               () => call("export.status", { exportId: request.exportId }, { transport: "mcp" }),
-              (v) => v.state === "committed",
+              (v) => v.state === "ready",
               "layer export",
             );
             assert.ok((await readFile(exported.output)).equals(await readFile(file)));

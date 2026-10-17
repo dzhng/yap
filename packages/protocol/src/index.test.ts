@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import {
   ARTIFACT_CHUNK_BYTES,
   captureDeviceSchema,
-  captureSelectionSchema,
   captureReportSchema,
+  captureSelectionSchema,
   nativeStartSchema,
   admitOperation,
   operationSchema,
@@ -13,6 +14,122 @@ import {
   parseRequest,
   responseSchema,
 } from "./index.js";
+import { workStateSchema } from "./work.js";
+import {
+  artifactStatusSchema,
+  cliStatusSchema,
+  jobStatusSchema,
+  modelStatusSchema,
+  skillStatusSchema,
+} from "./work.js";
+import { updateStatusSchema } from "./update.js";
+
+function allEnums(
+  value: unknown,
+  path: string[] = [],
+): Array<{ path: string[]; values: string[] }> {
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  const values = Array.isArray(record.enum)
+    ? record.enum.filter((item): item is string => typeof item === "string")
+    : typeof record.const === "string"
+      ? [record.const]
+      : [];
+  return (values.length ? [{ path, values }] : []).concat(
+    Object.entries(record).flatMap(([key, child]) => allEnums(child, [...path, key])),
+  );
+}
+
+const oldStateWords = new Set([
+  "waiting",
+  "queued",
+  "running",
+  "ready",
+  "failed",
+  "unavailable",
+  "canceled",
+  "not_requested",
+  "not_ready",
+  "processing",
+  "preparing",
+  "absent",
+  "updating",
+  "opening",
+  "closing",
+  "cleanup_pending",
+  "pending",
+  "checking",
+  "downloading",
+  "installing",
+  "complete",
+  "completed",
+  "committed",
+  "installed",
+  "missing",
+  "unmanaged",
+  "disabled",
+  "different",
+  "invalid",
+  "needs_attention",
+]);
+function scanProtocolStateEnums(
+  schemas: readonly z.ZodType[],
+): Array<{ path: string[]; values: string[] }> {
+  const workWords = new Set(workStateSchema.options);
+  const factSets = [
+    new Set(["installed", "missing", "unmanaged", "disabled", "needs_attention"]),
+    new Set(["installed", "missing", "different", "unavailable", "needs_attention"]),
+    new Set(["absent", "ready", "invalid"]),
+    new Set(["available", "disabled", "unavailable"]),
+  ];
+  return schemas.flatMap((schema, index) =>
+    allEnums(z.toJSONSchema(schema, { reused: "ref" }), [`schema${index}`]).filter(
+      ({ path, values }) =>
+        !factSets.some(
+          (facts) => values.length === facts.size && values.every((value) => facts.has(value)),
+        ) &&
+        values.filter((value) => oldStateWords.has(value)).length >= 2 &&
+        !(
+          values.length === workWords.size && values.every((value) => workWords.has(value as never))
+        ),
+    ),
+  );
+}
+
+it("scans operation and status schemas for a second async state vocabulary", () => {
+  expect(
+    scanProtocolStateEnums([
+      operationSchema,
+      captureReportSchema,
+      captureDeviceSchema,
+      updateStatusSchema,
+      skillStatusSchema,
+      cliStatusSchema,
+      modelStatusSchema,
+      jobStatusSchema,
+      artifactStatusSchema,
+    ]),
+  ).toEqual([]);
+  expect(
+    scanProtocolStateEnums([z.object({ state: z.enum(["processing", "ready"]) })]),
+  ).toHaveLength(1);
+});
+
+it("has no per-item retry operations", () => {
+  for (const operation of [
+    "index.retry",
+    "transcript.retry",
+    "transcript.render.retry",
+    "cursor.render.retry",
+    "preview.retry",
+    "audio.retry",
+    "frame.retry",
+    "waveform.retry",
+    "spectrogram.retry",
+    "export.retry",
+  ])
+    expect(operationNames.has(operation)).toBe(false);
+});
 
 type AppCaptureContract = {
   operations: { name: string; params: Record<string, unknown> }[];
@@ -289,7 +406,6 @@ it("project indexes use picture taps and retained references across paging and d
       operation: "index.get",
       params: { projectId: "project", cursor: "opaque" },
     },
-    { operation: "index.retry", params: { projectId: "project", tap: reference.tap } },
     {
       operation: "index.coverage",
       params: { ...reference, cursor: "opaque" },
@@ -367,7 +483,7 @@ it("package handles do not authorize managed media inspection", () => {
     ])
       expect(operationSchema.safeParse({ operation, params }).success).toBe(false);
   }
-  for (const operation of ["index.retry", "recording.delete"])
+  for (const operation of ["recording.delete"])
     expect(
       operationSchema.safeParse({ operation, params: { packageHandle: "open-1", atUs: 0 } })
         .success,
@@ -375,7 +491,7 @@ it("package handles do not authorize managed media inspection", () => {
 });
 
 it("arbitrary frame operations require a project or selected asset", () => {
-  for (const operation of ["frame.get", "frame.retry", "frame.batch"]) {
+  for (const operation of ["frame.get", "frame.batch"]) {
     const atUs = operation === "frame.batch" ? [0, 1] : 0;
     expect(
       operationSchema.safeParse({
@@ -394,7 +510,7 @@ it("arbitrary frame operations require a project or selected asset", () => {
 });
 
 it("audio inspection selects exactly one project or asset stream", () => {
-  for (const operation of ["audio.get", "audio.retry"]) {
+  for (const operation of ["audio.get"]) {
     const params = { assetId: "asset", streamId: "audio", range: { startUs: 0, endUs: 1000 } };
     expect(operationSchema.parse({ operation, params })).toBeTruthy();
     expect(() =>

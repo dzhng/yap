@@ -155,7 +155,7 @@ try {
   assert.ok(selection.streamId);
   const barrier = await service.arm("media.sourceVisualSamples");
   const pending = await call("timeline.events", selection);
-  assert.equal(pending.state, "not_ready");
+  assert.equal(pending.state, "queued");
   assert.equal(pending.page, null);
   await barrier();
   const sceneJobId = pending.context.scene.jobId;
@@ -168,7 +168,7 @@ try {
   const canceledJob = await call("job.get", { jobId: sceneJobId });
   for (let i = 0; i < 2; i++) {
     const canceled = await call("timeline.events", selection);
-    assert.equal(canceled.context.scene.state, "not_requested");
+    assert.equal(canceled.context.scene.state, "idle");
     assert.equal(canceled.context.scene.reason, "canceled");
     assert.equal(canceled.context.scene.retryable, true);
     assert.equal(canceled.context.scene.jobId, sceneJobId);

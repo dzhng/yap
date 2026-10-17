@@ -163,7 +163,7 @@ test("selected batch metadata cannot masquerade as timestamp batch metadata", as
           projectId: "project",
           revisionId: "r1",
           generation: "index",
-          items: [{ atUs: 0, ok: true, data: { state: "processing" } }],
+          items: [{ atUs: 0, ok: true, data: { state: "running" } }],
         },
       },
       "ordinal",

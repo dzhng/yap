@@ -287,7 +287,7 @@ test("pending event evidence retains dependency failure identities for an explic
     return {
       projectId: "p",
       revisionId: "r",
-      state: "not_ready",
+      state: "queued",
       reason: "source_evidence_not_ready",
       retryable: true,
       dependencies: [dependency],

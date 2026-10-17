@@ -395,7 +395,7 @@ async function lifecycle(refs, fullAudio) {
     const unpublished = await call("preview.get", params, { transport: "mcp" });
     assert.equal(unpublished.published, null);
     assert.equal(unpublished.delivery, null);
-    await call("preview.retry", params, { transport: "mcp" });
+    await call("job.retry", { jobId: canceled.jobId }, { transport: "mcp" });
     const recovered = await preview("cancel-retry", head, range);
     const media = await inspect(recovered.file, baselineIds, refs, range);
     const audio = recoveredAudio(media.samples, range, fullAudio);
@@ -422,7 +422,7 @@ async function lifecycle(refs, fullAudio) {
   const absent = await call("preview.get", crashParams, { transport: "mcp" });
   assert.equal(absent.published, null);
   assert.equal(absent.delivery, null);
-  await call("preview.retry", crashParams, { transport: "mcp" });
+  await call("job.retry", { jobId: interrupted.jobId }, { transport: "mcp" });
   const recovered = await preview("crash-retry", head, crashRange);
   const media = await inspect(recovered.file, baselineIds, refs, crashRange);
   const audio = recoveredAudio(media.samples, crashRange, fullAudio);

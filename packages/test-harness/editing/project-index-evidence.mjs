@@ -164,7 +164,7 @@ try {
   assert.equal(failed.retryable, true);
   assert.equal(failed.errorDetails.dependency.jobId, child.jobId);
   assert.equal((await call("index.get", audioSelection)).state, "failed");
-  await call("index.retry", audioSelection, { transport: "mcp" });
+  await call("job.retry", { jobId: pendingIndex.jobId }, { transport: "mcp" });
   report.checks.canceledFrameRetry = {
     parentJobId: pendingIndex.jobId,
     childJobId: child.jobId,
@@ -350,10 +350,14 @@ try {
   );
   assert.deepEqual(batch.items[0].data.candidate, composition.entries[2].candidate);
   assert.deepEqual(batch.items[3].data.candidate, composition.entries[2].candidate);
-  const retried = await call("index.retry", {
-    projectId: composition.reference.projectId,
-    revisionId: composition.reference.revisionId,
-    maxLongEdge: 160,
+  const retried = await call("job.retry", {
+    jobId: (
+      await call("index.get", {
+        projectId: composition.reference.projectId,
+        revisionId: composition.reference.revisionId,
+        maxLongEdge: 160,
+      })
+    ).jobId,
   });
   assert.equal(retried.published.output.generation, composition.reference.generation);
   const firstPage = await call("index.get", {

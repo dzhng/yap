@@ -186,7 +186,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "gain export",
   );
   assert.deepEqual(await readFile(moviePath), await readFile(exported.output));

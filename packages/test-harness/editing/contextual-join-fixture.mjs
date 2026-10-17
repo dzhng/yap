@@ -287,6 +287,8 @@ try {
     modelId: "parakeet",
     purpose: "transcription",
     state: "ready",
+    presence: "ready",
+    jobId: null,
   });
   const fixture = await importFixture();
   const full = { startUs: 0, endUs: intactDurationUs };

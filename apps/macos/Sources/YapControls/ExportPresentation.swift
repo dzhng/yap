@@ -60,10 +60,10 @@ public enum ExportPresentation {
     public static func stateTitle(_ record: ExportsState.Record) -> String {
         if record.abandoning { return "abandoning" }
         switch record.state {
-        case "committed": return record.cleanupPending ? "exported, cleanup pending" : "exported"
+        case "ready": return record.cleanupPending ? "exported, cleanup pending" : "exported"
         case "queued": return "waiting"
         case "running": return "exporting…"
-        case "not_requested": return "not started"
+        case "idle": return "not started"
         default: return record.state
         }
     }

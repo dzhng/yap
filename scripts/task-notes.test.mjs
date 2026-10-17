@@ -221,7 +221,7 @@ test("an export owner receipt preserves its nested pinned snapshot without inven
       snapshot: { revisionId: "chosen", documentHash: "immutable-document" },
       jobId: null,
       output: null,
-      state: "waiting",
+      state: "queued",
       reason: "not_prepared",
     };
   const input = { ...notes, artifacts: [{ ...notes.artifacts[0], reference: receipt }] };

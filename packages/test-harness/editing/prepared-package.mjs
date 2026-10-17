@@ -339,7 +339,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
   );
   const archive = join(out, "relocated.zip");
   await rename(exported.output, archive);

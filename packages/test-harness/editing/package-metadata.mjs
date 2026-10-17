@@ -138,7 +138,7 @@ try {
     leaf: "project.zip",
     kind: "processed-package",
   });
-  const exported = await settled("export.status", { exportId }, "committed");
+  const exported = await settled("export.status", { exportId }, "ready");
   const extraction = join(out, "inspected");
   await mkdir(extraction);
   await run("unzip", ["-q", exported.output, "-d", extraction]);

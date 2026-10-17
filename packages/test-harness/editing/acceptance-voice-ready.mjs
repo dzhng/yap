@@ -110,11 +110,14 @@ try {
   assert.equal(declared.runtimeDigest, manifest.runtimeArtifact.digest);
   report.initial = await call("model.status", { modelId: manifest.name });
   assert(
-    ["absent", "ready"].includes(report.initial.state),
+    ["absent", "ready"].includes(report.initial.presence),
     "Reuse only a ready or absent fixture model",
   );
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
-  if (report.initial.state === "absent") {
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
+  if (report.initial.presence === "absent") {
     await call("model.prepare", { modelId: manifest.name });
     report.refusal = await poll(
       () => call("model.status", { modelId: manifest.name }),
@@ -123,22 +126,32 @@ try {
     );
     assert.equal(report.refusal.code, "MODEL_SOURCE_REQUIRED");
     const params = { modelId: manifest.name, runtimeSource, modelSource };
-    assert.equal((await call("model.prepare", params)).state, "preparing");
-    assert.equal((await call("model.prepare", params, { transport: "mcp" })).state, "preparing");
+    assert.equal((await call("model.prepare", params)).state, "running");
+    assert.equal((await call("model.prepare", params, { transport: "mcp" })).state, "running");
     report.ready = await poll(
       () => call("model.status", { modelId: manifest.name }, { transport: "mcp" }),
       (v) => v.state === "ready",
       "registered voice adoption",
     );
   } else report.ready = report.initial;
-  assert.deepEqual(await call("model.prepare", { modelId: manifest.name }), { state: "ready" });
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.partialDeepStrictEqual(await call("model.prepare", { modelId: manifest.name }), {
+    state: "ready",
+    presence: "ready",
+  });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   await stop();
   await service.start();
-  assert.deepEqual(await call("model.status", { modelId: manifest.name }), { state: "ready" });
-  assert.deepEqual(await call("model.status", { modelId: manifest.name }, { transport: "mcp" }), {
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: manifest.name }), {
     state: "ready",
+    presence: "ready",
   });
+  assert.partialDeepStrictEqual(
+    await call("model.status", { modelId: manifest.name }, { transport: "mcp" }),
+    { state: "ready", presence: "ready" },
+  );
   report.reopened = true;
   // Capability proof uses an admitted reference clip, not a substitute for newly generated speech.
   const audio = inputs.inputs.find((v) => v.key === "voiceReference");

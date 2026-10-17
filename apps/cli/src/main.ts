@@ -45,7 +45,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 
 const { version } = appManifest;
-const previewOperations = new Set(["preview.get", "preview.retry"]);
+const previewOperations = new Set(["preview.get"]);
 const skillLifecycleOperations = new Set(["skill.install", "skill.update", "skill.uninstall"]);
 
 function failure(

@@ -46,16 +46,16 @@ failed job implicitly.
 
 ## Export and delivery
 
-`export.create`, `export.list`, `export.status`, `export.retry`,
+`export.create`, `export.list`, `export.status`, `job.retry`,
 `export.recover`, `export.cancel`, and `export.abandon` publish or recover
 video, audio, captions, and editable packages. `artifact.read`,
 `artifact.renew`, and `artifact.close` consume large CLI/MCP deliveries.
 
 ## Evidence and indexing
 
-`index.get`, `index.retry`, `index.coverage`, `index.frame`, `index.frames`,
+`index.get`, `job.retry`, `index.coverage`, `index.frame`, `index.frames`,
 `face.trajectory.get`, `correspondence.prepare`, `correspondence.get`,
-`alignment.observe`, `alignment.get`, `cursor.render`, `cursor.render.retry`,
+`alignment.observe`, `alignment.get`, `cursor.render`, `job.retry`,
 `speaker.continuity.prepare`,
 `speaker.continuity.get`, `speaker.observe`, `speaker.get`, `speaker.bind`,
 `join.verify`, `timeline.events`, and `cursor.raw` expose measured visual,
@@ -64,14 +64,14 @@ information; it never authorizes an edit.
 
 ## Transcript, audio and visual processing
 
-`transcript.review`, `transcript.render.prepare`, `transcript.render.retry`,
+`transcript.review`, `transcript.render.prepare`, `job.retry`,
 `transcript.render.get`, `transcript.transcribe`, `transcript.get`,
-`transcript.search`, and `transcript.retry` provide source/project text and
+`transcript.search`, and `job.retry` provide source/project text and
 rendered speech evidence. `audio.extract`, `audio.prepare`, `audio.get`,
-`audio.measure`, and `audio.retry` provide retained or measured PCM.
-`waveform.get`, `waveform.retry`, `spectrogram.get`, and `spectrogram.retry`
-provide bounded signal views. `frame.get`, `frame.batch`, and `frame.retry`
-provide stills; `preview.get` and `preview.retry` provide playable previews.
+`audio.measure`, and `job.retry` provide retained or measured PCM.
+`waveform.get`, `job.retry`, `spectrogram.get`, and `job.retry`
+provide bounded signal views. `frame.get`, `frame.batch`, and `job.retry`
+provide stills; `preview.get` and `job.retry` provide playable previews.
 `voice.generate` creates a durable generated audio asset from an explicit
 reference and text.
 
@@ -125,7 +125,7 @@ Disable maintenance before customizing the global skill; uninstall removes the
 paths Yap recorded plus any global Yap skill discovered at that moment, and
 removes nothing when Yap holds no receipt.
 
-Mutation skill operations return an updating status and operationId; poll
+Mutation skill operations return a running status and jobId; poll
 `skill.status` for terminal state and diagnostics. Settings shows one toggle and a
 one-line summary for the command and skill; the CLI is the surface for state,
 paths, source revision, discovery links, ownership and errors. Lifecycle reconciliation runs at every

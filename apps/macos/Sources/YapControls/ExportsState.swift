@@ -53,13 +53,14 @@ public struct ExportsState: Equatable, Sendable {
         public init(
             exportId: String, target: MediaTarget, kind: Kind, revisionId: String, state: String,
             directory: String, leaf: String, output: String?, reason: String?, retryable: Bool,
-            abandoning: Bool, cleanupPending: Bool
+            abandoning: Bool, cleanupPending: Bool, jobId: String? = nil
         ) {
             self.exportId = exportId
             self.target = target
             self.kind = kind
             self.revisionId = revisionId
             self.state = state
+            self.jobId = jobId
             self.directory = directory
             self.leaf = leaf
             self.output = output
@@ -73,6 +74,7 @@ public struct ExportsState: Equatable, Sendable {
         public let kind: Kind
         public let revisionId: String
         public let state: String
+        public let jobId: String?
         public let directory: String
         public let leaf: String
         /// The committed file; nil until the export is committed.
@@ -82,14 +84,14 @@ public struct ExportsState: Equatable, Sendable {
         public let abandoning: Bool
         public let cleanupPending: Bool
 
-        public var committed: Bool { state == "committed" }
+        public var committed: Bool { state == "ready" }
         /// An uncommitted attempt that is no longer running and waits for a person's retry.
-        public var stopped: Bool { ["failed", "canceled", "unavailable", "not_requested"].contains(state) }
+        public var stopped: Bool { ["failed", "canceled", "unavailable", "idle"].contains(state) }
         /// Nothing changes until someone asks: a clean commit, or an attempt that stopped.
         public var settled: Bool { !abandoning && (committed ? !cleanupPending : stopped) }
 
         private enum Keys: String, CodingKey {
-            case exportId, kind, snapshot, state, destination, output, reason
+            case exportId, kind, snapshot, state, jobId, destination, output, reason
             case retryable, abandoning, cleanupPending
         }
         private enum SnapshotKeys: String, CodingKey { case revisionId }
@@ -112,7 +114,8 @@ public struct ExportsState: Equatable, Sendable {
                 reason: try fields.decodeIfPresent(String.self, forKey: .reason),
                 retryable: try fields.decode(Bool.self, forKey: .retryable),
                 abandoning: try fields.decode(Bool.self, forKey: .abandoning),
-                cleanupPending: try fields.decode(Bool.self, forKey: .cleanupPending))
+                cleanupPending: try fields.decode(Bool.self, forKey: .cleanupPending),
+                jobId: try fields.decodeIfPresent(String.self, forKey: .jobId))
         }
     }
 

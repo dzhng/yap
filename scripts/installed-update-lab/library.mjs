@@ -85,7 +85,7 @@ export async function populateLibrary(home, source, call) {
       !["failed", "canceled", "unavailable"].includes(result.state),
       JSON.stringify(result),
     );
-    return result.state === "committed" && !result.cleanupPending;
+    return result.state === "ready" && !result.cleanupPending;
   }, "Fixture export did not commit");
   return {
     ...source,

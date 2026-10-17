@@ -91,7 +91,7 @@ async function videoBinding(acquisitionId) {
   return { acquisition, binding };
 }
 const settled = (read, label) =>
-  poll(read, (value) => !["processing", "pending", "not_ready"].includes(value.state), label);
+  poll(read, (value) => !["queued", "running"].includes(value.state), label);
 
 /** Source time of a host instant: host time after the origin with paused time removed. */
 function sourceUs(host, finished) {

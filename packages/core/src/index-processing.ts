@@ -278,7 +278,11 @@ export class IndexProcessing {
     const metadata = input.cursor
       ? this.publishedProject(input.cursor)
       : status!.published!.evidence;
-    return this.projectRead(metadata).get({ cursor: input.cursor, limit: input.limit });
+    // A ready read keeps the job identity its status reported; continuations name no job.
+    return {
+      ...this.projectRead(metadata).get({ cursor: input.cursor, limit: input.limit }),
+      jobId: status?.jobId ?? null,
+    };
   }
   coverageProject(
     input: ProjectIndexReference & {
@@ -666,7 +670,11 @@ export class IndexProcessing {
         "ARTIFACT_CHANGED",
         "Source index continuation changed its face request",
       );
-    return this.sourceRead(metadata).get({ cursor: input.cursor, limit: input.limit });
+    // A ready read keeps the job identity its status reported; continuations name no job.
+    return {
+      ...this.sourceRead(metadata).get({ cursor: input.cursor, limit: input.limit }),
+      jobId: status?.jobId ?? null,
+    };
   }
   coverageSource(
     input: SourceIndexReference & {

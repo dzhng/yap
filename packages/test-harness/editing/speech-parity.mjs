@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { realpath } from "node:fs/promises";
 import { readAudioWaveFile } from "../../core/dist/audio-wave.js";
 import { parakeetModel } from "../../core/dist/models.js";
+import { modelWorkState } from "../../protocol/dist/index.js";
 import { existingSpeechModelSnapshot } from "./existing-speech-model.mjs";
 import { historicalWholeSupportRecords } from "./speech-parity-records.mjs";
 import { changedTranscriptGeneration } from "./generation-evidence.mjs";
@@ -196,15 +197,18 @@ try {
     await save("fixture.json", { ...config, modelState: state });
     await service.start();
     for (const transport of ["cli", "mcp"]) {
-      assert.deepEqual(await call("model.status", { modelId: "parakeet" }, { transport }), state);
+      // The fixture declares the stored model status; the public edge reports it as WorkState.
+      assert.partialDeepStrictEqual(
+        await call("model.status", { modelId: "parakeet" }, { transport }),
+        {
+          ...state,
+          state: modelWorkState[state.state],
+        },
+      );
       const unavailable = await call("transcript.get", selection, { transport });
       assert.equal(unavailable.state, "unavailable");
       assert.equal(unavailable.reason, "model_not_prepared");
       assert.equal(unavailable.jobId, null);
-      assert.equal(
-        (await call("transcript.retry", selection, { transport, error: true })).code,
-        "MODEL_NOT_PREPARED",
-      );
       report.readiness.push({ transport, state, unavailable });
     }
     assert.equal(
@@ -225,7 +229,7 @@ try {
   } else {
     for (const transport of ["cli", "mcp"]) {
       const state = await call("model.status", { modelId: "parakeet" }, { transport });
-      assert.deepEqual(state, { state: "ready" });
+      assert.partialDeepStrictEqual(state, { state: "ready", presence: "ready" });
       report.readiness.push({
         transport,
         state,

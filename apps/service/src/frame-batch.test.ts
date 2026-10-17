@@ -216,7 +216,7 @@ test("service source batches require independent explicit retry of a failed pict
   expect([...f.attempts].sort((a, b) => a - b)).toEqual([0, 500_000]);
   await closeDeliveries(f, failed.items);
   f.failures.delete(500_000);
-  const retry = await f.call("frame.retry", { ...f.selection, atUs: 500_000 });
+  const retry = await f.call("job.retry", { jobId: bad.data.jobId! });
   expect(retry).toMatchObject({ ok: true, data: { jobId: bad.data.jobId } });
   await f.job(bad.data.jobId!, "ready");
   const final = await ready(f, [0, 500_000]);

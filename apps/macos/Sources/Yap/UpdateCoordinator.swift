@@ -16,9 +16,18 @@ final class UpdateCoordinator {
             let retryable: Bool
         }
         var parameters: [String: Any] {
-            [
+            let workState: String
+            let availability = state == "disabled" ? "disabled" : state == "unavailable" ? "unavailable" : "available"
+            switch state {
+            case "idle": workState = "idle"
+            case "disabled", "unavailable": workState = "unavailable"
+            case "failed": workState = "failed"
+            case "waiting": workState = "queued"
+            default: preconditionFailure("Unknown update state: \(state)")
+            }
+            return [
                 "update": [
-                    "state": state, "availableVersion": availableVersion as Any? ?? NSNull(),
+                    "state": workState, "jobId": NSNull(), "availability": availability, "availableVersion": availableVersion as Any? ?? NSNull(),
                     "blockers": blockers,
                     "error": error.map {
                         ["code": $0.code, "message": $0.message, "retryable": $0.retryable] as [String: Any]

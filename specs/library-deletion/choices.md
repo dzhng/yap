@@ -41,7 +41,7 @@ until they do).
 - **A failed workspace creation is `PACKAGE_STORAGE_UNAVAILABLE`, retryable** (sound).
   It was `INVALID_STORAGE` with a hand-set retryable flag, which the first derivation
   missed because the flag sat on its own line. The draft compensated with a service-side
-  rewrite keyed on the error *message*, now removed. A replaced or linked directory stays
+  rewrite keyed on the error _message_, now removed. A replaced or linked directory stays
   `INVALID_STORAGE`, not retryable, which native tests pin. A directory that changed
   while being opened is `STORAGE_CHANGED`, retryable, as before.
 - **`ARTIFACT_CHANGED` is not retryable; an evicted prerequisite is `DEPENDENCY_LOST`**
@@ -171,3 +171,65 @@ until they do).
   their pinned generation; several readers capped limits below the schema's 1000.
 - **`preset.list` is paged** (sound). It landed from main after the spec; it pages like
   `model.list`.
+
+## Slice 06: one async vocabulary
+
+`WorkState` is the protocol vocabulary. Stored catalog strings remain unchanged and are mapped
+once at the service or app boundary:
+
+| Stored vocabulary     | Old word                                                                                                                | WorkState     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------- |
+| JobQueue              | `waiting`, `queued`                                                                                                     | `queued`      |
+| JobQueue              | `running`                                                                                                               | `running`     |
+| JobQueue              | `ready`                                                                                                                 | `ready`       |
+| JobQueue              | `failed`                                                                                                                | `failed`      |
+| JobQueue              | `unavailable`                                                                                                           | `unavailable` |
+| JobQueue              | `canceled`                                                                                                              | `canceled`    |
+| Artifact readiness    | `not_requested`                                                                                                         | `idle`        |
+| Artifact readiness    | `queued`, `not_ready`                                                                                                   | `queued`      |
+| Artifact readiness    | `processing`, `preparing`, `opening`, `closing`, `cleanup_pending`, `updating`, `checking`, `downloading`, `installing` | `running`     |
+| Artifact/model/preset | `ready`, `complete`, `completed`, `committed`, `installed`                                                              | `ready`       |
+| Model lifecycle       | `absent`                                                                                                                | `unavailable` |
+| Model lifecycle       | `preparing`                                                                                                             | `running`     |
+| Model lifecycle       | `ready`                                                                                                                 | `ready`       |
+| Model lifecycle       | `invalid`, `failed`                                                                                                     | `failed`      |
+| Skill lifecycle       | `updating`                                                                                                              | `running`     |
+| Skill lifecycle       | `installed`                                                                                                             | `ready`       |
+| Skill lifecycle       | `missing`, `unmanaged`, `disabled`                                                                                      | `unavailable` |
+| Skill lifecycle       | `needs_attention`                                                                                                       | `failed`      |
+| CLI lifecycle         | `installed`                                                                                                             | `ready`       |
+| CLI lifecycle         | `missing`, `different`, `unavailable`                                                                                   | `unavailable` |
+| CLI lifecycle         | `needs_attention`                                                                                                       | `failed`      |
+
+The rule is: a word is a `WorkState` only when it says where some work is in its lifecycle.
+Domain facts remain separate and keep their existing words. The protocol fields that carry those
+facts are:
+
+| Status owner | Fact field | Stored fact words (unchanged) |
+| --- | --- | --- |
+| Skill | `installation` | `installed`, `missing`, `unmanaged`, `disabled`, `needs_attention` |
+| CLI | `installation` | `installed`, `missing`, `different`, `unavailable`, `needs_attention` |
+| Model | `presence` | `absent`, `ready`, `invalid` |
+| Update | `availability` | `available`, `disabled`, `unavailable` |
+
+The lifecycle `state` on each of those records is the mapped `WorkState`; the fact field is never
+collapsed into that lifecycle word.
+`idle` means no work has been requested, `queued` means admitted work is waiting, `running` means
+an attempt is active, and `unavailable` means the requested result cannot currently be supplied.
+Every async status carries `jobId`; app-owned operations expose their native operation identity
+through that field.
+
+- **Unknown stored words throw** (sound). A stored state with no mapping is a bug in the
+  mapping, not a failed job, so `mapWorkState` throws instead of reporting `failed`.
+- **`job.retry` reuses the owner's retry where one already repaired prerequisites** (sound).
+  For an export job it runs `MediaExports.retry`, which re-runs a failed audio or preview step
+  and keeps the export's abandon and owner fences. For rendered recognition it re-runs a failed
+  PCM extraction, as `transcript.render.retry` did, because the item's status names only the
+  recognition job. Every other job is re-queued directly. Rejected: a general "retry the failed
+  dependency" rule; no other owner needed one.
+- **A ready `index.get` carries the `jobId` its status reported** (sound). A continuation page
+  names no job (`jobId: null`). The ready read had dropped it, so a caller could not retry from
+  a read.
+- **Every removed `*.retry` has a recovery test through `job.retry`** (sound). Each drives the
+  item to `failed`, retries the `jobId` the item's own status returned, and checks it reaches
+  `ready`. Writing them found the two `job.retry` gaps and the missing `jobId` above.

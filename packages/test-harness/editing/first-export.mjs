@@ -54,7 +54,7 @@ export async function exportJourney({
   );
   const committed = await poll(
     () => call("export.status", { exportId: request.exportId }, { transport: "mcp" }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "full project export",
   );
   assert.equal(committed.output, join(directory, request.leaf));
@@ -71,11 +71,17 @@ export async function exportJourney({
       (item) =>
         item.exportId === request.exportId &&
         item.revisionId === revisionId &&
-        item.state === "committed",
+        item.state === "ready",
     ),
   );
-  const retried = await call("export.retry", { exportId: request.exportId });
-  assert.deepEqual(retried.receipt, committed.receipt);
+  const retried = await call("job.retry", { jobId: committed.jobId });
+  assert.equal(retried.state, "ready");
+  const afterRetry = await call(
+    "export.status",
+    { exportId: request.exportId },
+    { transport: "mcp" },
+  );
+  assert.deepEqual(afterRetry.receipt, committed.receipt);
   assert.deepEqual(await external(committed.output), file, "Retry republished a committed export");
   Object.assign(evidence, {
     request,
@@ -88,7 +94,7 @@ export async function exportJourney({
   const waitCommit = (exportId) =>
     poll(
       () => call("export.status", { exportId }, { transport: "mcp" }),
-      (value) => value.state === "committed",
+      (value) => value.state === "ready",
       "commit after explicit retry",
     );
   const canceledRequest = {
@@ -120,7 +126,7 @@ export async function exportJourney({
   assert.equal(canceled.receipt, null);
   assert.equal(canceled.output, null);
   await assert.rejects(stat(canceledPath), { code: "ENOENT" });
-  await call("export.retry", { exportId: canceledRequest.exportId }, { transport: "mcp" });
+  await call("job.retry", { jobId: canceledJob.jobId }, { transport: "mcp" });
   const resumed = await waitCommit(canceledRequest.exportId);
   const resumedFile = await external(canceledPath);
   assert.equal(resumedFile.sha256, file.sha256);

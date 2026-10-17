@@ -255,7 +255,7 @@ final class LibraryController {
     }
 
     private static func valid(_ job: LibraryState.Job) -> Bool {
-        !job.jobId.isEmpty && ["waiting", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
+        !job.jobId.isEmpty && ["idle", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
     }
     private static func active(_ admission: LibraryState.SourceAdmission) -> Bool {
         admission.job.map { ["queued", "running", "waiting"].contains($0.state) } ?? false

@@ -9,6 +9,8 @@ let directory: string;
 let owner: string;
 let tool: string;
 const ownedPids: number[] = [];
+// Compiling the real Swift owner is setup, not the behavior under test, and takes seconds on a
+// loaded machine, so it has its own budget.
 beforeAll(async () => {
   directory = await mkdtemp("/tmp/yap-cli-native-");
   owner = await compileCliOwner(directory);
@@ -21,7 +23,7 @@ beforeAll(async () => {
     if(process.argv[3]==='descriptor')writeFileSync(3,'inherited bytes');
     writeFileSync(process.argv[2]+'.tmp',JSON.stringify({pid:process.pid,owner:process.ppid,child:child.pid}));renameSync(process.argv[2]+'.tmp',process.argv[2]);setInterval(()=>{},1000);`,
   );
-});
+}, 120_000);
 afterAll(async () => {
   for (const pid of ownedPids) {
     try {

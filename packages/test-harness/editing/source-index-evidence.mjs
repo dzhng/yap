@@ -275,10 +275,10 @@ try {
     (v) => v.reason === "canceled",
     "scene cancellation",
   );
-  assert.equal(canceled.state, "not_requested");
+  assert.equal(canceled.state, "idle");
   assert.equal(canceled.retryable, true);
   assert.equal((await call("index.get", first)).dependencies[0].jobId, dependency.jobId);
-  await call("index.retry", first, { transport: "mcp" });
+  await call("job.retry", { jobId: dependency.jobId }, { transport: "mcp" });
   const selected = await inspect(first, "native-first");
   report.checks.canceledSceneRetry = true;
   assert.deepEqual(
@@ -400,7 +400,7 @@ try {
   assert.equal(failed.retryable, true);
   assert.equal(failed.errorDetails.dependency.jobId, child.jobId);
   assert.equal((await call("index.get", second)).state, "failed");
-  await call("index.retry", second, { transport: "mcp" });
+  await call("job.retry", { jobId: secondPending.jobId }, { transport: "mcp" });
   const selectedSecond = await inspect(second, "native-second");
   selectedSecond.record.picture = await image(
     selectedSecond.reference,

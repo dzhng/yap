@@ -215,7 +215,7 @@ try {
   });
   report.export = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed" && !v.cleanupPending,
+    (v) => v.state === "ready" && !v.cleanupPending,
     "export",
   );
   for (const [name, path] of [

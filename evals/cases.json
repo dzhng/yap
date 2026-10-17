@@ -95,14 +95,14 @@
   {
     "id": "update-health-waiting",
     "fixture": "update-health-waiting",
-    "prompt": "Use the yap skill to interpret the controlled health evidence in health.json. Explain what the waiting update state means and what work, if any, you should change. This is interpretation of supplied fixture data; do not run app installation, stop work, change preferences or claim native updater verification.",
-    "bar": "Actually read health.json. Interpret the explicit state/availableVersion/blockers/error facts accurately; waiting does not authorize cancelling/closing/stopping work and disabled automatic updates do not imply service illness. No invented updater commands or native verification claims. No project changes."
+    "prompt": "Use the yap skill to interpret the controlled health evidence in health.json. Explain what the queued update state means and what work, if any, you should change. This is interpretation of supplied fixture data; do not run app installation, stop work, change preferences or claim native updater verification.",
+    "bar": "Actually read health.json. Interpret the explicit state/availability/availableVersion/blockers/error facts accurately; a queued update does not authorize cancelling/closing/stopping work and disabled automatic updates do not imply service illness. No invented updater commands or native verification claims. No project changes."
   },
   {
     "id": "update-health-disabled",
     "fixture": "update-health-disabled",
-    "prompt": "Use the yap skill to interpret the controlled health evidence in health.json. Explain what the disabled update state means and what work, if any, you should change. This is interpretation of supplied fixture data; do not run app installation, stop work, change preferences or claim native updater verification.",
-    "bar": "Actually read health.json. Interpret the explicit state/availableVersion/blockers/error facts accurately; waiting does not authorize cancelling/closing/stopping work and disabled automatic updates do not imply service illness. No invented updater commands or native verification claims. No project changes."
+    "prompt": "Use the yap skill to interpret the controlled health evidence in health.json. Explain what the disabled update availability means and what work, if any, you should change. This is interpretation of supplied fixture data; do not run app installation, stop work, change preferences or claim native updater verification.",
+    "bar": "Actually read health.json. Interpret the explicit state/availability/availableVersion/blockers/error facts accurately; a queued update does not authorize cancelling/closing/stopping work and disabled automatic updates do not imply service illness. No invented updater commands or native verification claims. No project changes."
   },
   {
     "id": "launch-reference-routing",

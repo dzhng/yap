@@ -118,10 +118,12 @@ try {
   );
   await service.stop(true);
   await service.start();
-  await call("export.retry", { exportId: request.exportId });
+  await call("job.retry", {
+    jobId: (await call("export.status", { exportId: request.exportId })).jobId,
+  });
   const committed = await poll(
     () => call("export.status", { exportId: request.exportId }),
-    (value) => value.state === "committed" && !value.cleanupPending,
+    (value) => value.state === "ready" && !value.cleanupPending,
     "SRT publication",
   );
   assert.equal(
@@ -135,8 +137,12 @@ try {
     "1\n00:00:00,000 --> 00:00:00,002\nCafé & x < y\n二\n\n2\n00:00:00,001 --> 00:00:00,003\nNext\n\n",
   );
   assert.equal((await call("export.create", request)).receipt.sha256, committed.receipt.sha256);
+  const retried = await call("job.retry", {
+    jobId: (await call("export.status", { exportId: request.exportId })).jobId,
+  });
+  assert.equal(retried.state, "ready");
   assert.equal(
-    (await call("export.retry", { exportId: request.exportId })).receipt.sha256,
+    (await call("export.status", { exportId: request.exportId })).receipt.sha256,
     committed.receipt.sha256,
   );
   report.srt = committed;
@@ -144,7 +150,7 @@ try {
   await call("export.create", vttRequest, { transport: "mcp" });
   report.vtt = await poll(
     () => call("export.status", { exportId: vttRequest.exportId }),
-    (value) => value.state === "committed" && !value.cleanupPending,
+    (value) => value.state === "ready" && !value.cleanupPending,
     "VTT publication",
   );
   assert.equal(
@@ -205,7 +211,7 @@ try {
     await call("export.create", markup);
     const written = await poll(
       () => call("export.status", { exportId: markup.exportId }),
-      (value) => value.state === "committed" && !value.cleanupPending,
+      (value) => value.state === "ready" && !value.cleanupPending,
       `${label} SRT`,
     );
     assert.ok(
@@ -223,7 +229,7 @@ try {
   await call("export.create", literalRequest);
   const literal = await poll(
     () => call("export.status", { exportId: literalRequest.exportId }),
-    (value) => value.state === "committed" && !value.cleanupPending,
+    (value) => value.state === "ready" && !value.cleanupPending,
     "literal VTT",
   );
   const literalDecoded = (
@@ -241,7 +247,7 @@ try {
   await call("export.create", syntaxRequest);
   const syntax = await poll(
     () => call("export.status", { exportId: syntaxRequest.exportId }),
-    (value) => value.state === "committed" && !value.cleanupPending,
+    (value) => value.state === "ready" && !value.cleanupPending,
     "literal subtitle syntax VTT",
   );
   const syntaxPackets = JSON.parse(
@@ -273,7 +279,7 @@ try {
   await call("export.create", emptyRequest);
   const empty = await poll(
     () => call("export.status", { exportId: emptyRequest.exportId }),
-    (value) => value.state === "committed" && !value.cleanupPending,
+    (value) => value.state === "ready" && !value.cleanupPending,
     "empty SRT",
   );
   assert.deepEqual(

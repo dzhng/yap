@@ -353,7 +353,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
   );
   report.exported = exported;
   report.observations.archiveSha256 = await digest(exported.output);

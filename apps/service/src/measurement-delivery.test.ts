@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 import { startProjectService } from "./project-service.js";
 import { probeFileFixture } from "./project-service.fixture.js";
 import { compileCliOwner } from "./cli-owner.fixture.js";
@@ -10,6 +10,15 @@ const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
 });
+// Compiling the real Swift owner is setup, not the behavior under test, and takes seconds on a
+// loaded machine, so it runs once with its own budget.
+let ownerDirectory: string;
+let nativeExecutable: string;
+beforeAll(async () => {
+  ownerDirectory = await mkdtemp("/tmp/yap-measure-owner-");
+  nativeExecutable = await compileCliOwner(ownerDirectory);
+}, 120_000);
+afterAll(() => rm(ownerDirectory, { recursive: true, force: true }));
 const sha = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
 const main = new URL("../../cli/dist/main.js", import.meta.url).pathname;
 async function run(socket: string, operation: string, params: unknown, args: string[] = []) {
@@ -63,7 +72,7 @@ test("production service measurement leases deliver complete JSON to CLI and MCP
   const service = await startProjectService({
     home,
     ffmpeg: { directory, receiptSha256: sha(receipt) },
-    nativeExecutable: await compileCliOwner(home),
+    nativeExecutable,
     worker: probeFileFixture(home, async (operation, params) => {
       if (operation === "media.probe")
         return {

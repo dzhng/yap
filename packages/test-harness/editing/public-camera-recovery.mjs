@@ -224,7 +224,7 @@ try {
     });
     const exported = await poll(
       () => service.call("export.status", { exportId }),
-      (value) => value.state === "committed",
+      (value) => value.state === "ready",
       "recovered project package",
     );
     await service.stop();

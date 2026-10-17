@@ -361,7 +361,8 @@ switch (operation) {
       );
     data = {
       exportId: params.exportId,
-      state: "committed",
+      state: "ready",
+      jobId: null,
       output: join(creation.params.directory, creation.params.leaf),
       receipt: {},
     };

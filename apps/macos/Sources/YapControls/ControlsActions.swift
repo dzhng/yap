@@ -75,7 +75,7 @@ public enum ControlsAction: Hashable, Sendable {
         case .refreshLibrary: "library.refresh"
         case .deleteRecording(let id): "recording.delete.\(id)"
         case .resendExport(let id): "export.resend.\(id)"
-        case .retryExport(let id): "export.retry.\(id)"
+        case .retryExport(let id): "export.jobRetry.\(id)"
         case .abandonExport(let id): "export.abandon.\(id)"
         case .revealExport(let id): "export.reveal.\(id)"
         case .dismissExport(let id): "export.dismiss.\(id)"

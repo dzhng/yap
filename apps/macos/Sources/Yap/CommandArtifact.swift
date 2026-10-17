@@ -19,7 +19,14 @@ struct CommandArtifact {
         let error: String?
 
         var json: Data {
-            var value: [String: Any] = ["state": state.rawValue, "path": path, "onPath": onPath]
+            let workState: String
+            let installation = state.rawValue
+            switch state {
+            case .installed: workState = "ready"
+            case .missing, .unavailable, .different: workState = "unavailable"
+            case .needs_attention: workState = "failed"
+            }
+            var value: [String: Any] = ["state": workState, "jobId": NSNull(), "installation": installation, "path": path, "onPath": onPath]
             if let profile { value["profile"] = profile }
             if let error { value["error"] = error }
             return (try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])) ?? Data("{}".utf8)

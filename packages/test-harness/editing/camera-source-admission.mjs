@@ -312,7 +312,7 @@ try {
   });
   const exported = await poll(
     () => service.call("export.status", { exportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "camera package",
   );
   await service.stop();

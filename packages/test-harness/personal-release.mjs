@@ -622,13 +622,13 @@ const main = async () => {
     const deadline = Date.now() + 900_000;
     for (;;) {
       const status = call("export.status", { exportId });
-      if (status.state === "committed") {
+      if (status.state === "ready") {
         exports[kind] = { exportId, output: status.output };
         break;
       }
       if (["failed", "unavailable", "canceled"].includes(status.state))
         throw new Error(`${kind} export ${status.state}: ${status.reason}`);
-      if (Date.now() > deadline) throw new Error(`${kind} export never committed`);
+      if (Date.now() > deadline) throw new Error(`${kind} export never became ready`);
       await wait(1000);
     }
     step(`export ${kind}`, exports[kind]);

@@ -10,42 +10,25 @@ import {
   type OperationRequest,
   type OperationResponse,
   type WaitMetadata,
+  workStateSchema,
 } from "@yap/protocol";
 import { ArtifactDeliveryError, batchReferences, describeBatch } from "./artifact-delivery.js";
 
-const pending = new Set([
-  "waiting",
-  "queued",
-  "running",
-  "processing",
-  "preparing",
-  "opening",
-  "closing",
-  "cleanup_pending",
-  "pending",
-  "not_ready",
-  "updating",
-  "finalizing",
-]);
-const unsuccessful = new Set([
-  "failed",
-  "canceled",
-  "unavailable",
-  "not_requested",
-  "absent",
-  "invalid",
-  "abandoned",
-  "interrupted",
-  "unsupported",
-]);
+const pending = new Set(["queued", "running"]);
+const unsuccessful = new Set(["failed", "canceled", "unavailable", "idle"]);
 const jobSummary = waitJobSchema.extend({
-  state: z.string(),
+  state: workStateSchema,
   target: z.record(z.string(), z.unknown()),
 });
 const reads = new Map([
-  ...["frame", "audio", "waveform", "spectrogram", "preview", "index", "transcript"].map(
-    (kind) => [`${kind}.retry`, `${kind}.get`] as [string, string],
-  ),
+  ["job.retry", "job.get"],
+  ["index.get", "index.get"],
+  ["transcript.get", "transcript.get"],
+  ["frame.get", "frame.get"],
+  ["audio.get", "audio.get"],
+  ["waveform.get", "waveform.get"],
+  ["spectrogram.get", "spectrogram.get"],
+  ["preview.get", "preview.get"],
   ["frame.batch", "frame.batch"],
   ["index.frames", "index.frames"],
   ["audio.measure", "audio.measure"],
@@ -54,10 +37,8 @@ const reads = new Map([
   ["transcript.transcribe", "transcript.get"],
   ["transcript.review", "transcript.review"],
   ["transcript.render.prepare", "transcript.render.get"],
-  ["transcript.render.retry", "transcript.render.get"],
   ["transcript.render.get", "transcript.render.get"],
   ["export.create", "export.status"],
-  ["export.retry", "export.status"],
   ["export.recover", "export.status"],
   ["capture.stop", "recording.get"],
   ["package.open", "package.status"],
@@ -84,10 +65,7 @@ export function waitSucceeded(result: OperationResponse): boolean {
     return false;
   if (Array.isArray(data.items))
     return data.items.every((item) => waitSucceeded({ id: result.id, ...item }));
-  return (
-    data.state === undefined ||
-    ["ready", "complete", "completed", "committed"].includes(String(data.state))
-  );
+  return data.state === undefined || ["ready"].includes(String(data.state));
 }
 function interrupted(result: Extract<OperationResponse, { ok: false }>) {
   return [
@@ -177,14 +155,13 @@ export async function waitForWork(options: {
     });
   const pins = record(latest.ok ? latest.data : null);
   let read = reads.get(request.operation);
-  if (request.operation === "transcript.retry" && "text" in request.params)
-    read = "transcript.search";
+  if (request.operation === "transcript.search") read = "transcript.search";
   let params: Record<string, unknown> =
     read === "model.status" ? { modelId: request.params.modelId } : { ...request.params };
   const sourcePreparation =
     read === "transcript.get" &&
     (request.operation === "transcript.transcribe" ||
-      (request.operation === "transcript.retry" && "assetId" in request.params));
+      request.operation === "transcript.transcribe");
   if (sourcePreparation) {
     delete params.executionRange;
     delete params.context;

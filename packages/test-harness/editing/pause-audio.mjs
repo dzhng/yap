@@ -279,7 +279,7 @@ try {
   assert.equal(exported.snapshot.revisionId, revisionId);
   const published = await poll(
     () => call("export.status", { exportId: exported.exportId }, { transport: "mcp" }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "export",
   );
   assert.deepEqual(await readFile(published.output), await readFile(join(out, "filled.mp4")));

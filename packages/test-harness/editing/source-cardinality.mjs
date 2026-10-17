@@ -464,7 +464,7 @@ try {
             "Cached collection requires ready evidence; no query-time preparation polling is permitted",
           );
           assert(
-            ["queued", "processing"].includes(response.state),
+            ["queued", "running"].includes(response.state),
             `Evidence preparation: ${response.state} (${response.reason})`,
           );
           assert(performance.now() < deadline, "Project evidence preparation deadline");

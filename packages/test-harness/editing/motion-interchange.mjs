@@ -310,7 +310,7 @@ try {
   });
   const packaged = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed" && !v.cleanupPending,
+    (v) => v.state === "ready" && !v.cleanupPending,
     "alpha package",
   );
   await service.stop();

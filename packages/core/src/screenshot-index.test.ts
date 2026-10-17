@@ -309,7 +309,10 @@ test("a substituted FIFO is rejected without blocking file validation", async ()
  } finally {catalog.close();}
  `,
     ],
-    { timeout: 1000, encoding: "utf8" },
+    // Opening a FIFO for reading blocks until a writer appears, which never happens here, so a
+    // blocking read never returns. The bound only has to beat that, not a loaded machine's
+    // startup of a TypeScript-transforming Node child.
+    { timeout: 20_000, encoding: "utf8" },
   );
   expect(child.stderr).toBe("");
   expect(child.error).toBeUndefined();
@@ -318,7 +321,7 @@ test("a substituted FIFO is rejected without blocking file validation", async ()
     code: "INVALID_EVIDENCE",
     message: "Invalid retained PNG file or byte receipt",
   });
-});
+}, 30_000);
 test("one damaged generation does not starve unrelated reclamation", async () => {
   const f = await fixture();
   f.index.begin(f.identity);

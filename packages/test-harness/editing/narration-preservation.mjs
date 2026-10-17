@@ -290,7 +290,7 @@ try {
   );
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "narrated export",
   );
   assert.equal(hash(await readFile(exported.output)), hash(await readFile(editedMovie)));

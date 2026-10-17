@@ -176,13 +176,14 @@ const unfinishedSql = `(receipt IS NULL OR abandoning=1 OR ${cleanupPendingSql})
 const admittedSql = "(receipt IS NULL OR abandoning=1 OR assembly IS NOT NULL)";
 
 /** The summary both discovery pages and status report for one intent. */
-function summarize(row: Lifecycle, job: Job["state"] | null) {
+function summarize(row: Lifecycle, job: Pick<Job, "state" | "jobId"> | null) {
   return {
+    jobId: job?.jobId ?? null,
     state: row.receipt
       ? ("committed" as const)
-      : job === "waiting"
+      : job?.state === "waiting"
         ? ("queued" as const)
-        : (job ?? ("not_requested" as const)),
+        : (job?.state ?? ("not_requested" as const)),
     abandoning: !!row.abandoning,
     cleanupPending: cleanupPending(row),
   };
@@ -432,7 +433,6 @@ export class MediaExports {
       state: string;
       reason: string | null;
       retryable: boolean;
-      jobId: string | null;
       published: {
         generation: number;
         issues: Issue[];
@@ -546,7 +546,7 @@ export class MediaExports {
   }
   private dependency(status: {
     state: string;
-    jobId: string | null;
+    jobId?: string | null;
     reason: string | null;
     retryable: boolean;
   }): ReturnType<JobAdmission> {
@@ -793,7 +793,7 @@ export class MediaExports {
     // Keep the bounded ID page outside the lookup; SQLite may otherwise scan every summary.
     const rows = this.owners.catalog.catalog
       .prepare(
-        `SELECT selected.*,j.state FROM (SELECT rowid,exportId,targetKind,targetId,kind,
+        `SELECT selected.*,j.state,j.jobId FROM (SELECT rowid,exportId,targetKind,targetId,kind,
       json_extract(${statusSnapshotSql},'$.revisionId') AS revisionId,receipt IS NOT NULL AS receipt,abandoning,
       assembly IS NOT NULL AS assembly,staging IS NOT NULL AS staging,stagingCleared
       FROM (SELECT rowid AS selectedRowid,exportId AS selectedExportId FROM export_intents WHERE rowid<?
@@ -816,16 +816,19 @@ export class MediaExports {
       kind: Request["kind"];
       revisionId: string;
       state: Job["state"] | null;
+      jobId: string | null;
     })[];
     const exports = rows
       .slice(0, limit)
-      .map(({ rowid: _rowid, exportId, targetId, kind, revisionId, state, ...lifecycle }) => ({
-        exportId,
-        projectId: targetId,
-        kind,
-        revisionId,
-        ...summarize(lifecycle, state),
-      }));
+      .map(
+        ({ rowid: _rowid, exportId, targetId, kind, revisionId, state, jobId, ...lifecycle }) => ({
+          exportId,
+          projectId: targetId,
+          kind,
+          revisionId,
+          ...summarize(lifecycle, state && jobId ? { state, jobId } : null),
+        }),
+      );
     return {
       exports,
       nextCursor:
@@ -877,7 +880,7 @@ export class MediaExports {
     return {
       exportId,
       kind: intent.kind,
-      ...summarize(intent, current?.state ?? null),
+      ...summarize(intent, current),
       recovery,
       projectId: intent.targetId,
       snapshot: intent.snapshot,

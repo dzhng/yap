@@ -155,8 +155,8 @@ const cli = (operation, params = {}) => {
   trace("cli", { operation, status: result.status, reply });
   return reply;
 };
-const health = (expectedUpdateState) =>
-  waitForHealth(() => cli("service.health"), wait, expectedUpdateState);
+const health = (expectedAvailability) =>
+  waitForHealth(() => cli("service.health"), wait, expectedAvailability);
 async function quit(child = appChild) {
   if (!child || child.exitCode !== null || child.signalCode !== null) return;
   child.kill("SIGTERM");
@@ -458,7 +458,8 @@ try {
   launch();
   const disabled = await health("disabled");
   trace("persisted-off-relaunch", { health: disabled });
-  assert.equal(disabled.update.state, "disabled");
+  assert.equal(disabled.update.state, "unavailable");
+  assert.equal(disabled.update.availability, "disabled");
   const requestsBefore = report.trace.filter((item) => item.event === "feed-request").length;
   await delay(1500);
   assert.equal(report.trace.filter((item) => item.event === "feed-request").length, requestsBefore);

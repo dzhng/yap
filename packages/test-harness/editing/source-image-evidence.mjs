@@ -187,12 +187,12 @@ try {
       `${name} job`,
     );
     const stopped = await call("frame.get", params, { transport: "mcp" });
-    assert.equal(stopped.state, crash ? "failed" : "not_requested");
+    assert.equal(stopped.state, crash ? "failed" : "idle");
     assert.equal(stopped.reason, crash ? "interrupted" : "canceled");
     assert.equal(stopped.retryable, true);
     assert.equal(stopped.published, null);
     assert.equal(stopped.jobId, pending.jobId);
-    const retry = await call("frame.retry", params, { transport: "mcp" });
+    const retry = await call("job.retry", { jobId: stopped.jobId }, { transport: "mcp" });
     assert.equal(retry.jobId, pending.jobId);
     const recovered = await ready(params);
     noClock(recovered.published.output);

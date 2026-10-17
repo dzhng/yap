@@ -527,7 +527,14 @@ it("announces its listener and answers health over both the pipe and the socket"
     version: JSON.parse(
       await readFile(new URL("../../macos/package.json", import.meta.url), "utf8"),
     ).version,
-    update: { state: "unavailable", availableVersion: null, blockers: [], error: null },
+    update: {
+      state: "unavailable",
+      jobId: null,
+      availability: "unavailable",
+      availableVersion: null,
+      blockers: [],
+      error: null,
+    },
   });
 });
 

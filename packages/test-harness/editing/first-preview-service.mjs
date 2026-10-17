@@ -62,7 +62,7 @@ const worker = async (operation, params, options) => {
   if (fault.point === "before-commit") await hold(fault, options?.signal);
   const result = await native(operation, params, options);
   if (fault.point === "after-commit" || fault.point === "after-encode") {
-    if (!result.ok || (fault.point === "after-commit" && result.data?.state !== "committed"))
+    if (!result.ok || (fault.point === "after-commit" && result.data?.state !== "ready"))
       throw new Error(`Expected real committed publication: ${JSON.stringify(result)}`);
     await hold(fault, options?.signal, result);
   }

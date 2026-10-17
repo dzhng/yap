@@ -360,7 +360,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }, { transport: "mcp" }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
   );
   const packagePath = join(out, "relocated.zip");
   await rename(exported.output, packagePath);
@@ -413,7 +413,7 @@ try {
   );
   const historicalExport = await poll(
     () => call("export.status", { exportId: historicalExportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
   );
   const historicalPath = join(out, "relocated-history.zip");
   await rename(historicalExport.output, historicalPath);
@@ -773,9 +773,9 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   });
   const expandedExport = await poll(
     () => call("export.status", { exportId: expandedExportId }, { transport: "mcp" }),
-    (value) => value.state === "committed" || value.state === "failed",
+    (value) => value.state === "ready" || value.state === "failed",
   );
-  assert.equal(expandedExport.state, "committed");
+  assert.equal(expandedExport.state, "ready");
   assert.equal(
     expandedExport.snapshot.historyThroughOrdinal,
     expandedExport.snapshot.revisionCount - 1,

@@ -120,7 +120,7 @@ try {
   let exported;
   for (;;) {
     exported = await call("export.status", { exportId });
-    if (exported.state === "committed") break;
+    if (exported.state === "ready") break;
     assert.ok(
       !["failed", "canceled", "unavailable"].includes(exported.state),
       JSON.stringify(exported),

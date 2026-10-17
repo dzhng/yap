@@ -127,7 +127,7 @@ for (const errorCode of ["CLI_TIMEOUT", "TIMEOUT", "CONNECTION_ERROR", "ABORTED"
     };
     await prepareBatch(manifest, { invoke, concurrency: 1 });
     assert.equal(manifest.items[0].import.state, "uncertain");
-    assert.equal(manifest.items[1].import.state, "not_requested");
+    assert.equal(manifest.items[1].import.state, "idle");
     await prepareBatch(manifest, { invoke, concurrency: 1 });
     assert.deepEqual(accepted, [
       manifest.items[0].requestId,
@@ -242,6 +242,40 @@ test("interrupted transcript admission recovers status without restarting a fail
   assert.equal(resumed.items[0].transcripts[0].status.state, "failed");
 });
 
+test("an interrupted transcript admission that never reached the service is requested again", async () => {
+  const manifest = createBatch([
+    { path: "/selected/interview.mov", transcriptStreamIds: ["audio"] },
+  ]);
+  let checkpoint;
+  let transcribes = 0;
+  const invoke = async (operation, params) => {
+    if (operation === "asset.import")
+      return {
+        jobId: "import",
+        state: "ready",
+        published: { generation: 1, output: { assetId: "interview" } },
+      };
+    if (operation === "asset.get") return { assetId: "interview", streams: [] };
+    if (operation === "transcript.transcribe") {
+      if (++transcribes === 1)
+        throw Object.assign(new Error("lost before admission"), { code: "CLI_TIMEOUT" });
+      return { state: "ready", jobId: "transcript", published: { generation: 1 } };
+    }
+    assert.equal(operation, "transcript.get");
+    return { state: "idle", jobId: null, page: null };
+  };
+  await prepareBatch(manifest, {
+    invoke,
+    save: async (state) => {
+      checkpoint = state;
+    },
+  });
+  const resumed = JSON.parse(JSON.stringify(checkpoint));
+  const result = await prepareBatch(resumed, { invoke });
+  assert.equal(transcribes, 2);
+  assert.equal(result.summary.ready, 1);
+});
+
 test("lowering concurrency on resume drains earlier jobs before admitting a new preparation", async () => {
   const manifest = createBatch([
     { path: "/selected/a.mov", transcriptStreamIds: ["audio"] },
@@ -292,7 +326,7 @@ test("resuming drains a pending stream before retrying a failed sibling", async 
     if (operation === "transcript.transcribe") {
       if (params.streamId === "first") return { state: "failed", jobId: "first", retryable: true };
       outstanding.add("second");
-      return { state: "processing", jobId: "second" };
+      return { state: "running", jobId: "second" };
     }
     if (operation === "job.retry") {
       retries++;

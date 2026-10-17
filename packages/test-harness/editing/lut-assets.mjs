@@ -193,7 +193,7 @@ try {
   });
   report.movie = await poll(
     () => call("export.status", { exportId: movieId }),
-    (v) => v.state === "committed" && !v.cleanupPending,
+    (v) => v.state === "ready" && !v.cleanupPending,
     "movie",
   );
   await run(ffmpeg, [
@@ -267,7 +267,7 @@ try {
   });
   report.referenceMovie = await poll(
     () => call("export.status", { exportId: referenceExportId }),
-    (v) => v.state === "committed" && !v.cleanupPending,
+    (v) => v.state === "ready" && !v.cleanupPending,
     "reference movie",
   );
   const decodedMoviePixels = async (path) =>
@@ -340,7 +340,7 @@ try {
   });
   report.package = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed" && !v.cleanupPending,
+    (v) => v.state === "ready" && !v.cleanupPending,
     "package",
   );
   // Only owned scratch state is removed; the external frozen shot and supplied cube files stay intact.

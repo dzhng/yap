@@ -47,7 +47,10 @@ try {
     voiceProfile,
   );
   for (const modelId of ["parakeet", "qwen3-tts-icl-v1"])
-    assert.deepEqual(await call("model.status", { modelId }), { state: "absent" });
+    assert.partialDeepStrictEqual(await call("model.status", { modelId }), {
+      state: "unavailable",
+      presence: "absent",
+    });
   assert.equal(
     (await call("model.status", { modelId: "missing" }, { error: true })).code,
     "NOT_FOUND",
@@ -57,16 +60,20 @@ try {
     runtimeSource: resolve(values.runtime),
     modelSource: resolve(values.model),
   };
-  assert.equal((await call("model.prepare", params)).state, "preparing");
-  assert.equal((await call("model.prepare", params, { transport: "mcp" })).state, "preparing");
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.equal((await call("model.prepare", params)).state, "running");
+  assert.equal((await call("model.prepare", params, { transport: "mcp" })).state, "running");
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   await poll(
     () => call("model.status", { modelId: "qwen3-tts-icl-v1" }, { transport: "mcp" }),
     (value) => value.state === "ready",
     "managed preparation",
   );
-  assert.deepEqual(await call("model.prepare", { modelId: "qwen3-tts-icl-v1" }), {
+  assert.partialDeepStrictEqual(await call("model.prepare", { modelId: "qwen3-tts-icl-v1" }), {
     state: "ready",
+    presence: "ready",
   });
   const started = performance.now();
   let verificationFinished = false;
@@ -84,10 +91,13 @@ try {
     "Catalog reads must advance during the full runtime verification",
   );
   report.catalogReadMs = performance.now() - started;
-  assert.deepEqual(await readiness, { state: "ready" });
+  assert.partialDeepStrictEqual(await readiness, { state: "ready", presence: "ready" });
   await service.stop();
   await service.start();
-  assert.deepEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), { state: "ready" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), {
+    state: "ready",
+    presence: "ready",
+  });
   assert.deepEqual(await call("model.list", {}), discovered);
   await service.stop();
   const models = new Models(join(home, "library"));
@@ -177,19 +187,21 @@ try {
   alteredEntry[0] ^= 0xff;
   try {
     await writeFile(prepared.entry, alteredEntry);
-    assert.deepEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), {
-      state: "invalid",
+    assert.partialDeepStrictEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), {
+      state: "failed",
+      presence: "invalid",
     });
-    assert.deepEqual(
+    assert.partialDeepStrictEqual(
       await call("model.status", { modelId: "qwen3-tts-icl-v1" }, { transport: "mcp" }),
-      {
-        state: "invalid",
-      },
+      { state: "failed", presence: "invalid" },
     );
   } finally {
     await writeFile(prepared.entry, originalEntry);
   }
-  assert.deepEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), { state: "ready" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "qwen3-tts-icl-v1" }), {
+    state: "ready",
+    presence: "ready",
+  });
   report.sameSizeRuntimeMutation = { cli: "invalid", mcp: "invalid", restored: "ready" };
   report.capacityAfter = (await statfs(out)).bavail * capacity.bsize;
   report.passed = true;

@@ -4,7 +4,7 @@ import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { createCli } from "./yap-cli.mjs";
 
-const activeStates = new Set(["waiting", "queued", "running", "processing", "uncertain"]);
+const activeStates = new Set(["queued", "running", "uncertain"]);
 const failedStates = new Set(["failed", "unavailable", "canceled"]);
 const uncertainCodes = new Set([
   "CLI_TIMEOUT",
@@ -43,7 +43,7 @@ export function createBatch(files) {
       path,
       requestId,
       transcriptStreamIds,
-      import: { state: "not_requested" },
+      import: { state: "idle" },
       asset: null,
       transcripts: [],
     };
@@ -140,9 +140,9 @@ export async function prepareBatch(
           }))
         )
           return false;
-      } else item.import = { state: "not_requested" };
+      } else item.import = { state: "idle" };
     }
-    if (["not_requested", "uncertain"].includes(item.import.state)) {
+    if (["idle", "uncertain"].includes(item.import.state)) {
       if (
         !(await request(
           "asset.import",
@@ -175,7 +175,7 @@ export async function prepareBatch(
     for (const streamId of streams) {
       let entry = item.transcripts.find((candidate) => candidate.streamId === streamId);
       if (!entry) {
-        entry = { streamId, status: { state: "not_requested" } };
+        entry = { streamId, status: { state: "idle" } };
         item.transcripts.push(entry);
       }
       if (entry.status.state === "uncertain") {
@@ -201,9 +201,9 @@ export async function prepareBatch(
             }))
           )
             return false;
-        } else entry.status = { state: "not_requested" };
+        } else entry.status = { state: "idle" };
       }
-      if (entry.status.state === "not_requested") {
+      if (entry.status.state === "idle") {
         if (
           !(await request(
             "transcript.transcribe",

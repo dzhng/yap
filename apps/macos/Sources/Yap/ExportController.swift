@@ -130,7 +130,10 @@ final class ExportController {
         Task { @MainActor in
             defer { changed() }
             do throws(ServiceFailure) {
-                let answer = try await call("export.retry", ["exportId": exportId])
+                guard let jobId = state.records.first(where: { $0.exportId == exportId })?.jobId else {
+                    throw ServiceFailure(code: "NOT_READY", message: "Export has no retryable job", retryable: true)
+                }
+                let answer = try await call("job.retry", ["jobId": jobId])
                 guard known(exportId) else { return }
                 state.update(try record(answer, exportId: exportId))
                 state.finish(exportId, failure: nil)

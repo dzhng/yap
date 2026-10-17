@@ -591,7 +591,7 @@ try {
     });
     const exported = await poll(
       () => call("export.status", { exportId }),
-      (value) => value.state === "committed",
+      (value) => value.state === "ready",
       "font package",
     );
     await rm(changedPath);
@@ -744,7 +744,7 @@ try {
     });
     const exported = await poll(
       () => call("export.status", { exportId }),
-      (value) => value.state === "committed",
+      (value) => value.state === "ready",
       "text range export",
     );
     assert.deepEqual(await readFile(movie), await readFile(exported.output));

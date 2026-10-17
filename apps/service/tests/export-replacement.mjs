@@ -178,7 +178,7 @@ test("public new export replaces unchanged Yap-owned bytes and old intent never 
   assert.match(after.toString(), /Revised words/);
   assert.equal(hash(after), second.receipt.sha256);
   assert.deepEqual(second.receipt.replacement.file, first.receipt.file);
-  await f.good("export.retry", { exportId: firstRequest.exportId }, true);
+  await f.good("export.recover", { exportId: firstRequest.exportId }, true);
   assert.deepEqual(await readFile(second.output), after);
   if (process.env.YAP_EXPORT_EVIDENCE)
     await writeFile(
@@ -270,11 +270,18 @@ test(
     }
     assert.deepEqual(await readFile(first.output), before);
     release.resolve();
-    await cancel;
-    const canceled = await f.call("export.status", { exportId: request.exportId }, true);
-    assert.equal(canceled.code, 1, JSON.stringify(canceled));
+    const canceledRecord = await cancel;
+    const canceled = await f.call("export.status", { exportId: request.exportId });
+    assert.equal(canceled.code, 0, JSON.stringify(canceled));
+    assert.equal(canceled.response.ok, true, JSON.stringify(canceled));
+    assert.equal(canceled.response.data.exportId, request.exportId);
+    assert.equal(canceledRecord.exportId, request.exportId);
+    assert.equal(canceledRecord.state, "canceled");
+    assert.equal(canceledRecord.jobId, pending.jobId);
+    assert.equal(canceledRecord.snapshot.revisionId, request.revisionId);
     assert.deepEqual(await readFile(first.output), before);
-    const retried = await f.good("export.retry", { exportId: request.exportId }, true);
+    await f.good("job.retry", { jobId: pending.jobId }, true);
+    const retried = await f.good("export.status", { exportId: request.exportId }, true);
     assert.deepEqual(retried.receipt.replacement.file, first.receipt.file);
     assert.match(await readFile(retried.output, "utf8"), /After cancellation/);
   },
@@ -347,7 +354,8 @@ test(
     assert.equal(lost.code, 1, JSON.stringify(lost));
     assert.equal(lost.response.data.receipt, null);
     assert.match(await readFile(won.output, "utf8"), /First publisher/);
-    await f.call("export.retry", { exportId: second.exportId }, true);
+    const secondStatus = await f.good("export.status", { exportId: second.exportId });
+    if (secondStatus.jobId) await f.call("job.retry", { jobId: secondStatus.jobId }, true);
     assert.match(await readFile(won.output, "utf8"), /First publisher/);
   },
 );
@@ -400,7 +408,7 @@ for (const mode of ["foreign", "symlink"])
     const visible = await readFile(first.output);
     assert.match(visible.toString(), /Uncertain new output/);
     await f.call("export.recover", { exportId: request.exportId }, true);
-    await f.call("export.retry", { exportId: request.exportId }, true);
+    await f.call("job.retry", { jobId: failed.response.data.jobId }, true);
     const abandoned = await f.call("export.abandon", { exportId: request.exportId });
     assert.equal(abandoned.code, 1, JSON.stringify(abandoned));
     assert.deepEqual(await readFile(first.output), visible);
@@ -447,4 +455,162 @@ test("an SRT export of literal markup publishes and reports the issue in its sta
     status.issues.map((issue) => issue.code),
     ["srt-literal-markup"],
   );
+});
+
+test("a failed export recovers through job.retry with the jobId its status returns", async (t) => {
+  let failures = 1,
+    allocations = 0;
+  const f = await fixture(t, (worker) => async (operation, params, options) => {
+    if (operation === "publication.allocate") {
+      allocations++;
+      if (failures-- > 0)
+        return {
+          ok: false,
+          error: {
+            code: "MEDIA_WORKER_UNAVAILABLE",
+            message: "Injected publication failure",
+            retryable: true,
+            details: {},
+          },
+        };
+    }
+    return worker(operation, params, options);
+  });
+  const request = f.request();
+  const created = await f.call("export.create", request, true);
+  assert.equal(created.code, 1, JSON.stringify(created));
+  const failed = await f.good("export.status", { exportId: request.exportId });
+  assert.equal(failed.state, "failed", JSON.stringify(failed));
+  assert.equal(failed.retryable, true, JSON.stringify(failed));
+  assert.equal(failed.jobId, created.response.data.jobId);
+  assert.equal(failed.receipt, null);
+  await assert.rejects(readFile(join(f.output, request.leaf)), { code: "ENOENT" });
+  const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
+  assert.equal(retried.jobId, failed.jobId);
+  const ready = await f.good("export.status", { exportId: request.exportId });
+  assert.equal(ready.state, "ready", JSON.stringify(ready));
+  assert.equal(ready.jobId, failed.jobId);
+  assert.equal(allocations, 2);
+  const bytes = await readFile(ready.output);
+  assert.match(bytes.toString(), /First words/);
+  assert.equal(hash(bytes), ready.receipt.sha256);
+});
+
+test("a failed preview recovers through job.retry with the jobId preview.get returns", async (t) => {
+  let failures = 1,
+    renders = 0;
+  const f = await fixture(t, (worker) => async (operation, params, options) => {
+    if (operation === "media.renderCompositionMovie") {
+      renders++;
+      if (failures-- > 0)
+        return {
+          ok: false,
+          error: {
+            code: "MEDIA_WORKER_UNAVAILABLE",
+            message: "Injected render failure",
+            retryable: true,
+            details: {},
+          },
+        };
+    }
+    return worker(operation, params, options);
+  });
+  // The fixture's text clip uses a font the native renderer cannot read; silence renders.
+  const selection = await silentProject(f, "silent-preview");
+  const pending = await f.good("preview.get", selection);
+  assert.ok(pending.jobId, JSON.stringify(pending));
+  const deadline = performance.now() + 10000;
+  let failed = pending;
+  while (failed.state !== "failed") {
+    assert.ok(["queued", "running"].includes(failed.state), JSON.stringify(failed));
+    assert.ok(performance.now() < deadline, JSON.stringify(failed));
+    failed = await f.good("preview.get", selection);
+  }
+  assert.equal(failed.jobId, pending.jobId);
+  assert.equal(failed.retryable, true);
+  assert.equal(failed.published, null);
+  assert.equal(failed.delivery, null);
+  assert.equal(renders, 1);
+  await f.good("job.retry", { jobId: failed.jobId }, true);
+  const ready = await f.good("preview.get", selection);
+  assert.equal(ready.state, "ready", JSON.stringify(ready));
+  assert.equal(ready.jobId, failed.jobId);
+  assert.equal(renders, 2);
+  // The CLI consumes the delivery and hands back the movie it wrote.
+  const movie = await readFile(ready.output);
+  assert.equal(movie.subarray(4, 8).toString(), "ftyp");
+});
+
+/** A short silent project the native renderer can complete without any media assets. */
+async function silentProject(f, requestId) {
+  const created = await f.good("project.create", {
+    requestId,
+    canvas: {
+      width: 32,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#204080ff",
+    },
+  });
+  const silent = await f.good("edit.apply", {
+    projectId: created.project.projectId,
+    requestId: `${requestId}-silence`,
+    expectedRevisionId: created.revision.id,
+    operations: [
+      { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
+      {
+        operation: "place",
+        clip: {
+          trackId: { label: "audio" },
+          source: { kind: "silence" },
+          placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
+        },
+      },
+    ],
+  });
+  return { projectId: created.project.projectId, revisionId: silent.revision.id };
+}
+
+test("job.retry on a failed export also retries the export's own failed audio render", async (t) => {
+  let failures = 1,
+    mixes = 0;
+  const f = await fixture(t, (worker) => async (operation, params, options) => {
+    if (operation === "media.mixCompositionAudio") {
+      mixes++;
+      if (failures-- > 0)
+        return {
+          ok: false,
+          error: {
+            code: "MEDIA_WORKER_UNAVAILABLE",
+            message: "Injected audio render failure",
+            retryable: true,
+            details: {},
+          },
+        };
+    }
+    return worker(operation, params, options);
+  });
+  const request = {
+    ...(await silentProject(f, "audio-export")),
+    kind: "audio",
+    directory: f.output,
+    leaf: "audio.wav",
+    exportId: randomUUID(),
+  };
+  const created = await f.call("export.create", request, true);
+  assert.equal(created.code, 1, JSON.stringify(created));
+  const failed = await f.good("export.status", { exportId: request.exportId });
+  assert.equal(failed.state, "failed", JSON.stringify(failed));
+  assert.equal(failed.retryable, true);
+  assert.equal(failed.jobId, created.response.data.jobId);
+  assert.equal(mixes, 1);
+  const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
+  assert.equal(retried.jobId, failed.jobId);
+  const ready = await f.good("export.status", { exportId: request.exportId });
+  assert.equal(ready.state, "ready", JSON.stringify(ready));
+  assert.equal(ready.jobId, failed.jobId);
+  assert.equal(mixes, 2);
+  const wave = await readFile(ready.output);
+  assert.equal(wave.subarray(0, 4).toString(), "RIFF");
+  assert.equal(hash(wave), ready.receipt.sha256);
 });

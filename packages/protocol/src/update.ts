@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { workStateSchema } from "./work.js";
 
 /** Stable reasons name lifetime owners, never inferred permission to cancel their work. */
 export const updateBlockerSchema = z.enum([
@@ -15,16 +16,9 @@ export const updateBlockerSchema = z.enum([
   "startup",
 ]);
 export const updateStatusSchema = z.strictObject({
-  state: z.enum([
-    "unavailable",
-    "disabled",
-    "idle",
-    "checking",
-    "downloading",
-    "waiting",
-    "installing",
-    "failed",
-  ]),
+  state: workStateSchema,
+  jobId: z.string().min(1).nullable(),
+  availability: z.enum(["available", "disabled", "unavailable"]),
   availableVersion: z.string().min(1).nullable(),
   blockers: z.array(z.string().min(1)),
   error: z

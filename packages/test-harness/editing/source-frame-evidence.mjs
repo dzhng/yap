@@ -349,7 +349,7 @@ try {
   assert.equal(canceled.published, null);
   assert.ok(canceled.delivery == null);
   assert.equal((await call("frame.get", canceledParams, { transport: "mcp" })).jobId, cancel.jobId);
-  await call("frame.retry", canceledParams, { transport: "mcp" });
+  await call("job.retry", { jobId: cancel.jobId }, { transport: "mcp" });
   await ready(canceledParams);
   const retried = await call("frame.get", canceledParams, { output: join(out, "retried-cli.png") });
   provenance(retried, first, 250000, 200000);
@@ -357,7 +357,10 @@ try {
   report.checks.cancelRetry = true;
   for (const [file, original] of originals) assert.equal(hash(await readFile(file)), original);
   report.originals = [...originals].map(([file, sha256]) => ({ file, sha256 }));
-  assert.deepEqual(await call("model.status", { modelId: "parakeet" }), { state: "absent" });
+  assert.partialDeepStrictEqual(await call("model.status", { modelId: "parakeet" }), {
+    state: "unavailable",
+    presence: "absent",
+  });
   report.passed = true;
 } catch (error) {
   report.error = { message: error.message, stack: error.stack };

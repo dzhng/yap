@@ -50,6 +50,7 @@ final class PreviewController {
     private var renewAt = Date.distantPast
     private var reading = false
     private var requestOperation = "preview.get"
+    private var workJobId: String?
     private var polling = false
     /// The project's name as people know it; its identifiers stay out of the window.
     var projectTitle: (String) -> String? = { _ in nil }
@@ -186,10 +187,10 @@ final class PreviewController {
                 lease = renewed
                 renewAt = now().addingTimeInterval(10)
             } else {
-                var params: [String: Any] = target.parameters
-                if let pinnedRevision { params["revisionId"] = pinnedRevision }
+                var params: [String: Any] = requestOperation == "job.retry" ? ["jobId": workJobId as Any] : target.parameters
+                if requestOperation != "job.retry", let pinnedRevision { params["revisionId"] = pinnedRevision }
                 if let previewRange = initialPreviewRange() { params["range"] = previewRange }
-                params["maxLongEdge"] = draftMaxLongEdge
+                if requestOperation != "job.retry" { params["maxLongEdge"] = draftMaxLongEdge }
                 let data = try await call(requestOperation, params)
                 // Decode the lease separately so a late or otherwise invalid ready answer
                 // releases the service pin rather than leaving it until expiration.
@@ -200,6 +201,7 @@ final class PreviewController {
                 }
                 do {
                     let answer = try JSONDecoder().decode(Answer.self, from: data)
+                    workJobId = answer.jobId
                     guard answer.target == target, !answer.revisionId.isEmpty,
                         pinnedRevision == nil || pinnedRevision == answer.revisionId else {
                         throw InvalidAnswer()
@@ -229,7 +231,7 @@ final class PreviewController {
                         polling = false
                         presentation.show(title: title, message: answer.reason ?? "Preview could not be prepared.",
                             canRetry: answer.dependency == nil && answer.retryable == true)
-                    } else if answer.state == "queued" || answer.state == "processing" {
+                    } else if answer.state == "queued" || answer.state == "running" {
                         presentation.show(title: title, message: "Preparing preview — \(answer.state)…", canRetry: false)
                     } else {
                         throw InvalidAnswer()
@@ -248,7 +250,8 @@ final class PreviewController {
     private func retryPreview() {
         guard let target, self.revisionId != nil, !reading else { return }
         presentation.show(title: title(for: target), message: "Retrying preview…", canRetry: false)
-        requestOperation = "preview.retry"
+        guard let workJobId else { return }
+        requestOperation = "job.retry"
         polling = true
         tick()
     }
@@ -408,9 +411,10 @@ final class PreviewController {
         let state: String
         let reason: String?
         let retryable: Bool?
+        let jobId: String?
         let dependency: Dependency?
         let published: Published?
-        private enum Keys: String, CodingKey { case revisionId, range, state, reason, retryable, dependency, published }
+        private enum Keys: String, CodingKey { case revisionId, range, state, reason, retryable, jobId, dependency, published }
         init(from decoder: Decoder) throws {
             let fields = try decoder.container(keyedBy: Keys.self)
             target = try MediaTarget(from: decoder)
@@ -419,6 +423,7 @@ final class PreviewController {
             state = try fields.decode(String.self, forKey: .state)
             reason = try fields.decodeIfPresent(String.self, forKey: .reason)
             retryable = try fields.decodeIfPresent(Bool.self, forKey: .retryable)
+            jobId = try fields.decodeIfPresent(String.self, forKey: .jobId)
             dependency = try fields.decodeIfPresent(Dependency.self, forKey: .dependency)
             published = try fields.decodeIfPresent(Published.self, forKey: .published)
         }

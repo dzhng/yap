@@ -204,36 +204,42 @@ await withReadinessProcesses(
       model: parakeetModel.repo,
       modelRevision: parakeetModel.revision,
     });
-    assert.deepEqual(await call(socket, "model.status", { modelId: "parakeet" }), {
-      state: "absent",
+    assert.partialDeepStrictEqual(await call(socket, "model.status", { modelId: "parakeet" }), {
+      state: "unavailable",
+      presence: "absent",
     });
     const params = { modelId: "parakeet", modelSource: source };
     const responses = await Promise.all([
       call(socket, "model.prepare", params, true),
       call(socket, "model.prepare", params),
     ]);
-    assert(responses.some((status) => status.state === "preparing"));
+    assert(responses.some((status) => status.state === "running"));
     let received = 0;
     const deadline = performance.now() + 180000;
     for (;;) {
       const status = await call(socket, "model.status", { modelId: "parakeet" }, true);
       if (status.state === "ready") break;
-      assert.equal(status.state, "preparing", JSON.stringify(status));
+      assert.equal(status.state, "running", JSON.stringify(status));
       assert.equal(status.totalBytes, declared.preparation.modelBytes);
       assert(status.receivedBytes >= received);
       received = status.receivedBytes;
       assert(performance.now() < deadline, "Existing readiness fixture budget exhausted");
       await delay(100);
     }
-    assert.deepEqual(await call(socket, "model.prepare", params), { state: "ready" });
+    assert.partialDeepStrictEqual(await call(socket, "model.prepare", params), {
+      state: "ready",
+      presence: "ready",
+    });
     await processes.stop();
     const reopened = await processes.start();
-    assert.deepEqual(await call(reopened, "model.status", { modelId: "parakeet" }), {
+    assert.partialDeepStrictEqual(await call(reopened, "model.status", { modelId: "parakeet" }), {
       state: "ready",
+      presence: "ready",
     });
-    assert.deepEqual(await call(reopened, "model.status", { modelId: "parakeet" }, true), {
-      state: "ready",
-    });
+    assert.partialDeepStrictEqual(
+      await call(reopened, "model.status", { modelId: "parakeet" }, true),
+      { state: "ready", presence: "ready" },
+    );
     await processes.stop();
     const models = new Models(join(home, "library"));
     assert.deepEqual(await models.status("parakeet"), { state: "ready" });

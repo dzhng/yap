@@ -157,7 +157,7 @@ async function audio(selection, label) {
 async function exported(exportId) {
   return poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "package export",
   );
 }

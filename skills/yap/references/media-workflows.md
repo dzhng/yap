@@ -92,7 +92,7 @@ downloads/acquires and verifies the selected model/runtime; it does not perform
 transcription, alignment, speaker analysis or voice generation. Supply verified
 local sources when required instead of guessing temporary paths or installing
 dependencies during reads. Keep incidental probes read-only. Diagnose
-failed/canceled work before explicit transcript retry and surface the exact returned
+failed/canceled work before `job.retry` with the transcript jobId and surface the exact returned
 reason when a retry still fails. Phrase search can cross accepted inference seams,
 but cannot cross unavailable, unobserved or skipped source support. Preserve
 overlapping estimates and zero-width instant pins as returned. Unfiltered source
@@ -138,8 +138,7 @@ combines `audio.extract` with fresh rendered-speech recognition; prepare require
 speech models through the advertised model operation. Keep the returned rendered
 generation and read it with `transcript.render.get`; preserve PCM origin, model
 provenance and both PCM/project ranges. These reads need no inference. Diagnose
-failed/canceled work before explicit `transcript.render.retry` with the same
-selection. Missing source support refuses rather than reading as silence; the
+failed/canceled work before `job.retry` with the returned jobId. Missing source support refuses rather than reading as silence; the
 refusal names the gaps, so select a range on one side of them. Fresh ASR may complete
 a clipped word: compare it with source evidence and inspect actual boundary audio
 before deciding that a join is clean or defective.
@@ -401,7 +400,7 @@ to describe visible changes, rather than assuming an edit edge is a new picture.
 A raw source image excludes
 project processing, crop/zoom and capture overlays. An unavailable source gap is
 missing evidence, not a black frame. Poll the same selection while processing;
-inspect failure before explicit frame retry. For batches, preserve per-item order
+inspect failure before `job.retry` with the returned frame jobId. For batches, preserve per-item order
 and errors, and deliver only ready pictures. Check the returned dimensions and
 sample identity; an inspection size bound does not author a crop or aspect ratio.
 
@@ -409,7 +408,7 @@ When the installed release advertises `cursor.render`, use it for the visible
 pointer trail during feedback review. It follows the same source/project selector
 families and pinning rules as `cursor.raw` and frame delivery, accepts explicit
 frame times and `trailUs`, and is read-only: its render plan is ephemeral and does
-not add a `processing.set` step. Poll and retry the same pinned request, preserve
+not add a `processing.set` step. Poll the same pinned request and use `job.retry` with its returned jobId, preserve
 per-frame errors and delivery receipts, and treat absent/off-crop/gapped pointer
 coverage as evidence. Use `cursor.raw` for exact coordinates and capture events;
 `frame.get` remains intentionally overlay-free.
@@ -419,7 +418,7 @@ edited composition. Source selection uses asset/stream and optional acquisition;
 project selection pins a revision and optionally a video tap, defaulting to processed
 output. Project indexes cover the whole revision, including holds and background.
 Poll the same selection while preparation is pending; inspect terminal failures
-before explicit index retry, which also recovers retryable prerequisites. Read
+before `job.retry` with the returned index jobId, which also recovers retryable prerequisites. Read
 `index.coverage` as well as entry pages, following every returned cursor. Fetch
 images using returned complete references; do not
 reconstruct their revision, generation, tap or size. Preserve per-image batch errors.
@@ -480,7 +479,7 @@ Choose the advertised standalone format in `settings`; omission selects the
 lossless project WAV rendition. AAC/M4A settings explicitly choose output rate,
 layout and encoding controls. Audio export works while video remains; removing
 video is a separate undoable edit only when the user's task requires it.
-Poll the same `exportId` until committed and deliver its actual output path.
+Poll the same `exportId` until `ready` and deliver its actual output path.
 Preserve the original request for replay/retry; changed settings need a new export
 identity. A ready `audio.get` rendition is inspection audio, not a published export.
 Do not substitute video output, raw source audio or an unsupported codec.
@@ -526,7 +525,7 @@ clock does not establish exact GIF timing. Keep that difference visible.
 ## Editable project transfer
 
 For an editable project transfer, discover `export.create` package support and
-poll its durable export intent until committed. Open the resulting ZIP, inspect
+poll its durable export intent until `ready`. Open the resulting ZIP, inspect
 `package.status`, then explicitly adopt it with a stable request ID. Poll the same
 adoption request; its ready result supplies durable project/revision IDs. Use those
 IDs for history, rendering and edits. Opening alone owns a temporary package

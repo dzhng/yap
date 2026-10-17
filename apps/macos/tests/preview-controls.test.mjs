@@ -192,10 +192,10 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             await until { !retry.view.messages.isEmpty }
             precondition(retry.view.messages.last!.1 == !dependency)
             if !dependency {
-                retry.service.answer("preview.retry", ready)
+                retry.service.answer("job.retry", ready)
                 retry.view.retry?()
                 await until { !retry.view.movies.isEmpty }
-                let request = retry.service.calls.first { $0.0 == "preview.retry" }!.1
+                let request = retry.service.calls.first { $0.0 == "job.retry" }!.1
                 precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]))
             }
             retry.owner.close()
@@ -267,7 +267,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         replacement.owner.open("replacement")
         await until { replacement.view.movies.count == 2 && replacement.service.closed == [token] }
         oldClose(); oldRetry(); oldFailure("late decoder failure")
-        precondition(replacement.view.active && replacement.failures.values.isEmpty && replacement.service.count("preview.retry") == 0)
+        precondition(replacement.view.active && replacement.failures.values.isEmpty && replacement.service.count("job.retry") == 0)
         replacement.owner.close(); await until { replacement.service.closed == [token, "replacement-token"] }
 
         let replacedRenewal = Rig(start); await replacedRenewal.ready(target, ready)

@@ -456,7 +456,7 @@ try {
   );
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "native publication",
   );
   assert.equal(hash(await readFile(join(out, "exported.mp4"))), renderedA.sha256);

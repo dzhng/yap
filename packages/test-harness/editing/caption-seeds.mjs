@@ -166,7 +166,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
   });
   const exported = await poll(
     () => api("export.status", { exportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "seeded export",
   );
   assert.deepEqual(await readFile(movie), await readFile(exported.output));
@@ -339,7 +339,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
   });
   const packaged = await poll(
     () => api("export.status", { exportId: packageExport }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "caption package",
   );
   await service.stop();

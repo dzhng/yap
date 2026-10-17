@@ -217,7 +217,7 @@ import YapControls
         calls.append((operation, params))
         switch operation {
         case "export.list": return json(pages.removeFirst())
-        case "export.retry":
+        case "job.retry":
             let id = params["exportId"] as! String
             if let refusal = refusedRetries[id] { throw refusal }
             if let accepted = acceptedRetries[id] { statuses[id] = accepted }
@@ -346,7 +346,7 @@ import YapControls
         await until { exports.state.readFailures[projectId] == nil }
 
         // A stopped export with an accepted-but-unreadable retry is recovered by status alone.
-        let committed = receipts.first { $0["projectId"] != nil && $0["state"] as? String == "committed" }!
+        let committed = receipts.first { $0["projectId"] != nil && $0["state"] as? String == "ready" }!
         var stopped = project
         stopped["state"] = "failed"
         stopped["retryable"] = true
@@ -371,7 +371,7 @@ import YapControls
             await until { changes > beforeRead }
             script.lostRetryReplies[projectId] = code == "INVALID_RESPONSE" ? nil
                 : ServiceFailure(code: code, message: "Accepted retry reply unavailable")
-            let mutationsBeforeRecovery = script.calls.filter { $0.0 == "export.retry" }.count
+            let mutationsBeforeRecovery = script.calls.filter { $0.0 == "job.retry" }.count
             exports.retry(projectId)
             await until { exports.state.acting[projectId] == nil }
             precondition(exports.state.observed.contains(projectId), "Accepted retry uncertainty \(code) needs status recovery even when the old receipt was settled")
@@ -379,7 +379,7 @@ import YapControls
             exports.tick()
             await until { exports.state.records.last?.committed == true }
             precondition(exports.state.readFailures[projectId] == nil && !exports.state.observed.contains(projectId))
-            precondition(script.calls.filter { $0.0 == "export.retry" }.count == mutationsBeforeRecovery + 1,
+            precondition(script.calls.filter { $0.0 == "job.retry" }.count == mutationsBeforeRecovery + 1,
                 "Status recovery does not resend the accepted retry for \(code)")
         }
         script.lostRetryReplies[projectId] = nil
@@ -413,7 +413,7 @@ import YapControls
         precondition(pending.target == originalProject.target && pending.revisionId == originalProject.revisionId
             && pending.directory == originalProject.directory && pending.leaf == originalProject.leaf)
         precondition(pending.committed && pending.cleanupPending && !pending.settled)
-        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.retry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
+        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "job.retry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
         precondition(!exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.dismiss.\(projectId)" })
         script.retries[projectId] = script.json(committed)
         exports.retry(projectId)
@@ -421,7 +421,7 @@ import YapControls
         let settled = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(committed))
         precondition(exports.state.records == [settled] && exports.state.failures[projectId] == nil)
         precondition(settled.settled && exports.state.observed.isEmpty)
-        let retries = script.calls.filter { $0.0 == "export.retry" }.map { $0.1 }
+        let retries = script.calls.filter { $0.0 == "job.retry" }.map { $0.1 }
         precondition(retries.allSatisfy { NSDictionary(dictionary: $0).isEqual(to: ["exportId": projectId]) },
             "Retries retain the original export identity and do not choose a new owner or destination")
         exports.reveal(projectId)

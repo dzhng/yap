@@ -24,7 +24,7 @@ test("installed fixture retains actual source bytes and public facts after servi
     assert.equal(before.recording.state, "interrupted");
     assert.equal(before.project.currentRevisionId, manifest.revisionId);
     assert.equal(before.job.state, "ready");
-    assert.equal(before.export.state, "committed");
+    assert.equal(before.export.state, "ready");
     assert.equal(before.originalSha256, source.sha256);
     assert.deepEqual(await readFile(media), await readFile(manifest.originalPath));
     await service.close();

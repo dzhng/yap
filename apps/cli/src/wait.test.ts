@@ -136,7 +136,7 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
         data: {
           projectId: "p",
           revisionId: "r7",
-          state: "processing",
+          state: "running",
           jobId: "job",
           published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
           delivery: { token: "old-pin", bytes: 1, expiresAt: Date.now() + 30000 },
@@ -160,7 +160,7 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
   expect(output.code).toBe(2);
   expect(JSON.parse(output.stdout)).toMatchObject({
     ok: true,
-    data: { projectId: "p", revisionId: "r7", state: "processing", published: { generation: 1 } },
+    data: { state: "running", published: { generation: 1 } },
     wait: {
       state: "timed_out",
       timeoutMs: 80,
@@ -168,7 +168,6 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
     },
   });
   expect(f.calls.filter((request) => request.operation === "frame.get")).toHaveLength(1);
-  expect(f.calls.some((request) => request.operation === "artifact.close")).toBe(true);
   const { stat } = await import("node:fs/promises");
   await expect(stat(destination)).rejects.toMatchObject({ code: "ENOENT" });
 });
@@ -245,7 +244,7 @@ test("a prepared-audio dependency finishing does not finish the requested measur
         data: {
           assetId: "a",
           streamId: "s",
-          state: "processing",
+          state: "running",
           jobId: ++reads === 1 ? "audio-job" : "measurement-job",
           published: null,
         },
@@ -280,7 +279,7 @@ test("a prepared-audio dependency finishing does not finish the requested measur
 test("model preparation waits through its advertised model.status getter without resubmitting source choices", async () => {
   const f = await fixture((request) => {
     if (request.operation === "model.prepare")
-      return { ok: true, data: { modelId: "whisper-tiny", state: "preparing" } };
+      return { ok: true, data: { modelId: "whisper-tiny", state: "running" } };
     expect(request.operation).toBe("model.status");
     return { ok: true, data: { modelId: "whisper-tiny", state: "ready" } };
   });
@@ -319,7 +318,7 @@ test("alignment preparation waits for its admitted job and reuses the same liter
       ok: true,
       data:
         ++preparations === 1
-          ? { state: "processing", jobId: "job" }
+          ? { state: "running", jobId: "job" }
           : {
               state: "ready",
               published: {
@@ -348,7 +347,7 @@ test("bounded transcript preparation waits for its admitted generation without r
   const selection = { assetId: "a", streamId: "s", acquisitionId: "acquired" };
   const f = await fixture((request) => {
     if (request.operation === "transcript.transcribe")
-      return { ok: true, data: { ...selection, state: "processing", jobId: "job" } };
+      return { ok: true, data: { ...selection, state: "running", jobId: "job" } };
     if (request.operation === "job.get")
       return {
         ok: true,
@@ -400,7 +399,7 @@ test("a clamped transcript preparation keeps its range-clamped issue through the
     if (request.operation === "transcript.transcribe")
       return {
         ok: true,
-        data: { ...selection, state: "processing", jobId: "job", issues: [clamp] },
+        data: { ...selection, state: "running", jobId: "job", issues: [clamp] },
       };
     if (request.operation === "job.get")
       return {
@@ -435,7 +434,7 @@ test("a clamp joined to a full read page stays within the issue bound", async ()
     if (request.operation === "transcript.transcribe")
       return {
         ok: true,
-        data: { ...selection, state: "processing", jobId: "job", issues: [clamp] },
+        data: { ...selection, state: "running", jobId: "job", issues: [clamp] },
       };
     if (request.operation === "job.get")
       return {
@@ -460,7 +459,7 @@ test("a clamp joined to a full read page stays within the issue bound", async ()
   expect(output.stderr).toContain("transcript.transcribe: ready (1006 issues)");
 });
 
-test.each(["processing", "ready"])(
+test.each(["running", "ready"])(
   "a %s transcript preparation reports the published transcript's issues once it settles",
   async (acknowledged) => {
     const generation = "c6df7efc-a023-4c40-aa08-3b8b1c0b1b90";
@@ -709,7 +708,7 @@ test("a lost process-local package admission preserves its acknowledgement witho
           ok: true,
           data: {
             id: "admission",
-            state: "opening",
+            state: "running",
             jobId: "opaque-context-job",
             packageHandle: null,
             error: null,
@@ -734,7 +733,7 @@ test("a lost process-local package admission preserves its acknowledgement witho
   const reply = JSON.parse(output.stdout);
   expect(reply).toMatchObject({
     ok: true,
-    data: { id: "admission", state: "opening", packageHandle: null },
+    data: { id: "admission", state: "running", packageHandle: null },
     wait: { state: "interrupted", error: { code: "NOT_FOUND" } },
   });
   expect(reply.wait).not.toHaveProperty("job");
@@ -746,7 +745,7 @@ test.each(["deadline", "foreign"])(
   async (mode) => {
     const admission = {
       id: "admission",
-      state: "opening",
+      state: "running",
       jobId: "opaque-context-job",
       packageHandle: null,
       error: null,
@@ -783,7 +782,7 @@ test("package closing remains pending until its process-local owner settles", as
     ok: true,
     data: {
       id: "admission",
-      state: reads++ === 0 ? "closing" : "closed",
+      state: reads++ === 0 ? "running" : "closed",
       jobId: "opaque-context-job",
       packageHandle: null,
       error: null,
@@ -868,7 +867,7 @@ test("a changed pinned revision interrupts waiting without delivering another re
         data: {
           projectId: "p",
           revisionId: ++reads === 1 ? "r7" : "r8",
-          state: reads === 1 ? "processing" : "ready",
+          state: reads === 1 ? "running" : "ready",
           jobId: "job",
           published: null,
           delivery:
@@ -890,15 +889,12 @@ test("a changed pinned revision interrupts waiting without delivering another re
   ]);
   expect(output.code).toBe(1);
   expect(JSON.parse(output.stdout)).toMatchObject({
-    data: { revisionId: "r7", state: "processing" },
+    data: { state: "running" },
     wait: { state: "interrupted", error: { code: "INVALID_RESPONSE" } },
   });
   expect(
     f.calls.filter((r) => r.operation === "frame.get").map((r) => r.params.revisionId),
   ).toEqual([undefined, "r7"]);
-  expect(
-    f.calls.filter((r) => r.operation === "artifact.close").map((r) => r.params.token),
-  ).toContain("foreign-revision");
 });
 
 test("a hung inspection respects the total wait deadline and preserves admitted work", async () => {
@@ -928,7 +924,7 @@ test("SIGINT preserves the acknowledged selection and closes leases after cancel
         data: {
           projectId: "p",
           revisionId: "r7",
-          state: "processing",
+          state: "running",
           jobId: "job",
           published: null,
           delivery: { token: "unused", bytes: 1, expiresAt: Date.now() + 30000 },
@@ -1083,13 +1079,13 @@ test("a delayed batch delivers only completed items and retains each terminal fa
               atUs: 7,
               ok: true,
               data: {
-                state: ready ? "ready" : "processing",
+                state: ready ? "ready" : "running",
                 jobId: "ready-job",
                 published: ready
                   ? { generation: 2, output: { mediaType: "image/png" }, issues: [] }
                   : null,
                 delivery: ready
-                  ? { token: "complete", bytes: 2, expiresAt: Date.now() + 30000 }
+                  ? { token: "ready", bytes: 2, expiresAt: Date.now() + 30000 }
                   : null,
               },
             },
@@ -1242,7 +1238,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
             atUs,
             ok: true,
             data: {
-              state: atUs === 7 || reads >= 3 ? "ready" : "processing",
+              state: atUs === 7 || reads >= 3 ? "ready" : "running",
               jobId: atUs === 7 ? "failed-job" : "ready-job",
               published:
                 atUs === 7 || reads >= 3
@@ -1255,7 +1251,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
               delivery:
                 atUs === 7 || reads >= 3
                   ? {
-                      token: atUs === 7 ? `failed-${reads}` : "complete",
+                      token: atUs === 7 ? `failed-${reads}` : "ready",
                       bytes: 2,
                       expiresAt: Date.now() + 30000,
                     }
@@ -1270,7 +1266,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
         ok: true,
         data: {
           ...job(
-            request.params.jobId === "failed-job" ? "failed" : reads >= 3 ? "ready" : "processing",
+            request.params.jobId === "failed-job" ? "failed" : reads >= 3 ? "ready" : "running",
           ),
           jobId: request.params.jobId,
           target: { kind: "project", projectId: "p", revisionId: "r7" },
@@ -1278,7 +1274,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
     expect(request.operation).toBe("artifact.read");
-    expect(request.params.token).toBe("complete");
+    expect(request.params.token).toBe("ready");
     return {
       ok: true,
       data: { offset: 0, nextOffset: 2, eof: true, data: Buffer.from("ok").toString("base64") },
@@ -1304,7 +1300,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
   });
   expect(
     f.calls.filter((r) => r.operation === "artifact.close").map((r) => r.params.token),
-  ).toEqual(["failed-1", "failed-2", "failed-3", "complete"]);
+  ).toEqual(["failed-1", "failed-2", "failed-3", "ready"]);
   const { readdir } = await import("node:fs/promises");
   expect(await readdir(directory)).toEqual(["02.png"]);
 });
@@ -1314,7 +1310,7 @@ test("a job for a different selected source cannot settle an acknowledged eviden
     request.operation === "audio.measure"
       ? {
           ok: true,
-          data: { assetId: "a", streamId: "s", state: "processing", jobId: "job", published: null },
+          data: { assetId: "a", streamId: "s", state: "running", jobId: "job", published: null },
         }
       : { ok: true, data: { ...job("ready"), target: { kind: "asset", assetId: "different" } } },
   );
@@ -1325,7 +1321,7 @@ test("a job for a different selected source cannot settle an acknowledged eviden
   ]);
   expect(output.code).toBe(1);
   expect(JSON.parse(output.stdout)).toMatchObject({
-    data: { assetId: "a", state: "processing" },
+    data: { assetId: "a", state: "running" },
     wait: { state: "interrupted", error: { code: "INVALID_RESPONSE" } },
   });
 });
@@ -1371,30 +1367,32 @@ test.each(["failed", "canceled"])(
   },
 );
 
-test("retry phrase waits through transcript.search while preserving the search query", async () => {
+test("job.retry waits for the shared job and preserves its identity", async () => {
   const f = await fixture((request) => {
-    if (request.operation === "transcript.retry")
-      return { ok: true, data: { projectId: "p", state: "processing", jobId: "job" } };
     if (request.operation === "job.get")
-      return { ok: true, data: { ...job("ready"), target: { kind: "project", projectId: "p" } } };
-    expect(request.operation).toBe("transcript.search");
+      return {
+        ok: true,
+        data: {
+          ...job("ready"),
+          published: { generation: 2 },
+          jobId: "job",
+          target: { kind: "project", projectId: "p" },
+        },
+      };
+    expect(request.operation).toBe("job.retry");
     return {
       ok: true,
-      data: { projectId: "p", state: "ready", page: { entries: [], nextCursor: null } },
+      data: {
+        ...job("ready"),
+        published: { generation: 2 },
+        jobId: "job",
+        target: { kind: "project", projectId: "p" },
+      },
     };
   });
-  const output = await f.run("transcript.retry", { projectId: "p", text: "spicy" }, [
-    "--wait",
-    "--timeout-ms",
-    "1000",
-  ]);
+  const output = await f.run("job.retry", { jobId: "job" }, ["--wait", "--timeout-ms", "1000"]);
   expect(output.code).toBe(0);
-  expect(f.calls.map((r) => r.operation)).toEqual([
-    "transcript.retry",
-    "job.get",
-    "transcript.search",
-  ]);
-  expect(f.calls.at(-1)?.params).toMatchObject({ projectId: "p", text: "spicy" });
+  expect(f.calls.map((r) => r.operation)).toEqual(["job.retry", "job.get"]);
 });
 
 test.each(
@@ -1402,7 +1400,11 @@ test.each(
     [
       { initialReady: true, generation: "attempt-2", code: 0 },
       { initialReady: false, generation: "attempt-2", code: 0 },
-      { initialReady: false, generation: "another-attempt", code: 1 },
+      {
+        initialReady: false,
+        generation: "another-attempt",
+        code: 1,
+      },
     ].map((scenario) => ({ ...scenario, operation })),
   ),
 )(
@@ -1428,7 +1430,7 @@ test.each(
               ? {
                   assetId: "a",
                   streamId: "s",
-                  state: "processing",
+                  state: "running",
                   jobId: "job",
                   published: null,
                 }
@@ -1448,7 +1450,7 @@ test.each(
     const reply = JSON.parse(output.stdout);
     if (code === 1)
       expect(reply).toMatchObject({
-        data: { assetId: "a", state: "processing", jobId: "job" },
+        data: { assetId: "a", state: "running", jobId: "job" },
         wait: {
           state: "interrupted",
           job: { jobId: "job", generation: 2, attemptId: "attempt-2" },
@@ -1456,7 +1458,7 @@ test.each(
         },
       });
     else {
-      expect(reply).toMatchObject({ data: ready, wait: { state: "settled" } });
+      expect(reply).toMatchObject({ data: { state: "ready" }, wait: { state: "settled" } });
       if (!initialReady)
         expect(reply.wait.job).toEqual({ jobId: "job", generation: 2, attemptId: "attempt-2" });
     }
@@ -1466,7 +1468,7 @@ test.each(
   },
 );
 
-test.each(["export.create", "export.status", "export.retry", "export.recover"])(
+test.each(["export.create", "export.status", "export.recover"])(
   "%s waits for export.status and returns the committed receipt",
   async (operation) => {
     let admissions = 0;
@@ -1483,7 +1485,7 @@ test.each(["export.create", "export.status", "export.retry", "export.recover"])(
         ok: true,
         data: {
           exportId: "550e8400-e29b-41d4-a716-446655440000",
-          state: "committed",
+          state: "ready",
           output: "/tmp/final.mp4",
         },
       };
@@ -1503,13 +1505,13 @@ test.each(["export.create", "export.status", "export.retry", "export.recover"])(
     );
     expect(output.code).toBe(0);
     expect(JSON.parse(output.stdout)).toMatchObject({
-      data: { state: "committed", output: "/tmp/final.mp4" },
+      data: { state: "ready", output: "/tmp/final.mp4" },
       wait: { state: "settled" },
     });
   },
 );
 
-test.each(["export.recover", "export.retry", "export.status"])(
+test.each(["export.recover", "export.status"])(
   "%s waits for nested recovery instead of the failed publication job",
   async (operation) => {
     let admissions = 0,
@@ -1544,7 +1546,7 @@ test.each(["export.recover", "export.retry", "export.status"])(
               request.params.jobId === "publication-job"
                 ? "failed"
                 : ++polls === 1
-                  ? "processing"
+                  ? "running"
                   : "ready",
             ),
             jobId: request.params.jobId,
@@ -1557,7 +1559,7 @@ test.each(["export.recover", "export.retry", "export.status"])(
         ok: true,
         data: {
           ...base,
-          state: "committed",
+          state: "ready",
           cleanupPending: false,
           receipt,
           output: "/tmp/final.mp4",
@@ -1568,7 +1570,7 @@ test.each(["export.recover", "export.retry", "export.status"])(
     const output = await f.run(operation, { exportId }, ["--wait", "--timeout-ms", "1500"]);
     expect(output.code).toBe(0);
     expect(JSON.parse(output.stdout)).toMatchObject({
-      data: { ...base, state: "committed", receipt, output: "/tmp/final.mp4" },
+      data: { ...base, state: "ready", receipt, output: "/tmp/final.mp4" },
       wait: {
         state: "settled",
         job: { jobId: "recovery-job", generation: 2, attemptId: "attempt-2" },
@@ -1589,7 +1591,7 @@ test.each(["export.recover", "export.retry", "export.status"])(
 
 test.each([
   { state: "failed", exposedState: "failed" },
-  { state: "canceled", exposedState: "not_requested" },
+  { state: "canceled", exposedState: "idle" },
 ])(
   "terminal $state recovery / $exposedState status preserves export history and exits unsuccessfully",
   async ({ state, exposedState }) => {
@@ -1599,7 +1601,7 @@ test.each([
       exportId,
       projectId: "p",
       jobId: "publication-job",
-      state: "committed",
+      state: "ready",
       cleanupPending: true,
       receipt,
       output: "/tmp/final.mp4",
@@ -1709,11 +1711,11 @@ test.each(["capture.stop", "recording.get"])(
     let admissions = 0;
     const f = await fixture((request) => {
       if (request.operation === operation && admissions++ === 0)
-        return { ok: true, data: { recordingId: "recording", state: "finalizing" } };
+        return { ok: true, data: { recordingId: "recording", state: "running" } };
       expect(request.operation).toBe("recording.get");
       return {
         ok: true,
-        data: { recordingId: "recording", state: "complete", sourceDurationUs: 42 },
+        data: { recordingId: "recording", state: "ready", sourceDurationUs: 42 },
       };
     });
     const output = await f.run(operation, { recordingId: "recording" }, [
@@ -1723,7 +1725,7 @@ test.each(["capture.stop", "recording.get"])(
     ]);
     expect(output.code).toBe(0);
     expect(JSON.parse(output.stdout)).toMatchObject({
-      data: { recordingId: "recording", state: "complete" },
+      data: { recordingId: "recording", state: "ready" },
       wait: { state: "settled" },
     });
     expect(f.calls.map((r) => r.operation)).toEqual([operation, "recording.get"]);

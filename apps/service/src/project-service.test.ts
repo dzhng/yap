@@ -30,7 +30,12 @@ import { EventEmitter } from "node:events";
 import { projectPackageManifest } from "@yap/core/project-package";
 import { fileIdentity } from "@yap/core/files";
 import type { ProjectSnapshot } from "@yap/core/projects";
-import { CONTROL_FRAME_BYTES, appOperations, updatePreparationSchema } from "@yap/protocol";
+import {
+  CONTROL_FRAME_BYTES,
+  appOperations,
+  modelStatusSchema,
+  updatePreparationSchema,
+} from "@yap/protocol";
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -226,8 +231,9 @@ test("health projects strict native update reports without exposing private coor
   expect(
     await f.control("update.report", {
       update: {
-        state: "waiting",
+        state: "queued",
         availableVersion: "2.0.0",
+        availability: "available",
         blockers: ["native.preview"],
         error: null,
         extra: true,
@@ -235,7 +241,9 @@ test("health projects strict native update reports without exposing private coor
     }),
   ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   const update = {
-    state: "waiting",
+    state: "queued",
+    jobId: null,
+    availability: "available",
     availableVersion: "2.0.0",
     blockers: ["native.preview"],
     error: null,
@@ -276,7 +284,9 @@ test("lifetime progress coalesces in one event turn and stops when the candidate
   });
   await f.control("update.report", {
     update: {
-      state: "waiting",
+      state: "queued",
+      jobId: null,
+      availability: "available",
       availableVersion: "2.0.0",
       blockers: ["native.preview"],
       error: null,
@@ -292,7 +302,14 @@ test("lifetime progress coalesces in one event turn and stops when the candidate
   await new Promise((resolve) => setImmediate(resolve));
   expect(notifications).toBe(1);
   await f.control("update.report", {
-    update: { state: "disabled", availableVersion: null, blockers: [], error: null },
+    update: {
+      state: "unavailable",
+      jobId: null,
+      availability: "unavailable",
+      availableVersion: null,
+      blockers: [],
+      error: null,
+    },
   });
   await Promise.all([f.control("project.list"), f.control("service.health")]);
   await new Promise((resolve) => setImmediate(resolve));
@@ -1435,7 +1452,7 @@ test("selected-source transcript reads report unprepared models without download
   const selection = { assetId: ready.published!.output.assetId, streamId: "track:1" };
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,
-    data: { state: "absent" },
+    data: { state: "unavailable" },
   });
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
@@ -1451,24 +1468,20 @@ test("selected-source transcript reads report unprepared models without download
     await f.call("transcript.review", { ...selection, range: { startUs: 0, endUs: 1_000_000 } }),
   ).toMatchObject({
     ok: true,
-    data: { state: "preparing", model: { state: "preparing" } },
+    data: { state: "running", model: { state: "running" } },
   });
   expect(await f.call("transcript.search", { ...selection, text: "hello" })).toMatchObject({
     ok: true,
     data: { reason: "model_not_prepared" },
   });
-  expect(await f.call("transcript.retry", selection)).toMatchObject({
-    ok: false,
-    error: { code: "MODEL_NOT_PREPARED" },
-  });
   expect(await f.call("transcript.get", { ...selection, acquisitionId: "missing" })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
-    ok: true,
-    data: { state: "preparing" },
-  });
+  const preparing = await f.call("model.status", { modelId: "parakeet" });
+  expect(preparing).toMatchObject({ ok: true, data: { state: "running", presence: "absent" } });
+  // Presence reports the installed files, never the lifecycle word.
+  expect(modelStatusSchema.safeParse((preparing as { data: unknown }).data).success).toBe(true);
   expect(requests.filter((operation) => operation === "speech.transcribe")).toEqual([]);
 });
 
@@ -1542,7 +1555,7 @@ test("project transcript review reports a failed default model download as faile
   // The default model is fetched without asking; here the fetch fails.
   expect(await f.call("transcript.review", review)).toMatchObject({
     ok: true,
-    data: { state: "preparing" },
+    data: { state: "running" },
   });
   await expect
     .poll(
@@ -1551,6 +1564,9 @@ test("project transcript review reports a failed default model download as faile
           .data?.state,
     )
     .toBe("failed");
+  const failed = await f.call("model.status", { modelId: "parakeet" });
+  expect(failed).toMatchObject({ ok: true, data: { state: "failed", presence: "absent" } });
+  expect(modelStatusSchema.safeParse((failed as { data: unknown }).data).success).toBe(true);
   expect(await f.call("transcript.review", review)).toMatchObject({
     ok: true,
     data: { state: "failed", model: { state: "failed" } },
@@ -2051,7 +2067,7 @@ test("model discovery crosses the public wire before either model is prepared", 
   });
   expect(await f.call("model.status", { modelId: "qwen3-tts-icl-v1" })).toMatchObject({
     ok: true,
-    data: { state: "absent" },
+    data: { state: "unavailable" },
   });
 });
 

@@ -72,7 +72,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
   });
   const exported = await poll(
     () => api("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "export",
   );
   assert.deepEqual(await readFile(files.full), await readFile(exported.output));

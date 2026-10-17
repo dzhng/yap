@@ -297,7 +297,7 @@ try {
     (v) => v.state === "canceled",
     "canceled picture",
   );
-  await call("frame.retry", { projectId, revisionId, atUs: 33333 });
+  await call("job.retry", { jobId: pending.jobId });
   const retried = await delivered({ projectId, revisionId, atUs: 33333 }, "cli");
   assert.equal(retried.data.published.output.frame.sampleAtUs, 0);
   report.checks.cancelRetry = true;

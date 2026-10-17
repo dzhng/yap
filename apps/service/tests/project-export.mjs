@@ -532,6 +532,7 @@ test("export discovery pages pinned summaries without admitting work and binds c
     projectId: f.projectId,
     kind: "video",
     revisionId: f.placed.revision.id,
+    jobId: page.exports[0].jobId,
     state: "queued",
     abandoning: false,
     cleanupPending: false,

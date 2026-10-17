@@ -452,7 +452,7 @@ test(
       await canceling;
       const canceled = await call("preview.get", { projectId, revisionId: next.revision.id });
       assert.equal(canceled.published, null);
-      assert.equal(canceled.state, "not_requested");
+      assert.equal(canceled.state, "idle");
       assert.equal(canceled.jobId, pending.jobId);
       const canceledJob = await call("job.get", { jobId: pending.jobId });
       assert.equal(canceledJob.state, "canceled");

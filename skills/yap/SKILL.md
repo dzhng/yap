@@ -35,7 +35,7 @@ those alternatives open.
 **Evidence requests include readiness.** Call the requested capability directly.
 Do not call `model.prepare` as a preflight: status reads never download, and the
 default transcript model is the only one Yap fetches on its own, reported as
-`preparing`. If a call returns `MODEL_NOT_PREPARED` or
+`running`. If a call returns `MODEL_NOT_PREPARED` or
 `unavailable:model_not_prepared`, read its details and explain to the user which
 optional model/runtime is missing, what it is for, what will be downloaded and the
 reported size or scope. Ask whether they want that download. Only after an explicit
@@ -92,8 +92,8 @@ including with automatic updates off; it leaves that preference unchanged.
 Follow `update.status` for the effective preference, progress and result. The app's
 Settings → General → Check for Updates uses this same operation. An update check
 returns before installation; existing CLI clients must finish before replacement.
-Explain advertised waiting/disabled state and blockers literally;
-waiting for idle does not authorize stopping work, and disabled automatic updates
+Explain `queued` progress and the update `availability` fact (`disabled` or `unavailable`) literally;
+queued work waiting for idle does not authorize stopping work, and disabled automatic updates
 do not prove the service is unhealthy. Do not invent an updater command or kill,
 cancel, close or stop work to obtain idle. Older releases may not advertise update
 state; say so. Fixture health JSON is interpretation evidence, not native proof.
@@ -171,8 +171,8 @@ unavailable; do not claim it reopened or retry writes blindly.
    content the brief needs. Treat readiness as a bounded state machine:
    `unavailable:model_not_prepared` means read the model details, ask the user
    before downloading an optional model/runtime, then use `model.prepare` only
-   after consent and retry; `processing` means poll the same request; `failed` means
-   diagnose the returned reason and use the advertised retry only after the cause
+   after consent and retry; `running` means poll the same request; `failed` means
+   diagnose the returned reason and use `job.retry` with the returned `jobId` after the cause
    is resolved. Follow returned pagination cursors, including empty pages with a
    next cursor. Preserve the transcript generation when using word identities. An
    opaque base64url cursor is operation- and filter-specific; pass it unchanged in
@@ -235,7 +235,7 @@ unavailable; do not claim it reopened or retry writes blindly.
 
 6. **Review it yourself.** Inspect the returned revision and request its audio,
    frames, or playable preview around changed joins. Poll the same pinned request
-   without `--output` while processing is pending; deliver once ready. A directory
+   without `--output` while work is queued or running; deliver once ready. A directory
    destination must not already exist, including when repeating an inspection.
    Check the returned job state and reason: `ok: true` and exit zero can report a
    failed job. Diagnose failures before an explicit supported retry. Compare the

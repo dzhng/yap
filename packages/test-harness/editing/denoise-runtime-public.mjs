@@ -182,7 +182,7 @@ async function movieDelivery(selection, name) {
   );
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "learned export",
   );
   assert.equal(hash(await readFile(exported.output)), hash(await readFile(movie)));

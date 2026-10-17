@@ -147,7 +147,7 @@ test(
       }
       assert.equal(await hash(video), originalHash);
       ({ instance } = await launchReady(home));
-      const retry = await call("frame.retry", params);
+      const retry = await call("job.retry", params);
       if (retry.delivery) await call("artifact.close", { token: retry.delivery.token });
       const regenerated = await ready();
       assert.equal(regenerated.jobId, first.jobId);

@@ -393,7 +393,7 @@ try {
     (v) => v.state === "canceled",
     "waveform audio dependency canceled",
   );
-  await call("waveform.retry", waveformRequest, { transport: "mcp" });
+  await call("job.retry", { jobId: preparingWaveform.jobId }, { transport: "mcp" });
   report.checks.waveformDependencyRetry = await waveform(waveformRequest, waveformRange, 72.1875);
   const cancellationRange = { startUs: 777, endUs: 888888 };
   const held = await service.arm("media.mixCompositionAudio");
@@ -401,7 +401,7 @@ try {
   await held();
   const canceled = await call("job.cancel", { jobId: pending.jobId }, { transport: "mcp" });
   assert.equal(canceled.state, "canceled");
-  const retry = await call("audio.retry", { projectId, range: cancellationRange });
+  const retry = await call("job.retry", { jobId: pending.jobId });
   assert.equal(retry.jobId, pending.jobId);
   const retried = await delivered({ projectId, range: cancellationRange }, "mcp");
   report.checks.cancelRetry = verify(retried.bytes, cancellationRange, 72.1875);

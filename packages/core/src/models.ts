@@ -376,6 +376,10 @@ class Preparation {
     }
   }
 
+  /** Whether the installed files match the receipt, by metadata, whatever preparation is doing. */
+  presence() {
+    return this.inspect();
+  }
   private inspect(): "absent" | "ready" | "invalid" {
     const root = this.root;
     try {
@@ -719,6 +723,9 @@ export class Models {
   }
   async status(modelId: string) {
     return this.selected(modelId).status();
+  }
+  presence(modelId: string) {
+    return this.selected(modelId).presence();
   }
   /**
    * Readiness from each preparation receipt, for the cheap service health check. Runtime bytes

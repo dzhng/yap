@@ -207,6 +207,10 @@ export class RenderedSpeech {
     this.owners.jobs.retry(current.jobId);
     return this.status(input, admitted);
   }
+  /** `job.retry` names only the recognition job; its retry still re-runs a failed extraction. */
+  retryJob(job: Job) {
+    return this.retry(this.selection(job));
+  }
   async execute({ job, signal }: JobExecution): Promise<StagedJobResult> {
     signal.throwIfAborted();
     const input = this.selection(job),

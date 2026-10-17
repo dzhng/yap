@@ -9,7 +9,7 @@ import {
   runJsonHelper,
 } from "./inspection-artifacts.mjs";
 
-const active = new Set(["waiting", "queued", "processing", "running", "not_ready"]);
+const active = new Set(["queued", "running"]);
 const number = (value) => (typeof value === "number" ? value : value.numerator / value.denominator);
 const escape = (value) =>
   String(value ?? "").replace(

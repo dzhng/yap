@@ -155,7 +155,7 @@ try {
   });
   const committed = await poll(
     () => call("export.status", { exportId }, { transport: "mcp" }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "physical empty-edit export",
   );
   assert.equal(committed.output, join(await realpath(exportDirectory), "physical-gap.mp4"));

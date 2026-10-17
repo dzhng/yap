@@ -96,6 +96,10 @@ import {
   type UpdateStatus,
   type UpdateBlocker,
   appOperations,
+  mapWorkState,
+  edgeWorkState,
+  transientWorkState,
+  publicationWorkState,
 } from "@yap/protocol";
 import {
   listenLocal,
@@ -249,6 +253,8 @@ export async function startProjectService(options: {
   let starting = true;
   let update: UpdateStatus = {
     state: "unavailable",
+    jobId: null,
+    availability: "unavailable",
     availableVersion: null,
     blockers: [],
     error: null,
@@ -1113,7 +1119,105 @@ export async function startProjectService(options: {
         index: projectIndex,
       }),
     );
-    const status = (jobId: string) => queue.inspect(jobId);
+    const status = (jobId: string) => {
+      const value = queue.inspect(jobId);
+      return { ...value, state: mapWorkState(value.state, edgeWorkState), jobId };
+    };
+    /** A lifecycle word that is not a presence fact asks the installed files instead. */
+    const modelPresence = (modelId: string, state: string) =>
+      state === "absent" || state === "ready" || state === "invalid"
+        ? state
+        : models.presence(modelId);
+    /** The export intent a job belongs to, or null for every other job. */
+    const exportOf = (jobId: string) => {
+      const job = queue.job(jobId);
+      if (
+        job.artifact !== "export" &&
+        job.artifact !== "export-media" &&
+        job.artifact !== "export-recovery"
+      )
+        return null;
+      try {
+        return { exportId: JSON.parse(job.input) as string, recovery: false };
+      } catch {
+        return job.artifact === "export-recovery"
+          ? { exportId: job.input.split("/", 1)[0]!, recovery: true }
+          : { exportId: job.input, recovery: false };
+      }
+    };
+    const itemStatus = (jobId: string) => {
+      const owner = exportOf(jobId);
+      return owner ? mediaExports.status(owner.exportId) : status(jobId);
+    };
+
+    // Domain owners retain their stored vocabulary. Only values carrying a job identity
+    // cross this boundary as WorkState; nested evidence labels remain domain facts.
+    const workMapping = {
+      ...edgeWorkState,
+      ...transientWorkState,
+      ...publicationWorkState,
+    } as const;
+    const domainStates = new Set([
+      "recording",
+      "paused",
+      "finalizing",
+      "interrupted",
+      "captured",
+      "observed",
+      "missing",
+      "not_applicable",
+      "unknown",
+      "named",
+      "attributed",
+      "overlap",
+      "closed",
+      "settled",
+      "conflicted",
+      "published",
+      "retained",
+      "ingest",
+      "stopped",
+      "available",
+      "measured",
+      "sampled",
+      "skipped",
+      "outside_project",
+      "on",
+      "off",
+      "transcribed",
+    ]);
+    const normalizeWork = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(normalizeWork);
+      if (!value || typeof value !== "object") return value;
+      const record = value as Record<string, unknown>;
+      const mapped = Object.fromEntries(
+        Object.entries(record).map(([key, child]) => [key, normalizeWork(child)]),
+      );
+      if (typeof record.state === "string") {
+        const asyncShape =
+          !("recordingId" in record || "finalizationError" in record) &&
+          ("jobId" in record ||
+            [
+              "published",
+              "reason",
+              "retryable",
+              "dependencies",
+              "context",
+              "page",
+              "report",
+              "refresh",
+              "operationId",
+              "receivedBytes",
+              "availableVersion",
+              "delivery",
+            ].some((key) => key in record));
+        if (asyncShape && !domainStates.has(record.state)) {
+          mapped.state = mapWorkState(record.state, workMapping);
+          if (!("jobId" in mapped)) mapped.jobId = null;
+        }
+      }
+      return mapped;
+    };
     const describeCapture = captureSources.describe.bind(captureSources);
     const handle: LocalHandler = async (request, requestSignal): Promise<OperationResult> => {
       if (closing) return operationError("SERVICE_STOPPED", "Service is closing");
@@ -1419,18 +1523,6 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "index.retry": {
-            const params = operation.params;
-            const status =
-              "projectId" in params ? indexes.retryProject(params) : indexes.retrySource(params);
-            return {
-              ok: true,
-              data: {
-                ...status,
-                published: publishedOutput(status.published, (value) => value.evidence),
-              },
-            };
-          }
           case "index.coverage": {
             const params = operation.params;
             const normalized =
@@ -1505,17 +1597,40 @@ export async function startProjectService(options: {
           case "preset.list":
             return {
               ok: true,
-              data: presets.page({
-                ...(operation.params.cursor === undefined
-                  ? {}
-                  : { cursor: operation.params.cursor }),
-                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
-              }),
+              data: (() => {
+                const page = presets.page({
+                  ...(operation.params.cursor === undefined
+                    ? {}
+                    : { cursor: operation.params.cursor }),
+                  ...(operation.params.limit === undefined
+                    ? {}
+                    : { limit: operation.params.limit }),
+                });
+                return {
+                  ...page,
+                  refresh: {
+                    ...page.refresh,
+                    state: page.refresh.error
+                      ? "failed"
+                      : page.refresh.checkedAt
+                        ? "ready"
+                        : "idle",
+                    jobId: null,
+                  },
+                };
+              })(),
             };
           case "preset.get":
             return { ok: true, data: presets.get(operation.params.id) };
           case "preset.update":
-            return { ok: true, data: await presets.update(operation.params.id) };
+            return {
+              ok: true,
+              data: {
+                ...(await presets.update(operation.params.id)),
+                state: "ready",
+                jobId: null,
+              },
+            };
           case "preset.create":
             return {
               ok: true,
@@ -1528,16 +1643,20 @@ export async function startProjectService(options: {
             };
           case "preset.delete":
             return { ok: true, data: await presets.delete(operation.params.id) };
-          case "model.status":
+          case "model.status": {
+            const model = await models.status(operation.params.modelId);
             return {
               ok: true,
               data: {
                 modelId: operation.params.modelId,
                 purpose: models.list().find((entry) => entry.modelId === operation.params.modelId)
                   ?.purpose,
-                ...(await models.status(operation.params.modelId)),
+                presence: modelPresence(operation.params.modelId, model.state),
+                jobId: null,
+                ...model,
               },
             };
+          }
           case "model.prepare": {
             const { modelId } = operation.params;
             const state = await models.status(modelId);
@@ -1553,7 +1672,11 @@ export async function startProjectService(options: {
                 admission.progress();
               });
             }
-            return { ok: true, data: await models.status(modelId) };
+            const model = await models.status(modelId);
+            return {
+              ok: true,
+              data: { jobId: null, presence: modelPresence(modelId, model.state), ...model },
+            };
           }
           case "alignment.observe": {
             const params = operation.params;
@@ -1987,11 +2110,8 @@ export async function startProjectService(options: {
               }),
             };
           }
-          case "transcript.render.prepare":
-          case "transcript.render.retry": {
-            const status = renderedSpeech[
-              operation.operation === "transcript.render.retry" ? "retry" : "prepare"
-            ](operation.params);
+          case "transcript.render.prepare": {
+            const status = renderedSpeech.prepare(operation.params);
             return {
               ok: true,
               data: {
@@ -2162,26 +2282,6 @@ export async function startProjectService(options: {
                     }),
                   (row) => row.type === "word" && disfluent(row.kind),
                 ),
-              },
-            };
-          }
-          case "transcript.retry": {
-            if ("projectId" in operation.params) {
-              const status = projectEvidence.retry(operation.params);
-              return {
-                ok: true,
-                data: {
-                  ...status,
-                  published: publishedOutput(status.published, (value) => value.value),
-                },
-              };
-            }
-            const status = transcripts.retrySource(operation.params);
-            return {
-              ok: true,
-              data: {
-                ...status,
-                published: publishedOutput(status.published, (value) => value.transcript),
               },
             };
           }
@@ -2620,14 +2720,11 @@ export async function startProjectService(options: {
               "This service inspects asset and project capture evidence",
             );
           }
-          case "frame.get":
-          case "frame.retry": {
+          case "frame.get": {
             const params = operation.params;
             return {
               ok: true,
-              data: frameDelivery(
-                mediaFrames[operation.operation === "frame.get" ? "request" : "retry"](params),
-              ),
+              data: frameDelivery(mediaFrames.request(params)),
             };
           }
           case "frame.batch": {
@@ -2669,8 +2766,7 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "cursor.render":
-          case "cursor.render.retry": {
+          case "cursor.render": {
             const params = operation.params;
             const identity =
               "projectId" in params
@@ -2696,11 +2792,7 @@ export async function startProjectService(options: {
                     return {
                       atUs,
                       ok: true,
-                      data: frameDelivery(
-                        mediaFrames[
-                          operation.operation === "cursor.render.retry" ? "retry" : "request"
-                        ](input),
-                      ),
+                      data: frameDelivery(mediaFrames.request(input)),
                     };
                   } catch (error) {
                     return { atUs, ...operationFailure(error) };
@@ -2710,13 +2802,9 @@ export async function startProjectService(options: {
             };
           }
           case "waveform.get":
-          case "waveform.retry":
-          case "spectrogram.get":
-          case "spectrogram.retry": {
-            const spectrum = operation.operation.startsWith("spectrogram.");
-            const status = await acoustics[
-              operation.operation.endsWith(".get") ? "request" : "retry"
-            ](
+          case "spectrogram.get": {
+            const spectrum = operation.operation === "spectrogram.get";
+            const status = await acoustics.request(
               spectrum
                 ? { ...operation.params, kind: "spectrum", format: "image" }
                 : operation.params,
@@ -2841,11 +2929,9 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "audio.get":
-          case "audio.retry": {
+          case "audio.get": {
             const params = operation.params;
-            const status =
-              await mediaAudio[operation.operation === "audio.get" ? "request" : "retry"](params);
+            const status = await mediaAudio.request(params);
             return {
               ok: true,
               data: {
@@ -3163,11 +3249,9 @@ export async function startProjectService(options: {
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
-          case "preview.get":
-          case "preview.retry": {
+          case "preview.get": {
             const params = operation.params;
-            const status =
-              await preview[operation.operation === "preview.get" ? "request" : "retry"](params);
+            const status = await preview.request(params);
             return {
               ok: true,
               data: {
@@ -3204,8 +3288,6 @@ export async function startProjectService(options: {
             return { ok: true, data: mediaExports.list(operation.params) };
           case "export.status":
             return { ok: true, data: mediaExports.status(operation.params.exportId) };
-          case "export.retry":
-            return { ok: true, data: await mediaExports.retry(operation.params.exportId) };
           case "export.recover":
             return { ok: true, data: await mediaExports.recover(operation.params.exportId) };
           case "export.cancel":
@@ -3230,12 +3312,19 @@ export async function startProjectService(options: {
             return { ok: true, data: { closed: true } };
           case "job.get":
             return { ok: true, data: status(operation.params.jobId) };
-          case "job.retry":
-            queue.retry(operation.params.jobId);
+          case "job.retry": {
+            // An export's retry also repairs its own failed prerequisites and honours its fences.
+            // Rendered recognition likewise re-runs its failed PCM extraction.
+            const owner = exportOf(operation.params.jobId);
+            const job = queue.job(operation.params.jobId);
+            if (owner && !owner.recovery) await mediaExports.retry(owner.exportId);
+            else if (job.artifact === "rendered-speech") renderedSpeech.retryJob(job);
+            else queue.retry(operation.params.jobId);
             return { ok: true, data: status(operation.params.jobId) };
+          }
           case "job.cancel":
             await queue.drainJob(operation.params.jobId);
-            return { ok: true, data: status(operation.params.jobId) };
+            return { ok: true, data: itemStatus(operation.params.jobId) };
           default:
             return operationError(
               "PREREQUISITE_MISSING",
@@ -3260,9 +3349,9 @@ export async function startProjectService(options: {
       }
     };
     const serve: LocalHandler = (request, signal) => {
-      const task = Promise.resolve(handle(request, signal)).then((result) => {
-        return result;
-      });
+      const task = Promise.resolve(handle(request, signal)).then(
+        (result) => normalizeWork(result) as OperationResult,
+      );
       pending.add(task);
       void task.then(
         () => {
@@ -3342,7 +3431,7 @@ export async function startProjectService(options: {
                 return admission.release(command.params.permitId);
               case "update.report":
                 update = command.params.update;
-                admission.observe(update.state === "waiting");
+                admission.observe(update.state === "queued" || update.state === "running");
                 return { ok: true, data: { reported: true } };
             }
           }

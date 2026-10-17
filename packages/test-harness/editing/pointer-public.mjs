@@ -86,8 +86,8 @@ try {
   const coldParent = await call("job.get", { jobId: cold.jobId });
   const coldPreview = await call("job.get", { jobId: coldParent.reason });
   const coldHistory = await call("job.get", { jobId: coldPreview.reason });
-  assert.equal(coldParent.state, "waiting");
-  assert.equal(coldPreview.state, "waiting");
+  assert.equal(coldParent.state, "queued");
+  assert.equal(coldPreview.state, "queued");
   assert.equal(coldHistory.artifact, "pointer-presentation");
   await call("job.cancel", { jobId: coldHistory.jobId });
   const coldFailed = await poll(
@@ -103,10 +103,10 @@ try {
       coldHistory.attemptId,
     );
   }
-  await call("export.retry", { exportId: coldExportId }, { transport: "mcp" });
+  await call("job.retry", { jobId: coldFailed.jobId }, { transport: "mcp" });
   const coldReady = await poll(
     () => call("export.status", { exportId: coldExportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "cold export explicit prerequisite retry",
   );
   report.checks.coldExport = {
@@ -123,7 +123,7 @@ try {
   const firstFrame = await call("frame.get", pictureRequest);
   await hit();
   const waitingFrame = await call("job.get", { jobId: firstFrame.jobId });
-  assert.equal(waitingFrame.state, "waiting");
+  assert.equal(waitingFrame.state, "queued");
   const historyJob = await call("job.get", { jobId: waitingFrame.reason });
   assert.equal(historyJob.artifact, "pointer-presentation");
   await call("job.cancel", { jobId: historyJob.jobId });
@@ -140,7 +140,7 @@ try {
       historyJob.attemptId,
     );
   }
-  await call("frame.retry", pictureRequest, { transport: "mcp" });
+  await call("job.retry", { jobId: failedFrame.jobId }, { transport: "mcp" });
   report.checks.canceledHistory = {
     waitingFrame,
     historyJob,
@@ -259,7 +259,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "pointer export",
   );
   report.checks.export = exported;
@@ -561,7 +561,7 @@ try {
   });
   await deletionHit();
   const deletedParent = await call("job.get", { jobId: pendingDelete.jobId });
-  assert.equal(deletedParent.state, "waiting");
+  assert.equal(deletedParent.state, "queued");
   await call("project.delete", { projectId: doomed.projectId });
   assert.equal(
     (

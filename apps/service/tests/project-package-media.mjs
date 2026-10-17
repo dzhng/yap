@@ -164,7 +164,7 @@ async function adoptedMedia(t, kind) {
   await until(async () => {
     const status = await call("export.status", { exportId });
     assert.notEqual(status.state, "failed", JSON.stringify(status));
-    return status.state === "committed";
+    return status.state === "ready";
   });
   const archive = join(output, "project.zip"),
     archiveHash = hash(await readFile(archive));
@@ -224,7 +224,7 @@ async function adoptedMedia(t, kind) {
   });
   assert.equal(failed.retryable, true);
   assert.deepEqual(await readdir(join(home, "library", "render")), []);
-  await call(`${kind}.retry`, request);
+  await call("job.retry", { jobId: failed.jobId });
   const retried = await ready(() => call(`${kind}.get`, request));
   assert.equal(retried.jobId, failed.jobId);
   assert.equal(retried.published.generation, 2);

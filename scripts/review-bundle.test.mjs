@@ -127,7 +127,7 @@ test("incomplete cut pagination never reports unchanged and preserves pending ev
       ? {
           projectId: "p",
           revisionId: params.revisionId,
-          state: "processing",
+          state: "running",
           dependencies: [{ jobId: "pending-scenes" }],
           coverage: { cuts: { state: "ready", basis: "revision" } },
           rows: [],
@@ -177,7 +177,7 @@ test("a pending event read without a returned page never completes the cut scan"
       ? {
           projectId: "p",
           revisionId: params.revisionId,
-          state: "processing",
+          state: "running",
           jobId: "pending-scenes",
           coverage: { cuts: { state: "ready", basis: "revision" } },
         }

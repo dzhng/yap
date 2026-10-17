@@ -371,7 +371,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId: requestedExport.exportId }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     "export",
   );
   await service.stop();

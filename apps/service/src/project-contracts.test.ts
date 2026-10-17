@@ -172,6 +172,238 @@ test("public rendered recognition rejects absent generations and refuses a range
   cleanups.push(async () => db.close());
   expect(db.prepare("SELECT COUNT(*) AS n FROM jobs").get()).toEqual({ n: 0 });
 });
+function pcmWave(frames: number, sampleRate: number, channels: number) {
+  const bytes = Buffer.alloc(44 + frames * channels * 4);
+  bytes.write("RIFF");
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(3, 20);
+  bytes.writeUInt16LE(channels, 22);
+  bytes.writeUInt32LE(sampleRate, 24);
+  bytes.writeUInt32LE(sampleRate * channels * 4, 28);
+  bytes.writeUInt16LE(channels * 4, 32);
+  bytes.writeUInt16LE(32, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(bytes.length - 44, 40);
+  return bytes;
+}
+/**
+ * One project with a placed audio clip, rendered by a controlled native edge: the project mix, the
+ * PCM conversion and recognition each answer like the native worker, and `fail` names the one
+ * native operation whose first attempt fails.
+ */
+async function renderedRecognition(fail: "media.mixCompositionAudio" | "speech.transcribe") {
+  const calls: string[] = [];
+  let failing = true,
+    probes = 0;
+  const speech = controlledSpeech([], [], [{ text: "rendered", startUs: 100_000, endUs: 400_000 }]);
+  const audio = (sampleRate: number, channels: number, endUs: number) => ({
+    id: "audio",
+    kind: "audio",
+    codec: "pcm",
+    decodable: true,
+    sampleRate,
+    channels,
+    startUs: 0,
+    endUs,
+    segments: [{ startUs: 0, endUs, empty: false }],
+  });
+  const f = await projectServiceFixture(cleanups, async (operation, params, options) => {
+    calls.push(operation);
+    if (operation === fail && failing) {
+      failing = false;
+      return {
+        ok: false,
+        error: {
+          code: "MEDIA_WORKER_FAILED",
+          message: "controlled failure",
+          retryable: true,
+          details: {},
+        },
+      };
+    }
+    // The first probe admits the source; later probes admit the converted PCM rendition.
+    if (operation === "media.probe")
+      return {
+        ok: true,
+        data: {
+          originUs: 0,
+          streams: [probes++ === 0 ? audio(48000, 2, 2_000_000) : audio(16000, 1, 1_000_000)],
+        },
+      };
+    if (operation === "media.mixCompositionAudio") {
+      const { output, range, clips } = params as {
+        output: string;
+        range: { start: number; end: number };
+        clips: { clipId: string }[];
+      };
+      const frames = range.end - range.start;
+      const bytes = pcmWave(frames, 48000, 2);
+      await writeFile(output, bytes);
+      return {
+        ok: true,
+        data: {
+          file: output,
+          bytes: bytes.length,
+          sampleRate: 48000,
+          channels: 2,
+          frames,
+          peak: 0,
+          clippedSamples: 0,
+          maximumBlockFrames: 1024,
+          peakResidentBytes: 0,
+          decoderContext: {
+            policy: "bounded-current-retained-run",
+            sampleRate: 48000,
+            maximumPrerollFrames: 0,
+            maximumTailFrames: 0,
+          },
+          unavailable: clips.map(({ clipId }) => ({ clipId, ranges: [] })),
+        },
+      };
+    }
+    if (operation === "media.convertSelectedAudio") {
+      const { source, output, sampleRate, channels } = params as {
+        source: string;
+        output: string;
+        sampleRate: number;
+        channels: number;
+      };
+      // Like the native converter, the selected input's dimensions come from its WAV header.
+      const selected = await readFile(source);
+      const input = {
+        sampleRate: selected.readUInt32LE(24),
+        channels: selected.readUInt16LE(22),
+        frames: (selected.length - 44) / (selected.readUInt16LE(22) * 4),
+      };
+      const frames = (input.frames * sampleRate) / input.sampleRate;
+      const bytes = pcmWave(frames, sampleRate, channels);
+      await writeFile(output, bytes);
+      return {
+        ok: true,
+        data: {
+          file: output,
+          mediaType: "audio/wav",
+          bytes: bytes.length,
+          implementationId: "native-finite-pcm-v1",
+          input,
+          output: { frames, sampleRate, channels },
+          channelPolicy: "equal-weight-double-rounded-float32",
+          contextPolicy: "complete-selected-pcm-zero-origin",
+        },
+      };
+    }
+    return speech(operation, params, options);
+  });
+  await modelMetadata(await realpath(join(f.home, "library")));
+  const imported = await f.call("asset.import", { requestId: "speech", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const assetId = (await f.job((imported.data as { jobId: string }).jobId, "ready")).published!
+    .output.assetId;
+  const created = await f.call("project.create", { requestId: "rendered", canvas });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const initial = created.data as { project: { projectId: string }; revision: { id: string } };
+  const edited = await f.call("edit.apply", {
+    projectId: initial.project.projectId,
+    expectedRevisionId: initial.revision.id,
+    requestId: "place",
+    operations: [
+      { operation: "track.add", track: { kind: "audio", order: 0 }, label: "dialogue" },
+      {
+        operation: "place",
+        clip: {
+          trackId: { label: "dialogue" },
+          assetId,
+          streamId: "audio",
+          source: { kind: "range", range: { startUs: 0, endUs: 1_000_000 } },
+          placement: { kind: "project", range: { startUs: 0, endUs: 1_000_000 } },
+        },
+      },
+    ],
+  });
+  if (!edited.ok) throw new Error(JSON.stringify(edited));
+  const request = {
+    projectId: initial.project.projectId,
+    revisionId: (edited.data as { revision: { id: string } }).revision.id,
+    range: { startUs: 0, endUs: 1_000_000 },
+    tap: { target: { kind: "output" }, point: { kind: "processed" } },
+    rendition: { sampleRate: 16000, channels: 1 },
+  };
+  type Status = {
+    state: string;
+    jobId: string | null;
+    published: { output: { generation: string } } | null;
+  };
+  const prepare = async () => {
+    const result = await f.call("transcript.render.prepare", request);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.data as Status;
+  };
+  /** Polls the item's own status, as a caller would, until it settles. */
+  const settled = async () => {
+    const deadline = performance.now() + 5000;
+    for (;;) {
+      const status = await prepare();
+      if (["ready", "failed", "canceled", "unavailable"].includes(status.state)) return status;
+      if (performance.now() >= deadline) throw new Error(JSON.stringify(status));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  };
+  const words = async (generation: string) => {
+    const read = await f.call("transcript.render.get", {
+      projectId: request.projectId,
+      revisionId: request.revisionId,
+      generation,
+    });
+    expect(read).toMatchObject({ ok: true, data: { state: "ready" } });
+    if (!read.ok) throw new Error(JSON.stringify(read));
+    return (read.data as { rows: { text: string }[] }).rows.map((row) => row.text);
+  };
+  return { ...f, calls, prepare, settled, words };
+}
+
+test("failed rendered recognition recovers through job.retry with the jobId its prepare returned", async () => {
+  const f = await renderedRecognition("speech.transcribe");
+  const pending = await f.prepare();
+  expect(pending.jobId).toEqual(expect.any(String));
+  const failed = await f.settled();
+  expect(failed).toMatchObject({ state: "failed", jobId: pending.jobId, published: null });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(1);
+  expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: { jobId: pending.jobId },
+  });
+  const ready = await f.settled();
+  expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(2);
+  expect(await f.words(ready.published!.output.generation)).toEqual(["rendered"]);
+});
+
+test("a failed rendered PCM dependency recovers through job.retry with the jobId its prepare returned", async () => {
+  const f = await renderedRecognition("media.mixCompositionAudio");
+  const pending = await f.prepare();
+  const failed = await f.settled();
+  expect(failed).toMatchObject({ state: "failed", jobId: pending.jobId, published: null });
+  expect(await f.call("job.get", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: {
+      state: "failed",
+      errorDetails: { dependencyJobId: expect.any(String), state: "failed" },
+    },
+  });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(0);
+  // The jobId the item reported is enough: its retry also re-runs the failed extraction.
+  expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: { jobId: pending.jobId },
+  });
+  const ready = await f.settled();
+  expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
+  expect(f.calls.filter((operation) => operation === "media.mixCompositionAudio")).toHaveLength(2);
+  expect(await f.words(ready.published!.output.generation)).toEqual(["rendered"]);
+});
+
 test("oversized independently valid project mutation does not dispatch", async () => {
   const f = await emptyProject();
   const before = await f.state();
@@ -308,7 +540,23 @@ test("package-root refusal does not revoke unrelated canonical project dispatch"
 
 test("selected-source transcript preserves filler, phrase and ready retry through actual model metadata", async () => {
   const requests: SpeechTranscriptionRequest[] = [];
-  const f = await projectServiceFixture(cleanups, controlledSpeech(requests));
+  let failFirst = true;
+  const speech = controlledSpeech(requests);
+  const f = await projectServiceFixture(cleanups, async (operation, params, options) => {
+    if (operation === "speech.transcribe" && failFirst) {
+      failFirst = false;
+      return {
+        ok: false,
+        error: {
+          code: "MEDIA_WORKER_FAILED",
+          message: "controlled failure",
+          retryable: true,
+          details: {},
+        },
+      };
+    }
+    return speech(operation, params, options);
+  });
   const model = await modelMetadata(await realpath(join(f.home, "library")));
   const receipt = await readFile(model.receipt);
   const status = await f.call("model.status", { modelId: "parakeet" });
@@ -323,7 +571,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const selection = { assetId: ready.published!.output.assetId, streamId: "track:1" };
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
-    data: { state: "not_requested", jobId: null },
+    data: { state: "idle", jobId: null },
   });
   const created = await f.call("project.create", { requestId: "cached-read", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
@@ -353,9 +601,9 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   expect(await f.call("transcript.get", projectSelection)).toMatchObject({
     ok: true,
     data: {
-      state: "not_ready",
+      state: "queued",
       reason: "source_evidence_not_ready",
-      dependencies: [{ state: "not_requested", jobId: null }],
+      dependencies: [{ state: "idle", jobId: null }],
     },
   });
   const database = new DatabaseSync(join(f.home, "library", "catalog.sqlite"));
@@ -367,6 +615,8 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const pending = await f.call("transcript.transcribe", selection);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
+  await f.job(jobId, "failed");
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
   await f.job(jobId, "ready");
   const speakerInput = {
     assetId: selection.assetId,
@@ -538,12 +788,9 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       },
     },
   );
-  const first = await f.call("transcript.retry", selection);
-  expect(first).toMatchObject({
-    ok: true,
-    data: { state: "ready", jobId, published: { output: { generation } } },
-  });
-  expect(await f.call("transcript.retry", selection)).toEqual(first);
+  const first = await f.call("job.get", { jobId });
+  expect(first).toMatchObject({ ok: true, data: { state: "ready", jobId } });
+  expect(await f.call("job.get", { jobId })).toEqual(first);
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
     data: { generation },

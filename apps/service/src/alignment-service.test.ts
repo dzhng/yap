@@ -165,7 +165,7 @@ test.runIf(process.platform === "darwin")(
         leaf: "alignment.zip",
       }),
     ).toMatchObject({ ok: true });
-    await wait(f, "export.status", { exportId }, "committed");
+    await wait(f, "export.status", { exportId }, "ready");
     const target = await projectServiceFixture(cleanup, async (operation, params, options) => {
       if (operation.startsWith("media."))
         throw Error(`Unexpected package inference/decoder ${operation}`);

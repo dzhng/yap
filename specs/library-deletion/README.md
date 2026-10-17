@@ -17,7 +17,7 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 to 05 done.
+**Status.** Slices 00 to 06 done.
 Choices made along the way are in [choices.md](choices.md).
 
 Slice 01 evidence: protocol, core, CLI and service suites, every package build and
@@ -28,8 +28,11 @@ tables while keeping catalog format 29. Slice 03 fences tombstoned assets and
 acquisitions from new references, job admission and asset publish. Slice 04 adds the
 read-only `LibraryUsers.usersOf` query and the `inUseDetailsSchema` refusal shape.
 Slice 05 gives every listing and evidence read one opaque-cursor paging contract.
+Slice 06 makes every public `state` a `WorkState` word, moves domain facts to
+`installation`, `presence` and `availability`, and replaces the ten `*.retry`
+operations with `job.retry`, each with a recovery test.
 
-**Pick up at** slice 06, then 07. Slices 08+ wait for 06 and 07.
+**Pick up at** slice 07. Slices 08+ wait for 07.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -53,7 +56,7 @@ Slice 05 gives every listing and evidence read one opaque-cursor paging contract
 - [x] 03 Deletion fence and publish race — [slices/03-fence.md](slices/03-fence.md)
 - [x] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
 - [x] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
-- [ ] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
+- [x] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
 - [ ] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
 - [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
 - [ ] 09 `recording.delete` takes its copies — [slices/09-recording-delete.md](slices/09-recording-delete.md)

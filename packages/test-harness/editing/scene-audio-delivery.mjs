@@ -155,7 +155,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "combined A/V export",
   );
   const moviePath = exported.output;

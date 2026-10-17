@@ -321,7 +321,7 @@ export async function runRetimedZoom(output) {
     });
     const exported = await poll(
       () => call("export.status", { exportId }),
-      (v) => v.state === "committed",
+      (v) => v.state === "ready",
       "export",
     );
     assert.deepEqual(

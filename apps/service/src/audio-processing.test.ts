@@ -1378,7 +1378,7 @@ real(
       });
       const committed = await settled(
         () => call<{ state: string; jobId: string }>("export.status", { exportId }),
-        (value) => value.state === "committed",
+        (value) => value.state === "ready",
       );
       // The receipt commits before the export job publishes the issues it carries.
       await settled(
@@ -1809,7 +1809,7 @@ real(
       const movieDeadline = performance.now() + 10000;
       for (;;) {
         const status = await call<{ state: string }>("export.status", { exportId: movieExportId });
-        if (status.state === "committed") break;
+        if (status.state === "ready") break;
         if (
           ["failed", "unavailable", "canceled", "conflicted"].includes(status.state) ||
           performance.now() > movieDeadline
@@ -1833,7 +1833,7 @@ real(
         const status = await call<{ state: string; output: string | null }>("export.status", {
           exportId,
         });
-        if (status.state === "committed") break;
+        if (status.state === "ready") break;
         if (
           ["failed", "unavailable", "canceled"].includes(status.state) ||
           performance.now() > exportDeadline

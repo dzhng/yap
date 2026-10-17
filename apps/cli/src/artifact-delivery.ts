@@ -25,15 +25,11 @@ export const artifactOperations = new Set([
   ...batchReferences.keys(),
   "index.frame",
   "frame.get",
-  "frame.retry",
   "audio.measure",
   "audio.pause.get",
   "audio.get",
-  "audio.retry",
   "waveform.get",
-  "waveform.retry",
   "spectrogram.get",
-  "spectrogram.retry",
 ]);
 
 export class ArtifactDeliveryError extends Error {

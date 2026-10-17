@@ -339,7 +339,7 @@ try {
       });
       cohort.export = await poll(
         () => call("export.status", { exportId }),
-        (v) => v.state === "committed",
+        (v) => v.state === "ready",
         "export",
       );
       assert.equal(hash(await readFile(output)), cohort.full.sha256);

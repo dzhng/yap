@@ -83,7 +83,7 @@ async function exported(selection, name, settings, transport = "cli") {
   const initial = await call("export.create", request, { transport });
   const status = await poll(
     () => call("export.status", { exportId: request.exportId }, { transport }),
-    (v) => v.state === "committed",
+    (v) => v.state === "ready",
     name,
   );
   assert.deepEqual(
@@ -599,10 +599,10 @@ try {
     const cancelStatus = await call("export.status", { exportId: pending.exportId });
     assert.equal(cancelStatus.state, "canceled");
     assert.equal(cancelStatus.receipt, null);
-    await call("export.retry", { exportId: pending.exportId }, { transport: "mcp" });
+    await call("job.retry", { jobId: encodedJob.jobId }, { transport: "mcp" });
     const retry = await poll(
       () => call("export.status", { exportId: pending.exportId }),
-      (v) => v.state === "committed",
+      (v) => v.state === "ready",
       "AAC explicit retry",
     );
     const encodedReady = await call("job.get", { jobId: encodedJob.jobId });

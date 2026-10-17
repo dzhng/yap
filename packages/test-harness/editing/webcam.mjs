@@ -729,7 +729,7 @@ try {
   });
   const exported = await poll(
     () => call("export.status", { exportId }),
-    (value) => value.state === "committed",
+    (value) => value.state === "ready",
     "editable project export",
   );
   const packagePath = join(out, "relocated-project.zip");

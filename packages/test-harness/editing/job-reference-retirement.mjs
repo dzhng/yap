@@ -178,7 +178,7 @@ try {
     const status = await call("audio.get", params, { transport: "mcp" });
     assert.equal(status.jobId, id);
     assert.notEqual(status.state, "ready");
-    await call("audio.retry", params, { transport: "mcp" });
+    await call("job.retry", { jobId: status.jobId }, { transport: "mcp" });
     assert.equal((await ready(params)).jobId, id);
   }
   const after = await call("audio.get", survivor, { output: join(out, "survivor-after.wav") });
