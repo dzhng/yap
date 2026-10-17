@@ -30,7 +30,11 @@ try {
           receiptSha256: process.env.YAP_FFMPEG_RECEIPT_SHA256 ?? "",
         }
       : undefined,
-    ...(bundledPresets ? { presets: { bundled: bundledPresets } } : {}),
+    // Installed runs refresh presets at launch and daily; YAP_PRESETS_REFRESH=0 turns it off.
+    presets: {
+      ...(bundledPresets ? { bundled: bundledPresets } : {}),
+      ...(process.env.YAP_PRESETS_REFRESH === "0" ? {} : { refresh: true as const }),
+    },
     version,
     control: { input: process.stdin, output: process.stdout },
     // Empty-home lifecycle tests opt out explicitly; installed runs keep the

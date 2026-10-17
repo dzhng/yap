@@ -1311,6 +1311,10 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Read one preset by id. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
+    .object({ operation: z.literal("preset.update"), params: z.object({ id: z.string().min(1).optional() }).strict() })
+    .strict()
+    .describe("Refresh installed presets from the pinned remote source, optionally selecting one preset plus shared kit and authoring packages."),
+  z
     .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
     .strict()
     .describe(
@@ -1802,6 +1806,7 @@ const waits: Partial<Record<OperationName, number>> = {
   "job.cancel": drain,
   "project.delete": drain,
   "storage.usage": drain,
+  "preset.update": drain,
 };
 
 /** The longest the service waits on one operation's own path before answering it. */

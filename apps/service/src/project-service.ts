@@ -37,6 +37,8 @@ import { MediaAudioInspection } from "@yap/core/audio-inspection";
 import { ProjectEvidenceInspection } from "@yap/core/project-evidence";
 import { Models } from "@yap/core/models";
 import { createPresets } from "@yap/core/presets";
+import { PresetRefresh } from "@yap/core/preset-refresh";
+import { remoteSource, type RemoteOptions } from "@yap/core/preset-remote";
 import { runtimeMaterializer } from "./runtime-materialization.js";
 import { TranscriptStore, type SpeechTranscriptionReceipt } from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
@@ -218,7 +220,8 @@ export async function startProjectService(options: {
   /** The native worker binary; YAP_NATIVE when omitted. Passing undefined means there is none. */
   nativeExecutable?: string | undefined;
   ffmpeg?: FFmpegInstallation | undefined;
-  presets?: { bundled?: string };
+  /** Bundled presets to install at startup; `refresh` turns on the launch and daily refresh (off unless passed). */
+  presets?: { bundled?: string; refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
@@ -230,6 +233,7 @@ export async function startProjectService(options: {
   const ownership = await claimStartup(runtime);
   let catalog: CaptureStore | undefined;
   let jobs: JobQueue | undefined;
+  let presetRefresh: PresetRefresh | undefined;
   let listenerStarting: Promise<LocalListener> | undefined;
   let deletion: ProjectDeletion | undefined;
   let recordingDeletion: RecordingDeletion | undefined;
@@ -298,6 +302,7 @@ export async function startProjectService(options: {
     admission.close();
     closed = Promise.resolve().then(async () => {
       controller?.close();
+      presetRefresh?.close();
       modelLifetime.abort();
       delivery.dispose();
       // Own the eventual listener before control opens: EOF during bind must not publish a
@@ -328,10 +333,18 @@ export async function startProjectService(options: {
       newId: randomUUID,
     });
     const captures = catalog;
+    const presetsRoot = join(options.home, "presets");
+    const remote = options.presets?.refresh;
+    if (remote) {
+      const remoteOptions = remote === true ? {} : remote;
+      presetRefresh = new PresetRefresh({ root: presetsRoot, source: () => remoteSource(remoteOptions) });
+    }
     const presets = await createPresets({
-      root: join(options.home, "presets"),
+      root: presetsRoot,
       ...(options.presets?.bundled ? { bundled: options.presets.bundled } : {}),
+      ...(presetRefresh ? { refresh: presetRefresh } : {}),
     });
+    presetRefresh?.start();
     const assets = new AssetStore(catalog, library);
     await assets.recover();
     const acquisitions = new AcquisitionStore(catalog);
@@ -1373,6 +1386,8 @@ export async function startProjectService(options: {
             return { ok: true, data: presets.list() };
           case "preset.get":
             return { ok: true, data: presets.get(operation.params.id) };
+          case "preset.update":
+            return { ok: true, data: await presets.update(operation.params.id) };
           case "model.status":
             return {
               ok: true,

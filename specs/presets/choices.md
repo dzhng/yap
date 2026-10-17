@@ -56,3 +56,26 @@ Appended per pass. Consolidated when the spec closes.
 - **`preset.get`'s instructions point at `shoot-plan.svg` and the kit's
   `measure.mjs` and `check.mjs` by absolute path.** *Sound*: the agent gets paths it
   can act on directly.
+
+## Slice 04 (refresh)
+
+Codex wrote the remote source and the refresh, then stopped twice on "model at
+capacity". Review fixes and the service wiring were done by hand.
+
+- **Remote tests inject `fetch` rather than run an HTTP fixture server.** *Sound*:
+  same contract (pinned URLs, statuses, streams), and it runs inside a sandbox
+  that can't listen on sockets. The spec named a local server.
+- **Timeouts:** a request timeout plus a fixed per-read inactivity timeout (30 s
+  default), with no limit on a whole file. *Sound*: there's no per-preset cap, so a
+  large file may take long but a stalled one may not. Review removed a version that
+  scaled per-read timeouts by file size and leaked a timer on every request.
+- **An id-scoped `preset.update id` also refreshes the kit and guide**, and only
+  removes packages it owns. *Sound*: a preset may depend on a newer kit.
+- **Refresh is opt-in for `startProjectService`**; `main.ts` turns it on and
+  `YAP_PRESETS_REFRESH=0` turns it off. *Sound*: about 18 test callers start the
+  service and must not hit the network.
+- **When refresh is off, `preset.update` succeeds with a failed report and
+  instructions saying nothing was downloaded.** *Provisional*: a refusal code would
+  also be defensible. Kept as output-by-default.
+- **`preset.update` uses the `drain` wait budget**, like other long operations.
+  *Sound*.

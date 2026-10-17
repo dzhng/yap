@@ -2020,6 +2020,42 @@ test("preset reads cross the public wire without changing the catalog format", a
   });
 });
 
+test("presets refresh at startup and on preset.update, pinned to one commit, over the public wire", async () => {
+  const commit = "b".repeat(40);
+  const text = "---\nid: wire-demo\nversion: 1\nname: Wire demo\ndescription: A preset served by the test.\n---\n\n## Shoot\n\nAnything.\n\n## Edit\n\nNothing.\n";
+  const index = {
+    format: 1,
+    packages: [{
+      id: "wire-demo", kind: "preset", name: "Wire demo", description: "A preset served by the test.", version: 1,
+      files: [{ path: "PRESET.md", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") }],
+    }],
+  };
+  const replies: Record<string, string> = {
+    "https://api.test/repos/dzhng/yap/commits/main": commit,
+    [`https://raw.test/dzhng/yap/${commit}/presets/index.json`]: JSON.stringify(index),
+    [`https://raw.test/dzhng/yap/${commit}/presets/wire-demo/PRESET.md`]: text,
+  };
+  const requested: string[] = [];
+  const fetch = (async (input: string | URL) => {
+    const url = String(input);
+    requested.push(url);
+    return replies[url] === undefined ? new Response("missing", { status: 404 }) : new Response(replies[url]);
+  }) as typeof globalThis.fetch;
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: { refresh: { apiBase: "https://api.test", rawBase: "https://raw.test", fetch } },
+  });
+  expect(await f.call("preset.update", {})).toMatchObject({
+    ok: true,
+    // The startup refresh may already have installed it; either way the result says what to do.
+    data: { refresh: { commit, error: null }, instructions: [expect.any(String)] },
+  });
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
+  });
+  expect(requested.filter((url) => url.startsWith("https://raw.test")).every((url) => url.includes(commit))).toBe(true);
+});
+
 test("a persisted queued voice request reaches its initialized owner after startup recovery", async () => {
   const f = await setup(async () => {
     throw Error("No native media execution expected");

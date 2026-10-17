@@ -15,7 +15,7 @@ export type PackageSource = {
     signal?: AbortSignal,
   ): Promise<ReadableStream<Uint8Array>>;
   source?: "bundled" | "downloaded";
-  commit?: string;
+  commit?: string | undefined;
 };
 
 export type InstalledPackage = {
@@ -38,7 +38,12 @@ export type InstallReport = {
   conflicts: string[];
 };
 
-export type InstallOptions = { removeMissingDownloaded?: boolean; signal?: AbortSignal };
+export type InstallOptions = {
+  removeMissingDownloaded?: boolean;
+  /** With removeMissingDownloaded, only packages this accepts may be removed (an id-scoped refresh). */
+  removeSelector?: PackageSelector | undefined;
+  signal?: AbortSignal;
+};
 export type PackageSelector = (remote: PresetManifest, installed?: InstalledPackage) => boolean;
 
 // The service is the sole owner of ~/.yap/presets, so an in-process queue is
@@ -163,6 +168,9 @@ export async function installPackages(
       if (options.removeMissingDownloaded) {
         for (const [id, installed] of Object.entries(receipt.packages)) {
           if (installed.source !== "downloaded" || remoteIds.has(id) || locals.has(id)) continue;
+          // An id-scoped refresh only owns that package (plus kit/authoring). Keep
+          // other downloaded packages until a full refresh sees their absence.
+          if (options.removeSelector && !options.removeSelector({ id, kind: installed.kind, version: installed.version, files: installed.files }, installed)) continue;
           await rm(join(target, folderFor({ id, kind: installed.kind })), { recursive: true, force: true });
           delete receipt.packages[id];
           report.removed.push(id);

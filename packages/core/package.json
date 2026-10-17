@@ -368,6 +368,14 @@
       "types": "./dist/preset-instructions.d.ts",
       "default": "./dist/preset-instructions.js"
     },
+    "./preset-refresh": {
+      "types": "./dist/preset-refresh.d.ts",
+      "default": "./dist/preset-refresh.js"
+    },
+    "./preset-remote": {
+      "types": "./dist/preset-remote.d.ts",
+      "default": "./dist/preset-remote.js"
+    },
     "./presets": {
       "types": "./dist/presets.d.ts",
       "default": "./dist/presets.js"

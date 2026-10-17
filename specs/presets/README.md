@@ -17,7 +17,7 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–03 are done; start at [slice 04](slices/04-refresh.md). Record every
+Slices 00–04 are done; start at [slice 05](slices/05-create-delete.md); 06 is independent. Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -40,7 +40,7 @@ TODO:
 - [x] [01 Format](slices/01-format.md): `packages/core/src/preset-format.ts`, `scripts/presets-index.mjs --check`, `presets/index.json`, `kit/KIT.md`.
 - [x] [02 Install and store](slices/02-store.md): `preset-install.ts` (streaming sha256 install, atomic swap, receipt, conflicts) and `preset-store.ts` (list, get, `local.json`).
 - [x] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
-- [ ] [04 Refresh](slices/04-refresh.md): launch and daily refresh, `preset.update`.
+- [x] [04 Refresh](slices/04-refresh.md): `preset-remote.ts` (commit-pinned GitHub fetch, streamed, timeouts), `preset-refresh.ts` (startup + daily, joined runs, state), `preset.update`.
 - [ ] [05 Create and delete](slices/05-create-delete.md): local presets, generated ids, rendered `instructions`, Trash.
 - [ ] [06 Skill route](slices/06-skill-route.md): one paragraph in the consumer skill.
 - [ ] [07 Prove presets](slices/07-prove-presets.md): each draft edits raw footage into its style.
