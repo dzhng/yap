@@ -11,7 +11,7 @@ index every later slice reads.
   `PRESET.md` (kind `preset`), `kit/KIT.md` (kind `kit`, new) and
   `authoring/AUTHORING.md` (kind `authoring`, frontmatter added).
 - `buildIndex(manifests)` → `{ format: 1, packages: [{ id, kind, name?, description?, version, files: [{ path, bytes, sha256 }] }] }`, files sorted by path.
-- `validateTree(root)` → issues for: a file over 20 MB; a shipped preset over 50 MB;
+- `validateTree(root)` → issues for: a file of 100 MiB or more (GitHub's push limit; there is no per-preset cap);
   a symlink; a Git LFS pointer; a `source/` folder (repo origin only); a relative
   link that doesn't resolve to an indexed file in the tree (so `../kit/…` passes,
   `../../x` fails); a preset missing `## Shoot` or `## Edit`; an id that doesn't

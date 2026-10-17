@@ -36,8 +36,8 @@ These came from the user who commissioned the first presets. Each one is binding
 - **Capture generously; only size is limited.** Keep the full reference videos in
   `examples/<slug>/source/` while you work. Add as many stills, short audio clips
   and short video excerpts as help: a 3-second clip of a text animation teaches more
-  than any still. A shipped preset drops `source/` and stays within 20 MB a file and
-  50 MB in total, since every install downloads it. Shipped presets are public, so
+  than any still. A shipped preset drops `source/`; the only size limit is GitHub's
+  100 MiB per file (no Git LFS). Shipped presets are public, so
   keep third-party excerpts short and make each one demonstrate a single technique;
   avoid shipping whole music cues.
 - **Our own words.** Describe the style in fresh language, backed by measurements.
@@ -115,7 +115,7 @@ a pacing curve across the episode, a sound-design note (risers, hits, silence).
 8. **Grade.** Write `look.json`, build `look.cube`, and render a before/after on the
    repo's own fixture footage.
 9. **Check every link** in every Markdown file resolves inside the preset or the kit.
-10. **Check the files**: within the size budget, every quoted
+10. **Check the files**: every file under 100 MiB, every quoted
     number found in a file, every operation passes `--help`.
 11. **Hand off to a critic.** Ask a fresh agent to audit the preset against this
     guide's rules and reference set, and fix what it finds.

@@ -26,6 +26,7 @@ recorded, previous copy served), a tampered file, a dropped connection, only new
 versions fetched, local presets untouched.
 
 **Risks:** the unauthenticated GitHub API limit (one call a day per install is
-fine); the first full download (bounded by the 50 MB-per-preset budget).
+fine); the first full download, which has no cap: stream every file to disk with
+its own timeout scaled to its size, and report bytes done in the refresh state.
 
 **Later, not v1:** an index signature, before presets come from anyone but us.

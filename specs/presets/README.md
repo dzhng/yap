@@ -28,7 +28,7 @@ Warnings:
   `~/.yap/library`. Slice 03's wire test asserts it.
 - `dzhng/yap` is public and every install downloads `presets/`. Shipped presets
   keep the source link plus any stills, short audio and short video excerpts that
-  help, within the size budget (20 MB a file, 50 MB a preset). Full reference
+  help. The only limit is GitHub's: each file under 100 MiB. Full reference
   videos stay local. See [references](#reference-videos).
 - `preset.*` is unrelated to the encoder `settings.preset` and the voice profile
   `preset` on `voice.generate`. Say so in operation descriptions.
@@ -51,7 +51,7 @@ Update this section before ending your pass.
 
 | Question | Decision | Why |
 | --- | --- | --- |
-| Where do the reference videos live? | The full video stays local, in the example's `source/` folder. Shipped presets keep the source link plus excerpts within the size budget (see references below). | First decision: links only, "don't make it too complicated". Then widened by the user to as many stills, audio and short videos as help. |
+| Where do the reference videos live? | The full video stays local, in the example's `source/` folder. Shipped presets keep the source link plus excerpts, each file under 100 MiB (see references below). | First decision: links only, "don't make it too complicated". Then widened by the user to as many stills, audio and short videos as help. |
 | How are presets named? | By the general style (`tactile-launch-film`, `on-location-conversation`, `studio-podcast`), never by the source. Each source is one entry under the preset's `examples/`. | User requirement: more videos of the same style become more examples in the same preset. |
 | What can a preset contain? | Markdown, small JSON data and helper scripts. | User choice. Scripts are allowed because some styles need computed steps, such as a caption layout or a grade recipe. |
 | How is a downloaded preset trusted? | Each file's sha256 must match the repo's `presets/index.json`, fetched over HTTPS from `github.com/dzhng/yap` and pinned to one commit. | User choice: checksummed. The commit pin gives one consistent snapshot. Authenticity rests on HTTPS and repo access, as with today's [pinned skill fetch](../../skills/yap/references/skill-lifecycle.md). An index signature is a named later option, not v1. |
@@ -59,7 +59,7 @@ Update this section before ending your pass.
 | Does a preset update itself? | Yes. The service refreshes presets from the repo at launch and once a day, the same way the app already checks for updates and admin notices. `preset.update` stays as a manual trigger. A failed refresh keeps the last good copy. | User requirement: "continuously auto-update it, just like how it continuously auto-updates the app itself". |
 | What is in a preset folder? | Anything, as in a skill folder. `PRESET.md` is the entry point and links to its other files by relative path. | User requirement. A16z's cold open lives in its own `cold-open.md`; every preset ships a `look.cube` grade. |
 | What does a preset operation return? | Explicit steps for the agent, not just documents. Each result carries `instructions`: ordered steps with real paths and commands. Documents are referenced by path for depth. | User: "the customer for all this is the agent… return instructions for the agent on how to use the guide… what's next basically", and asked for the literal field name `instructions`. |
-| What are a preset's references? | The source videos the style was learned from (https URLs, or absolute paths to the user's own files), recorded in `PRESET.md`. `preset.create` doesn't fetch them; the agent downloads them into the preset's `examples/<slug>/source/`. Any preset can hold as many stills, audio clips and short video excerpts as help a future agent. The only limit is size: no file over 20 MB and no shipped preset over 50 MB, since every install downloads it. Full reference videos stay local (in `source/`, dropped when shipping). | User: "don't give yourself so much artificial limitation… don't include a 5 GB video but you can include as many stills and as many audio and also smaller videos as you want". Caution, recorded once: shipped presets are public, so third-party excerpts should be short and demonstrate one technique (a text animation, a cut, a mix move); full music cues are the riskiest to republish. |
+| What are a preset's references? | The source videos the style was learned from (https URLs, or absolute paths to the user's own files), recorded in `PRESET.md`. `preset.create` doesn't fetch them; the agent downloads them into the preset's `examples/<slug>/source/`. Any preset can hold as many stills, audio clips and short video excerpts as help a future agent. The only limit is GitHub's hard one: each file under 100 MiB, so no Git LFS is needed. There is no per-preset cap. Full reference videos stay local (in `source/`, dropped when shipping). | User: "don't give yourself so much artificial limitation… don't include a 5 GB video but you can include as many stills and as many audio and also smaller videos as you want", then "as high as you can without needing LFS… no arbitrary limits". Caution, recorded once: shipped presets are public, so third-party excerpts should be short and demonstrate one technique (a text animation, a cut, a mix move); full music cues are the riskiest to republish. |
 | Can a preset be deleted? | `preset.delete` removes local presets only, by moving them to the Trash. | User: "if we add a create then we should have a delete too". Official presets return on refresh, so deleting them would mislead. |
 | How are presets created? | `preset.create` scaffolds a new preset from `presets/authoring/template/` and returns the authoring guide, [AUTHORING.md](../../presets/authoring/AUTHORING.md). The guide holds every rule the user set while the first three were made, the method, the reference set and the depth bar. We author the shipped presets the same way (dogfooding): `preset.create`, fill it in locally, try it with `preset.get`, then copy the finished folder into the repo's `presets/` and open a PR. Shipping is a Git change, not a Yap operation. | User requirement: "a preset command to actually create presets", carrying "all this feedback and instructions", with the isometric-motion skill copied in as the example of depth. |
 | How deep is a preset? | As deep as [isometric-motion](../../presets/authoring/reference/isometric-motion/SKILL.md), copied into `presets/authoring/reference/` under its MIT license. Every example carries stills, storyboards, motion filmstrips, a measured profile, a section map and timeline, colour scopes, music analysis and speech pacing. | User requirement: "as many references as possible. Be creative." |
@@ -113,8 +113,8 @@ and the agent reads them from the installed folder. Typical files: extra detail
 loaded on demand, a `look.cube` grade LUT plus the `look.json` it was built from,
 and scripts run with the Node from `yap service.tools`. Every file is listed in the
 index and checked on download. Preset files are plain Git objects, never LFS:
-`raw.githubusercontent.com` serves an LFS pointer, not the bytes. Budget: 20 MB
-a file, 50 MB a shipped preset. A link to a file outside the folder fails
+`raw.githubusercontent.com` serves an LFS pointer, not the bytes. Each file must be under
+100 MiB, GitHub's push limit; there is no per-preset cap. A link to a file outside the folder fails
 validation.
 
 `PRESET.md` frontmatter:
@@ -192,11 +192,14 @@ place and reports the mismatched path.
 
   The CLI and MCP get the operations from the schema; no adapter reads preset files.
 - Reads never choose between copies; the installer already chose.
+- Size: the validator enforces only GitHub's 100 MiB per-file limit. Large presets
+  are allowed, so the refresh must stream to disk, never hold a file in memory,
+  and report progress in `preset.list`'s refresh state.
 - `catalogFormat`, the project document and every library table stay the same.
 - Preset operations never create, edit or export a project.
 - Committed preset text describes each style in our own words; it quotes no
   transcript or script. Reference media in a shipped preset is excerpts that each
-  demonstrate something (stills, short clips, short audio), within the size budget.
+  demonstrate something (stills, clips, audio), each file under 100 MiB.
 - The download path follows the model-download pattern: verify in staging, then
   rename into place, so a reader never sees a half-installed preset.
 
@@ -252,6 +255,10 @@ Alternatives not taken:
   tree owns precedence in one place.
 
 ## Known unknowns
+
+- With no per-preset cap, a first refresh can download hundreds of megabytes. If
+  that proves slow, fetch each preset's large media on first `preset.get` instead
+  of at refresh, keeping `PRESET.md` and data files eager. Measure before adding it.
 
 - Index authenticity beyond HTTPS: decide whether to add an Ed25519 index
   signature, reusing release signing. Revisit before third-party or user presets.
