@@ -67,6 +67,14 @@ provide stills; `preview.get` and `preview.retry` provide playable previews.
 `voice.generate` creates a durable generated audio asset from an explicit
 reference and text.
 
+## Presets
+
+`preset.list`, `preset.get`, `preset.update`, `preset.create` and `preset.delete`
+read, refresh, scaffold and remove style presets: skill-like folders for one kind
+of video, each with Shoot, Edit and Check guidance and a measuring kit. Every
+result carries `instructions` for the next step. Presets refresh from the Yap
+repository at launch and daily. Only local presets can be deleted.
+
 ## Models and runtime
 
 `model.list`, `model.status`, and `model.prepare` discover, inspect and prepare

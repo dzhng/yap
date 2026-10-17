@@ -79,3 +79,14 @@ capacity". Review fixes and the service wiring were done by hand.
   also be defensible. Kept as output-by-default.
 - **`preset.update` uses the `drain` wait budget**, like other long operations.
   *Sound*.
+
+## Slice 06 (skill route)
+
+- **The routing paragraph sits in the skill's "Task references" section.** That is
+  where every other "go read X" pointer lives. *Sound*.
+- **The eval case runs with the CLI available and accepts an honest "unavailable"**
+  when the service can't run in the Linux trial. *Sound*: it grades routing, not
+  native readiness, like the existing `*-reference-routing` cases.
+- **The skill names `preset.create` and `preset.delete` one slice before they
+  exist.** *Provisional*: slice 05 lands next on the same branch, before any
+  release.
