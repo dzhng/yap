@@ -33,6 +33,8 @@ public struct Preferences {
         static let microphoneDeviceName = "recording.microphoneDeviceName"
         static let systemAudio = "recording.systemAudio"
         static let setUpAgents = "setUpAgents"
+        static let telemetryInstallId = "telemetry.installId"
+        static let telemetryPingSent = "telemetry.pingSent"
     }
 
     /// Standard menu-bar apps open their window at every launch until a person turns that off.
@@ -45,6 +47,23 @@ public struct Preferences {
     public var setUpAgents: Bool {
         get { defaults.object(forKey: Key.setUpAgents) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Key.setUpAgents) }
+    }
+
+    /// Anonymous install ID for telemetry, generated once on first launch. A random UUID with no
+    /// connection to personal data. Used only to count unique installs.
+    public var telemetryInstallId: String {
+        get {
+            if let existing = defaults.string(forKey: Key.telemetryInstallId) { return existing }
+            let generated = UUID().uuidString.lowercased()
+            defaults.set(generated, forKey: Key.telemetryInstallId)
+            return generated
+        }
+    }
+
+    /// Whether the one-time first-launch ping has been sent.
+    public var telemetryPingSent: Bool {
+        get { defaults.bool(forKey: Key.telemetryPingSent) }
+        nonmutating set { defaults.set(newValue, forKey: Key.telemetryPingSent) }
     }
 
     /// Where the Settings window was last closed, as AppKit describes a window frame.
