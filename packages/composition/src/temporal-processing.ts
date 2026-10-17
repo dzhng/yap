@@ -9,6 +9,7 @@ import type { ValidatedComposition, ExactRange } from "./model.js";
 import type { ProcessingInstruction } from "./processing-plan.js";
 import {
   isStatefulProcessor,
+  processorRegistry,
   type StatefulProcessor,
   type Anchor,
   type ProcessingStep,
@@ -146,54 +147,61 @@ export function temporalProcessing(model: ValidatedComposition) {
           ranges.push({ start, end });
           stateActive.set(member.stepId, ranges);
         }
+      // The output stack carries picture processors too; the audio program runs only audio ones.
       return plan.map(({ steps, ...node }) => ({
         ...node,
-        steps: steps.map((step) => {
-          const { id, enabled, processor } = step;
-          if (processor.type === "rnnoise")
+        steps: steps
+          .filter((step) => processorRegistry[step.processor.type].mediaKind === "audio")
+          .map((step) => {
+            const { id, enabled, processor } = step;
+            if (processor.type === "rnnoise")
+              return {
+                id,
+                enabled,
+                processor: {
+                  type: "rnnoise" as const,
+                  active: stateActive.get(id) ?? [],
+                  ...(processor.mix === undefined
+                    ? {}
+                    : {
+                        mix:
+                          typeof processor.mix === "number"
+                            ? processor.mix
+                            : (program(step, node.target, "mix", processor.mix)?.samples(
+                                sampleRate,
+                              ) ?? 0),
+                      }),
+                },
+              };
+            if (isStatefulProcessor(processor))
+              return {
+                id,
+                enabled,
+                processor: { ...processor, active: stateActive.get(id) ?? [] },
+              };
+            if (processor.type !== "gain") return { id, enabled, processor };
+            if (typeof processor.gain === "number" && !step.window)
+              return { id, enabled, processor: { type: "gain" as const, gain: processor.gain } };
+            const compiled = program(step, node.target, "gain", processor.gain);
+            const active = (compiled?.available ?? [])
+              .map(({ start, end }) => ({
+                start: sampleAt(start, sampleRate),
+                end: sampleAt(end, sampleRate),
+              }))
+              .filter(({ start, end }) => start < end);
             return {
               id,
               enabled,
               processor: {
-                type: "rnnoise" as const,
-                active: stateActive.get(id) ?? [],
-                ...(processor.mix === undefined
-                  ? {}
-                  : {
-                      mix:
-                        typeof processor.mix === "number"
-                          ? processor.mix
-                          : (program(step, node.target, "mix", processor.mix)?.samples(
-                              sampleRate,
-                            ) ?? 0),
-                    }),
+                type: "gain" as const,
+                gain:
+                  typeof processor.gain === "number"
+                    ? processor.gain
+                    : (compiled?.samples(sampleRate) ?? 1),
+                active,
               },
             };
-          if (isStatefulProcessor(processor))
-            return { id, enabled, processor: { ...processor, active: stateActive.get(id) ?? [] } };
-          if (processor.type !== "gain") return { id, enabled, processor };
-          if (typeof processor.gain === "number" && !step.window)
-            return { id, enabled, processor: { type: "gain" as const, gain: processor.gain } };
-          const compiled = program(step, node.target, "gain", processor.gain);
-          const active = (compiled?.available ?? [])
-            .map(({ start, end }) => ({
-              start: sampleAt(start, sampleRate),
-              end: sampleAt(end, sampleRate),
-            }))
-            .filter(({ start, end }) => start < end);
-          return {
-            id,
-            enabled,
-            processor: {
-              type: "gain" as const,
-              gain:
-                typeof processor.gain === "number"
-                  ? processor.gain
-                  : (compiled?.samples(sampleRate) ?? 1),
-              active,
-            },
-          };
-        }),
+          }),
       }));
     },
     opacity(step: ProcessingStep, target: ProcessingTarget, at: TimeValue) {

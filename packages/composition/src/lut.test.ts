@@ -74,6 +74,39 @@ test("an ordered LUT retains an immutable non-media dependency and survives comp
   );
 });
 
+test("a LUT on the output grades the picture and never reaches the audio program", () => {
+  const graded = structuredClone(document) as typeof document & {
+    tracks: object[];
+    clips: object[];
+  };
+  graded.tracks.push({ id: "a", kind: "audio", order: 1 });
+  graded.clips.push({
+    id: "voice",
+    trackId: "a",
+    assetId: "sound",
+    streamId: "s",
+    source: { kind: "range", range },
+    placement: { kind: "project", range },
+  });
+  graded.processing = [
+    { target: { kind: "output" }, steps: [document.processing[0]!.steps[0]!] },
+  ] as never;
+  const sound = {
+    id: "sound",
+    streams: [{ id: "s", kind: "audio", bounds: range, available: [range] }],
+  };
+  const window = createCompiler(validateComposition(graded, [...assets, sound]), "out").window({
+    range,
+    rendition: { sampleRate: 48000, channels: 2 },
+    tap: { target: { kind: "output" }, point: { kind: "processed" } },
+  });
+  expect([...window.frames()][0]!.visual.at(-1)!.operations).toContainEqual(
+    expect.objectContaining({ kind: "lut", assetId: "cube" }),
+  );
+  const output = window.processing().find((node) => node.target.kind === "output")!;
+  expect(output.steps).toEqual([]);
+});
+
 test("unknown and non-LUT asset references refuse even while bypassed", () => {
   const bypassed = structuredClone(document);
   bypassed.processing[0]!.steps[0]!.enabled = false;

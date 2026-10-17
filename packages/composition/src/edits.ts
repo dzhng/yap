@@ -657,7 +657,10 @@ export function applyBatch(
       const id =
         step.id === undefined ? allocate("processingStep") : resolve(step.id, "processingStep");
       if (step.id !== undefined && !existing.has(id))
-        invalid("Processing step does not belong to this target", { target, stepId: id });
+        invalid(
+          "Processing step id names no existing step on this target; omit id to add a new step",
+          { target, stepId: id },
+        );
       if (used.has(id)) invalid("Repeated processing step ID", { stepId: id });
       used.add(id);
       bind(step.label, "processingStep", id);
