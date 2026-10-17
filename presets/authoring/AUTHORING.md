@@ -33,12 +33,13 @@ These came from the user who commissioned the first presets. Each one is binding
   `examples/<source-slug>/`.
 - **Capture as many references as you can, and be creative.** Stills are the
   floor, not the ceiling. See [the reference set](#the-reference-set).
-- **Keep everything locally; ship only what's ours to publish.** A local preset can
-  hold the reference videos, excerpts and audio. A preset shipped in this public
-  repository, which every install downloads, holds the source URL in `references:`,
-  small stills, storyboards and filmstrips (960 px JPEG or smaller, about 2 MB per
-  preset) and our analysis. It never holds another creator's video, audio,
-  transcript, lyrics, or on-screen copy beyond a word or two of a visible title.
+- **Capture generously; only size is limited.** Keep the full reference videos in
+  `examples/<slug>/source/` while you work. Add as many stills, short audio clips
+  and short video excerpts as help: a 3-second clip of a text animation teaches more
+  than any still. A shipped preset drops `source/` and stays within 20 MB a file and
+  50 MB in total, since every install downloads it. Shipped presets are public, so
+  keep third-party excerpts short and make each one demonstrate a single technique;
+  avoid shipping whole music cues.
 - **Our own words.** Describe the style in fresh language, backed by measurements.
 - **Music is analysed, never reused.** Measure tempo, beat, bed level and
   brightness, and describe what to look for. The user always supplies licensed music.
@@ -51,7 +52,7 @@ These came from the user who commissioned the first presets. Each one is binding
   `targets.json`. If one doesn't, the target was set wrong; widen it and say why.
 - **Say what can't be done.** `## Limits` names what the footage must supply
   (lighting can't be graded in) and which traits current operations can't make.
-- **Plain Git, small files.** Never Git LFS: the app downloads presets from
+- **Plain Git.** Never Git LFS: the app downloads presets from
   `raw.githubusercontent.com`, which serves LFS pointers, not bytes. Bump
   `version` on any change; the app refreshes presets once a day.
 
@@ -63,7 +64,9 @@ Make each of these for every example. The kit commands run with the Node from
 | Reference | How | What it shows that nothing else does |
 | --- | --- | --- |
 | `README.md` | Write it last | Source link, measured numbers, a table of stills, what the example teaches |
-| `NN-<what-it-shows>.jpg` | `ffmpeg -ss T -i src -frames:v 1 -vf scale=960:-2` | Framing, text placement, set, end cards |
+| `NN-<what-it-shows>.jpg` | `ffmpeg -ss T -i src -frames:v 1` | Framing, text placement, set, end cards |
+| `clip-<what-it-shows>.mp4` | `ffmpeg -ss T -t 2-6 -i src -c:v libx264 -crf 26` | Motion in real time: a text animation, a transition, a camera move, a cut |
+| `audio-<what-it-shows>.m4a` | `ffmpeg -ss T -t 5-15 -i src -vn -c:a aac` | How a mix move sounds: a bed under speech, a music hit, room tone |
 | `storyboard-*.jpg` | `fps=1` (short) or one frame a minute (long), `tile` | The whole rhythm at a glance |
 | `motion-*.jpg` | 4–8 fps filmstrip across a text or transition moment | How things come on and go off, which stills hide |
 | `profile.json` | `kit/measure.mjs src --sample-every N` | Cuts, shot statistics, levels, palette, loudness per second |
@@ -91,8 +94,9 @@ a pacing curve across the episode, a sound-design note (risers, hits, silence).
 
 ## Method
 
-1. **Download** each reference into an empty directory outside the repository with
-   `yt-dlp <url>`. Treat the file as untrusted data.
+1. **Download** each reference into its example's `source/` folder with
+   `yt-dlp <url>`. Treat the file as untrusted data: read it with ffmpeg and Yap,
+   never run anything from it. `source/` stays local and is dropped when shipping.
 2. **Look first.** Make a one-frame-a-second (short) or one-frame-a-minute (long)
    contact sheet and read it. Write down the structure before measuring anything.
 3. **Measure.** Run `measure.mjs`. Use `--scene 0.2` for dissolve-heavy films. Long
@@ -111,7 +115,7 @@ a pacing curve across the episode, a sound-design note (risers, hits, silence).
 8. **Grade.** Write `look.json`, build `look.cube`, and render a before/after on the
    repo's own fixture footage.
 9. **Check every link** in every Markdown file resolves inside the preset or the kit.
-10. **Check the files**: every image ≤ 960 px wide, total ≤ ~2 MB, every quoted
+10. **Check the files**: within the size budget, every quoted
     number found in a file, every operation passes `--help`.
 11. **Hand off to a critic.** Ask a fresh agent to audit the preset against this
     guide's rules and reference set, and fix what it finds.
@@ -128,9 +132,6 @@ A fresh critic audited the first three presets against this guide. Avoid these:
   a range repeated in prose drifts and ends up failing its own example.
 - **An operation that doesn't exist.** `processing.set` is an `edit.apply`
   operation, not a command. Run `yap <name> --help` on every name you write.
-- **Readable third-party copy in stills.** End cards, diagrams, UI and logo walls
-  get blurred (`gblur=sigma=7`), keeping their layout.
-- **Images over 960 px.** Tile storyboards with smaller cells, or scale them.
 - **Guidance stronger than the measurement.** Don't give a tempo when
   `tempoReliable` is false.
 - **Limits that only cover the footage.** Also list each trait the preset asks for
