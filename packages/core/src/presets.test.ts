@@ -82,3 +82,17 @@ it("a broken bundled directory never stops the facade; the error is reported by 
   expect(listed.presets).toEqual([]);
   expect(listed.refresh.error).toMatch(/bundled presets unavailable/);
 });
+
+it("after a kit-only update, instructions never send the agent to preset.get the kit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "presets-update-kit-"));
+  const fakeRefresh = {
+    run: async () => ({ installed: ["kit", "authoring"], skipped: [], failed: [], removed: [], conflicts: [] }),
+    state: () => ({ checkedAt: "2026-10-17T00:00:00.000Z", commit: "c".repeat(40), error: null, available: [], bytesDone: 0 }),
+    settled: async () => {},
+    remoteIds: () => new Set<string>(),
+  };
+  const presets = await createPresets({ root, refresh: fakeRefresh as never });
+  const result = await presets.update();
+  expect(result.instructions).toEqual(["No presets changed."]);
+  await rm(root, { recursive: true, force: true });
+});

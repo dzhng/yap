@@ -34,6 +34,7 @@ export class PresetRefresh {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private inFlight: Promise<InstallReport> | undefined;
   private started = false;
+  private lastRemoteIds: string[] = [];
   private closed = false;
   private currentState: RefreshState = { checkedAt: null, commit: null, error: null, available: [], bytesDone: 0 };
 
@@ -61,10 +62,22 @@ export class PresetRefresh {
     this.schedule();
   }
 
-  close(): void {
+  /** Stop the schedule and wait for a run in flight, so no install is still moving folders. */
+  async close(): Promise<void> {
     this.closed = true;
     if (this.timer) this.clock.clearTimeout(this.timer);
     this.timer = undefined;
+    await this.settled();
+  }
+
+  /** Resolves once no run is in flight; a failed run counts as settled. */
+  async settled(): Promise<void> {
+    await this.inFlight?.catch(() => {});
+  }
+
+  /** Every package id in the last remote index fetched, newer or not. */
+  remoteIds(): Set<string> {
+    return new Set(this.lastRemoteIds);
   }
 
   private schedule(): void {
@@ -82,6 +95,7 @@ export class PresetRefresh {
     const source = this.options.source();
     try {
       const index = await source.index();
+      this.lastRemoteIds = index.packages.map((pkg) => pkg.id);
       // An id-scoped refresh owns that preset plus the shared kit and guide.
       const owned = (remote: { id: string; kind: string }) => !id || remote.id === id || remote.kind === "kit" || remote.kind === "authoring";
       const selected: PackageSelector = (remote, installed) => owned(remote) && newerThanInstalled(remote, installed);

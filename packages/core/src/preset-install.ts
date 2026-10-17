@@ -50,6 +50,13 @@ export type PackageSelector = (remote: PresetManifest, installed?: InstalledPack
 // sufficient; cross-process locking would add machinery for an unsupported use.
 const queues = new Map<string, Promise<void>>();
 
+const PACKAGE_ID = /^[a-z0-9-]+$/;
+function validPackage(pkg: Pick<PresetManifest, "id" | "kind">): boolean {
+  if (typeof pkg.id !== "string" || !PACKAGE_ID.test(pkg.id)) return false;
+  if (pkg.kind === "preset") return true;
+  return (pkg.kind === "kit" || pkg.kind === "authoring") && pkg.id === pkg.kind;
+}
+
 function folderFor(pkg: Pick<PresetManifest, "id" | "kind">): string {
   return pkg.kind === "preset" ? pkg.id : pkg.kind;
 }
@@ -125,6 +132,12 @@ export async function installPackages(
     await mkdir(stagingRoot, { recursive: true });
     try {
       for (const pkg of index.packages) {
+        // A remote index is untrusted input: an id or kind outside the format could name a path
+        // outside the target, so it is refused before any path is built from it.
+        if (!validPackage(pkg)) {
+          report.failed.push({ id: String(pkg.id), reason: "invalid package id or kind" });
+          continue;
+        }
         const installed = receipt.packages[pkg.id];
         if (pkg.kind === "preset" && locals.has(pkg.id)) {
           report.conflicts.push(pkg.id);

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -142,4 +142,22 @@ describe("preset installer", () => {
       }
     }
   });
+});
+
+test("refuses a remote package whose id or kind would escape the target", async () => {
+  const outer = await mkdtemp(join(tmpdir(), "preset-install-escape-"));
+  const target = join(outer, "presets");
+  const text = "x";
+  const file = { path: "PRESET.md", bytes: 1, sha256: createHash("sha256").update(text).digest("hex") };
+  const source = {
+    index: async () => ({ format: 1 as const, packages: [
+      { id: "../escaped", kind: "preset" as const, version: 1, files: [file] },
+      { id: "kit", kind: "evil" as never, version: 1, files: [file] },
+    ] }),
+    file: async () => new ReadableStream<Uint8Array>({ start(c) { c.enqueue(new TextEncoder().encode(text)); c.close(); } }),
+  };
+  const report = await installPackages(source, target);
+  expect(report.installed).toEqual([]);
+  expect(report.failed.map((f) => f.id).sort()).toEqual(["../escaped", "kit"]);
+  await expect(stat(join(outer, "escaped"))).rejects.toThrow();
 });

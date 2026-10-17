@@ -60,3 +60,15 @@ describe("preset store", () => {
     expect(new PresetStore(root).get("kit")).toBeUndefined();
   });
 });
+
+test("never reads outside the presets root, and only serves installed or local presets", async () => {
+  const outer = await mkdtemp(join(tmpdir(), "preset-store-escape-"));
+  const root = join(outer, "presets");
+  await mkdir(join(outer, "secret"), { recursive: true });
+  await writeFile(join(outer, "secret", "PRESET.md"), "outside");
+  await mkdir(join(root, "stray"), { recursive: true });
+  await writeFile(join(root, "stray", "PRESET.md"), "not installed");
+  const store = new PresetStore(root);
+  expect(store.get("../secret")).toBeUndefined();
+  expect(store.get("stray")).toBeUndefined();
+});

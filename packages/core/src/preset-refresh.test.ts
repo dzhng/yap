@@ -93,3 +93,33 @@ describe("PresetRefresh", () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
+
+it("close waits for a refresh in flight, so nothing is still renaming when ownership is released", async () => {
+  const root = await mkdtemp(join(tmpdir(), "preset-refresh-close-"));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const index: PresetIndex = { format: 1, packages: [pkg("slow", 1)] };
+  const base = sourceFor(index, { "slow/PRESET.md": "slow" });
+  const source: PackageSource = { ...base, async index() { await gate; return index; } };
+  const refresh = new PresetRefresh({ root, source: () => source, clock: fakeClock() });
+  const running = refresh.run();
+  let closed = false;
+  const closing = refresh.close().then(() => { closed = true; });
+  await Promise.resolve();
+  expect(closed).toBe(false);
+  release();
+  await running;
+  await closing;
+  expect(closed).toBe(true);
+  await rm(root, { recursive: true, force: true });
+});
+
+it("remembers every id in the last remote index and lets callers wait for a run in flight", async () => {
+  const root = await mkdtemp(join(tmpdir(), "preset-refresh-ids-"));
+  const index: PresetIndex = { format: 1, packages: [pkg("official", 1)] };
+  const refresh = new PresetRefresh({ root, source: () => sourceFor(index, { "official/PRESET.md": "official" }), clock: fakeClock() });
+  void refresh.run();
+  await refresh.settled();
+  expect(refresh.remoteIds()).toEqual(new Set(["official"]));
+  await rm(root, { recursive: true, force: true });
+});

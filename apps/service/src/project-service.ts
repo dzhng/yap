@@ -302,13 +302,13 @@ export async function startProjectService(options: {
     admission.close();
     closed = Promise.resolve().then(async () => {
       controller?.close();
-      presetRefresh?.close();
       modelLifetime.abort();
       delivery.dispose();
       // Own the eventual listener before control opens: EOF during bind must not publish a
       // socket after shutdown released the catalog. Every owner drains before that release.
       const results = await Promise.allSettled([
         listenerStarting?.then((bound) => bound.close()),
+        presetRefresh?.close(),
         captureControl?.close(),
         reconciliation,
         jobs?.close(),

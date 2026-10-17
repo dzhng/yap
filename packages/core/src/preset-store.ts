@@ -5,6 +5,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { parsePackage, type PresetFile, type PresetManifest } from "./preset-format.js";
 import type { InstalledPackage, PresetReceipt } from "./preset-install.js";
 
+const PRESET_ID = /^[a-z0-9-]+$/;
+
 export type PresetSource = "bundled" | "downloaded" | "local";
 export type PresetSummary = {
   id: string;
@@ -111,7 +113,8 @@ export class PresetStore {
     const receipt = this.readReceipt();
     const locals = readLocalIds(this.root);
     const installed = receipt.packages[id];
-    if (installed && installed.kind !== "preset" && !locals.has(id)) return undefined;
+    // Only an installed or local preset id is served, so a crafted id can't reach outside the root.
+    if (!PRESET_ID.test(id) || (installed?.kind !== "preset" && !locals.has(id))) return undefined;
     const path = join(this.root, id);
     const textPath = join(path, "PRESET.md");
     if (!existsSync(textPath)) return undefined;

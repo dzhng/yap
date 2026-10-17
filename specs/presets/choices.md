@@ -111,3 +111,20 @@ capacity". Review fixes and the service wiring were done by hand.
   app has the native media helper this worktree lacks.
 - **The proof grades the video track, not the output.** This is forced by the
   output-target export bug recorded in slice 07.
+
+## Whole-feature review (Codex, against main)
+
+All five findings were confirmed in the code and fixed, test first.
+
+- **`preset.get` serves only installed or local preset ids** that match the id format.
+  A crafted id such as `../x` returns not-found. *Sound* (P1).
+- **The installer refuses a remote package whose id or kind is outside the format**
+  before building any path from it. A remote index is untrusted input. *Sound* (P1).
+- **`PresetRefresh.close()` waits for a run in flight.** The service awaits it before
+  releasing ownership. *Sound* (P2).
+- **`preset.update` names only downloaded presets** as things to `preset.get`; kit and
+  guide updates aren't presets. *Sound* (P2).
+- **`preset.create` waits for a refresh in flight and reserves every id in the last
+  remote index**, not just newer ones. *Sound* (P2). A preset published after that
+  index can still collide; the installer then records a conflict and the local
+  preset keeps its id.

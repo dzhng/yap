@@ -74,12 +74,13 @@ export class Presets {
       return { report: { installed: [], skipped: [], failed: [{ id: id ?? "presets", reason: "refresh is disabled" }], removed: [], conflicts: [] }, refresh: this.list().refresh, instructions: ["Preset refresh is turned off in this service, so nothing was downloaded; the installed presets are unchanged."] };
     }
     const report = await this.refresh.run(id);
-    const changed = [...new Set([...report.installed, ...report.removed].filter((value) => this.store.get(value)?.source !== "local"))];
-    return {
-      report,
-      refresh: this.list().refresh,
-      instructions: changed.length ? [`Presets changed: ${changed.join(", ")}. Call preset.get on each changed preset before editing.`] : ["No presets changed."],
-    };
+    // Only presets can be read with preset.get; kit and authoring updates are shared files.
+    const updated = report.installed.filter((value) => this.store.get(value)?.source === "downloaded");
+    const instructions: string[] = [];
+    if (updated.length) instructions.push(`Presets updated: ${updated.join(", ")}. Call preset.get on each before editing with it.`);
+    if (report.removed.length) instructions.push(`No longer offered and removed: ${report.removed.join(", ")}.`);
+    if (!instructions.length) instructions.push("No presets changed.");
+    return { report, refresh: this.list().refresh, instructions };
   }
 
 
@@ -92,9 +93,11 @@ export class Presets {
       catch { validPath = false; }
       if (!validUrl && !validPath) throw new PresetReferenceInvalidError(reference);
     }
-    const available = new Set(this.refresh?.state().available.map((entry) => entry.id) ?? []);
-    for (const id of this.store.installedIds()) available.add(id);
-    const id = presetId(input.name, available);
+    // Reserve every official id, including ones a refresh in flight is about to install.
+    await this.refresh?.settled();
+    const taken = this.refresh?.remoteIds() ?? new Set<string>();
+    for (const id of this.store.installedIds()) taken.add(id);
+    const id = presetId(input.name, taken);
     if (!id) throw new PresetNameUnusableError(input.name);
     const path = join(this.store.root, id);
     await scaffold({ template: join(this.store.root, "authoring", "template"), target: path, id, name: input.name, references });
