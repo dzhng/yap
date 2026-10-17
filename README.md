@@ -281,7 +281,10 @@ particular release what to do when something has gone wrong.
 service ships, refreshes from this repository and returns to agents through `preset.*`.
 
 The consumer [yap skill](skills/yap/SKILL.md) teaches external agents
-how to edit for the user with the toolkit. Repository development skills live
+how to edit for the user with the toolkit. The consumer
+[storyboard skill](skills/storyboard/SKILL.md) builds the chapter and shot plan a
+human agrees on before a long conversation is edited; the app does not bundle or
+install it yet. Repository development skills live
 separately under .agents/skills; they are not a product operation catalog.
 README artwork lives in [.github/readme](.github/readme).
 
