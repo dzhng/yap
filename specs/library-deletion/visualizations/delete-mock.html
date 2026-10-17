@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- Approved by the user 2026-10-17 ("this looks good") as the review target for slices 13 (left panel) and 14 (right panel). Data is fake. -->
+<html><head><meta charset="utf-8"><title>Library delete — approved mock</title><style>
+:root{--background:#111214;--foreground:#ececec;--muted-foreground:#9a9ca3;--card:#18191c;--border:#2c2e33;--secondary:#2a2c31;--popover:#1d1f23;--accent-surface:#2b3550;--accent-surface-foreground:#c8d4ff;--destructive:#ff6b6b;--code-background:#0c0d0f;--code-foreground:#d6d6d6;--radius:10px;--font-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;--font-mono:"SF Mono",Menlo,monospace}
+body{margin:24px;background:var(--background);font-family:var(--font-sans);color:var(--foreground);max-width:760px}
+.wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-foreground);margin:0 0 8px}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tab{font-size:12px;padding:4px 10px;border-radius:6px;color:var(--muted-foreground)}.tab.on{background:var(--secondary);color:var(--foreground)}
+.storage{font-size:11px;color:var(--muted-foreground);margin-bottom:10px}
+.row{border:1px solid var(--border);border-radius:8px;padding:9px 11px;margin-bottom:7px;position:relative;background:var(--background)}
+.t{font-size:13px;font-weight:600}.d{font-size:11px;color:var(--muted-foreground);margin-top:2px}
+.badge{font-size:10px;padding:1px 6px;border-radius:4px;background:var(--accent-surface);color:var(--accent-surface-foreground);margin-left:6px;font-weight:500}
+.more{position:absolute;right:10px;top:9px;font-size:13px;color:var(--muted-foreground)}
+.menu{position:absolute;right:8px;top:30px;background:var(--popover);border:1px solid var(--border);border-radius:8px;padding:4px;font-size:12px;z-index:2;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.menu div{padding:4px 12px;border-radius:4px}.menu .del{color:var(--destructive)}
+.dlg{background:var(--popover);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:12px}
+.dlg b{font-size:13px}.dlg p{font-size:12px;color:var(--muted-foreground);margin:6px 0 10px}
+.dlg ul{font-size:12px;margin:0 0 10px 18px;padding:0}
+.btns{display:flex;justify-content:flex-end;gap:8px}.btn{font-size:12px;padding:4px 12px;border-radius:6px;border:1px solid var(--border)}.btn.red{background:#d93a3a;color:#fff;border-color:transparent;font-weight:600}
+pre{font-family:var(--font-mono);font-size:11px;background:var(--code-background);color:var(--code-foreground);padding:12px;border-radius:var(--radius);margin:0;overflow:auto;line-height:1.5}
+.c{color:var(--muted-foreground)}.full{grid-column:1/-1}
+</style></head><body><div class="wrap">
+<div class="panel"><h3>Library — Recordings tab (slice 13)</h3>
+<div class="tabs"><span class="tab on">Recordings</span><span class="tab">Projects</span></div>
+<div class="storage">Library 2.3 GB · media 87 MB · models 2.2 GB</div>
+<div class="row"><div class="t">Today 9:41 PM</div><div class="d">4:12 · Microphone audio · Ready</div><span class="more">⋯</span></div>
+<div class="row"><div class="t">launch-teaser-v2.mp4<span class="badge">Imported</span></div><div class="d">0:42 · 22 MB · imported Today 8:46 PM</div><span class="more">⋯</span>
+<div class="menu"><div>Play</div><div>Copy agent prompt</div><div class="del">Delete…</div></div></div>
+<div class="row" style="margin-top:58px"><div class="t">Yesterday 3:05 PM</div><div class="d">11:30 · Microphone audio · Ready</div><span class="more">⋯</span></div>
+<div class="row"><div class="t">Yesterday 2:58 PM</div><div class="d">0:07 · Deleting</div></div>
+</div>
+<div class="panel"><h3>Delete dialog — one dialog, two cases (slice 14)</h3>
+<div class="dlg"><b>Delete “launch-teaser-v2.mp4”?</b><p>Removes Yap’s copy and its transcripts (22 MB). Your original file isn’t touched. This can’t be undone.</p><div class="btns"><span class="btn">Cancel</span><span class="btn red">Delete</span></div></div>
+<div class="dlg"><b>Delete “Yesterday 3:05 PM”?</b><p>This recording is used by:</p><ul><li>Project “Q4 demo” — 14 revisions</li><li>Project “Bug report: export” — 3 revisions</li></ul><p>Deleting it also deletes these projects (1.4 GB total). This can’t be undone.</p><div class="btns"><span class="btn">Cancel</span><span class="btn red">Delete all</span></div></div>
+</div>
+<div class="panel full"><h3>What an agent sees — asset.delete refused (CLI / MCP, slice 08)</h3>
+<pre>{"ok":false,"error":{"code":"IN_USE","retryable":false,
+  "message":"Asset is used by 2 projects; pass cascade:true to delete them too",
+  "details":{
+    "assetId":"a3237d65…",
+    <span class="c">// everything cascade:true would delete right now</span>
+    "usedBy":[{"kind":"project","projectId":"8f1c…","title":"Q4 demo","revisions":14},
+              {"kind":"project","projectId":"2b90…","title":"Bug report: export","revisions":3}],
+    <span class="c">// bytes freed by a plain delete vs a cascade</span>
+    "freesBytes":22930475,"cascadeFreesBytes":1442001920 }}}</pre>
+<pre style="margin-top:8px">{"ok":true,"data":{"assetId":"a3237d65…","deleted":true,"freedBytes":1442001920}}</pre>
+</div></div></body></html>
