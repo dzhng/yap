@@ -17,8 +17,7 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests. No operation code exists yet._
 
-Start at [slice 00](slices/00-spike.md): three quick checks the whole plan rests
-on. Then build in order. Read [contracts](#contracts) and
+Slice 00 is done; start at [slice 01](slices/01-format.md) and build in order. Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
 
@@ -36,7 +35,7 @@ Warnings:
   runs past the video (see [study](study.md)). Until it lands, extract audio first.
 
 TODO:
-- [ ] [00 Spike](slices/00-spike.md): bundled path through `runtime.json`, `/usr/bin/trash` with Put Back, and LUT/text/dissolve through the public CLI.
+- [x] [00 Spike](slices/00-spike.md): the service resolves the bundled path from `runtime.json` (no Swift), `/usr/bin/trash` works (Put Back unverified), every Edit step maps to an `edit.apply` operation.
 - [ ] [01 Format](slices/01-format.md): packages (preset, kit, authoring), index, validator, `--check`.
 - [ ] [02 Install and store](slices/02-store.md): one verified, atomic installer and one reader of `~/.yap/presets/`.
 - [ ] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
@@ -163,8 +162,8 @@ place and reports the mismatched path.
 ### Storage
 
 - Bundled: `Yap.app/Contents/Resources/presets/`, copied from repo `presets/`
-  (without `source/`) by `scripts/build-macos.mjs`. The service finds it through
-  `presetsDirectory` in its `runtime.json`; `YAP_PRESETS_DIRECTORY` overrides it.
+  (without `source/`) by `scripts/build-macos.mjs`. `apps/service/src/main.ts` resolves
+  `presetsDirectory` from its `runtime.json`; `YAP_PRESETS_DIRECTORY` overrides it.
 - Installed: the service reads only `~/.yap/presets/`, which mirrors the repo
   (`<id>/`, `kit/`, `authoring/`) so `../kit/` resolves for every preset, local
   ones included.

@@ -20,8 +20,9 @@ presets bundled in it.
   recorded, else `## Edit` on their footage, then `## Check`, with real paths.
 - Build: `scripts/build-macos.mjs` copies `presets/` (without `source/`) to
   `Contents/Resources/presets` and writes `presetsDirectory: "../presets"` into
-  `runtime.json`; `apps/service/src/main.ts` passes it, with
-  `YAP_PRESETS_DIRECTORY` overriding for development.
+  `runtime.json`. `apps/service/src/main.ts` already reads `runtime.json`; it
+  resolves `presetsDirectory` relative to that file and passes it to
+  `startProjectService`. `YAP_PRESETS_DIRECTORY` overrides it. No Swift change (slice 00).
 - `list` returns `{ presets: [{ id, name, description, version, source, references, conflict? }], refresh: { checkedAt, commit, error, available } , instructions }`; it never touches the network.
 
 **Run or see:** `yap preset.list`, `yap preset.get tactile-launch-film`,
