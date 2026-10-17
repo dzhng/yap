@@ -45,24 +45,50 @@ export class DeletionPlans {
         "SELECT subjectKind,subjectId,cascade,phase,createdAt FROM deletion_plans WHERE subjectKind=? AND subjectId=?",
       )
       .get(subjectKind, subjectId) as
-      | { subjectKind: string; subjectId: string; cascade: number; phase: DeletionPhase; createdAt: string }
+      | {
+          subjectKind: string;
+          subjectId: string;
+          cascade: number;
+          phase: DeletionPhase;
+          createdAt: string;
+        }
       | undefined;
-    return row
-      ? { ...row, cascade: row.cascade === 1 }
-      : null;
+    return row ? { ...row, cascade: row.cascade === 1 } : null;
+  }
+
+  /** Whether deletion has reached its durable tombstone phase for this subject. */
+  isTombstoned(subjectKind: string, subjectId: string): boolean {
+    return Boolean(
+      this.store.catalog
+        .prepare(
+          "SELECT 1 FROM deletion_plans WHERE subjectKind=? AND subjectId=? AND phase <> 'planned' LIMIT 1",
+        )
+        .get(subjectKind, subjectId),
+    );
   }
 
   list(subjectKind?: string): DeletionPlan[] {
-    const rows = subjectKind === undefined
-      ? this.store.catalog
-          .prepare("SELECT subjectKind,subjectId,cascade,phase,createdAt FROM deletion_plans ORDER BY subjectKind,subjectId")
-          .all()
-      : this.store.catalog
-          .prepare("SELECT subjectKind,subjectId,cascade,phase,createdAt FROM deletion_plans WHERE subjectKind=? ORDER BY subjectId")
-          .all(subjectKind);
-    return (rows as Array<{ subjectKind: string; subjectId: string; cascade: number; phase: DeletionPhase; createdAt: string }>).map(
-      (row) => ({ ...row, cascade: row.cascade === 1 }),
-    );
+    const rows =
+      subjectKind === undefined
+        ? this.store.catalog
+            .prepare(
+              "SELECT subjectKind,subjectId,cascade,phase,createdAt FROM deletion_plans ORDER BY subjectKind,subjectId",
+            )
+            .all()
+        : this.store.catalog
+            .prepare(
+              "SELECT subjectKind,subjectId,cascade,phase,createdAt FROM deletion_plans WHERE subjectKind=? ORDER BY subjectId",
+            )
+            .all(subjectKind);
+    return (
+      rows as Array<{
+        subjectKind: string;
+        subjectId: string;
+        cascade: number;
+        phase: DeletionPhase;
+        createdAt: string;
+      }>
+    ).map((row) => ({ ...row, cascade: row.cascade === 1 }));
   }
 
   members(subjectKind: string, subjectId: string): DeletionPlanMember[] {
@@ -99,7 +125,11 @@ export class DeletionPlans {
   }
 
   /** Adopt an existing tombstone so legacy markers resume through the coordinator. */
-  adopt(subjectKind: string, subjectId: string, createdAt = new Date().toISOString()): DeletionPlan {
+  adopt(
+    subjectKind: string,
+    subjectId: string,
+    createdAt = new Date().toISOString(),
+  ): DeletionPlan {
     return this.store.transaction(() => {
       const existing = this.get(subjectKind, subjectId);
       if (existing) return existing;

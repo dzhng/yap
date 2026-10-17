@@ -17,7 +17,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ResourceReferences, resourceKinds, type ResourceOwner } from "./references.js";
 import type { Asset as CompositionAsset } from "@yap/composition";
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, unlinkSync } from "node:fs";
 import { mkdir, open, link, unlink, opendir, rm, lstat } from "node:fs/promises";
 import { extname, isAbsolute, join } from "node:path";
 import { z } from "zod";
@@ -608,6 +608,10 @@ export class AssetStore {
       await this.publishFile(candidate.id, async () => {
         try {
           signal.throwIfAborted();
+          if (this.dependencies.isTombstoned("asset", candidate.id))
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: candidate.id,
+            });
           await link(staging, join(this.directory, publishedName)).catch(async (error) => {
             if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
             const existing = await open(
@@ -645,6 +649,17 @@ export class AssetStore {
           const prior = this.store.catalog
             .prepare("SELECT metadata FROM assets WHERE id=?")
             .get(candidate.id);
+          if (this.dependencies.isTombstoned("asset", candidate.id)) {
+            if (!prior)
+              try {
+                unlinkSync(join(this.directory, publishedName));
+              } catch (error) {
+                if (!absent(error)) throw error;
+              }
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: candidate.id,
+            });
+          }
           if (prior) {
             const existing = this.get(candidate.id);
             if (pinnedFile && existing.fileName !== publishedName)
@@ -699,6 +714,15 @@ export class AssetStore {
     } finally {
       if (this.publications.get(id) === settled) this.publications.delete(id);
     }
+  }
+  /** Internal deletion step: remove an asset's managed file under the publication lock. */
+  async unlinkFile(id: string): Promise<void> {
+    await this.publishFile(id, async () => {
+      const asset = this.get(id);
+      await unlink(join(this.directory, asset.fileName)).catch((error) => {
+        if (!absent(error)) throw error;
+      });
+    });
   }
   /** Stage immutable bytes without publishing outside the caller's attempt fence. */
   async stage(
