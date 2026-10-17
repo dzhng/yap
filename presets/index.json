@@ -649,7 +649,7 @@
       "kind": "preset",
       "name": "On-location conversation",
       "description": "A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.",
-      "version": 3,
+      "version": 5,
       "files": [
         {
           "path": "examples/ashe-frontier-tech/01-cold-open-street.jpg",
@@ -788,8 +788,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 11940,
-          "sha256": "6dc59b5aaf2f08771f178c7032fb8af59937b78a8e354f4ca033386413a10f92"
+          "bytes": 12931,
+          "sha256": "28f7c5f50dad722d214fdcb2004253c9584b30c57963b104c53f741ce08e79fc"
         },
         {
           "path": "shoot-plan.svg",
@@ -808,12 +808,12 @@
       "kind": "preset",
       "name": "Studio interview podcast",
       "description": "A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.",
-      "version": 3,
+      "version": 5,
       "files": [
         {
           "path": "cold-open.md",
-          "bytes": 2683,
-          "sha256": "558cdd2fb47c3aebd934c42dfd4882cff7de296689ed5609ce4b1dff27abf32f"
+          "bytes": 3032,
+          "sha256": "ff153376361b2192841b0df92e37ffea426d07392f3e6ba6f3c09d6f7fba9cbd"
         },
         {
           "path": "examples/a16z-show/01-teaser-kinetic-caps.jpg",
@@ -967,13 +967,18 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 11469,
-          "sha256": "78488277a18d0aae80c722184cfe6cfcf185836c103b9a40a284a5265bf49b72"
+          "bytes": 12173,
+          "sha256": "f39b55155a5ac1bc82760f7d1ff66a860ec0fa0fb3c07dc0d0d1746339d3fe8d"
         },
         {
           "path": "shoot-plan.svg",
           "bytes": 1818,
           "sha256": "7a53a41db74d74b7c3c74033d1728a7060237dca8b4b04f3e96991ba5d1c5cf2"
+        },
+        {
+          "path": "targets-body.json",
+          "bytes": 668,
+          "sha256": "d0ffd695daa81ff47ce9b470e1d672c156475897043d8a8592c5fecd82d444ad"
         },
         {
           "path": "targets-teaser.json",
@@ -982,8 +987,8 @@
         },
         {
           "path": "targets.json",
-          "bytes": 1335,
-          "sha256": "e13d3d8d73b01f4d2fb26e05abac211048628d6ff37a72019d80150adfc9b043"
+          "bytes": 1395,
+          "sha256": "aad3ab670d230ab1bdab2bc2eb1e1ec5a34235b4a00d24e7f43cc924ffd044b9"
         }
       ]
     },
@@ -992,7 +997,7 @@
       "kind": "preset",
       "name": "Tactile launch film",
       "description": "A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.",
-      "version": 3,
+      "version": 5,
       "files": [
         {
           "path": "examples/humansand-persimmon/01-process-macro.jpg",
@@ -1106,8 +1111,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 12146,
-          "sha256": "08f1cae61d980a498989565480889bc7fe705aa50e6c6ae8bc63e1d1f2d80ec3"
+          "bytes": 13020,
+          "sha256": "f16596099c1fcd74d4c86da46be7cd5541256355a5765b6784dcdfb429e25f10"
         },
         {
           "path": "shoot-plan.svg",

@@ -1,0 +1,5 @@
+{
+ "$about": "The conversation's own rhythm and look, checked on the body alone (after the teaser's beat of black, before the end card): ffmpeg -ss <body start> -to <body end> -i export.mp4 -c copy body.mp4 && node ../kit/measure.mjs body.mp4 --sample-every 5 --out b.json && node ../kit/check.mjs b.json targets-body.json. Inserts on pale cards lift black levels, so the grade is judged here too.",
+ "shots.medianSeconds": {"range": [4, 15], "aspect": "mood", "why": "patient cutting; the example's body median is 9.4 s (examples/a16z-show/shots-body.json)"},
+ "picture.ylow": {"range": [30, 60], "aspect": "mood", "why": "matte blacks in the conversation itself"}
+}

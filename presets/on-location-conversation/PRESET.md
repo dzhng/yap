@@ -2,7 +2,7 @@
 id: on-location-conversation
 name: On-location conversation
 description: A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.
-version: 3
+version: 5
 references:
   - https://x.com/ashebytes/status/2107522974568103969
 ---
@@ -50,6 +50,7 @@ Only the first row is from an example; prove the others before relying on them.
 | Cut | Length | What changes |
 | --- | --- | --- |
 | Clip | 45–90 s | One stretch inside one location, its chapter label on, no cold open |
+| Short | 2–5 min | Cold open of 10–15 s, two or three chapters, an ending of 5–15 s |
 | Episode | 20–60 min | Everything in this preset |
 | Series trailer | 60–90 s | One strong line per location over each location's B-roll, then the series card |
 
@@ -147,11 +148,13 @@ So:
    single framing is the style.
 4. **Text.** Use one geometric or humanist sans with wide letter-spacing (about
    0.3 em), all caps, white, small (2.5–3% of frame height). Open choices that read
-   close to the example: Montserrat or Open Sans at semibold; import with
-   `asset.import`.
+   close to the example: Montserrat or Open Sans at semibold, or Avenir Next Demi
+   Bold, which ships with macOS. Yap's text has no letter-spacing setting yet, so
+   space the letters with spaces.
    - The series title is centred on the lower third of the cold open's last shot
      for about 3 s, with the guest's handle larger above it (see still 04).
-   - A chapter label goes bottom-left about 30 s into each location: a
+   - A chapter label goes bottom-left about a quarter of the way into each chapter,
+     at most 30 s in: a
      translucent dark box (about 55% black) holding a thin vertical bar and the
      label. It switches on and off in one frame, with no fade, and holds 6–8 s.
      See [motion-chapter-label-in](examples/ashe-frontier-tech/motion-chapter-label-in.jpg).
@@ -162,10 +165,17 @@ So:
    `interpolation: "trilinear"`). The intent, in [look.json](look.json): lifted
    blacks, softly compressed highlights and about 25% less saturation, a faded film
    feel. Check that the sky behind the pair holds detail.
-6. **Ending (45–75 s).** After the last location, cut a looser montage of handheld
+   Then fit the grade to the footage: measure with `../kit/measure.mjs` and add
+   exposure, contrast or saturation steps on the same track until every mood line in
+   `../kit/check.mjs` passes. The cube carries the look; trims carry it onto this
+   footage. In the first trials, a bright white room needed a contrast step of 1.05 after the cube to bring the blacks back into range; contrast is sensitive, so 1.10 already crushed them.
+   Balance every shot to the look before judging it: a source much hotter or more
+   saturated than the rest (fire, sky, a screen) gets its own exposure and
+   saturation trim, so no shot breaks the mood.
+6. **Ending (about 5–10% of the running time; 45–75 s for a long episode).** After the last location, cut a looser montage of handheld
    guest singles, workplace B-roll and the dim interiors, at 3–6 s per shot under
    the closing conversation or a soft instrumental. End on a dim interior with a
-   centred two-line sign-off in the same tracked caps and the host's handle, held
+   centred two-line sign-off placed over a calm area (not a flame or a window) in the same tracked caps and the host's handle, held
    about 5 s.
 7. **Audio.** Keep the speech natural. Match the takes' loudness to each other
    within 1 LU and target about −24 LUFS integrated for the episode. Reduce
@@ -193,7 +203,7 @@ read alike. Then check by eye:
 
 - Every location is one continuous shot; no cuts inside it apart from the B-roll
   bridges.
-- The cold open is 10–15 s and the ending is 45–75 s.
+- The cold open is 10–15 s and the ending is in proportion to the running time.
 - Each chapter label appears once per location and is readable on a phone.
 - Saturation lower than the raw footage and no clipped sky.
 - Loudness of the location segments varies by 1 LU or less.
@@ -201,7 +211,7 @@ read alike. Then check by eye:
 ## Limits
 
 Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
-the export fails with "Unsupported audio processing step" (Yap 0.1.51).
+the export fails with "Unsupported audio processing step".
 
 Not yet proven with Yap's operations: the chapter label's translucent box with a
 bar. Until it is, render the box and bar as a PNG overlay asset and lay the text over it.

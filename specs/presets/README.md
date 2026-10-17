@@ -17,8 +17,8 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–06 are done and slice 07's export proof is done. Next: slice 07 part 2,
-one independent agent per preset on the launch-video session footage. Record every
+All slices are done. Next: the full test run, the final review, consolidating
+[choices.md](choices.md), then close the spec with close-spec. Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -44,7 +44,7 @@ TODO:
 - [x] [04 Refresh](slices/04-refresh.md): `preset-remote.ts` (commit-pinned GitHub fetch, streamed, timeouts), `preset-refresh.ts` (startup + daily, joined runs, state), `preset.update`.
 - [x] [05 Create and delete](slices/05-create-delete.md): `preset-scaffold.ts`, `preset.create`/`preset.delete`, `authoring/instructions.md`, injectable Trash.
 - [x] [06 Skill route](slices/06-skill-route.md): one paragraph in `skills/yap/SKILL.md`, a catalog section, and the `preset-style-routing` eval case.
-- [ ] [07 Prove presets](slices/07-prove-presets.md): export proof done (LUT renders as designed; two Yap bugs and a kit bug found). Part 2: one independent agent per preset edits the launch-video session footage.
+- [x] [07 Prove presets](slices/07-prove-presets.md): export proof, and three independent agents turned one set of launch footage into three moods; every mood check passed; critique findings folded into presets v5.
 
 Update this section before ending your pass.
 

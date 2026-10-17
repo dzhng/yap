@@ -9,21 +9,24 @@ fast-moving part of the show.
    that state a strong claim, a surprising number or a vivid image. Use the user's
    brief and topics list; `transcript.search` finds candidates. Order them so the
    teaser rises: context, then tension, then the boldest claim last.
-2. **Picture under each line.** Alternate between the speaker's single camera and a
+2. **Hard cuts only.** No zoom, whip or flash transitions: the energy comes from the
+   cut rate and the words, not from effects.
+3. **Picture under each line.** Alternate between the speaker's single camera and a
    full-frame illustrative insert (a screenshot, a diagram, a product UI shot or a
    licensed clip the user supplied). Change the picture every 2–3 s, so one line
    usually spans 2–3 shots. Put screenshots, charts and diagrams on a pale card
    inset over a softly blurred, desaturated painted or architectural background,
-   or on flat warm off-white (#F4F0E6). Never edge to edge. A chart builds up while
-   the line plays.
-3. **Kinetic words.** For each line, highlight 1–4 key words as large captions
+   or on flat warm off-white (#F4F0E6). Never edge to edge, with a visible card edge or shadow; crop away browser chrome
+   and cursors. A chart builds up while the line plays.
+4. **Kinetic words.** For each line, highlight 1–4 key words as large captions
    timed exactly to their spoken words (use `text.seed` with the transcript word
    timings).
    - Font: a high-contrast condensed serif, white, with a soft outer glow so it
-     reads on dark footage. Open choices close to the example: Playfair Display
+     reads on dark footage. Open choices close to the example: Didot Bold (ships with macOS), Playfair Display
      (caps) or Bodoni Moda in a condensed width; import with `asset.import`.
    - Size: 8–12% of frame height. Place it in the empty side of the frame, never
-     over a face.
+     over a face, and on a plain area: over a pale or busy background (curtains,
+     windows) add a soft shadow or move the words.
    - Words build up one at a time on their spoken onsets, spread across the
      empty part of the frame like a sentence being laid out, then all clear
      together 6–10 frames after the phrase ends. A phrase is 1–4 words.
@@ -33,7 +36,7 @@ fast-moving part of the show.
    - Don't caption every line; this is emphasis, not subtitles.
    - Once in the teaser, an all-caps phrase in the same font can trail into the
      body ("coming up" style); write your own wording.
-4. **Out.** End the teaser on the boldest line, cut to 0.5–1 s of black, then cut
+5. **Out.** End the teaser on the boldest line, cut to 0.5–1 s of black, then cut
    to the wide two-shot to start the conversation.
 
 ## Audio

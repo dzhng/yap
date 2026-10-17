@@ -65,11 +65,53 @@ Findings, each fixed where it belongs:
   as luma 687), which would fail every brightness target. It now converts to 8-bit
   first, with a test. Kit version 2.
 
-### Part 2: a fresh agent edits raw footage into each style
+### Part 2: one footage, three moods (2026-10-17, installed Yap 0.1.53)
 
-No longer blocked. Presets carry a mood onto any footage, so all three are proven
-on one set of raw footage: the launch-video session in the user's library (the
-same bytes as `fixtures/launch-video/session/`): five 4K DJI clips of one speaker
-by a window plus fireplace B-roll, a laptop camera take, a screen recording and
-narration. One independent agent per preset, each given only the footage, the
-preset and its `instructions`.
+Three independent agents each got the launch-video session footage, one preset as
+files (the installed app predates `preset.get`) and its rendered `instructions`.
+None was told about the others or what to expect. Every agent passed every mood
+check; form lines came out as notes, as designed.
+
+| Preset | Export | Mood checks | Storyboard |
+| --- | --- | --- | --- |
+| `tactile-launch-film` | 48.5 s; wordless and music-led; the clip-on mic as the made object; claim lines taken from the narration | all ok | [storyboard](../assets/07-launch-footage/tactile-launch-film-storyboard.jpg) |
+| `on-location-conversation` | 2:13; B-roll cold open, two topic chapters held as unbroken wides, sign-off over the fireplace | all ok | [storyboard](../assets/07-launch-footage/on-location-conversation-storyboard.jpg) |
+| `studio-podcast` | 2:01; 32 s teaser with gold and white kinetic words and screen inserts on cards, black beat, two-camera body, dark end card | all ok (whole, teaser) | [storyboard](../assets/07-launch-footage/studio-podcast-storyboard.jpg) |
+
+An unprimed critique of full frames and crops confirmed these defects. Each one is
+now a rule in its preset (version 5):
+- A tactile claim pair that didn't read as a phrase ("Your agent gets / and the
+  hands"), set beside a mouth.
+- Fire shots hotter and more saturated than the grade, in two of the three videos.
+  Every preset now balances outlier shots.
+- A zoom transition smearing a studio teaser frame. The teaser is hard cuts only.
+- Kinetic words losing contrast over a pale curtain, and an on-location sign-off
+  over a bright flame.
+
+Dismissed with reason: "studio isn't low-key enough" and "tactile isn't hands
+crafting". Those are the lighter, adapted versions of each mood that `## Any
+footage` asks for.
+
+Preset gaps the agents found, fixed in version 4:
+- The cube alone missed the mood targets on dark and on bright footage. Every
+  Grade step now fits the cube with exposure, contrast and saturation trims until
+  the checks pass, with the trial values as examples.
+- Text sizes as a percentage don't map to Yap's text `size`. Tactile now gives px
+  on a 1080-line canvas.
+- The suggested open fonts aren't installed. macOS fallbacks are named.
+- On-location structure assumed long form. The label delay and ending now scale
+  with length, and the size table has a 2–5 min row.
+- The studio whole-video median shot length fought the teaser on short edits. Body
+  rhythm moved to `targets-body.json`.
+
+Yap findings for separate fixes (not preset bugs):
+- A text clip with a background box failed to render ("Malformed picture receipt"
+  in a failed job while the call returned ok).
+- Text has no letter-spacing setting.
+- Overlapping text clips each need their own track.
+- `edit.apply` labels resolve only within one request.
+- The bundled ffmpeg lacks `drawtext`, `eq` and `boxblur`.
+- About 64 concurrent frame reads were refused with `LIMIT_EXCEEDED`.
+- With `--wait`, export output starts with progress lines before the JSON.
+- `kit/measure.mjs`'s scene threshold (0.3) misses cuts between similar framings of
+  one room (22 of 26 found). Agents can pass `--scene 0.2`.

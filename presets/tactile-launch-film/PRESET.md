@@ -2,7 +2,7 @@
 id: tactile-launch-film
 name: Tactile launch film
 description: A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.
-version: 3
+version: 5
 references:
   - https://x.com/humansand/status/2098115046438215791
 ---
@@ -145,15 +145,25 @@ piano or soft strings in a low register, with no drums.
    in [look.json](look.json): lifted warm blacks, cream highlights and about 20%
    less saturation. Then check one frame per shot. Highlights must not clip, and
    the window must read as cream, not white.
+   Then fit the grade to the footage: measure with `../kit/measure.mjs` and add
+   exposure, contrast or saturation steps on the same track until every mood line in
+   `../kit/check.mjs` passes. The cube carries the look; trims carry it onto this
+   footage. In the first trials, dark or indoor footage needed +0.3 EV, contrast 0.95, saturation 1.6 and lifted shadows before the cube to reach the brightness and saturation targets.
+   Balance every shot to the look before judging it: a source much hotter or more
+   saturated than the rest (fire, sky, a screen) gets its own exposure and
+   saturation trim, so no shot breaks the mood.
 4. **Text.** Use a light serif (the user's brand serif if supplied; otherwise an
-   open book serif such as EB Garamond or Cormorant Garamond at a light weight;
+   open book serif such as EB Garamond or Cormorant Garamond at a light weight, or
+   Hoefler Text, which ships with macOS;
    import it with `asset.import` and compare with the example stills) in near-black on light areas and off-white on dark areas.
-   - The title (product name), centred near the top over shot 3, about 6% of frame
-     height, with a small subtitle under it at about 2% (see still 04).
-   - Claim lines are about 3.5% of frame height, two lines at most, placed in the
+   - The title (product name), centred near the top over shot 3, about 120 px on a
+     1080-line canvas (Yap's text `size`), with a small subtitle under it at about 2% (see still 04).
+   - Claim lines are about 64 px on a 1080-line canvas, two lines at most, placed in the
      shot's empty space: top-left over a wall, lower-middle over a tabletop. Where a
      sequence of claims shares a first line, it stays put and only the second line
-     changes. Each line comes in about 1 s after the cut with a quick 4–6 frame
+     changes, and every pair must read as a phrase on its own ("Your agent gets /
+     the hands", never "Your agent gets / and the hands"). Keep text clear of faces
+     and mouths. Each line comes in about 1 s after the cut with a quick 4–6 frame
      reveal and holds at least 2.5 s. See [motion-claim-line-in](examples/humansand-persimmon/motion-claim-line-in.jpg).
    - Don't use captions, lower thirds, boxes, drop shadows or motion graphics.
 5. **End card.** About 5 s on a flat cream background (#F6F1E8). A round crop of
@@ -191,7 +201,7 @@ read alike. Then check by eye:
 ## Limits
 
 Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
-the export fails with "Unsupported audio processing step" (Yap 0.1.51).
+the export fails with "Unsupported audio processing step".
 
 Not yet proven with Yap's operations: the particle transition (still 07), the
 round crop of the object on the end card, and the line-reveal animation. Until

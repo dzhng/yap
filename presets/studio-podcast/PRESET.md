@@ -2,7 +2,7 @@
 id: studio-podcast
 name: Studio interview podcast
 description: A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.
-version: 3
+version: 5
 references:
   - https://x.com/a16z/status/2110385202581197049
 ---
@@ -142,6 +142,13 @@ So:
    `interpolation: "trilinear"`). The intent, in [look.json](look.json): matte
    lifted blacks, highlights held well below white and slightly warm skin. Match the
    three cameras so a cut never changes the colour.
+   Then fit the grade to the footage: measure with `../kit/measure.mjs` and add
+   exposure, contrast or saturation steps on the same track until every mood line in
+   `../kit/check.mjs` passes. The cube carries the look; trims carry it onto this
+   footage. In the first trials, a bright daylight room needed −0.5 EV before the cube for the low-key level; a contrast step before the cube crushes the blacks, because the cube's lift is the floor.
+   Balance every shot to the look before judging it: a source much hotter or more
+   saturated than the rest (fire, sky, a screen) gets its own exposure and
+   saturation trim, so no shot breaks the mood.
 5. **Brand mark.** Place it top-right at about 4% of frame height and 60% opacity,
    from the first frame through the last line, inserts included (see stills 04–05).
    Leave it off the end card.
@@ -179,13 +186,14 @@ read alike. Then check by eye:
 - The active speaker is on screen for at least 90% of body time.
 - Sampled body frames have average luma 75–110/255; the three cameras' averages
   are within 8 levels of each other.
-- The teaser passes [targets-teaser.json](targets-teaser.json) (command in its `$about`).
+- The teaser passes [targets-teaser.json](targets-teaser.json) and the body passes
+  [targets-body.json](targets-body.json) (commands in each `$about`).
 - The brand mark is present and unchanged throughout the body.
 
 ## Limits
 
 Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
-the export fails with "Unsupported audio processing step" (Yap 0.1.51).
+the export fails with "Unsupported audio processing step".
 
 Not yet proven with Yap's operations: the gold metallic glow on key words, charts
 that build while a line plays, and the blurred-backdrop inset card. Until they are,
