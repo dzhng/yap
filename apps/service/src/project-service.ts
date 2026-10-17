@@ -36,6 +36,7 @@ import type { SourceVisualObservations } from "@yap/core/source-scenes";
 import { MediaAudioInspection } from "@yap/core/audio-inspection";
 import { ProjectEvidenceInspection } from "@yap/core/project-evidence";
 import { Models } from "@yap/core/models";
+import { createPresets } from "@yap/core/presets";
 import { runtimeMaterializer } from "./runtime-materialization.js";
 import { TranscriptStore, type SpeechTranscriptionReceipt } from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
@@ -217,6 +218,7 @@ export async function startProjectService(options: {
   /** The native worker binary; YAP_NATIVE when omitted. Passing undefined means there is none. */
   nativeExecutable?: string | undefined;
   ffmpeg?: FFmpegInstallation | undefined;
+  presets?: { bundled?: string };
   version?: string | null;
   autoPrepareModels?: boolean;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
@@ -326,6 +328,10 @@ export async function startProjectService(options: {
       newId: randomUUID,
     });
     const captures = catalog;
+    const presets = await createPresets({
+      root: join(options.home, "presets"),
+      ...(options.presets?.bundled ? { bundled: options.presets.bundled } : {}),
+    });
     const assets = new AssetStore(catalog, library);
     await assets.recover();
     const acquisitions = new AcquisitionStore(catalog);
@@ -1363,6 +1369,10 @@ export async function startProjectService(options: {
           }
           case "model.list":
             return { ok: true, data: models.list() };
+          case "preset.list":
+            return { ok: true, data: presets.list() };
+          case "preset.get":
+            return { ok: true, data: presets.get(operation.params.id) };
           case "model.status":
             return {
               ok: true,

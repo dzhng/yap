@@ -15,9 +15,9 @@ and can be downloaded from this repository without an app release.
 _Last updated 2026-10-16. Status: the plan is merged from three independent
 drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted in
 repo `presets/` with full example references (see [study notes](study.md)); the
-kit has 11 passing tests. No operation code exists yet._
+kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–02 are done; start at [slice 03](slices/03-read.md). Record every
+Slices 00–03 are done; start at [slice 04](slices/04-refresh.md). Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -39,7 +39,7 @@ TODO:
 - [x] [00 Spike](slices/00-spike.md): the service resolves the bundled path from `runtime.json` (no Swift), `/usr/bin/trash` works (Put Back unverified), every Edit step maps to an `edit.apply` operation.
 - [x] [01 Format](slices/01-format.md): `packages/core/src/preset-format.ts`, `scripts/presets-index.mjs --check`, `presets/index.json`, `kit/KIT.md`.
 - [x] [02 Install and store](slices/02-store.md): `preset-install.ts` (streaming sha256 install, atomic swap, receipt, conflicts) and `preset-store.ts` (list, get, `local.json`).
-- [ ] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
+- [x] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
 - [ ] [04 Refresh](slices/04-refresh.md): launch and daily refresh, `preset.update`.
 - [ ] [05 Create and delete](slices/05-create-delete.md): local presets, generated ids, rendered `instructions`, Trash.
 - [ ] [06 Skill route](slices/06-skill-route.md): one paragraph in the consumer skill.

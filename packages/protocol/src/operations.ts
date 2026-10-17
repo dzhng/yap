@@ -1299,6 +1299,18 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Explicitly retry previously requested selected-source preparation with the same executionRange/context; initial work uses transcript.transcribe. Models must already be prepared. A project selector retries only its evidence manifest (include the same text to retry phrase search); source preparation failures must be retried with their returned asset-stream selection. Keep the same acquisition selection; preparation uses a fresh generation after failure.",
     ),
   z
+    .object({ operation: z.literal("preset.list"), params: z.object({}).strict() })
+    .strict()
+    .describe(
+      "List installed presets. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
+    .object({ operation: z.literal("preset.get"), params: z.object({ id: z.string().min(1) }).strict() })
+    .strict()
+    .describe(
+      "Read one preset by id. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
     .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
     .strict()
     .describe(

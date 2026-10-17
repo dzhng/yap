@@ -363,6 +363,14 @@
     "./preset-store": {
       "types": "./dist/preset-store.d.ts",
       "default": "./dist/preset-store.js"
+    },
+    "./preset-instructions": {
+      "types": "./dist/preset-instructions.d.ts",
+      "default": "./dist/preset-instructions.js"
+    },
+    "./presets": {
+      "types": "./dist/presets.d.ts",
+      "default": "./dist/presets.js"
     }
   },
   "scripts": {

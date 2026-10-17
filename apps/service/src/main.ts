@@ -3,16 +3,25 @@ import { CONTROL_FRAME_BYTES, encodeJsonLine, personalHome } from "@yap/protocol
 import { startProjectService } from "./project-service.js";
 import { StartupFailure } from "./startup.js";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import appManifest from "../../macos/package.json" with { type: "json" };
 
 // Installed runtime metadata records the assembled app; standalone builds use its manifest.
 let version = appManifest.version;
+const runtimeUrl = new URL("./runtime.json", import.meta.url);
+let runtimeMetadata: Record<string, unknown> = {};
 try {
-  const metadata = JSON.parse(readFileSync(new URL("./runtime.json", import.meta.url), "utf8"));
-  if (typeof metadata.version === "string" && metadata.version.length) version = metadata.version;
+  runtimeMetadata = JSON.parse(readFileSync(runtimeUrl, "utf8")) as Record<string, unknown>;
+  if (typeof runtimeMetadata.version === "string" && runtimeMetadata.version.length)
+    version = runtimeMetadata.version;
 } catch {}
 
 try {
+  const bundledPresets =
+    process.env.YAP_PRESETS_DIRECTORY ??
+    (typeof runtimeMetadata.presetsDirectory === "string"
+      ? fileURLToPath(new URL(runtimeMetadata.presetsDirectory, runtimeUrl))
+      : undefined);
   const service = await startProjectService({
     home: personalHome(),
     ffmpeg: process.env.YAP_FFMPEG_DIRECTORY
@@ -21,6 +30,7 @@ try {
           receiptSha256: process.env.YAP_FFMPEG_RECEIPT_SHA256 ?? "",
         }
       : undefined,
+    ...(bundledPresets ? { presets: { bundled: bundledPresets } } : {}),
     version,
     control: { input: process.stdin, output: process.stdout },
     // Empty-home lifecycle tests opt out explicitly; installed runs keep the

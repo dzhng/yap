@@ -38,3 +38,21 @@ Appended per pass. Consolidated when the spec closes.
   `downloaded`.** *Sound*: matches the two install paths in the spec.
 - **`list()` takes name, description and version from the installed `PRESET.md`.**
   The receipt's version is the fallback. *Sound*: the file on disk is the truth.
+
+## Slice 03 (read operations and bundling)
+
+- **`createPresets` is async and completes installation before returning the facade.**
+  *Sound*: package installation streams and atomically swaps files, so callers never read a
+  partially installed tree.
+- **Unknown ids throw `PresetNotFoundError` with code `PRESET_NOT_FOUND`.**
+  *Sound*: the service's existing error adapter can preserve the normal refusal envelope while
+  keeping the core facade typed.
+- **Instruction templates use uppercase exported constants.**
+  *Sound*: the template strings are public data owned by `preset-instructions`, and the names
+  distinguish them from rendered instruction lists.
+- **A failed bundled install never stops the service.** `createPresets` catches the
+  failure and reports it as `refresh.error` in `preset.list`. *Sound*: presets are an
+  add-on; recording and editing must keep working. Added in review.
+- **`preset.get`'s instructions point at `shoot-plan.svg` and the kit's
+  `measure.mjs` and `check.mjs` by absolute path.** *Sound*: the agent gets paths it
+  can act on directly.

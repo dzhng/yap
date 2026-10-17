@@ -22,7 +22,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, test, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { AssetStore } from "@yap/core/assets";
-import { Catalog } from "@yap/core/catalog";
+import { Catalog, catalogFormat } from "@yap/core/catalog";
 import { callLocal } from "@yap/client";
 import { startProjectService } from "./project-service.js";
 import { PassThrough, Writable } from "node:stream";
@@ -1983,6 +1983,40 @@ test("model discovery crosses the public wire before either model is prepared", 
   expect(await f.call("model.status", { modelId: "qwen3-tts-icl-v1" })).toMatchObject({
     ok: true,
     data: { state: "absent" },
+  });
+});
+
+test("preset reads cross the public wire without changing the catalog format", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: { bundled: join(import.meta.dirname, "../../../presets") },
+  });
+  expect(catalogFormat).toBe(29);
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: {
+      presets: expect.arrayContaining([
+        expect.objectContaining({ id: "studio-podcast", source: "bundled" }),
+        expect.objectContaining({ id: "on-location-conversation", source: "bundled" }),
+        expect.objectContaining({ id: "tactile-launch-film", source: "bundled" }),
+      ]),
+      refresh: { checkedAt: null, commit: null, error: null, available: [] },
+      instructions: expect.any(Array),
+    },
+  });
+  expect(await f.call("preset.get", { id: "tactile-launch-film" })).toMatchObject({
+    ok: true,
+    data: {
+      id: "tactile-launch-film",
+      text: expect.stringContaining("## Shoot"),
+      path: expect.stringContaining("tactile-launch-film"),
+      kitPath: expect.stringContaining("presets/kit"),
+      guidePath: expect.stringContaining("presets/authoring/AUTHORING.md"),
+      instructions: expect.arrayContaining([expect.stringContaining("tactile-launch-film")]),
+    },
+  });
+  expect(await f.call("preset.get", { id: "missing-preset" })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_NOT_FOUND" },
   });
 });
 
