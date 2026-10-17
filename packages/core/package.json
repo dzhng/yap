@@ -355,6 +355,14 @@
     "./preset-format": {
       "types": "./dist/preset-format.d.ts",
       "default": "./dist/preset-format.js"
+    },
+    "./preset-install": {
+      "types": "./dist/preset-install.d.ts",
+      "default": "./dist/preset-install.js"
+    },
+    "./preset-store": {
+      "types": "./dist/preset-store.d.ts",
+      "default": "./dist/preset-store.js"
     }
   },
   "scripts": {

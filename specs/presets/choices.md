@@ -22,3 +22,19 @@ Appended per pass. Consolidated when the spec closes.
 - **Dependencies installed in this worktree** with `bun install --frozen-lockfile`,
   hardlinked from Bun's cache, so vitest and `tsc` could run. Codex's sandbox could
   not fetch them.
+
+## Slice 02 (install and store)
+
+- **`local.json` format is `{ "ids": [...] }`**, owned by `PresetStore`. Any other
+  shape is an error. *Sound*: one owner, no compatibility shims. Review caught an
+  earlier draft that accepted four shapes.
+- **Conflicts live in `receipt.conflicts`.** A remote preset whose id matches a
+  local one is recorded there and never installed. *Sound*: the receipt only
+  describes what is actually on disk. Review caught an earlier draft that wrote a
+  fake `packages` entry.
+- **Concurrency:** an in-process queue per target directory, no file lock.
+  *Sound*: one service owns `~/.yap/presets/`. Revisit if a second writer appears.
+- **`directorySource` labels its packages `bundled`; any other source defaults to
+  `downloaded`.** *Sound*: matches the two install paths in the spec.
+- **`list()` takes name, description and version from the installed `PRESET.md`.**
+  The receipt's version is the fallback. *Sound*: the file on disk is the truth.
