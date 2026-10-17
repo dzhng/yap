@@ -2,6 +2,22 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.54
+
+Adds presets: skill-like bundles that give an agent one mood of video (grade,
+music, cut rhythm, pacing, text and framing) to carry onto whatever footage you
+give it. Ask your agent for a style, or run `yap preset.list` and
+`yap preset.get`. Three ship with the app (`tactile-launch-film`,
+`on-location-conversation` and `studio-podcast`), and they refresh from the
+repository at launch and once a day without an app update. `yap preset.create`
+makes your own local preset from reference videos, and `yap preset.delete` moves a
+local one to the Trash.
+
+A colour LUT on the whole output now exports instead of failing with
+"Unsupported audio processing step". Text with a background box no longer fails
+its frame read with "Malformed picture receipt". Adding a processing step with an
+invented `id` now explains that the id names an existing step.
+
 ## 0.1.53
 
 Withdraws the 0.1.52 audio change. When an audio track's samples could not be
