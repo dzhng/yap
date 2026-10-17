@@ -53,7 +53,7 @@ export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegi
     markersPage: (afterId = "") => {
       const page = owners.store.deletionsPage(afterId);
       return {
-        subjects: page.projectIds.map((id) => ({ kind: "project", id } satisfies LibrarySubject)),
+        subjects: page.projectIds.map((id) => ({ kind: "project", id }) satisfies LibrarySubject),
         nextAfterId: page.nextAfterId,
       };
     },

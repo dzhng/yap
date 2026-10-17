@@ -187,7 +187,10 @@ test(
     const before = assembly(),
       reservation = JSON.parse(before);
     assert.ok(reservation.input.identity && reservation.zip.identity);
-    await assert.rejects(f.deletion.delete({ kind: "project", id: f.projectId }), (error) => error.retryable === true);
+    await assert.rejects(
+      f.deletion.delete({ kind: "project", id: f.projectId }),
+      (error) => error.retryable === true,
+    );
     assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
     assert.ok(
       (await stat(join(f.home, "package-exports", reservation.zip.name, "payload.zip"))).size > 0,

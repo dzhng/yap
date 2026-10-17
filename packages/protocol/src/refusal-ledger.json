@@ -417,6 +417,15 @@
         "helpers/mac/Sources/YapWire/Wire.swift": 1
       }
     },
+    "DELETE_IN_PROGRESS": {
+      "category": "conflict",
+      "retryable": true,
+      "files": {
+        "apps/service/src/project-service.ts": 3,
+        "packages/core/src/assets.ts": 2,
+        "packages/core/src/references.ts": 1
+      }
+    },
     "DEPENDENCY_FAILED": {
       "category": "execution-failure",
       "retryable": true,

@@ -325,6 +325,7 @@ export async function startProjectService(options: {
       newId: randomUUID,
     });
     const captures = catalog;
+    const plans = new DeletionPlans(captures);
     const assets = new AssetStore(catalog, library);
     await assets.recover();
     const acquisitions = new AcquisitionStore(catalog);
@@ -412,9 +413,17 @@ export async function startProjectService(options: {
       pin(target) {
         if (target.kind === "import") assets.intent(target.importId);
         else if (target.kind === "acquisition") {
+          if (plans.isTombstoned("acquisition", target.acquisitionId))
+            throw new CatalogError("DELETE_IN_PROGRESS", "acquisition deletion is in progress", {
+              acquisitionId: target.acquisitionId,
+            });
           if (!captureSources.available(target.acquisitionId))
             throw new CatalogError("NOT_FOUND", "Capture source donor is unavailable");
         } else if (target.kind === "asset") {
+          if (plans.isTombstoned("asset", target.assetId))
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: target.assetId,
+            });
           if (!assets.has(target.assetId))
             throw new CatalogError("NOT_FOUND", "Asset does not exist", {
               assetId: target.assetId,
@@ -435,7 +444,8 @@ export async function startProjectService(options: {
       },
       isAvailable(target) {
         if (target.kind === "recording") return captures.isAvailable(target.recordingId);
-        if (target.kind === "asset") return assets.has(target.assetId);
+        if (target.kind === "asset")
+          return !plans.isTombstoned("asset", target.assetId) && assets.has(target.assetId);
         if (target.kind === "project")
           return projects.hasRevision(target.projectId, target.revisionId);
         if (target.kind !== "import" && target.kind !== "acquisition") return false;
@@ -443,14 +453,22 @@ export async function startProjectService(options: {
           targets.pin(target);
           return true;
         } catch (error) {
-          if (error instanceof CatalogError && error.code === "NOT_FOUND") return false;
+          if (
+            error instanceof CatalogError &&
+            (error.code === "NOT_FOUND" || error.code === "DELETE_IN_PROGRESS")
+          )
+            return false;
           throw error;
         }
       },
-      isDeleting: (owner) =>
-        owner.kind === "recording"
-          ? captures.isDeleting(owner.recordingId)
-          : owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isDeleting: (owner) => {
+        if (owner.kind === "recording") return captures.isDeleting(owner.recordingId);
+        if (owner.kind === "project") return projects.isDeleting(owner.projectId);
+        if (owner.kind === "asset") return plans.isTombstoned("asset", owner.assetId);
+        if (owner.kind === "acquisition")
+          return plans.isTombstoned("acquisition", owner.acquisitionId);
+        return false;
+      },
       isCapturing: () => captures.isCapturing(),
     };
     await acquisitionImports.recover(new AbortController().signal);
@@ -1060,7 +1078,6 @@ export async function startProjectService(options: {
     await speakers.cleanup(modelLifetime.signal);
     await alignments.cleanup(modelLifetime.signal);
     await indexes.cleanup(modelLifetime.signal);
-    const plans = new DeletionPlans(captures);
     const libraryDeletion = new LibraryDeletion(plans);
     deletion = libraryDeletion;
     libraryDeletion.register(

@@ -95,3 +95,20 @@ until they do).
   (sound). Queue drain happens immediately before `CaptureSources.retire`; its
   lifetime and retiring fence then cover quiesce, file removal, row cleanup and
   finish, including retries after a phase fault.
+
+## Slice 03: deletion fence
+
+- **The fence starts at `tombstoned`, not `planned`** (sound). A `planned` plan has not
+  yet committed to deleting, so it refuses nothing. Every later phase fences.
+- **`DELETE_IN_PROGRESS` is a retryable conflict, with `{assetId}` or
+  `{acquisitionId}` in its details** (sound). A caller retries after the deletion either
+  finishes (and the retry fails as not found) or is abandoned (and the retry succeeds).
+- **Synchronous callers are tested by order, not latches** (sound). Revision publish,
+  `jobs.retainInputs` and package adoption each retain inside one synchronous SQLite
+  transaction, so a tombstone cannot land mid-call; tombstoned-before and
+  cleared-after cover every interleaving. Asset publish has real async gaps, so its
+  two orderings race staging against `AssetStore.unlinkFile` and check rows and files
+  agree before and after a restart.
+- **Publish keeps a second tombstone check after staging** (sound). Staging links the
+  file under the publication lock, and the row is written later. If deletion wins in
+  between, publish refuses and removes a file it linked for a row that never existed.

@@ -18,8 +18,9 @@
 **Seam.** `ResourceReferences`, `JobTargets` and `AssetStore`, all in core. Tests
 use an in-memory catalog fixture and boot no service.
 
-**Run or see.** A fixture script races an import's publish against a tombstone
-and prints whether rows and files still agree.
+**Run or see.** Run `bun packages/core/scripts/deletion-fence-race.mjs` after
+building `packages/core`; it races an import's publish against a tombstone and
+prints whether rows and files still agree.
 
 **Verify.** Red tests first:
 - **Latched callers.** Each of the four retain paths (revision, job input,
