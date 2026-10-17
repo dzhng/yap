@@ -233,3 +233,12 @@ through that field.
 - **Every removed `*.retry` has a recovery test through `job.retry`** (sound). Each drives the
   item to `failed`, retries the `jobId` the item's own status returned, and checks it reaches
   `ready`. Writing them found the two `job.retry` gaps and the missing `jobId` above.
+- **Model `presence` reads the installed files** (sound). Core's model status has one word
+  for both lifecycle and files, so while preparing or after a failed preparation the
+  service asks `Models.presence`, a metadata-only receipt check, instead of copying
+  `preparing` or `failed` into a field whose schema allows only `absent`, `ready` and
+  `invalid`.
+- **`batch-prepare` manifests are not migrated** (sound, hard cutover). A manifest written
+  before this slice that still holds `not_requested` or `processing` will not resume
+  correctly; rerun the batch. The sweep also fixed a real bug there: a transcript request
+  interrupted before it reached the service reads back `idle`, and is now sent again.
