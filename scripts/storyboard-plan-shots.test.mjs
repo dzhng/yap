@@ -101,7 +101,6 @@ const conversation = (layout, extra = {}) =>
       { startUs: 0, speaker: "Host" },
       { startUs: 8 * S, speaker: "Guest" },
     ],
-    phoneChecks: [{ startUs: 20 * S, endUs: 25 * S }],
     ...extra,
   });
 
@@ -117,7 +116,7 @@ test("the single layout shows one person at a time", async () => {
   for (const shot of plan.chapters[0].shots) assert.equal(shot.crop.width, shot.crop.height);
 });
 
-test("the split layout pairs both people side by side and goes full-frame guest for key lines and phone checks", async () => {
+test("the split layout pairs both people side by side and goes full-frame guest for key lines", async () => {
   const plan = await conversation("split");
   const shots = plan.chapters[0].shots;
   const split = shots.find((shot) => shot.view === "SPLIT");
@@ -129,7 +128,6 @@ test("the split layout pairs both people side by side and goes full-frame guest 
   );
   for (const half of split.crops) assert.ok(Math.abs(half.width / half.height - 8 / 9) < 0.01);
   const at = (t) => shots.find((shot) => shot.startUs <= t * S && t * S < shot.endUs);
-  assert.ok(["GUEST", "GUEST_TIGHT"].includes(at(22).view), "host phone check");
   assert.equal(at(42).view, "GUEST_TIGHT", "key line");
   for (const [i, shot] of shots.entries())
     assert.equal(shot.cut, i === 0 || shot.view !== shots[i - 1].view);

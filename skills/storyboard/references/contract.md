@@ -13,15 +13,14 @@ Chapters:
 ```json
 {"title": "Guest Name · Lab",
  "chapters": [
-  {"startUs": 0, "endUs": 19000000, "label": "Pre-roll: battery check", "call": "cut"},
-  {"startUs": 552000000, "endUs": 665000000, "label": "Not bitter, a bittersweet lesson",
-   "call": "keep", "note": "Launch-clip line", "keyLinesUs": [583000000]}]}
+  {"startUs": 0, "endUs": 19000000, "label": "Pre-roll: mic check", "call": "cut"},
+  {"startUs": 552000000, "endUs": 665000000, "label": "The guest's core argument",
+   "call": "keep", "note": "Strongest line", "keyLinesUs": [583000000]}]}
 ```
 
 `call` is `keep`, `trim`, `cut` or `decide`. Chapters tile the recording in order.
 
 Turns, each lasting until the next: `[{"startUs": 19000000, "speaker": "Host"}, ...]`.
-Phone checks: `[{"startUs": 70500000, "endUs": 80500000}, ...]`.
 
 ## Helpers
 
@@ -49,7 +48,7 @@ A rerun reuses every complete batch. A refused call saves `batch-NNNN.refused.js
 ```json
 {"chapters": "chapters.json", "turns": "turns.json", "stills": "work/stills/stills.json",
  "words": ["transcript/page-001.json", "transcript/page-002.json"],
- "phoneChecks": "phone.json", "host": "Host", "guest": "Guest", "hostSide": "left",
+ "host": "Host", "guest": "Guest", "hostSide": "left",
  "layout": "multicam", "aspect": "16:9", "out": "plan.json"}
 ```
 

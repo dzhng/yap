@@ -42,26 +42,22 @@ any agent sandbox. Request and output shapes are in [contract](references/contra
    Mark key lines in `keyLinesUs`. Done when chapters tile the recording and every
    one has a call.
 
-4. **Optionally find host phone checks**: moments the host looks down at a phone or notes,
-   so the plan cuts to the guest. Read [phone checks](references/phone-checks.md)
-   first; detection needs a vision model you choose and is never required.
-
-5. **Plan the shots** with `scripts/plan-shots.mjs`, choosing a layout from
+4. **Plan the shots** with `scripts/plan-shots.mjs`, choosing a layout from
    [shot plan](references/shot-plan.md). The planner's rules are a default you apply
    and adjust; edit the plan JSON wherever your judgment differs. Done when every
    kept chapter has shots and `totals` matches the pacing you intend.
 
-6. **Write a summary for every shot**: at most 9 words, specific (name the idea,
+5. **Write a summary for every shot**: at most 9 words, specific (name the idea,
    example or number), from its `spoken` text. Write them yourself or delegate in
    batches to any model available; the transcript itself never goes on the page.
 
-7. **Build, serve and show it.** Run `scripts/build-site.mjs`, then
+6. **Build, serve and show it.** Run `scripts/build-site.mjs`, then
    `scripts/serve-site.mjs SITE_DIR` in the background. Open the printed URL in your
    preview or browser tool and look at it. A path alone is not delivery. Read the
    returned `issues`. Done when the human can see the page inline and you've checked
    it against the rules below.
 
-8. **Iterate** on feedback: edit chapters or plan, rebuild, reload. Agreement on the
+7. **Iterate** on feedback: edit chapters or plan, rebuild, reload. Agreement on the
    storyboard is the only done-condition of this skill. After it, plan the edit
    with the yap skill: per-shot crops are source pixels, top-left origin, ready for
    its geometry operations. Check the result with project frames from the edited revision.
@@ -71,7 +67,7 @@ decision the human is about to make (a missing speaker, a bad take), say so at o
 
 ## Design rules
 
-The human set these; keep them unless they change them.
+These are defaults; follow the human wherever they change them.
 
 - One row per chapter, read top to bottom; shots run left to right in time.
   Never a uniform grid of frames: it hides the story.

@@ -22,7 +22,6 @@ const EYE_IN_FACE = 0.4; // the eye line sits this far down a detected face box
 // the frame otherwise forces a tight square crop whose hair touches the top edge.
 const EYE_IN_CROP = { "16:9": 0.36, "1:1": 0.45 };
 const ROTATION = ["GUEST", "WIDE", "GUEST_TIGHT", "GUEST", "TWO", "GUEST_TIGHT"];
-const PHONE = "host looks down: guest";
 const KEY_LINE = "key line";
 
 const median = (values) => {
@@ -132,19 +131,16 @@ function override(shots, s, e, view, why) {
   shots.splice(0, shots.length, ...out);
 }
 
-const forced = (shot) => shot.why === PHONE || shot.why === KEY_LINE;
+const forced = (shot) => shot.why === KEY_LINE;
 
 function mergeShort(shots, minUs) {
   const out = [];
   for (const shot of shots) {
     const last = out.at(-1);
-    // Forced shots keep their identity so another layout can still honour them.
+    // Key lines keep their identity so another layout can still honour them.
     const same = last?.view === shot.view && !forced(last) && !forced(shot);
     if (last && (shot.endUs - shot.startUs < minUs || same)) {
       last.endUs = shot.endUs;
-      // A host phone check outranks whatever it was folded into.
-      if (last.view !== shot.view && shot.why === PHONE)
-        Object.assign(last, { view: shot.view, why: PHONE });
     } else out.push({ ...shot });
   }
   if (out.length > 1 && out[0].endUs - out[0].startUs < minUs) {
@@ -162,7 +158,7 @@ function restyle(shot, layout, openerRole) {
     return shot.view === "WIDE" || shot.view === "TWO" ? "GUEST_TIGHT" : shot.view;
   }
   if (layout === "split") {
-    if (shot.why === KEY_LINE || shot.why === PHONE)
+    if (shot.why === KEY_LINE)
       return shot.view === "GUEST_TIGHT" ? shot.view : "GUEST";
     return "SPLIT";
   }
@@ -180,7 +176,6 @@ export async function planShots(request) {
     .sort((a, b) => a.startUs - b.startUs);
   const manifest = await load(request.stills, "stills");
   const words = request.words ? await loadWords(request.words) : [];
-  const phoneChecks = request.phoneChecks ? await load(request.phoneChecks, "phoneChecks") : [];
   const { host, guest } = request;
   if (!host || !guest) throw failure("INVALID_REQUEST", "Supply host and guest speaker names");
   if (!turns.some((turn) => turn.speaker === guest))
@@ -312,11 +307,6 @@ export async function planShots(request) {
       const p = us(point);
       if (p >= a && p < b) override(shots, p, Math.min(b, p + keyLineUs), "GUEST_TIGHT", KEY_LINE);
     }
-    for (const check of phoneChecks) {
-      const s = Math.max(a, us(check.startUs));
-      const e = Math.min(b, us(check.endUs));
-      if (e > s) override(shots, s, e, "GUEST", PHONE);
-    }
     const opener = speakerSpans(turns, a, b)[0];
     const openerRole = opener?.speaker === guest ? "guest" : "host";
     let previous;
@@ -357,7 +347,7 @@ if (launchedAs(import.meta.url, "plan-shots.mjs"))
     `Usage: node plan-shots.mjs < request.json
 Plan virtual-camera shots for a two-person conversation filmed as one locked wide shot. Pure: reads
 saved files, calls nothing. Request: chapters, turns, stills (each JSON or a path), host, guest,
-optional words (word list or saved transcript.review receipts), phoneChecks, layout (multicam|single|split), aspect (16:9|1:1), hostSide
+optional words (word list or saved transcript.review receipts), layout (multicam|single|split), aspect (16:9|1:1), hostSide
 (left|right), views, minShotUs, maxShotUs, longAnswerUs, openerUs, keyLineUs, out. Prints the plan,
 or a summary when out is set. Times are microseconds; crops are source pixels, top-left origin.`,
   );
