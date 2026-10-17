@@ -5,7 +5,6 @@ import { createHash } from "node:crypto";
 import { captionProposals } from "../../../skills/yap/scripts/caption-proposals.mjs";
 import { applyBatch, createCompiler, validateComposition } from "../../composition/dist/index.js";
 import { mediaWorker, nativeResult } from "../../../apps/service/dist/worker.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 
 const out = resolve(process.argv[2] ?? "");
 assert.ok(
@@ -150,7 +149,7 @@ try {
       output: join(out, name + ".png"),
       canvas,
       frame: [...plan.frames()][0],
-      processing: nativeProcessing(plan.processing()),
+      processing: plan.processing(),
       assets: [],
       fonts: [{ assetId: fontId, path: fontPath }],
       profile: "h264-rec709",

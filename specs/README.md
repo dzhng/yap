@@ -35,6 +35,10 @@ replacement, admission, signing and explicit skill-lifecycle boundaries, with
 published-artifact and scoped native/agent evidence. Release publishing remains
 owned by the [tag workflow](../scripts/README.md#versioned-github-releases).
 
+[Presets](done/presets/README.md) records why a preset is a mood bundle that fits
+any footage, how presets ship, refresh daily from this repository and are authored
+locally, and the three-agent proof on one footage set.
+
 [Agent review workflow](done/agent-review-workflow/README.md) records the native
 revision inspection surface, launch-floor catalog boundary, read-only caption and
 layout evidence, timeline selection and revision-pinned Downloads export.

@@ -1,0 +1,14 @@
+{
+ "words": 965,
+ "spanSeconds": 299.8,
+ "wordsPerMinute": 193,
+ "pausesPerMinute": 14.4,
+ "pauseSeconds": {
+  "p50": 0.4,
+  "p90": 0.96
+ },
+ "wordsPerPhrase": {
+  "p50": 9,
+  "p90": 32
+ }
+}

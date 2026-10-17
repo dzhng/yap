@@ -1299,6 +1299,50 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Explicitly retry previously requested selected-source preparation with the same executionRange/context; initial work uses transcript.transcribe. Models must already be prepared. A project selector retries only its evidence manifest (include the same text to retry phrase search); source preparation failures must be retried with their returned asset-stream selection. Keep the same acquisition selection; preparation uses a fresh generation after failure.",
     ),
   z
+    .object({ operation: z.literal("preset.list"), params: z.object({}).strict() })
+    .strict()
+    .describe(
+      "List installed presets. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
+    .object({
+      operation: z.literal("preset.get"),
+      params: z.object({ id: z.string().min(1) }).strict(),
+    })
+    .strict()
+    .describe(
+      "Read one preset by id. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
+    .object({
+      operation: z.literal("preset.update"),
+      params: z.object({ id: z.string().min(1).optional() }).strict(),
+    })
+    .strict()
+    .describe(
+      "Refresh installed presets from the pinned remote source, optionally selecting one preset plus shared kit and authoring packages. An unreachable source is reported in the result and leaves the installed presets unchanged. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
+    .object({
+      operation: z.literal("preset.create"),
+      params: z
+        .object({ name: z.string().min(1), references: z.array(z.string()).optional() })
+        .strict(),
+    })
+    .strict()
+    .describe(
+      "Create a local preset style bundle from the authoring template. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
+    .object({
+      operation: z.literal("preset.delete"),
+      params: z.object({ id: z.string().min(1) }).strict(),
+    })
+    .strict()
+    .describe(
+      "Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
+  z
     .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
     .strict()
     .describe(
@@ -1790,6 +1834,7 @@ const waits: Partial<Record<OperationName, number>> = {
   "job.cancel": drain,
   "project.delete": drain,
   "storage.usage": drain,
+  "preset.update": drain,
 };
 
 /** The longest the service waits on one operation's own path before answering it. */

@@ -38,6 +38,9 @@ import type { SourceVisualObservations } from "@yap/core/source-scenes";
 import { MediaAudioInspection } from "@yap/core/audio-inspection";
 import { ProjectEvidenceInspection } from "@yap/core/project-evidence";
 import { Models } from "@yap/core/models";
+import { createPresets, type PresetsOptions } from "@yap/core/presets";
+import { PresetRefresh } from "@yap/core/preset-refresh";
+import { remoteSource, type RemoteOptions } from "@yap/core/preset-remote";
 import { runtimeMaterializer } from "./runtime-materialization.js";
 import { TranscriptStore, type SpeechTranscriptionReceipt } from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
@@ -219,6 +222,8 @@ export async function startProjectService(options: {
   /** The native worker binary; YAP_NATIVE when omitted. Passing undefined means there is none. */
   nativeExecutable?: string | undefined;
   ffmpeg?: FFmpegInstallation | undefined;
+  /** Bundled presets to install at startup; `refresh` turns on the launch and daily refresh (off unless passed). */
+  presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
@@ -230,6 +235,7 @@ export async function startProjectService(options: {
   const ownership = await claimStartup(runtime);
   let catalog: CaptureStore | undefined;
   let jobs: JobQueue | undefined;
+  let presetRefresh: PresetRefresh | undefined;
   let listenerStarting: Promise<LocalListener> | undefined;
   let deletion: LibraryDeletion | undefined;
   let exports: MediaExports | undefined;
@@ -302,6 +308,7 @@ export async function startProjectService(options: {
       // socket after shutdown released the catalog. Every owner drains before that release.
       const results = await Promise.allSettled([
         listenerStarting?.then((bound) => bound.close()),
+        presetRefresh?.close(),
         captureControl?.close(),
         reconciliation,
         jobs?.close(),
@@ -326,6 +333,22 @@ export async function startProjectService(options: {
     });
     const captures = catalog;
     const plans = new DeletionPlans(captures);
+    const presetsRoot = join(options.home, "presets");
+    const remote = options.presets?.refresh;
+    if (remote) {
+      const remoteOptions = remote === true ? {} : remote;
+      presetRefresh = new PresetRefresh({
+        root: presetsRoot,
+        source: () => remoteSource(remoteOptions),
+      });
+    }
+    const presets = await createPresets({
+      root: presetsRoot,
+      ...(options.presets?.bundled ? { bundled: options.presets.bundled } : {}),
+      ...(presetRefresh ? { refresh: presetRefresh } : {}),
+      ...(options.presets?.trash ? { trash: options.presets.trash } : {}),
+    });
+    presetRefresh?.start();
     const assets = new AssetStore(catalog, library);
     await assets.recover();
     const acquisitions = new AcquisitionStore(catalog);
@@ -1378,6 +1401,24 @@ export async function startProjectService(options: {
           }
           case "model.list":
             return { ok: true, data: models.list() };
+          case "preset.list":
+            return { ok: true, data: presets.list() };
+          case "preset.get":
+            return { ok: true, data: presets.get(operation.params.id) };
+          case "preset.update":
+            return { ok: true, data: await presets.update(operation.params.id) };
+          case "preset.create":
+            return {
+              ok: true,
+              data: await presets.create({
+                name: operation.params.name,
+                ...(operation.params.references === undefined
+                  ? {}
+                  : { references: operation.params.references }),
+              }),
+            };
+          case "preset.delete":
+            return { ok: true, data: await presets.delete(operation.params.id) };
           case "model.status":
             return {
               ok: true,

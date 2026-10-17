@@ -1,0 +1,11 @@
+{
+ "$about": "Mood targets an export must land in and form notes that describe the reference, widened from the measured examples (see examples/*/profile.json). Run: node ../kit/measure.mjs export.mp4 --sample-every 1 --scene 0.2 --out p.json && node ../kit/check.mjs p.json targets.json",
+ "durationSeconds": {"range": [30, 60], "aspect": "form", "why": "a short film; the example runs 42 s"},
+ "shots.count": {"range": [4, 10], "aspect": "form", "why": "few, long shots; the example has 4 shots (3 hard cuts) with dissolves inside"},
+ "shots.medianSeconds": {"range": [4, 12], "aspect": "mood", "why": "each shot lingers; the example's median is 7.7 s"},
+ "picture.yavg": {"range": [130, 185], "aspect": "mood", "why": "bright window light; the example averages 167"},
+ "picture.ylow": {"range": [90, 140], "aspect": "mood", "why": "soft, lifted shadows; the example's average low is 116"},
+ "picture.satavg": {"range": [8, 18], "aspect": "mood", "why": "muted colour; the example averages 13"},
+ "loudness.integratedLufs": {"range": [-18, -15], "aspect": "mood", "why": "music-only film for social; the example is −16.9"},
+ "loudness.truePeakDbfs": {"range": [-12, -1], "aspect": "mood", "why": "headroom for platform encoding"}
+}

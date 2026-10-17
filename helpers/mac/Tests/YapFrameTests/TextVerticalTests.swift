@@ -103,6 +103,41 @@ func verifyTextDecorations() throws {
     }
     precondition(outsidePixels == 0,
         "Caption stroke must fit its reported decoration bounds, allowing one antialias pixel; outside=\(outsidePixels)")
+
+    // Core rejects a receipt whose decoration bounds do not contain its ink bounds, compared exactly
+    // as the reported numbers (packages/core/src/frame-inspection.ts). Decorations that add no extent
+    // (a flush background, a zero-width stroke, an unblurred unoffset shadow) must still satisfy it.
+    let avenirURL = URL(fileURLWithPath: "/System/Library/Fonts/Avenir Next.ttc")
+    let avenirDigest = SHA256.hash(data: try Data(contentsOf: avenirURL)).map { String(format: "%02x", $0) }.joined()
+    let avenir = try JSONDecoder().decode(
+        FontAssetBinding.self,
+        from: JSONEncoder().encode(["assetId": avenirDigest, "path": avenirURL.path]),
+    )
+    let flush: [(stroke: TextSource.Stroke?, shadow: TextSource.Shadow?, background: TextSource.Background?)] = [
+        (nil, nil, .init(color: "#0000008C", padding: 0, cornerRadius: 0)),
+        (.init(color: "#ff0000ff", width: 0), nil, nil),
+        (nil, .init(color: "#000000aa", offsetX: 0, offsetY: 0, blur: 0), nil),
+    ]
+    var violations: [String] = []
+    for decoration in flush {
+        for text in ["W H A T   Y A P   I S", "N O   A I   O F   I T S   O W N", "Decorated", "AVW"] {
+            for (size, box) in [(28.0, (520, 64))] + stride(from: 12.0, through: 96.0, by: 2.5).map({ ($0, (640, 128)) }) {
+                let layout = try TextRaster(TextSource(
+                    kind: "text", text: text, font: .init(assetId: avenirDigest, postScriptName: "AvenirNext-DemiBold"),
+                    width: box.0, height: box.1, size: size, color: "#FFFFFFFF", alignment: "center",
+                    verticalAlignment: "center", stroke: decoration.stroke, shadow: decoration.shadow,
+                    background: decoration.background, highlight: nil, activeRanges: nil, wrap: false),
+                    binding: avenir).layout
+                let (x, y, w, h) = (layout.decorationBounds[0], layout.decorationBounds[1], layout.decorationBounds[2], layout.decorationBounds[3])
+                let (ix, iy, iw, ih) = (layout.inkBounds[0], layout.inkBounds[1], layout.inkBounds[2], layout.inkBounds[3])
+                if !(x <= ix && y <= iy && x + w >= ix + iw && y + h >= iy + ih) {
+                    violations.append("\(text) @\(size) in \(box): decoration \(layout.decorationBounds) ink \(layout.inkBounds)")
+                }
+            }
+        }
+    }
+    precondition(violations.isEmpty,
+        "Decoration bounds must contain ink bounds as reported; \(violations.count) violations, first: \(violations.prefix(3))")
     print("PASS native text stroke, shadow and background decorations are rendered and receipted")
 }
 

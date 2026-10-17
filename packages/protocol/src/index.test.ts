@@ -9,6 +9,7 @@ import {
   admitOperation,
   operationSchema,
   operationNames,
+  appOperations,
   parseRequest,
   responseSchema,
 } from "./index.js";
@@ -85,6 +86,32 @@ it("advertises the app-managed command-line tool as callable public operations",
       operation,
     ).toBe(false);
   }
+});
+
+it("advertises strict service-routed preset reads", () => {
+  expect(operationSchema.parse({ operation: "preset.list", params: {} })).toMatchObject({
+    operation: "preset.list",
+    params: {},
+  });
+  expect(
+    operationSchema.parse({ operation: "preset.get", params: { id: "studio-podcast" } }),
+  ).toMatchObject({
+    operation: "preset.get",
+    params: { id: "studio-podcast" },
+  });
+  expect(
+    operationSchema.safeParse({ operation: "preset.list", params: { extra: true } }).success,
+  ).toBe(false);
+  expect(
+    operationSchema.safeParse({
+      operation: "preset.get",
+      params: { id: "studio-podcast", extra: true },
+    }).success,
+  ).toBe(false);
+  expect(operationNames.has("preset.list")).toBe(true);
+  expect(operationNames.has("preset.get")).toBe(true);
+  expect(appOperations.has("preset.list")).toBe(false);
+  expect(appOperations.has("preset.get")).toBe(false);
 });
 
 it("reads authored project revisions while recording identities retain only source lifetime", () => {

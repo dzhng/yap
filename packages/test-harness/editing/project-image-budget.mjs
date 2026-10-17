@@ -1,4 +1,3 @@
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -65,7 +64,7 @@ data.append(c.flush())
     frame: window.frames().next().value,
     canvas: document.canvas,
     profile: "h264-rec709",
-    processing: nativeProcessing(window.processing()),
+    processing: window.processing(),
     assets: assets.map((asset) => ({
       assetId: asset.id,
       streamId: "image:0",
@@ -120,7 +119,7 @@ data.append(c.flush())
   report.repeated = invoke({
     ...params,
     frame: repeatedWindow.frames().next().value,
-    processing: nativeProcessing(repeatedWindow.processing()),
+    processing: repeatedWindow.processing(),
   });
   report.passed &&= report.repeated.reply.ok === true;
   assert.equal(report.repeated.reply.ok, true, JSON.stringify(report.repeated));

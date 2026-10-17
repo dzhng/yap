@@ -1,0 +1,14 @@
+{
+ "words": 247,
+ "spanSeconds": 69.5,
+ "wordsPerMinute": 213,
+ "pausesPerMinute": 11.2,
+ "pauseSeconds": {
+  "p50": 0.32,
+  "p90": 0.56
+ },
+ "wordsPerPhrase": {
+  "p50": 18,
+  "p90": 26
+ }
+}

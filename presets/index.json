@@ -1,0 +1,1130 @@
+{
+  "format": 1,
+  "packages": [
+    {
+      "id": "authoring",
+      "kind": "authoring",
+      "name": "Preset authoring guide",
+      "description": "Guidance for creating and measuring a video preset.",
+      "version": 4,
+      "files": [
+        {
+          "path": "AUTHORING.md",
+          "bytes": 11086,
+          "sha256": "560d6dcba23efe2485144cc5466d54d484bae0b62b05eabde98ddef31b5b48ae"
+        },
+        {
+          "path": "instructions.md",
+          "bytes": 1239,
+          "sha256": "11b092cb11d37b5f0fd27ebc42e46f817e5f0cf51c241c11fb97ffc727e9f895"
+        },
+        {
+          "path": "reference/isometric-motion/examples/arcade-cabinet/arcade-cabinet.css",
+          "bytes": 3221,
+          "sha256": "a0ea7bce89a665ddd13f72daf31849c07d8b517b66a3d555543aa506b8933629"
+        },
+        {
+          "path": "reference/isometric-motion/examples/arcade-cabinet/build.mjs",
+          "bytes": 51493,
+          "sha256": "a5e92188b54fb18fe7fbce3dbc86a8e55abf32f2560be667ac0866d089ba7b84"
+        },
+        {
+          "path": "reference/isometric-motion/examples/arcade-cabinet/live.js",
+          "bytes": 21286,
+          "sha256": "d9f02ea9193f3109501333bdfb4ab297a71457aaba431f05f5df667ea8c40c8f"
+        },
+        {
+          "path": "reference/isometric-motion/examples/arcade-cabinet/parts.mjs",
+          "bytes": 4296,
+          "sha256": "3ba74b8c55e72933b1e119e3d24c939f654b2c43d41ff26cf855f064cbc7d2a3"
+        },
+        {
+          "path": "reference/isometric-motion/examples/arcade-cabinet/screen.mjs",
+          "bytes": 6701,
+          "sha256": "8fbb8aebb1d657508979ec9b58a29281c71403396df1fcdc6f8f834fe9097be9"
+        },
+        {
+          "path": "reference/isometric-motion/examples/desk-computer/build.mjs",
+          "bytes": 23023,
+          "sha256": "d378f9814acf75bc915921d4f2d83ed1eb4991a8b4298eb0de0e10383b2ff66d"
+        },
+        {
+          "path": "reference/isometric-motion/examples/dial-indicator/build.mjs",
+          "bytes": 14973,
+          "sha256": "e4eaa2324af7f2630650ca72e52a78d56159213a786e14fba8321344789f990d"
+        },
+        {
+          "path": "reference/isometric-motion/examples/next-token/build.mjs",
+          "bytes": 36308,
+          "sha256": "1f2d08426b076f9647587b3944b30e4f7964c71a18ca21b9c99ac7486574b3b0"
+        },
+        {
+          "path": "reference/isometric-motion/examples/next-token/model.mjs",
+          "bytes": 1783,
+          "sha256": "4ddcb9c0b30e2ab781fd38de5500bdaa6d82990f43897b062f00679ea425f143"
+        },
+        {
+          "path": "reference/isometric-motion/examples/raptor-engine/build.mjs",
+          "bytes": 70705,
+          "sha256": "26064df05bb650845ec485195f972f5a0fed3c21ee152f0b8db8194fdc26d916"
+        },
+        {
+          "path": "reference/isometric-motion/examples/raptor-engine/live.js",
+          "bytes": 30752,
+          "sha256": "03d801ef2b75e17a38ebc3d5cb9178747226ea8c2e0c527caafb9c72844d88d8"
+        },
+        {
+          "path": "reference/isometric-motion/examples/raptor-engine/raptor.css",
+          "bytes": 6792,
+          "sha256": "f850575feeeacac8ef5d9d9c49359f4deaef848666c68a4dafa9727fe926cd6e"
+        },
+        {
+          "path": "reference/isometric-motion/examples/ripple-tank/build.mjs",
+          "bytes": 32062,
+          "sha256": "5a5b846bcd146630be3eafb73ebd04cfdd2101d05def15a877fff7188822b493"
+        },
+        {
+          "path": "reference/isometric-motion/examples/ripple-tank/live.js",
+          "bytes": 21720,
+          "sha256": "d2427eada1948662c680b9ca42e8d6e81979f9206c0572524ac404f204f07b5e"
+        },
+        {
+          "path": "reference/isometric-motion/examples/ripple-tank/model.mjs",
+          "bytes": 5004,
+          "sha256": "f6315aa53e80c0c69bf3c52baf0a1340ca4daacfae80245def02f357c2d33882"
+        },
+        {
+          "path": "reference/isometric-motion/examples/ripple-tank/ripple.css",
+          "bytes": 1675,
+          "sha256": "1bf7a778f0b50928adcd54e67c44aa2b12a6877b45f15a0b697d87ab7be0dd5c"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/art.tsx",
+          "bytes": 4491,
+          "sha256": "aecef8d6ee247e99d52717371a319283af8b1bbba2adfcdd4d012553d2963b38"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/drops.ts",
+          "bytes": 19131,
+          "sha256": "9bec874c5e324d69a25cc9085ecf2c5d9c3c2e3bd1a8c667c45e048301b899d4"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/fan.ts",
+          "bytes": 2715,
+          "sha256": "648c1d946e9512afcae60e077d2436926ca1ea94b02c944df8624419812077b1"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/figure.tsx",
+          "bytes": 1078,
+          "sha256": "b9db1ef99bfac58d55d0506f05e0c178e5c9566c61cbf26826ea25cfaa57805f"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/geometry.ts",
+          "bytes": 10962,
+          "sha256": "faf7d6bf1b475daacd4751687d409d7a5c03a6c2bb216ae81beadce5a3cea99a"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/live.tsx",
+          "bytes": 11718,
+          "sha256": "e96fd47aa4ab250a6b2c6fe3c6c3c96d4bcf737dff7f084d4912f5d1ef195116"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/rig.ts",
+          "bytes": 8160,
+          "sha256": "b19fc1637a1f4c411c23f34c7a48361f308402b15b11efc44fb6555e8f67ceea"
+        },
+        {
+          "path": "reference/isometric-motion/examples/spot-plate/spot-plate.css",
+          "bytes": 1518,
+          "sha256": "b31e4c8e02f4de0b77fe0a71718f59d7df2e3abc3d9772f802e00fc3d8a582bd"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/art.tsx",
+          "bytes": 7372,
+          "sha256": "a6b8c1094a9402380d9835ecedbcc677254686b7391027a20da10fc8bf24dae5"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/figure.tsx",
+          "bytes": 850,
+          "sha256": "2dbaef167b9a6a96de74357fc57ae2a650159007852d3d4e8c471b8837e463a9"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/geometry.ts",
+          "bytes": 13085,
+          "sha256": "b8c275eb58b093a85c312f90dc5d79fd9d9a93ae266e42a8a6fa7f6f9aaeb571"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/live.tsx",
+          "bytes": 17463,
+          "sha256": "46a4c338a2805fc0078a20d6f4e12d9de20fc4145ec051ffce3964b164c5a7da"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/pose.ts",
+          "bytes": 3894,
+          "sha256": "380e1d07afcaa3a4e2cd1b13556500f2b336e354fa1c369918b3173f0c9d0866"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/rig.ts",
+          "bytes": 5604,
+          "sha256": "9672431d6982acaa7b6f28e88e1371443bd6a10fb906ff52fc7bdb0f5fd88b05"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/stretch.css",
+          "bytes": 1210,
+          "sha256": "dd15f4582b5fb9b228dc7e32ef57dbcba0129dad38b36e5707247eeb7a2abe8b"
+        },
+        {
+          "path": "reference/isometric-motion/examples/test-rig/view.ts",
+          "bytes": 3116,
+          "sha256": "5465a3e122c2074f8de755b874c7bdb783b365e4140e3e741fc91a32cd69500c"
+        },
+        {
+          "path": "reference/isometric-motion/examples/turning-dial/build.mjs",
+          "bytes": 32098,
+          "sha256": "dcb1b2a1fec2c98c2cea401c6a5b1c7e6545da3b5ea08433cfd72a7f27a49248"
+        },
+        {
+          "path": "reference/isometric-motion/examples/turning-dial/dial.css",
+          "bytes": 509,
+          "sha256": "769fc9596dcd2bbc46823d6e2816a3e584b52e0a6db359d93bedce16f354bedd"
+        },
+        {
+          "path": "reference/isometric-motion/examples/turning-dial/live.js",
+          "bytes": 12523,
+          "sha256": "e872f0d930ba583ce7c4c252a3767aa6b9f6cd1f97fe6dddb212653a0579b41f"
+        },
+        {
+          "path": "reference/isometric-motion/examples/turning-dial/stress.mjs",
+          "bytes": 19414,
+          "sha256": "6d3aec19d8ce6daadffe15113da9415c2fe084c6407d1bb7fb4b5fec86330314"
+        },
+        {
+          "path": "reference/isometric-motion/kit/audit.mjs",
+          "bytes": 92696,
+          "sha256": "90c5bb4a86f108e8a1d3211dbea326bed16acd887c3438810ea29200a2cde28d"
+        },
+        {
+          "path": "reference/isometric-motion/kit/canvas-painter.mjs",
+          "bytes": 27535,
+          "sha256": "1918db10279c9d9df87d7df52c7ed8c2de8acd0bbce214c8f2115a39e7f955ac"
+        },
+        {
+          "path": "reference/isometric-motion/kit/gl-shared.mjs",
+          "bytes": 8863,
+          "sha256": "8c3773cf3e15844df332db3ba55af940186edb2227201e5839347ecc390c039c"
+        },
+        {
+          "path": "reference/isometric-motion/kit/gl.mjs",
+          "bytes": 8763,
+          "sha256": "17a477411e0b9fcb8e84e718094eaefa6be2c0b7d6ce15ee03fe8e252944130a"
+        },
+        {
+          "path": "reference/isometric-motion/kit/iso-kit.mjs",
+          "bytes": 35175,
+          "sha256": "6d3ecc725d30c3b0346da309cf61dfa5a65017c23620bbd4093009d4fb104018"
+        },
+        {
+          "path": "reference/isometric-motion/kit/iso-kit.ts",
+          "bytes": 38631,
+          "sha256": "e9fc988c61a11bfac1f097e62419915ea86b2130ab091f1b50c0e019c907e253"
+        },
+        {
+          "path": "reference/isometric-motion/kit/iso.css",
+          "bytes": 7698,
+          "sha256": "ef19bac5a42ba9be42b56b2c1cf7fc7e21d332a8060765e9ca1d987b8ab23924"
+        },
+        {
+          "path": "reference/isometric-motion/kit/lathe.mjs",
+          "bytes": 48028,
+          "sha256": "a4e7e974b1a37e603ad2b76363b6f9815cc101dfff0ad277a5d4e8f1dc56fccb"
+        },
+        {
+          "path": "reference/isometric-motion/kit/react/draw.tsx",
+          "bytes": 6602,
+          "sha256": "d5389bd78aa3d5424a37b1ce6f635bd102eb86faf27d064b10957716278a631c"
+        },
+        {
+          "path": "reference/isometric-motion/kit/react/live.tsx",
+          "bytes": 4359,
+          "sha256": "6d01fa12bca4ec14d1b7d7d5331d18a997dd3ee131d59dd57f83b932a1705f42"
+        },
+        {
+          "path": "reference/isometric-motion/kit/tube.mjs",
+          "bytes": 14230,
+          "sha256": "bcb3cc360f6d83e6a5753f4c464b4587ab7965028b05a5d58e285abce58667c9"
+        },
+        {
+          "path": "reference/isometric-motion/kit/turn-audit.mjs",
+          "bytes": 57157,
+          "sha256": "e118b838c00621eb5d86409552b75b50d02c303eaedefc008146a7c62c2eaefd"
+        },
+        {
+          "path": "reference/isometric-motion/kit/turn-build.mjs",
+          "bytes": 65265,
+          "sha256": "b95d76f9181703508b5bb758973bf004eb92d298a01e0e5ff5457f830c183888"
+        },
+        {
+          "path": "reference/isometric-motion/kit/turn-fixed.mjs",
+          "bytes": 147055,
+          "sha256": "7429b46eb7673aefb6ed90adeaf130c1dafe8e32af038cbde24a04e693d13fc7"
+        },
+        {
+          "path": "reference/isometric-motion/kit/turn.mjs",
+          "bytes": 139815,
+          "sha256": "cb4b530b5e1750ba0e4fd2367d5f25e00195c0136672aa2ecd665c0622ffd1a2"
+        },
+        {
+          "path": "reference/isometric-motion/LICENSE",
+          "bytes": 1061,
+          "sha256": "87c078ab9d90a3044f359e6b563d4e6afea7aa060897cf4f21618687b3856796"
+        },
+        {
+          "path": "reference/isometric-motion/references/3d.md",
+          "bytes": 44644,
+          "sha256": "de58da5415b4c9fe7712b5b71e0868c4d36363d54e4e32d98a6b016363554536"
+        },
+        {
+          "path": "reference/isometric-motion/references/craft.md",
+          "bytes": 50299,
+          "sha256": "38761fa9b81d66b30e50b05488501d4815830d3627f153d60f76ca783f598936"
+        },
+        {
+          "path": "reference/isometric-motion/references/kit.md",
+          "bytes": 67873,
+          "sha256": "684672e069fdb52735efabc3f4310dedd840d0c8066a8dc7784be2b7e656be71"
+        },
+        {
+          "path": "reference/isometric-motion/references/motion.md",
+          "bytes": 22611,
+          "sha256": "dda401ca1b4661a5f0b7c1e33dac6e7e4b8c13d51ca5d9312123a5c02dab320b"
+        },
+        {
+          "path": "reference/isometric-motion/references/react.md",
+          "bytes": 3614,
+          "sha256": "76b5cee6e0a7513e3c77a832e3f58b1343806597d469774e1749f141525801fd"
+        },
+        {
+          "path": "reference/isometric-motion/references/verify.md",
+          "bytes": 43574,
+          "sha256": "fb81437fc5d75094a34432eb6f545644aa228e15173a27d08b3cace912033561"
+        },
+        {
+          "path": "reference/isometric-motion/references/walkthrough.md",
+          "bytes": 5276,
+          "sha256": "4d157e0169080a6ed44d5b06de0a5de2931baf3d0fac30283d2644dd66506dfa"
+        },
+        {
+          "path": "reference/isometric-motion/references/webgl.md",
+          "bytes": 61104,
+          "sha256": "fb4e2421c6a705d4ad849c8e516731ebc958bc5ff0855548ff58232b0aa01923"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-affine-bounds.test.mjs",
+          "bytes": 4175,
+          "sha256": "038e0a879363c4b0d2c7146a62065b09f2973210114928d5005e9082219654d2"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-cache.test.mjs",
+          "bytes": 1603,
+          "sha256": "00b49601c068897e94bf8309d652bb55595e541283c510bba34957c457edd57e"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-clearance-envelope.test.mjs",
+          "bytes": 2407,
+          "sha256": "ffa8321d25996ac165dd1fdb6473a903c1c6f03b86996b2fef6978203b8f2bd8"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-empty-clipping.test.mjs",
+          "bytes": 3936,
+          "sha256": "a28384ccbf303acc32f7788753459a7338c94bc74ee5efe70762daa75a62c8cb"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-order-convergence.test.mjs",
+          "bytes": 2875,
+          "sha256": "9ad7b9a645d9e90a788e561484013b0fdefb1a8abd38fcb160f5d1a6464be278"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-path-origin.test.mjs",
+          "bytes": 1594,
+          "sha256": "1e5917a4a3bc337aa4497e5717de47b198db8fc9538d5f10d40a788f5f821d37"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-profile.test.mjs",
+          "bytes": 2171,
+          "sha256": "80179ae38afa6e58ed254a597daeee27240e85f87d1bbd0421def4e347ec37c0"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-projection.test.mjs",
+          "bytes": 1934,
+          "sha256": "0cd790e0dfc64633019db3233b87fec823c6148037d9335e1c2b16ea1c722db6"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-slide-clearance.test.mjs",
+          "bytes": 2875,
+          "sha256": "007f68aa5262eae40aceef00eec91e4d5be0164bd5fb9377680996164ff9ac19"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-svg-attributes.test.mjs",
+          "bytes": 3484,
+          "sha256": "2d2a949639f90d6328eeea401f6b7f3a3dc1fcc17f1d46cbe2de208afc3c6533"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/audit-taper.test.mjs",
+          "bytes": 1267,
+          "sha256": "ea4415ef743efc4ba1393457c571cdfc2b91bfd5ea931ae32829926c80aed487"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/capture-current-geometry.test.mjs",
+          "bytes": 5109,
+          "sha256": "ad0c0555e693c8c9e2b14a3098b91acd04df6e7c45779615aaa86e81be452756"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/capture-selector.test.mjs",
+          "bytes": 7665,
+          "sha256": "046ce21a686e99c1a5a760f529b999cdca5b7f504961784bc087395b0b586eff"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/capture.mjs",
+          "bytes": 13283,
+          "sha256": "b000f78cf72aee3fb2096a74527a8ef87d9022fb28fecc35d3f232cf3a6e6d8f"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/capture.test.mjs",
+          "bytes": 2023,
+          "sha256": "319aed308ded5eb4137c8d633720a9254d8c5f35a8adcc1e883066e6c983ed62"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/chrome-port.mjs",
+          "bytes": 1083,
+          "sha256": "6775d3d389d26f37a52be8358aa88d1dc0aded63cb24ae20a936505a192e5d9d"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/chrome-startup.test.mjs",
+          "bytes": 1838,
+          "sha256": "bd3c0eb4b699ebfbfd4efa5920acf386f31876ed490aaee839886dd8ed4cf797"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/drive-actions.test.mjs",
+          "bytes": 1822,
+          "sha256": "ef415f9860e656dcf0d1c95b48aedf974cf311aa31e547403f7684c59d676aa3"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/drive-async-until.test.mjs",
+          "bytes": 2743,
+          "sha256": "86058cb8456c1c9c2822c7a3ece698e2dba40a1a01f2746668cfe2e2cb193435"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/drive-turn-controller.test.mjs",
+          "bytes": 2702,
+          "sha256": "2b7deda0e9706208ae9c21cc2ada09d623eebee9e0dfc512503b8ddbeb4ddcac"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/drive.mjs",
+          "bytes": 22086,
+          "sha256": "6376ebdae1eba1ec33dddac198ca3b1852f35013c7a3f8cb09642b26b7e5e452"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/drive.test.mjs",
+          "bytes": 3690,
+          "sha256": "c4f354f8c79e766858d913321fcb84786355e814ca2e096992a088b2181529f0"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/enter-key.test.mjs",
+          "bytes": 2560,
+          "sha256": "2592318f2b41735e4ff8ed2edcbc3abee46d81f9184b02dd99c121d8900d3838"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/fidelity-cut.test.mjs",
+          "bytes": 3702,
+          "sha256": "7f3518eba374167ada79cc73970cc9557ef48faa3e8b390326589c67ab989787"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/fidelity-tube-coverage.test.mjs",
+          "bytes": 3223,
+          "sha256": "eef7300ea786d82268811cc4e4153c1de913bae17cec58bd4a28f64ea875c525"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/fingerprint.mjs",
+          "bytes": 1241,
+          "sha256": "1582728c6f70b340f8fdda28f287e6f8d45e291ab739ef9ff527a5374f7b1654"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/inline-kit.mjs",
+          "bytes": 648,
+          "sha256": "01e08df7c2556ce52a7e8ed9009a332036b209ab7e42389874af2a65fda6e9db"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/line-ends.mjs",
+          "bytes": 15143,
+          "sha256": "e8a121473dfe62245eab2116e8fb6b4d8ed86e3fe29ea50a90e86ffed335b1cd"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines-arcs.test.mjs",
+          "bytes": 2059,
+          "sha256": "ae915157d4bbdfe8e4af031c0e2e5f5f566c938ba7bb88884ae377489aff540e"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines-bezier.test.mjs",
+          "bytes": 1769,
+          "sha256": "7a95169325fed35eecb0c7aefcb806a48bfd09eaba3df5461dc2e30c5d0695f4"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines-round.test.mjs",
+          "bytes": 2458,
+          "sha256": "7a012c3eb010b7f8082ee49ce939d6f35f384d188d897e3fd3708682c5d3a657"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines-rounded-rect.test.mjs",
+          "bytes": 2527,
+          "sha256": "88d0a27b047895a00f5654f59d93c775fb8312a5c28be3b47b5e673d80efe5b6"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines.mjs",
+          "bytes": 1700,
+          "sha256": "b0ca73ab3a0d1cd4a28fda933496cbd7384ef315d821b5d2fffae1c704ce79cc"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/lines.test.mjs",
+          "bytes": 1537,
+          "sha256": "82931231d33d977bcc44c54b05bdb7b78c4ddebc422848ab59539018dd43583a"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/navigation.test.mjs",
+          "bytes": 2255,
+          "sha256": "b9bd9d7360735e178b24e086e5c875e1703e3e0593e7ddff5f10fe0b4f0f7587"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/orbit-sampling.test.mjs",
+          "bytes": 2810,
+          "sha256": "ed6ce6b0dd32f6c7ab51a5a50ea2dd4b920858ff35d725bea22bee79e323b97a"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/react-dots-opacity.test.mjs",
+          "bytes": 2817,
+          "sha256": "e7d2b5386f397efe4197b4607f2131170bf88dc52ccc3cfcfea2677f28d41aec"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/react-readout-first-write.test.mjs",
+          "bytes": 3846,
+          "sha256": "088a2d29d67e9638f7e43e9b5204c027566934d38302c0ee5e406752f2a4780a"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/react-readout-target.test.mjs",
+          "bytes": 4657,
+          "sha256": "1354dc4a3fc44063034bd586b7e0e1e589804c65e47ee522c5c553dbded9e05d"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/react-solid-seamless.test.mjs",
+          "bytes": 2752,
+          "sha256": "f45927c14dd6023eec7109da5db10cddd46cd46b21f58675a6d4dc6ca12122b0"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/react-visibility-target.test.mjs",
+          "bytes": 3844,
+          "sha256": "78c630aa974d2fbd04cb096a95b528d64d3027e2a9666b85e9d7a50965160925"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/turn-bench.mjs",
+          "bytes": 3863,
+          "sha256": "d86cd53e3702fa92e22b4052ee9bf47da10fd0a71401fe477bd8da2fe30b1631"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/turn-check.mjs",
+          "bytes": 37440,
+          "sha256": "b08ec017c59288d728f17074eb82d5da518f092c860951750523c1e7c07e6df9"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/turn-fidelity.mjs",
+          "bytes": 20164,
+          "sha256": "4b8e7ad29d0a255d2dd5e7f396bce11f13e5baa5eb682adc68025d4ee16a1fb7"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/turn-group-reference.test.mjs",
+          "bytes": 2174,
+          "sha256": "bfac2f910c80c7fcfba9e4861391552000a0f25414ae86576a9ef9ef46291412"
+        },
+        {
+          "path": "reference/isometric-motion/scripts/turn-split-owner.test.mjs",
+          "bytes": 3411,
+          "sha256": "829febf610ba09cdca651fbd86340f13932f241b4e3525a3d8566ac70d75a69d"
+        },
+        {
+          "path": "reference/isometric-motion/SKILL.md",
+          "bytes": 33605,
+          "sha256": "bd419cd45eefaf25a125e3dcc633d906bf8051556e1cba549591b37907ff1a0c"
+        },
+        {
+          "path": "reference/README.md",
+          "bytes": 1256,
+          "sha256": "82df95c9549364c54fa0a93d09670f5196437e5d8b9933677f2adbfb05c853e1"
+        },
+        {
+          "path": "template/examples/source-slug/README.md",
+          "bytes": 613,
+          "sha256": "52b111d0d0773b3dfc2b6bd83b0dee118221bd3af0d117770b7337b82420d847"
+        },
+        {
+          "path": "template/PRESET.md",
+          "bytes": 2200,
+          "sha256": "dc880f1a286aaa600e49dc27dbddea00289c1a4d72b873a543eabbc75d321656"
+        },
+        {
+          "path": "template/targets.json",
+          "bytes": 456,
+          "sha256": "3fe5b4ffea1c6568110dabf0d68f2b9a5df36f878c821e47299464dc06b1b581"
+        }
+      ]
+    },
+    {
+      "id": "kit",
+      "kind": "kit",
+      "name": "Preset measurement kit",
+      "description": "Shared tools for measuring, checking and documenting presets.",
+      "version": 4,
+      "files": [
+        {
+          "path": "check.mjs",
+          "bytes": 2063,
+          "sha256": "6082db7bc4c10d0bb4b27267ea560d60434d673f2418670b82fb354bb320b850"
+        },
+        {
+          "path": "check.test.mjs",
+          "bytes": 1537,
+          "sha256": "c9bbe191b02135381032cb95b22459f0488b727706199f36bda1b319be0a83c3"
+        },
+        {
+          "path": "KIT.md",
+          "bytes": 302,
+          "sha256": "b2db81a03a8fe3173965e11faed4ca304750a1a2d7a9dcb2d1c6957f615cb564"
+        },
+        {
+          "path": "make-look-lut.mjs",
+          "bytes": 2360,
+          "sha256": "c9551babc143f1253be2ba96810a5d80532b939bf439e804a841fe929e520064"
+        },
+        {
+          "path": "measure.mjs",
+          "bytes": 6746,
+          "sha256": "4e2a6f5abef2e0758866a80bddf20c7d66e904a0cd9bc38fd2646297c04d82c7"
+        },
+        {
+          "path": "measure.test.mjs",
+          "bytes": 3378,
+          "sha256": "55d65297c384cb6cc63f1abe612a4bc863020ffdbafa5a29bf6f814caf9f771e"
+        },
+        {
+          "path": "music.mjs",
+          "bytes": 6381,
+          "sha256": "2b59465174b5e729ed9ae8551389993cf65b1663170e8b4ca04032af138faa36"
+        },
+        {
+          "path": "music.test.mjs",
+          "bytes": 1749,
+          "sha256": "0762a672c0247662fdfd83d469cec754a96f75ba9b24a881b2e935bda45ce767"
+        },
+        {
+          "path": "pacing.mjs",
+          "bytes": 2781,
+          "sha256": "761de27d0003f44e40bcc82a51b02f8a21f8b9569a712d10210b7d6e89c80bb1"
+        },
+        {
+          "path": "pacing.test.mjs",
+          "bytes": 797,
+          "sha256": "56fc8ac013202278cb8e6cd781184a3bdebd9f2bc474681c2bb7c108d1971982"
+        },
+        {
+          "path": "timeline.mjs",
+          "bytes": 3767,
+          "sha256": "2b82d779f7226c2feff6212b862b813f7a7c502bd256769e18805c214b1caf3e"
+        },
+        {
+          "path": "timeline.test.mjs",
+          "bytes": 1037,
+          "sha256": "4a8f040ef325586e3be232bf5660fad5d76b009718d9ae4e94ee582c5ac3701a"
+        }
+      ]
+    },
+    {
+      "id": "on-location-conversation",
+      "kind": "preset",
+      "name": "On-location conversation",
+      "description": "A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.",
+      "version": 6,
+      "files": [
+        {
+          "path": "examples/ashe-frontier-tech/01-cold-open-street.jpg",
+          "bytes": 70566,
+          "sha256": "1f68d01ff9ea6ce206d82aae3198cfb13b3077ec331fa26b7e6392a78dd24b2b"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/02-cold-open-detail.jpg",
+          "bytes": 30877,
+          "sha256": "453449c6f1a155897a160bb39ab76dd73a42c8eda7096ed39aa6c41b4c676710"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/03-cold-open-food.jpg",
+          "bytes": 57329,
+          "sha256": "108afdd19e1bf912ae1fff0b625bc408690b23a0a1f39aac180a3fdb22ac0f2e"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/04-guest-and-series-card.jpg",
+          "bytes": 39230,
+          "sha256": "9c2cdbfca3022c551a476986be8d16f26eaa3daf02ff634de0baa345e7206cf9"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/05-chapter-label.jpg",
+          "bytes": 80011,
+          "sha256": "f3da33fbbf336d3b0944e76b2200f29857bdcd2467b39918a4c51ab8691b6458"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/06-location-park.jpg",
+          "bytes": 78156,
+          "sha256": "8f6a5c6b7b8030f672f7d479b31ab57025408834ea0bf71005f8968b1f2c0637"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/07-location-shade-with-label.jpg",
+          "bytes": 94529,
+          "sha256": "55eade35482f6ffbdf2221724a6f849d923a17cd521d810a35cfbca83517824f"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/08-location-steps.jpg",
+          "bytes": 75743,
+          "sha256": "7e4868951d9f1bf98f928553ad6d34db1bfab58b41db9245ce059d84cc50128d"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/09-ending-workplace-broll.jpg",
+          "bytes": 55234,
+          "sha256": "eea035b7020e904c59999d23246742faf00cdfd54898cae0eebe4d477db6d487"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/10-location-cafe.jpg",
+          "bytes": 67070,
+          "sha256": "141f36485b0d72bc94b091838432280ca5faa22890f5ddfc4a75e2d348d10b0e"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/11-sign-off-card.jpg",
+          "bytes": 15204,
+          "sha256": "29b076ef1058cd59d5aab366872fc094767b08c36d18ea3034ac379e973d279f"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/motion-chapter-label-in.jpg",
+          "bytes": 53269,
+          "sha256": "94cb03432364cf98f591d84ab7c3dd437eb1782ebc82b94dcb91612977d2b09b"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/music-body-15m.json",
+          "bytes": 279,
+          "sha256": "e32337207e50ee66f67e5871125f83559b2e5a441617911979da76c05031f698"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/music-cold-open.json",
+          "bytes": 280,
+          "sha256": "2dae30cf80aee4189de0a8b3f23a94c6ab33d1f166ad964ec594332d58acc6f0"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/music-ending.json",
+          "bytes": 286,
+          "sha256": "b18a4f8f2329f855e2ebbdb9b3b39c3d42321a25e3dd2aef2ef0a40b3a720d02"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/pacing-body-15m.json",
+          "bytes": 192,
+          "sha256": "6d5418192eda485076ffc9a028c6b788ea27a26c9e9e64ffb23ded819687e2fe"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/profile.json",
+          "bytes": 158651,
+          "sha256": "33eb25d560ca6c71da1fd91cd6e9ef8b82378180113fd36c043fc4b17ae7a2f8"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/README.md",
+          "bytes": 3825,
+          "sha256": "b16ae68a9af5363f0e6bb99af4ecb826764dcc6b749ad0b3886763000a2e64b3"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/scope-vectorscope.jpg",
+          "bytes": 6528,
+          "sha256": "a6ba79171f3a828459c6577cde49e8a8a7f92d4e9c5e57cbf05691d18615e56f"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/scope-waveform.jpg",
+          "bytes": 29963,
+          "sha256": "7d0a7b96616bac22097a6290fad8cf5a11c40f7ea398452fd06a4700b00271ac"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/sections.json",
+          "bytes": 359,
+          "sha256": "2c6ed00024b10203678f0daca3d1b54a373ef835ba1737d54dae1b98759a2258"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/storyboard-1min.jpg",
+          "bytes": 10161,
+          "sha256": "5722841664491c200023e74ec34343cc0d544811d969a52428e7e4104280e7ea"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/storyboard-opening-2min.jpg",
+          "bytes": 136977,
+          "sha256": "0f00aa21369f3083fa6a7374b6c68c07c456769c92ca29a6ac895056dbee4c3b"
+        },
+        {
+          "path": "examples/ashe-frontier-tech/timeline.svg",
+          "bytes": 44470,
+          "sha256": "e09922a736383286bebd59f60fa983bec5d7c6146197004bb1597b15d002e551"
+        },
+        {
+          "path": "look-before-after.jpg",
+          "bytes": 21542,
+          "sha256": "a2434e64e64c67b1bbcf1ccd583a3a0ad8a177b9d071d6c6e5931e6df8b34b2b"
+        },
+        {
+          "path": "look.cube",
+          "bytes": 118049,
+          "sha256": "415008de0fb81360954e836f9ef18a1401ef67b6c4be463aca9e1d2490845c8d"
+        },
+        {
+          "path": "look.json",
+          "bytes": 221,
+          "sha256": "cf642ec2feaf0bb6e2c92c3869d8f1bad07f118306654076e71631b29cef3cb5"
+        },
+        {
+          "path": "PRESET.md",
+          "bytes": 13054,
+          "sha256": "4aedc808697f78acb8d53819a3b2050b63004e3bf6e2cb9ee6af3d6d87f177d2"
+        },
+        {
+          "path": "shoot-plan.svg",
+          "bytes": 1695,
+          "sha256": "82720f62462607573f13925dfd7480f022c93792ce14203b544fcac58eef1d4f"
+        },
+        {
+          "path": "targets.json",
+          "bytes": 1132,
+          "sha256": "0a0fb678ead8ff9de770f7962cea19bb6747bb06222742d363f49874807bb20d"
+        }
+      ]
+    },
+    {
+      "id": "studio-podcast",
+      "kind": "preset",
+      "name": "Studio interview podcast",
+      "description": "A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.",
+      "version": 6,
+      "files": [
+        {
+          "path": "cold-open.md",
+          "bytes": 3032,
+          "sha256": "ff153376361b2192841b0df92e37ffea426d07392f3e6ba6f3c09d6f7fba9cbd"
+        },
+        {
+          "path": "examples/a16z-show/01-teaser-kinetic-caps.jpg",
+          "bytes": 43818,
+          "sha256": "2b9a8827b0092289cf3f5b3a85b5bbd0e61edacaed75f8871e3265d85d8250a4"
+        },
+        {
+          "path": "examples/a16z-show/02-teaser-kinetic-over-broll.jpg",
+          "bytes": 35086,
+          "sha256": "0221f79c873bf02be0366c4e2c2d8c8680334c28c716b2f7aab4b51b106abe3c"
+        },
+        {
+          "path": "examples/a16z-show/03-teaser-kinetic-over-single.jpg",
+          "bytes": 39519,
+          "sha256": "a1ee09bfea7d08e591e9206e014f1c430435321eab9075ffd0ad3dfc183c4bbc"
+        },
+        {
+          "path": "examples/a16z-show/04-teaser-illustrative-insert.jpg",
+          "bytes": 23006,
+          "sha256": "b5460f7b2bc5478e570cbe0aa4f3b2a0004680af668f625babef6ded9b0441e5"
+        },
+        {
+          "path": "examples/a16z-show/05-teaser-illustration-on-paper.jpg",
+          "bytes": 44274,
+          "sha256": "46a1101600fbd388f17cbbfd865023011ce0c1c36543cf48dead2da8deaebd1c"
+        },
+        {
+          "path": "examples/a16z-show/06-teaser-ui-on-cream.jpg",
+          "bytes": 8792,
+          "sha256": "9e39b21258899a46cc4c43655c7a1a515085e55962e5576a31de4914e8c8c938"
+        },
+        {
+          "path": "examples/a16z-show/07-teaser-diagram.jpg",
+          "bytes": 14050,
+          "sha256": "a3913fbcb44599797f7773b978351a340632741e8f379ec246405e2acd5ba22f"
+        },
+        {
+          "path": "examples/a16z-show/08-teaser-kinetic-serif-word.jpg",
+          "bytes": 38874,
+          "sha256": "c22cb22f7cb4aa0b5e90638560c7b89b18c5de61ce99f33f5bbf3631aa2309a5"
+        },
+        {
+          "path": "examples/a16z-show/09-body-wide.jpg",
+          "bytes": 45300,
+          "sha256": "45ca655621b75c3280845b476fbcc154eb893407d593cc580d3f245e1630720e"
+        },
+        {
+          "path": "examples/a16z-show/10-body-host-single.jpg",
+          "bytes": 42037,
+          "sha256": "6fdc57923abf67915488051b22acb06ccd4d5e6da7010da813a03a393fcdf14c"
+        },
+        {
+          "path": "examples/a16z-show/11-body-guest-single.jpg",
+          "bytes": 28582,
+          "sha256": "8ee2ca8cba298255332e459f918ed65e18a7e62234ddb2253b3a023575cd4414"
+        },
+        {
+          "path": "examples/a16z-show/12-end-card.jpg",
+          "bytes": 9225,
+          "sha256": "b353bd39fe4ddb4e68b5019340c4975fc001e248aabe39c5c245016e1fb5f2aa"
+        },
+        {
+          "path": "examples/a16z-show/motion-kinetic-words.jpg",
+          "bytes": 40752,
+          "sha256": "8fe6ffb15bc67b1dcaeea7adde43668b0122a7be3de98f3933dcd9d05e496693"
+        },
+        {
+          "path": "examples/a16z-show/music-body-15m.json",
+          "bytes": 282,
+          "sha256": "4015ac37fd88c6720f25c9c53463adf7867a45b8a7d399d0d040e6e9a396be2c"
+        },
+        {
+          "path": "examples/a16z-show/music-teaser.json",
+          "bytes": 281,
+          "sha256": "f64270028211ab9474ee27636becc06026d4b7b3f796a48908d98d95b8e489c9"
+        },
+        {
+          "path": "examples/a16z-show/pacing-body-15m.json",
+          "bytes": 191,
+          "sha256": "df295aef350341637a3c62f997c7de32c2f61ea05e045bb67f03fcb043b290bd"
+        },
+        {
+          "path": "examples/a16z-show/pacing-teaser.json",
+          "bytes": 192,
+          "sha256": "5b75cc58327e1a6b813238a0e6add55d9ab7ab3e0b143094137181829a144609"
+        },
+        {
+          "path": "examples/a16z-show/profile-teaser.json",
+          "bytes": 15052,
+          "sha256": "5083178d3ad08356f8f04bd12b9b72888690eee323ec4e05a12432cf3fe6940b"
+        },
+        {
+          "path": "examples/a16z-show/profile.json",
+          "bytes": 182657,
+          "sha256": "35c3816c25bbfae27425bd5b70457f609d43e2e7de3d081ccc477f2701d6a012"
+        },
+        {
+          "path": "examples/a16z-show/README.md",
+          "bytes": 4081,
+          "sha256": "80725dd2adc919dbacdd67a35e46e48333b948d746e37b564db58845661f7a0f"
+        },
+        {
+          "path": "examples/a16z-show/scope-vectorscope.jpg",
+          "bytes": 5950,
+          "sha256": "5c844a8e25e440c952f242b5b1438d88781e2b6606619524b2a2b1e235973792"
+        },
+        {
+          "path": "examples/a16z-show/scope-waveform.jpg",
+          "bytes": 26587,
+          "sha256": "a64fe45871cb703b8af4012729fb80ffaf5fb3412c5897bf6bef4fd91689d63e"
+        },
+        {
+          "path": "examples/a16z-show/sections.json",
+          "bytes": 167,
+          "sha256": "ee2a1e09ef4ef83821596c936cd3712038d9c24f132c34f398fb6da570c26379"
+        },
+        {
+          "path": "examples/a16z-show/shots-body.json",
+          "bytes": 196,
+          "sha256": "2b8866c48a1d83684899d3ce51919fd52fab8579d6b7347a98093b4ff19cc803"
+        },
+        {
+          "path": "examples/a16z-show/storyboard-1min.jpg",
+          "bytes": 10217,
+          "sha256": "fde24f62b00988f03dbb2cf212899d58379c77f78992e0faa29765f7ad92c610"
+        },
+        {
+          "path": "examples/a16z-show/storyboard-teaser-2min.jpg",
+          "bytes": 91135,
+          "sha256": "38b82383ed75206483ccb3dcf81a5d4b9519e5e45213dea0184136a11ef30908"
+        },
+        {
+          "path": "examples/a16z-show/timeline.svg",
+          "bytes": 67065,
+          "sha256": "74fac9607328bcf6668509d76df5d76effbdb88abd785388cd23d7a2093a4534"
+        },
+        {
+          "path": "look-before-after.jpg",
+          "bytes": 21345,
+          "sha256": "f67bf84121edae3975f962aafeffa3f17510b2f05cef6a6b505035db62d3ef59"
+        },
+        {
+          "path": "look.cube",
+          "bytes": 118031,
+          "sha256": "1feffa848117fb7ce88414cc7cd5226b02484877a1a06cecfb6efa53dddb0583"
+        },
+        {
+          "path": "look.json",
+          "bytes": 200,
+          "sha256": "007e9f313619e46adc2615828f5de4e19c2e2f3c6b20d44d74a5d4bba77503b8"
+        },
+        {
+          "path": "PRESET.md",
+          "bytes": 12246,
+          "sha256": "11eb9edf1b04183e964cfefe898e7404af09d202c275e4048dcdc2a10925c6e0"
+        },
+        {
+          "path": "shoot-plan.svg",
+          "bytes": 1818,
+          "sha256": "7a53a41db74d74b7c3c74033d1728a7060237dca8b4b04f3e96991ba5d1c5cf2"
+        },
+        {
+          "path": "targets-body.json",
+          "bytes": 668,
+          "sha256": "d0ffd695daa81ff47ce9b470e1d672c156475897043d8a8592c5fecd82d444ad"
+        },
+        {
+          "path": "targets-teaser.json",
+          "bytes": 763,
+          "sha256": "486e4681d238bf0ab3bee8c3ae5aac5d72eb09e89aff7066ec3fc8b22cf0005d"
+        },
+        {
+          "path": "targets.json",
+          "bytes": 1395,
+          "sha256": "aad3ab670d230ab1bdab2bc2eb1e1ec5a34235b4a00d24e7f43cc924ffd044b9"
+        }
+      ]
+    },
+    {
+      "id": "tactile-launch-film",
+      "kind": "preset",
+      "name": "Tactile launch film",
+      "description": "A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.",
+      "version": 6,
+      "files": [
+        {
+          "path": "examples/humansand-persimmon/01-process-macro.jpg",
+          "bytes": 23447,
+          "sha256": "28621b2e36d82e3dda406df49ae4bdfd49602bf4b44be173fc4fb36fc07c502b"
+        },
+        {
+          "path": "examples/humansand-persimmon/02-first-marks.jpg",
+          "bytes": 25517,
+          "sha256": "9823826240a914011e72e4a8dd9afd629e5d8871e6319e1d41168a8eaf56990d"
+        },
+        {
+          "path": "examples/humansand-persimmon/03-title-over-object.jpg",
+          "bytes": 32304,
+          "sha256": "efefb0d1fac0788d975032e724482655ace11b0cb6072da5bd9fe898ee0597d6"
+        },
+        {
+          "path": "examples/humansand-persimmon/04-title-and-subtitle.jpg",
+          "bytes": 24319,
+          "sha256": "eb4d19c0ac4aacd08fc0a64c5855fe66c4953f4ae4868c9225408b15762ad219"
+        },
+        {
+          "path": "examples/humansand-persimmon/05-claim-over-process.jpg",
+          "bytes": 40495,
+          "sha256": "682b535d85613a236ce09fe0ffbf725750648e57a88f4657ddf71bb3ecc1062c"
+        },
+        {
+          "path": "examples/humansand-persimmon/06-claim-over-scale-wall.jpg",
+          "bytes": 41875,
+          "sha256": "655d3c040337e60da1dcc7611d936a16e73d7055da750a46f69574c87325bc55"
+        },
+        {
+          "path": "examples/humansand-persimmon/07-transition-particles.jpg",
+          "bytes": 44369,
+          "sha256": "03ff6f607210cdba547d4833fd430891904669b37233ffe87415135a7c64f684"
+        },
+        {
+          "path": "examples/humansand-persimmon/08-real-beside-made.jpg",
+          "bytes": 43102,
+          "sha256": "02196f07876e6db1e776f71fc89c5a9e99fe928600ff9899afc60f53a08a9a80"
+        },
+        {
+          "path": "examples/humansand-persimmon/09-final-placement.jpg",
+          "bytes": 26489,
+          "sha256": "8d208531a587c363fe0a55670ca1b6bf61002507cd03277208c4ce607ca8535b"
+        },
+        {
+          "path": "examples/humansand-persimmon/10-end-card.jpg",
+          "bytes": 11444,
+          "sha256": "297a0b72e0f0f6423974181be832e9abf10cc6c81bc371f6d58b4f53a2eea74d"
+        },
+        {
+          "path": "examples/humansand-persimmon/motion-claim-line-in.jpg",
+          "bytes": 69487,
+          "sha256": "84f1010aec4213be1bed046bb0fab097ce9ac7ddd2a32c6d48966b08f82a4c7e"
+        },
+        {
+          "path": "examples/humansand-persimmon/music.json",
+          "bytes": 284,
+          "sha256": "f99990dea4acf5dd2b3d594c0ad14ba1f0775af3502f1e3e043dc95e2f0072ce"
+        },
+        {
+          "path": "examples/humansand-persimmon/profile.json",
+          "bytes": 7276,
+          "sha256": "efdb437a87062a1284c191c95032fd7de07f0f50c356b8de4b0f6711bcce80c5"
+        },
+        {
+          "path": "examples/humansand-persimmon/README.md",
+          "bytes": 2998,
+          "sha256": "e4739db35544bc30cb1b9d9a726a0d1a6bbc014a83bf3be64f40fdf650988627"
+        },
+        {
+          "path": "examples/humansand-persimmon/scope-vectorscope.jpg",
+          "bytes": 5305,
+          "sha256": "b8344bb9d5bc37ec170dea88f0b2fdf8770be8dfcf53e236890c10da32e6bda0"
+        },
+        {
+          "path": "examples/humansand-persimmon/scope-waveform.jpg",
+          "bytes": 25272,
+          "sha256": "1bc5f89ca4615612860d38c0242a4606dfffc08e5d62c788ad2374c55176e984"
+        },
+        {
+          "path": "examples/humansand-persimmon/sections.json",
+          "bytes": 340,
+          "sha256": "7536480b69c285e36f9cba27dcca1becdd094434d1ed229123c81912ac6605d4"
+        },
+        {
+          "path": "examples/humansand-persimmon/storyboard-1s.jpg",
+          "bytes": 87402,
+          "sha256": "03c5d98c52db178dff6e2ba72b88d64ac0cc2073545efe510a48fd48ac936331"
+        },
+        {
+          "path": "examples/humansand-persimmon/timeline.svg",
+          "bytes": 3937,
+          "sha256": "74e3e5ba9691ee1bbc6d949a5651ca204c05ed9cc048ab2bd321eab03bd8d1f1"
+        },
+        {
+          "path": "look-before-after.jpg",
+          "bytes": 22442,
+          "sha256": "1ae68e94c56026d089fcf220a4df10b133959416eeb58afe41e44602aeeacc36"
+        },
+        {
+          "path": "look.cube",
+          "bytes": 118038,
+          "sha256": "2e0002b514bc15165888763b4c2cca4e34ba45d4755ed8fb276584fb1939c94c"
+        },
+        {
+          "path": "look.json",
+          "bytes": 209,
+          "sha256": "d31123535aabd4b0dc7b731bcc9cc628cb56b4db65cb4a2841f00d572550a07a"
+        },
+        {
+          "path": "PRESET.md",
+          "bytes": 13112,
+          "sha256": "aab830ac4c37e03afb0f5ceffef3937b2d48f51f9fc72e542ab922400daf1269"
+        },
+        {
+          "path": "shoot-plan.svg",
+          "bytes": 1613,
+          "sha256": "c4900dc7e36425ae856076a5065372a8275fec84277d2afaab1132abd3980478"
+        },
+        {
+          "path": "targets.json",
+          "bytes": 1235,
+          "sha256": "02d07260a9930c05f64502765e7309ab826c475fdc6c954a8678054e672eb99b"
+        }
+      ]
+    }
+  ]
+}

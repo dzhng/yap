@@ -22,7 +22,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, test, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { AssetStore } from "@yap/core/assets";
-import { Catalog } from "@yap/core/catalog";
+import { Catalog, catalogFormat } from "@yap/core/catalog";
 import { callLocal } from "@yap/client";
 import { startProjectService } from "./project-service.js";
 import { PassThrough, Writable } from "node:stream";
@@ -1986,6 +1986,147 @@ test("model discovery crosses the public wire before either model is prepared", 
     ok: true,
     data: { state: "absent" },
   });
+});
+
+test("preset reads cross the public wire without changing the catalog format", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: { bundled: join(import.meta.dirname, "../../../presets") },
+  });
+  expect(catalogFormat).toBe(29);
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: {
+      presets: expect.arrayContaining([
+        expect.objectContaining({ id: "studio-podcast", source: "bundled" }),
+        expect.objectContaining({ id: "on-location-conversation", source: "bundled" }),
+        expect.objectContaining({ id: "tactile-launch-film", source: "bundled" }),
+      ]),
+      refresh: { checkedAt: null, commit: null, error: null, available: [] },
+      instructions: expect.any(Array),
+    },
+  });
+  expect(await f.call("preset.get", { id: "tactile-launch-film" })).toMatchObject({
+    ok: true,
+    data: {
+      id: "tactile-launch-film",
+      text: expect.stringContaining("## Shoot"),
+      path: expect.stringContaining("tactile-launch-film"),
+      kitPath: expect.stringContaining("presets/kit"),
+      guidePath: expect.stringContaining("presets/authoring/AUTHORING.md"),
+      instructions: expect.arrayContaining([expect.stringContaining("tactile-launch-film")]),
+    },
+  });
+  expect(await f.call("preset.get", { id: "missing-preset" })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_NOT_FOUND" },
+  });
+});
+
+test("presets refresh at startup and on preset.update, pinned to one commit, over the public wire", async () => {
+  const commit = "b".repeat(40);
+  const text =
+    "---\nid: wire-demo\nversion: 1\nname: Wire demo\ndescription: A preset served by the test.\n---\n\n## Any footage\n\nAdapt.\n\n## Shoot\n\nAnything.\n\n## Edit\n\nNothing.\n";
+  const index = {
+    format: 1,
+    packages: [
+      {
+        id: "wire-demo",
+        kind: "preset",
+        name: "Wire demo",
+        description: "A preset served by the test.",
+        version: 1,
+        files: [
+          {
+            path: "PRESET.md",
+            bytes: Buffer.byteLength(text),
+            sha256: createHash("sha256").update(text).digest("hex"),
+          },
+        ],
+      },
+    ],
+  };
+  const replies: Record<string, string> = {
+    "https://api.test/repos/dzhng/yap/commits/main": commit,
+    [`https://raw.test/dzhng/yap/${commit}/presets/index.json`]: JSON.stringify(index),
+    [`https://raw.test/dzhng/yap/${commit}/presets/wire-demo/PRESET.md`]: text,
+  };
+  const requested: string[] = [];
+  const fetch = (async (input: string | URL) => {
+    const url = String(input);
+    requested.push(url);
+    return replies[url] === undefined
+      ? new Response("missing", { status: 404 })
+      : new Response(replies[url]);
+  }) as typeof globalThis.fetch;
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: { refresh: { apiBase: "https://api.test", rawBase: "https://raw.test", fetch } },
+  });
+  expect(await f.call("preset.update", {})).toMatchObject({
+    ok: true,
+    // The startup refresh may already have installed it; either way the result says what to do.
+    data: { refresh: { commit, error: null }, instructions: [expect.any(String)] },
+  });
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
+  });
+  expect(
+    requested
+      .filter((url) => url.startsWith("https://raw.test"))
+      .every((url) => url.includes(commit)),
+  ).toBe(true);
+});
+
+test("a local preset is created, read and trashed over the public wire", async () => {
+  const trashed: string[] = [];
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: {
+      bundled: join(import.meta.dirname, "../../../presets"),
+      trash: async (path) => void trashed.push(path),
+    },
+  });
+  const created = await f.call("preset.create", {
+    name: "Vertical explainer",
+    references: ["https://example.com/v"],
+  });
+  expect(created).toMatchObject({
+    ok: true,
+    data: {
+      id: "vertical-explainer",
+      path: expect.stringContaining("presets/vertical-explainer"),
+      instructions: expect.any(Array),
+    },
+  });
+  expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({
+    ok: true,
+    data: { id: "vertical-explainer-2" },
+  });
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: {
+      presets: expect.arrayContaining([
+        expect.objectContaining({ id: "vertical-explainer", source: "local" }),
+      ]),
+    },
+  });
+  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({
+    ok: true,
+    data: { source: "local", text: expect.stringContaining("https://example.com/v") },
+  });
+  expect(await f.call("preset.create", { name: "Bad", references: ["notes.txt"] })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_REFERENCE_INVALID" },
+  });
+  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_NOT_LOCAL" },
+  });
+  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({
+    ok: true,
+    data: { trashedPaths: [expect.stringContaining("vertical-explainer")] },
+  });
+  expect(trashed).toHaveLength(1);
+  expect(catalogFormat).toBe(29);
 });
 
 test("a persisted queued voice request reaches its initialized owner after startup recovery", async () => {

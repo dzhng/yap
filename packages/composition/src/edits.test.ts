@@ -2610,6 +2610,23 @@ test("independent stack updates keep frozen receipts, labels and a following dep
   expect(result.document.processing[0]!.steps[0]!.processor).toEqual({ type: "gain", gain: 0.25 });
 });
 
+test("a new processing step with an invented id is told that id names an existing step", () => {
+  const document = { ...input, groups: [{ id: "a", kind: "audio", order: 0 }] };
+  expect(() =>
+    applyBatch(
+      document,
+      [
+        {
+          operation: "processing.set",
+          target: { kind: "group", id: "a" },
+          steps: [{ id: "my-new-step", processor: { type: "gain", gain: 1 } }],
+        },
+      ],
+      context,
+    ),
+  ).toThrow(/omit id to add a new step/);
+});
+
 test("an invalid independent processing prefix precedes later construction errors or repair", () => {
   const document = {
     ...input,

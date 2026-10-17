@@ -35,6 +35,10 @@ acquisitions from new references, job admission and asset publish.
   sets done first, so it follows the final rules from the start.
 - The macOS app reads changed shapes (`recording.get`, `assetId`, paging). Fix its
   decoders in the slice that changes the shape, never later.
+- Presets (`preset.list/get/create/update/delete`) landed from main after this spec
+  was written. Slice 05 pages `preset.list` like `model.list`; slices 06 and 07 apply
+  their vocabulary and naming rules to the preset operations too. A preset is a
+  local file, not a catalog row, so it stays outside the deletion coordinator.
 - Write the test first (red, then green) in every slice. Run the narrowest check
   per change, and the full suite once, in slice 16.
 

@@ -297,17 +297,37 @@ struct TextRaster {
             let spread = max(shadow.blur * 2, 0)
             decorationBounds = decorationBounds.union(decorationBounds.offsetBy(dx: shadow.offsetX, dy: -shadow.offsetY).insetBy(dx: -spread, dy: -spread))
         }
+        let inkBounds = hasGlyphBounds
+            ? [glyphBounds.minX, Double(request.height) - glyphBounds.maxY, glyphBounds.width, glyphBounds.height]
+            : [0, 0, 0, 0]
         self.image = CIImage(cgImage: image)
         self.layout = .init(
             font: request.font, text: request.text, visibleRange: [visible.location, visible.length], lines: reports,
-            inkBounds: hasGlyphBounds
-                ? [glyphBounds.minX, Double(request.height) - glyphBounds.maxY, glyphBounds.width, glyphBounds.height]
-                : [0, 0, 0, 0],
+            inkBounds: inkBounds,
             visibleBounds: visibleGlyphBounds.isNull ? [] : [visibleGlyphBounds.minX, Double(request.height) - visibleGlyphBounds.maxY, visibleGlyphBounds.width, visibleGlyphBounds.height],
-            decorationBounds: hasGlyphBounds ? [decorationBounds.minX, Double(request.height) - decorationBounds.maxY, decorationBounds.width, decorationBounds.height] : [0, 0, 0, 0],
+            decorationBounds: hasGlyphBounds
+                ? Self.containing(inkBounds, [decorationBounds.minX, Double(request.height) - decorationBounds.maxY, decorationBounds.width, decorationBounds.height])
+                : [0, 0, 0, 0],
             verticalOffset: Double(verticalOffset), stroke: request.stroke, shadow: request.shadow, background: request.background,
             highlight: request.highlight, activeRanges: request.activeRanges)
         self.pixels = Int64(request.width) * Int64(request.height)
         self.fallbacks = fallbacks
+    }
+
+    /// The receipt promises decoration bounds contain ink bounds, compared as the reported numbers.
+    /// CGRect union and inset recompute width from edges, which can lose the last bit, so a
+    /// decoration that adds no extent (a flush background) would otherwise report a box a hair
+    /// smaller than its ink. Widen each axis until `origin + size` reaches the ink edge.
+    static func containing(_ ink: [Double], _ bounds: [Double]) -> [Double] {
+        func axis(_ inkOrigin: Double, _ inkSize: Double, _ origin: Double, _ size: Double) -> (Double, Double) {
+            let start = min(origin, inkOrigin)
+            let end = max(origin + size, inkOrigin + inkSize)
+            var extent = end - start
+            while start + extent < end { extent = extent.nextUp }
+            return (start, extent)
+        }
+        let (x, width) = axis(ink[0], ink[2], bounds[0], bounds[2])
+        let (y, height) = axis(ink[1], ink[3], bounds[1], bounds[3])
+        return [x, y, width, height]
     }
 }

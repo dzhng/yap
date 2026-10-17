@@ -31,7 +31,7 @@
     "lab:render-timing": "bun run --cwd packages/test-harness lab:render-timing",
     "lab:exports": "bun run build && bun run --cwd packages/test-harness lab:exports",
     "lab:personal-release": "node packages/test-harness/personal-release.mjs",
-    "test:tools": "node --test scripts/*.test.mjs helpers/ffmpeg/*.test.mjs helpers/model-runtime/*.test.mjs helpers/speaker/*.test.mjs helpers/alignment/*.test.mjs"
+    "test:tools": "node --test scripts/*.test.mjs presets/kit/*.test.mjs helpers/ffmpeg/*.test.mjs helpers/model-runtime/*.test.mjs helpers/speaker/*.test.mjs helpers/alignment/*.test.mjs && node scripts/presets-index.mjs --check"
   },
   "devDependencies": {
     "@types/node": "24.13.4",

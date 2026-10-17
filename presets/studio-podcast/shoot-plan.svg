@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 420" font-family="ui-sans-serif, system-ui" font-size="12">
+  <title>Studio podcast: three-camera floor plan (top view)</title>
+  <rect width="640" height="420" fill="#16181a"/>
+  <rect x="40" y="30" width="560" height="14" fill="#3b4246"/><text x="44" y="24" fill="#9aa">dark back wall (slate / charcoal / deep green)</text>
+  <circle cx="320" cy="60" r="14" fill="#d1a986"/><text x="340" y="64" fill="#d1a986">lit brand element</text>
+  <circle cx="110" cy="75" r="10" fill="#f3d7a0"/><circle cx="530" cy="75" r="10" fill="#f3d7a0"/><text x="70" y="100" fill="#f3d7a0">warm lamp</text><text x="500" y="100" fill="#f3d7a0">warm lamp</text>
+  <circle cx="320" cy="190" r="70" fill="#b98c55" stroke="#d9b07a"/><text x="292" y="194" fill="#2a1f12">round table</text>
+  <circle cx="245" cy="165" r="16" fill="#8a3a5a"/><text x="206" y="140" fill="#ddd">host</text>
+  <circle cx="395" cy="165" r="16" fill="#8a3a5a"/><text x="415" y="140" fill="#ddd">guest</text>
+  <g fill="#6ab0e8" stroke="#6ab0e8">
+    <rect x="305" y="330" width="30" height="20"/><line x1="320" y1="330" x2="245" y2="170"/><line x1="320" y1="330" x2="395" y2="170"/>
+    <rect x="470" y="290" width="30" height="20"/><line x1="485" y1="290" x2="245" y2="170" stroke-dasharray="4 3"/>
+    <rect x="140" y="290" width="30" height="20"/><line x1="155" y1="290" x2="395" y2="170" stroke-dasharray="4 3"/>
+  </g>
+  <text x="270" y="370" fill="#6ab0e8">A: wide two-shot, front, both + brand element</text>
+  <text x="420" y="330" fill="#6ab0e8">B: host single, ~30° off axis</text>
+  <text x="40" y="330" fill="#6ab0e8">C: guest single, mirrored</text>
+  <text x="40" y="400" fill="#888">Soft key per person from the front side; lamps and brand element are the only background light.</text>
+</svg>

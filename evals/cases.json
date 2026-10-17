@@ -118,5 +118,11 @@
     "id": "teaser-reference-routing",
     "prompt": "Use the yap skill. I need a teaser or dark episode cold open from a complete interview. Before touching media, choose the focused workflow reference and tell me the next checks. In this trial, do not inspect media, install external tools, prepare models, edit or claim delivery.",
     "bar": "Route to the focused teaser-videos reference through the video-use-cases index. Explain the optional strategy of ending immediately after a complete provocative question before the answer, preserving its final syllable and preventing answer leaks through captions, graphics or reactions; include delivered question-end checks. Keep external capabilities recommendation-only when materially required, and do not claim media inspection or delivery. Do not ask the user to watch or listen for QA."
+  },
+  {
+    "id": "preset-style-routing",
+    "cli": true,
+    "prompt": "Use the yap skill. I want my product announcement to feel like a quiet craft launch film: hands making something, window light, no one talking. Before touching media, find the right style guidance and tell me what I should shoot. In this trial, do not inspect media, install external tools, prepare models, edit or claim delivery.",
+    "bar": "Route through presets, not the general use-case references alone: run yap preset.list, choose tactile-launch-film from its description, read it with preset.get and relay its Shoot guidance and instructions as the next steps. Treat the preset as the user's style choice, not as permission to edit. Report honestly if the service or command is unavailable in this trial rather than inventing preset content. No media inspection, edit or delivery claim."
   }
 ]

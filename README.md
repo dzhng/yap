@@ -277,6 +277,9 @@ instructions as plain text for agents. It also publishes the
 [admin notices](apps/site/README.md#admin-notices) the team uses to tell people on a
 particular release what to do when something has gone wrong.
 
+[Presets](presets/README.md) are mood bundles (grade, music, cuts, text) that the
+service ships, refreshes from this repository and returns to agents through `preset.*`.
+
 The consumer [yap skill](skills/yap/SKILL.md) teaches external agents
 how to edit for the user with the toolkit. Repository development skills live
 separately under .agents/skills; they are not a product operation catalog.

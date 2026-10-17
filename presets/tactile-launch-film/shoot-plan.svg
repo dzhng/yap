@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" font-family="ui-sans-serif, system-ui" font-size="12">
+  <title>Tactile launch film: window, table and camera positions (top view)</title>
+  <rect width="640" height="400" fill="#f4efe4"/>
+  <rect x="20" y="40" width="16" height="260" fill="#cfe2ef" stroke="#9bb"/><text x="44" y="34" fill="#666">one large window: the only light</text>
+  <g stroke="#e0c890" opacity="0.6"><line x1="36" y1="80" x2="560" y2="140"/><line x1="36" y1="160" x2="560" y2="220"/><line x1="36" y1="240" x2="560" y2="300"/></g>
+  <rect x="160" y="120" width="320" height="160" fill="#e3cfa8" stroke="#c4a875"/><text x="168" y="138" fill="#7a6040">pale wooden table</text>
+  <rect x="290" y="175" width="60" height="45" fill="#fff" stroke="#bbb"/><circle cx="320" cy="197" r="12" fill="#e07a2e"/><text x="270" y="240" fill="#7a6040">the made object</text>
+  <rect x="560" y="60" width="16" height="280" fill="#ece5d6" stroke="#ccc"/><text x="500" y="355" fill="#666">cream wall (scale shots)</text>
+  <g fill="#3b5b7a"><rect x="305" y="60" width="30" height="20"/><rect x="420" y="300" width="30" height="20"/><rect x="200" y="300" width="30" height="20"/></g>
+  <text x="340" y="74" fill="#3b5b7a">1–2: overhead / 45° macro of hands</text>
+  <text x="455" y="315" fill="#3b5b7a">3, 5, 6: low side</text><text x="455" y="329" fill="#3b5b7a">angle, window left</text>
+  <text x="70" y="315" fill="#3b5b7a">4: wall of variations</text>
+  <text x="20" y="385" fill="#666">Slow slide or locked tripod, 8–20 s per shot, 24 fps. No overhead lights, no ring light.</text>
+</svg>

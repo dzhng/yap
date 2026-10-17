@@ -355,6 +355,38 @@
     "./correspondence": {
       "types": "./dist/correspondence.d.ts",
       "default": "./dist/correspondence.js"
+    },
+    "./preset-format": {
+      "types": "./dist/preset-format.d.ts",
+      "default": "./dist/preset-format.js"
+    },
+    "./preset-install": {
+      "types": "./dist/preset-install.d.ts",
+      "default": "./dist/preset-install.js"
+    },
+    "./preset-store": {
+      "types": "./dist/preset-store.d.ts",
+      "default": "./dist/preset-store.js"
+    },
+    "./preset-instructions": {
+      "types": "./dist/preset-instructions.d.ts",
+      "default": "./dist/preset-instructions.js"
+    },
+    "./preset-refresh": {
+      "types": "./dist/preset-refresh.d.ts",
+      "default": "./dist/preset-refresh.js"
+    },
+    "./preset-remote": {
+      "types": "./dist/preset-remote.d.ts",
+      "default": "./dist/preset-remote.js"
+    },
+    "./preset-scaffold": {
+      "types": "./dist/preset-scaffold.d.ts",
+      "default": "./dist/preset-scaffold.js"
+    },
+    "./presets": {
+      "types": "./dist/presets.d.ts",
+      "default": "./dist/presets.js"
     }
   },
   "scripts": {

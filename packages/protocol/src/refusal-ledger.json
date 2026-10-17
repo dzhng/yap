@@ -1804,6 +1804,34 @@
         "packages/core/src/source-index-materialization.ts": 1
       }
     },
+    "PRESET_NAME_UNUSABLE": {
+      "category": "malformed",
+      "retryable": false,
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
+    "PRESET_NOT_FOUND": {
+      "category": "missing-prerequisite",
+      "retryable": false,
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
+    "PRESET_NOT_LOCAL": {
+      "category": "conflict",
+      "retryable": false,
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
+    "PRESET_REFERENCE_INVALID": {
+      "category": "malformed",
+      "retryable": false,
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
     "PROCESSING_BUSY": {
       "category": "resource-bound",
       "retryable": true,

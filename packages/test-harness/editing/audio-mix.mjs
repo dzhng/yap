@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import frozenWorkers from "../../../specs/done/agent-editing/assets/acceptance-maintenance/native-worker-preservation.json" with { type: "json" };
 import { verifyMixedCodecRates } from "./audio-mixed-codec-rates.mjs";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
@@ -187,7 +186,7 @@ try {
         end: Math.floor((range.endUs * 48000) / 1000000),
       },
       clips: [...window.audio()],
-      processing: nativeProcessing(window.processing()),
+      processing: window.processing(),
       assets: sources.map((source) => source.binding),
     };
     const result = call("media.mixCompositionAudio", params, expectedError);

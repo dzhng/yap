@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -72,6 +72,12 @@ const skill = join(app, "Contents/Resources/skill");
 rmSync(skill, { recursive: true, force: true });
 execFileSync("ditto", [join(root, "skills/yap"), skill]);
 bundleSkillsInstaller(root, join(app, "Contents/Resources"));
+const presetsDirectory = join(app, "Contents/Resources/presets");
+rmSync(presetsDirectory, { recursive: true, force: true });
+cpSync(join(root, "presets"), presetsDirectory, {
+  recursive: true,
+  filter: (source) => source.split(/[\\/]/).at(-1) !== "source",
+});
 const ffmpegDirectory = join(app, "Contents/Resources/ffmpeg");
 rmSync(ffmpegDirectory, { recursive: true, force: true });
 const identity = signingIdentity();
@@ -98,6 +104,7 @@ writeFileSync(
       ...facts,
       nodePath: process.execPath,
       ffmpegDirectory: "../ffmpeg",
+      presetsDirectory: "../presets",
       ffmpegReceiptSha256: createHash("sha256")
         .update(readFileSync(join(ffmpegDirectory, "receipt.json")))
         .digest("hex"),

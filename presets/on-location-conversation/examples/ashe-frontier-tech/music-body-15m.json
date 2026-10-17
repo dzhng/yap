@@ -1,0 +1,15 @@
+{
+ "format": 1,
+ "from": 0,
+ "seconds": 300,
+ "tempoBpm": 122,
+ "beatOffsetSeconds": 0.07,
+ "pulseStrength": 1.25,
+ "tempoReliable": false,
+ "cutsChecked": 0,
+ "cutsOnBeat": null,
+ "speechRmsDbfs": -29.8,
+ "gapRmsDbfs": -33,
+ "bedBelowSpeechDb": 3.2,
+ "medianCentroidHz": 1391
+}

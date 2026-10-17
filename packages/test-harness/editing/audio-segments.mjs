@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -87,7 +86,7 @@ for (const rate of [44100, 48000]) {
       output: join(outputDirectory, `${rate}-${sequence}.wav`),
       range: window.manifest.sampleRange,
       clips: [...window.audio()],
-      processing: nativeProcessing(window.processing()),
+      processing: window.processing(),
       assets: [
         { assetId: asset.id, streamId: source.streamId, path, originUs: -source.sourceOffsetUs },
       ],

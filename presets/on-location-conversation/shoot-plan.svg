@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 380" font-family="ui-sans-serif, system-ui" font-size="12">
+  <title>On-location conversation: framing guide (camera view)</title>
+  <rect width="640" height="380" fill="#16181a"/>
+  <rect x="40" y="30" width="560" height="315" fill="#2d312d" stroke="#888"/>
+  <line x1="226" y1="30" x2="226" y2="345" stroke="#555" stroke-dasharray="3 4"/><line x1="413" y1="30" x2="413" y2="345" stroke="#555" stroke-dasharray="3 4"/>
+  <line x1="40" y1="135" x2="600" y2="135" stroke="#555" stroke-dasharray="3 4"/><line x1="40" y1="240" x2="600" y2="240" stroke="#555" stroke-dasharray="3 4"/>
+  <rect x="40" y="40" width="560" height="120" fill="#4b5a4b" opacity="0.5"/><text x="300" y="70" fill="#c7c9c0">street, park or building behind</text>
+  <rect x="80" y="270" width="480" height="18" fill="#2f6a3f"/><text x="500" y="300" fill="#8c8">bench / steps</text>
+  <circle cx="226" cy="150" r="22" fill="#afada4"/><rect x="190" y="175" width="72" height="110" rx="18" fill="#afada4"/>
+  <circle cx="413" cy="150" r="22" fill="#646657"/><rect x="377" y="175" width="72" height="110" rx="18" fill="#646657"/>
+  <circle cx="236" cy="205" r="3" fill="#fff"/><circle cx="423" cy="205" r="3" fill="#fff"/><text x="246" y="209" fill="#fff">lav mic</text>
+  <rect x="50" y="305" width="220" height="26" fill="#000" opacity="0.55"/><line x1="60" y1="310" x2="60" y2="326" stroke="#fff"/><text x="70" y="322" fill="#fff" letter-spacing="2">CHAPTER LABEL</text>
+  <text x="40" y="362" fill="#888">Tripod at seated eye height, knees or mid-thigh up, faces on the thirds lines.</text><text x="40" y="376" fill="#888">One take per location, no zoom.</text>
+</svg>

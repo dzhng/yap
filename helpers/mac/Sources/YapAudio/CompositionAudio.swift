@@ -335,11 +335,6 @@ public enum CompositionAudio {
                 parentTargets[input] = node.target
             }
             for step in node.steps {
-                if node.mediaKind == "output",
-                    ["geometry", "opacity", "sdr-correction"].contains(step.processor.type)
-                {
-                    continue
-                }
                 guard !step.id.isEmpty, stepIds.insert(step.id).inserted,
                     step.processor.type == "gain" || step.processor.stateRecipe != nil
                 else { throw invalid("Unsupported audio processing step.") }

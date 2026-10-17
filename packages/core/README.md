@@ -150,6 +150,11 @@ registered inventory by metadata, instead of rehashing the runtime; anything els
 falls through to full verification and repair, and execution still verifies the
 runtime bytes before every run.
 
+[Presets](src/presets.ts) are a separate installed tree, `~/.yap/presets/`,
+outside the library: mood bundles the service installs from the app bundle,
+refreshes from the repository's pinned index and serves through `preset.*`. The
+[presets record](../../specs/done/presets/README.md) names each module's owner.
+
 Curated runtime acquisition uses the same downloader and cancellation owner.
 The [runtime recipe](../../helpers/model-runtime/README.md) identifies public
 interpreter/package inputs and offline assembly; the service supplies execution
