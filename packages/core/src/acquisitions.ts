@@ -566,6 +566,10 @@ export class AcquisitionImporter {
     this.directory = join(library, "acquisitions");
     this.recordings = join(realpathSync(library), "recordings");
   }
+  /** The acquisition tree retired by this importer. */
+  managedPaths(acquisitionId: string): readonly string[] {
+    return [join(this.directory, acquisitionId)];
+  }
   async prepareImport(requestId: string, path: string): Promise<PreparedAcquisition> {
     if (!requestId || !isAbsolute(path))
       throw new CatalogError(

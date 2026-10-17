@@ -73,6 +73,7 @@ import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
 import { CatalogError, dependencyRefusal } from "@yap/core/catalog";
 import { DeletionPlans } from "@yap/core/deletion-plans";
+import { LibraryUsers } from "@yap/core/library-users";
 import { CaptureStore, isSettled } from "@yap/core/capture-store";
 import { CaptureService } from "./capture.js";
 import { CaptureSources } from "./capture-sources.js";
@@ -241,6 +242,7 @@ export async function startProjectService(options: {
   let exports: MediaExports | undefined;
   let packages: ProjectPackages | undefined;
   let storage: ManagedStorage | undefined;
+  let libraryUsers: LibraryUsers | undefined;
   let controller: ControlChannel | undefined;
   let captureControl: CaptureService | undefined;
   let modelsOwner: Models | undefined;
@@ -991,6 +993,15 @@ export async function startProjectService(options: {
     );
     await sourceIndex.recoverPending("asset", new AbortController().signal);
     await projectIndex.recoverPending("project", new AbortController().signal);
+    libraryUsers = new LibraryUsers(captures, {
+      asset: (id) => [assets.path(id)],
+      acquisition: (id) => acquisitionImports.managedPaths(id),
+      recording: (id) => files.recordingPaths(id),
+      project: (id) => [
+        ...projectIndex.ownedPaths({ kind: "project", projectId: id }),
+        ...cache.ownedPaths({ kind: "project", projectId: id }),
+      ],
+    });
     indexes = new IndexProcessing({
       jobs: queue,
       project: {
@@ -3090,7 +3101,7 @@ export async function startProjectService(options: {
         admission.progress();
         console.error(error);
       });
-    return { socketPath: listener.socketPath, assets, close };
+    return { socketPath: listener.socketPath, assets, libraryUsers, close };
   } catch (error) {
     await close();
     throw error;

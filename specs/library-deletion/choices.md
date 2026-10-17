@@ -112,3 +112,25 @@ until they do).
 - **Publish keeps a second tombstone check after staging** (sound). Staging links the
   file under the publication lock, and the row is written later. If deletion wins in
   between, publish refuses and removes a file it linked for a row that never existed.
+
+## Slice 04: who uses this?
+
+- **Byte counts ask the owners deletion uses** (sound). `LibraryUsers` takes one required
+  `files` dependency (asset, acquisition, recording and project paths), built in the
+  service from `AssetStore.path`, `AcquisitionImporter.managedPaths`,
+  `ManagedFiles.recordingPaths`, and the project index and derived cache's `ownedPaths`.
+  The first draft guessed the library folder from an arbitrary asset row and counted a
+  recording as 0 bytes in a catalog without assets.
+- **The recording path is mirrored, not shared** (provisional, slice 09). The native
+  helper removes a recording's folder in Swift, so `ManagedFiles.recordingPaths` repeats
+  the same layout in TypeScript. Slice 09, which takes recording copies, should test that
+  the two agree.
+- **The screenshot index has one owner for its directory layout** (sound). Lookup and
+  `ownedPaths` both build from one `parts()` helper; the draft's second copy is gone.
+- **Only a missing path counts as 0 bytes** (sound). Any other file-system error
+  propagates.
+- **No caching** (sound). The query reads current ownership directly; it runs once per
+  delete request or confirmation.
+- **Results are project-level with a revision count** (sound, as the spec decided).
+  Entries sort by id; acquisitions and derived assets use `{kind, acquisitionId}` and
+  `{kind, assetId}`.

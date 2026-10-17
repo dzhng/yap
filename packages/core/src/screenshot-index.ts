@@ -260,20 +260,30 @@ export class ScreenshotIndexStore<
       );
     return row;
   }
-  private directory(identity: D["identity"], create = false, exclusive = false): string {
-    const owner = this.domain.owner(identity),
-      [kind, id] = ownerIdentity(owner);
+  /** Generation directories that reclaim removes for this owner. */
+  ownedPaths(owner: IndexOwner): readonly string[] {
+    const rows = this.store.catalog
+      .prepare("SELECT identity FROM screenshot_index_generations WHERE ownerKind=? AND ownerId=?")
+      .all(...ownerIdentity(owner)) as { identity: string }[];
+    return rows.map((row) => join(this.home, ...this.parts(JSON.parse(row.identity))));
+  }
+  /** The generation directory's segments below the index home; one owner for the layout. */
+  private parts(identity: D["identity"]): string[] {
+    const [kind, id] = ownerIdentity(this.domain.owner(identity));
     if (!/^[a-zA-Z0-9_-]+$/.test(id) || !identity.generation) invalid("Invalid index identity");
-    const home = lstatSync(this.home);
-    if (!home.isDirectory() || home.dev !== this.device) invalid("Retained index home changed");
-    let path = this.home;
-    const parts = [
+    return [
       "evidence",
       "index",
       kind,
       id,
       createHash("sha256").update(identity.generation).digest("hex"),
     ];
+  }
+  private directory(identity: D["identity"], create = false, exclusive = false): string {
+    const parts = this.parts(identity);
+    const home = lstatSync(this.home);
+    if (!home.isDirectory() || home.dev !== this.device) invalid("Retained index home changed");
+    let path = this.home;
     for (const [partIndex, segment] of parts.entries()) {
       path = join(path, segment);
       if (create) {

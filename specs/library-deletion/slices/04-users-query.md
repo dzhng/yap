@@ -1,6 +1,7 @@
 # 04 Who uses this?
 
 **Contract.**
+
 - **The query.** `LibraryUsers.usersOf({kind: "asset"|"acquisition"|"recording", id})`
   returns:
   `{usedBy: [{kind: "project", projectId, title, revisions}], acquisitions: [...], derivedAssets: [...], freesBytes, cascadeFreesBytes}`.
@@ -18,9 +19,11 @@
 
 **Seam.** A read-only core module, tested against a seeded catalog fixture.
 
-**Run or see.** A fixture script prints `usersOf` for the seeded cases below.
+**Run or see.** `bun packages/core/scripts/library-users.mjs` (after building
+`packages/core`) prints `usersOf` for the seeded cases below.
 
 **Verify.** Red tests first, with seeded fixtures for:
+
 - a clip held only by undo history;
 - a clip used in two projects;
 - a derived chain (source → HDR conversion → used in a project);

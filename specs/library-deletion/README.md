@@ -17,7 +17,7 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 to 03 done. Slice 05 is in progress in its own worktree.
+**Status.** Slices 00 to 04 done. Slice 05 is in progress in its own worktree.
 Choices made along the way are in [choices.md](choices.md).
 
 Slice 01 evidence: protocol, core, CLI and service suites, every package build and
@@ -25,9 +25,11 @@ typecheck, the Swift build and the native node suites are green. The `YapCapture
 camera flake seen then is fixed (`b6237bda`), outside this spec's slices.
 Slice 02 adds the shared `LibraryDeletion` coordinator and idempotent deletion-plan
 tables while keeping catalog format 29. Slice 03 fences tombstoned assets and
-acquisitions from new references, job admission and asset publish.
+acquisitions from new references, job admission and asset publish. Slice 04 adds the
+read-only `LibraryUsers.usersOf` query and the `inUseDetailsSchema` refusal shape.
 
-**Pick up at** slice 04, alongside slice 05 or 06 in the API worktree.
+**Pick up at** slice 05 (finishing in the API worktree), then 06 and 07. Slices 08+
+wait for 05-07.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -47,7 +49,7 @@ acquisitions from new references, job admission and asset publish.
 - [x] 01 Retryability per error code — [slices/01-error-ledger.md](slices/01-error-ledger.md)
 - [x] 02 One deletion coordinator and deletion plans — [slices/02-deletion-coordinator.md](slices/02-deletion-coordinator.md)
 - [x] 03 Deletion fence and publish race — [slices/03-fence.md](slices/03-fence.md)
-- [ ] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
+- [x] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
 - [ ] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
 - [ ] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
 - [ ] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)

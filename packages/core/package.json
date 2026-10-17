@@ -296,6 +296,10 @@
       "types": "./dist/deletion-plans.d.ts",
       "default": "./dist/deletion-plans.js"
     },
+    "./library-users": {
+      "types": "./dist/library-users.d.ts",
+      "default": "./dist/library-users.js"
+    },
     "./capture-publication": {
       "types": "./dist/capture-publication.d.ts",
       "default": "./dist/capture-publication.js"

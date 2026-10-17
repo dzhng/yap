@@ -54,6 +54,70 @@ const metadata = {
 };
 const setup = projectServiceFixture.bind(undefined, cleanups);
 
+test("wired LibraryUsers reports the project bytes that real project deletion removes", async () => {
+  let home = "";
+  const f = await setup(async (operation, params) => {
+    if (operation === "storage.clearRenderWorkspace") return { ok: true, data: { removed: true } };
+    if (operation === "storage.removeCacheFiles") {
+      for (const id of params.ids as string[])
+        await rm(join(home, "library/cache/derived", `${id}.cache`), { force: true });
+      return { ok: true, data: { removed: true } };
+    }
+    return { ok: true, data: {} };
+  });
+  home = f.home;
+  const created = await f.call("project.create", {
+    requestId: "users-project",
+    canvas: {
+      width: 64,
+      height: 32,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const { project, revision } = created.data as {
+    project: { projectId: string };
+    revision: { id: string };
+  };
+  const catalog = new Catalog(join(home, "library/catalog.sqlite"));
+  const cacheId = randomUUID();
+  try {
+    catalog.catalog
+      .prepare("INSERT INTO acquisitions(id,requestId,admission,metadata) VALUES(?,?,?,?)")
+      .run(
+        "acquisition-capture",
+        "capture-request",
+        JSON.stringify({ kind: "capture", recordingId: "recording-1" }),
+        "{}",
+      );
+    catalog.catalog
+      .prepare("INSERT INTO resource_references VALUES(?,?,?,?)")
+      .run("acquisition", "acquisition-capture", "revision", revision.id);
+    catalog.catalog
+      .prepare(
+        "INSERT INTO derived_cache(id,ownerKind,ownerId,touched,bytes) VALUES (?,'project',?,1,?)",
+      )
+      .run(cacheId, project.projectId, 1);
+  } finally {
+    catalog.close();
+  }
+  const cachePath = join(home, "library/cache/derived", `${cacheId}.cache`);
+  await writeFile(cachePath, "cached render");
+  const before = Number((await stat(cachePath)).size);
+  const details = f.service.libraryUsers!.usersOf({ kind: "recording", id: "recording-1" });
+  expect(details.usedBy).toEqual([
+    { kind: "project", projectId: project.projectId, title: "Untitled", revisions: 1 },
+  ]);
+  expect(details.cascadeFreesBytes).toBe(before);
+  const totalBefore = Number((await stat(cachePath)).size);
+  expect(await f.call("project.delete", { projectId: project.projectId })).toMatchObject({
+    ok: true,
+  });
+  await expect(stat(cachePath)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(totalBefore).toBe(before);
+});
+
 test("correspondence receipts are admitted and paged without declaring an edit", async () => {
   const f = await setup(async () => ({ ok: true, data: {} }));
   const endpoint = (assetId: string) => ({

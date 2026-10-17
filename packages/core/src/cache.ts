@@ -113,6 +113,10 @@ export class DerivedCache {
       after = rows.at(-1)!.id;
     }
   }
+  /** Paths that purgeOwner removes for this owner. */
+  ownedPaths(owner: JobOwner): readonly string[] {
+    return [...this.usageFiles(owner)];
+  }
   /** Only this owner interprets its filenames. Unreserved files have no owner attribution. */
   ownerForFile(path: string): JobOwner | null {
     if (dirname(path) !== this.root || !filename.test(basename(path))) return null;

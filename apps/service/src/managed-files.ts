@@ -84,6 +84,10 @@ export class ManagedFiles {
       throw error;
     }
   }
+  /** The path owned by recording retirement; byte inspection uses this same root. */
+  recordingPaths(recordingId: string): readonly string[] {
+    return [join(this.home, "recordings", recordingId)];
+  }
   removeRecordingDirectory(
     recordingId: string,
     signal: AbortSignal,
