@@ -351,6 +351,10 @@
     "./correspondence": {
       "types": "./dist/correspondence.d.ts",
       "default": "./dist/correspondence.js"
+    },
+    "./preset-format": {
+      "types": "./dist/preset-format.d.ts",
+      "default": "./dist/preset-format.js"
     }
   },
   "scripts": {

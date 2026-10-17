@@ -9,3 +9,4 @@ dist/
 .claude/worktrees/
 evals/.cache/
 evals/results/
+presets/**/source/

@@ -1,3 +1,10 @@
+---
+id: authoring
+version: 1
+name: Preset authoring guide
+description: Guidance for creating and measuring a video preset.
+---
+
 # Creating a preset
 
 Start with `yap preset.create --params '{"name":"…","references":["https://…"]}'`.

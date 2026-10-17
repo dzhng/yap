@@ -17,7 +17,8 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests. No operation code exists yet._
 
-Slice 00 is done; start at [slice 01](slices/01-format.md) and build in order. Read [contracts](#contracts) and
+Slices 00–01 are done; start at [slice 02](slices/02-store.md). Record every
+decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
 
@@ -36,7 +37,7 @@ Warnings:
 
 TODO:
 - [x] [00 Spike](slices/00-spike.md): the service resolves the bundled path from `runtime.json` (no Swift), `/usr/bin/trash` works (Put Back unverified), every Edit step maps to an `edit.apply` operation.
-- [ ] [01 Format](slices/01-format.md): packages (preset, kit, authoring), index, validator, `--check`.
+- [x] [01 Format](slices/01-format.md): `packages/core/src/preset-format.ts`, `scripts/presets-index.mjs --check`, `presets/index.json`, `kit/KIT.md`.
 - [ ] [02 Install and store](slices/02-store.md): one verified, atomic installer and one reader of `~/.yap/presets/`.
 - [ ] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
 - [ ] [04 Refresh](slices/04-refresh.md): launch and daily refresh, `preset.update`.
