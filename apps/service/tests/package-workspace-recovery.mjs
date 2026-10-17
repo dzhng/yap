@@ -152,8 +152,8 @@ test("failed provision cleanup retains exact identity and rejects a replacement"
   await mkdir(directory, { mode: 0o700 });
   await writeFile(join(directory, "sentinel"), "foreign");
   await assert.rejects(cleanupFailedPackageWorkspace(f.parent, name, failure, worker), {
-    code: "STORAGE_CHANGED",
-    retryable: true,
+    code: "INVALID_STORAGE",
+    retryable: false,
   });
   assert.equal(await readFile(join(directory, "sentinel"), "utf8"), "foreign");
   await rm(directory, { recursive: true });

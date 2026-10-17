@@ -15,11 +15,11 @@ beforeAll(async () => {
   tool = join(directory, "tool.cjs");
   await writeFile(
     tool,
-    `const {writeFileSync}=require('node:fs');const {spawn}=require('node:child_process');
+    `const {writeFileSync,renameSync}=require('node:fs');const {spawn}=require('node:child_process');
     const child=spawn(process.argv[3]==='no-pipes'?'/bin/sleep':process.execPath,process.argv[3]==='no-pipes'?['1000']:['-e','setInterval(()=>{},1000)'],{stdio:process.argv[3]==='no-pipes'?'ignore':'inherit'});
     if(process.argv[3]==='no-pipes')for(let n=0;n<31;n++)spawn('/bin/sleep',['1000'],{stdio:'ignore'});
     if(process.argv[3]==='descriptor')writeFileSync(3,'inherited bytes');
-    writeFileSync(process.argv[2],JSON.stringify({pid:process.pid,owner:process.ppid,child:child.pid}));setInterval(()=>{},1000);`,
+    writeFileSync(process.argv[2]+'.tmp',JSON.stringify({pid:process.pid,owner:process.ppid,child:child.pid}));renameSync(process.argv[2]+'.tmp',process.argv[2]);setInterval(()=>{},1000);`,
   );
 });
 afterAll(async () => {

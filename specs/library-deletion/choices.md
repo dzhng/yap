@@ -67,3 +67,11 @@ until they do).
 - **`CONNECTION_CLOSED` and `CONNECTION_ERROR` are retryable** (sound). The CLI had
   always treated every `CONNECTION_*` error as retryable, and the ledger now records
   that.
+- **Re-throws that forced retryability were checked too** (sound). The first site
+  comparison only covered literal codes. A second pass found base re-throws that kept a
+  dynamic code but forced `retryable: true`. Assembly cleanup stays retryable through
+  `dependencyRefusal` (an export's recovery is pinned as retryable until its owned
+  identity returns). `FFMPEG_UNAVAILABLE` is retryable, as it was everywhere it was thrown.
+  Recording deletion, export retirement and failed workspace admission keep their pinned
+  codes and take the ledger's retryability for them; their intents stay durable, so
+  startup resumes them regardless.

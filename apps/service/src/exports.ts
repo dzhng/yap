@@ -484,7 +484,7 @@ export class MediaExports {
       this.saveAssembly(intent);
     } catch (error) {
       if (error instanceof CatalogError)
-        throw new CatalogError(error.code, error.message, error.details);
+        throw dependencyRefusal(error.code, error.message, error.details, true);
       throw error;
     } finally {
       await parent?.handle.close();

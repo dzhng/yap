@@ -521,7 +521,7 @@
     },
     "FFMPEG_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/ffmpeg-tools.ts": 1,
         "packages/protocol/src/tools.ts": 1
