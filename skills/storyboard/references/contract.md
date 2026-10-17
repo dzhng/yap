@@ -11,7 +11,7 @@ on stderr and exit 1. Results carry `issues`: evidence for you to weigh, not ref
 Chapters:
 
 ```json
-{"title": "Lucy Shi · Physical Intelligence",
+{"title": "Guest Name · Lab",
  "chapters": [
   {"startUs": 0, "endUs": 19000000, "label": "Pre-roll: battery check", "call": "cut"},
   {"startUs": 552000000, "endUs": 665000000, "label": "Not bitter, a bittersweet lesson",
@@ -20,7 +20,7 @@ Chapters:
 
 `call` is `keep`, `trim`, `cut` or `decide`. Chapters tile the recording in order.
 
-Turns, each lasting until the next: `[{"startUs": 19000000, "speaker": "Lily"}, ...]`.
+Turns, each lasting until the next: `[{"startUs": 19000000, "speaker": "Host"}, ...]`.
 Phone checks: `[{"startUs": 70500000, "endUs": 80500000}, ...]`.
 
 ## Helpers
@@ -49,7 +49,7 @@ A rerun reuses every complete batch. A refused call saves `batch-NNNN.refused.js
 ```json
 {"chapters": "chapters.json", "turns": "turns.json", "stills": "work/stills/stills.json",
  "words": ["transcript/page-001.json", "transcript/page-002.json"],
- "phoneChecks": "phone.json", "host": "Lily", "guest": "Lucy", "hostSide": "left",
+ "phoneChecks": "phone.json", "host": "Host", "guest": "Guest", "hostSide": "left",
  "layout": "multicam", "aspect": "16:9", "out": "plan.json"}
 ```
 
@@ -63,7 +63,7 @@ document plus `layout`, `aspect`, `source`, `host`, `guest` and
 ```json
 {"startUs": 24000000, "endUs": 41000000, "view": "HOST", "why": "host question",
  "cut": true, "crop": {"x": 115, "y": 590, "width": 2400, "height": 1350},
- "spoken": "Yeah. For the new audience, could you share…", "summary": "Lily asks about Lucy's research"}
+ "spoken": "Yeah. For the new audience, could you share…", "summary": "Host asks about the guest's research"}
 ```
 
 `view` is `WIDE`, `TWO`, `GUEST`, `GUEST_TIGHT`, `HOST` or `SPLIT`. A `SPLIT` shot has

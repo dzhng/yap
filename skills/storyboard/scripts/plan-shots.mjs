@@ -3,9 +3,8 @@ import { failure, launchedAs, load, runJsonHelper, us } from "./storyboard-io.mj
 
 const S = 1_000_000;
 export const CALLS = ["keep", "trim", "cut", "decide"];
-// Virtual cameras as a fraction of the source height; widths follow from the aspect. From a
-// 3840x2160 source: 16:9 WIDE 3840x2160, TWO 2880x1620, GUEST/HOST 2400x1350, GUEST_TIGHT
-// 1920x1080; 1:1 WIDE 2160, TWO 2000, GUEST/HOST 1640, GUEST_TIGHT 1380; a split half 1240x1395.
+// Virtual cameras as a fraction of the source height; widths follow from the aspect.
+// Pixel sizes for a 3840x2160 source: references/shot-plan.md.
 const HEIGHTS = {
   "16:9": { WIDE: 1, TWO: 0.75, GUEST: 0.625, GUEST_TIGHT: 0.5, HOST: 0.625 },
   "1:1": {

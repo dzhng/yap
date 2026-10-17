@@ -56,11 +56,10 @@ any agent sandbox. Request and output shapes are in [contract](references/contra
    batches to any model available; the transcript itself never goes on the page.
 
 7. **Build, serve and show it.** Run `scripts/build-site.mjs`, then
-   `scripts/serve-site.mjs SITE_DIR` in the background. It binds 127.0.0.1 on a free
-   port, because `localhost` can reach a different server on the IPv6 side. Open
-   the printed URL in your preview or browser tool and look at it. A path alone is not
-   delivery. Read the returned `issues`. Done when the human can see the page
-   inline and you've checked it against the rules below.
+   `scripts/serve-site.mjs SITE_DIR` in the background. Open the printed URL in your
+   preview or browser tool and look at it. A path alone is not delivery. Read the
+   returned `issues`. Done when the human can see the page inline and you've checked
+   it against the rules below.
 
 8. **Iterate** on feedback: edit chapters or plan, rebuild, reload. Agreement on the
    storyboard is the only done-condition of this skill. After it, plan the edit

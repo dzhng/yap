@@ -22,8 +22,8 @@ async function workspace(t) {
 
 const board = {
   title: "Episode",
-  host: "Lily",
-  guest: "Lucy",
+  host: "Host",
+  guest: "Guest",
   source,
   chapters: [
     { startUs: 0, endUs: 4 * S, label: "Pre-roll", call: "cut", shots: [] },
@@ -39,7 +39,7 @@ const board = {
           endUs: 9 * S,
           view: "GUEST",
           crop: { x: 1440, y: 540, width: 1400, height: 1400 },
-          summary: "Lucy introduces her robotics research",
+          summary: "Guest introduces their robotics research",
           spoken: "Thank you for inviting me, I work on robot foundation models",
         },
         {
@@ -70,7 +70,7 @@ test("renders one row per chapter, a minimal header and summaries instead of the
     ],
   );
   assert.match(page, /<header><h1>Episode<\/h1><p>2 chapters · 2 shots · 1 min<\/p><\/header>/);
-  assert.match(page, /Lucy introduces her robotics research/);
+  assert.match(page, /Guest introduces their robotics research/);
   assert.doesNotMatch(page, /robot foundation models/);
   assert.equal(result.shots, 2);
 });
