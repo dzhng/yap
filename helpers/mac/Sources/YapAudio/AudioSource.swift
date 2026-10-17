@@ -184,7 +184,6 @@ final class ConvertedAudioInterval {
     private var offset = 0
     private var exhausted = false
     private var paddingFrames: Int
-    private var shortTail = false
 
     /// Validates exact source demand and the platform format without decoding PCM.
     static func configuration(source: SourceTrack, start: Int64, outputRate: Int,
@@ -270,9 +269,7 @@ final class ConvertedAudioInterval {
         var written = 0
         while written < frames {
             if offset == Int(converted.frameLength) {
-                if exhausted, shortTail { return }
-                if exhausted, frames - written <= paddingFrames,
-                    input.reachedSelectionEnd || input.reachedPhysicalEnd {
+                if exhausted, frames - written <= paddingFrames, input.reachedSelectionEnd {
                     paddingFrames -= frames - written
                     return
                 }
@@ -292,15 +289,6 @@ final class ConvertedAudioInterval {
                 // A later mix call must not reuse the previous buffer's consumed offset.
                 offset = 0
                 if let error = input.failure { throw error }
-                // A compressed track can finish its final packet before the requested
-                // quantized boundary (AAC priming/remainder frames). Preserve the admitted
-                // output duration with zero-filled tail frames instead of failing the job.
-                if converted.frameLength == 0, outcome == .endOfStream {
-                    exhausted = true
-                    shortTail = true
-                    paddingFrames = max(0, paddingFrames - (frames - written))
-                    return
-                }
                 if outcome == .endOfStream, converted.frameLength == 0,
                     frames - written <= paddingFrames, input.reachedSelectionEnd
                 {
@@ -311,11 +299,6 @@ final class ConvertedAudioInterval {
                 guard outcome != .error, !input.readerFailed,
                     converted.frameLength > 0
                 else {
-                    if input.reachedPhysicalEnd {
-                        exhausted = true
-                        paddingFrames = max(0, paddingFrames - (frames - written))
-                        return
-                    }
                     if let detail = sourceInput.failure {
                         throw detail
                     }
@@ -352,7 +335,6 @@ private final class ConversionInput: @unchecked Sendable {
     private(set) var failure: Error?
     var readerFailed: Bool { reader.failed }
     var reachedSelectionEnd: Bool { reader.reachedSelectionEnd }
-    var reachedPhysicalEnd: Bool { reader.reachedPhysicalEnd }
 
     init(reader: AudioSourceReader) { self.reader = reader }
 
