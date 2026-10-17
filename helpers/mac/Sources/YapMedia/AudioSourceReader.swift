@@ -24,6 +24,7 @@ package final class AudioSourceReader {
     private var expectedStamp = CMTime.zero
     private var reopened = false
     package private(set) var decodedFrames: Int64 = 0
+    package private(set) var reachedPhysicalEnd = false
     package var failed: Bool { reader?.status == .failed }
     package var reachedSelectionEnd: Bool { position >= end }
 
@@ -52,6 +53,7 @@ package final class AudioSourceReader {
         self.position = start
         self.end = end
         intervalStart = start
+        reachedPhysicalEnd = false
         reopened = false
     }
 
@@ -147,6 +149,7 @@ package final class AudioSourceReader {
                     try open(at: position, through: end)
                     continue
                 }
+                if reader?.status == .completed { reachedPhysicalEnd = position < end }
                 return nil
             }
             let frames = CMSampleBufferGetNumSamples(sample)
