@@ -2,7 +2,7 @@
 id: on-location-conversation
 name: On-location conversation
 description: A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.
-version: 1
+version: 2
 references:
   - https://x.com/ashebytes/status/2107522974568103969
 ---
@@ -141,8 +141,9 @@ So:
      label. It switches on and off in one frame, with no fade, and holds 6–8 s.
      See [motion-chapter-label-in](examples/ashe-frontier-tech/motion-chapter-label-in.jpg).
    - Don't add captions or a burned-in transcript.
-5. **Grade.** Import [look.cube](look.cube) and apply it to every clip with an
-   `edit.apply` call whose operation is `processing.set` with a LUT (`colorSpace: "linear-srgb"`,
+5. **Grade.** Import [look.cube](look.cube) and apply it with an
+   `edit.apply` `processing.set` on each video track (`target: { kind: "track", id }`; a
+   new step has no `id`) with a LUT (`colorSpace: "linear-srgb"`,
    `interpolation: "trilinear"`). The intent, in [look.json](look.json): lifted
    blacks, softly compressed highlights and about 25% less saturation, a faded film
    feel. Check that the sky behind the pair holds detail.
@@ -181,6 +182,9 @@ read alike. Then check by eye:
 - Loudness of the location segments varies by 1 LU or less.
 
 ## Limits
+
+Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
+the export fails with "Unsupported audio processing step" (Yap 0.1.51).
 
 Not yet proven with Yap's operations: the chapter label's translucent box with a
 bar. Until it is, render the box and bar as a PNG overlay asset and lay the text over it.

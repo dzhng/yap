@@ -2,7 +2,7 @@
 id: studio-podcast
 name: Studio interview podcast
 description: A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.
-version: 1
+version: 2
 references:
   - https://x.com/a16z/status/2110385202581197049
 ---
@@ -121,8 +121,9 @@ So:
 3. **Teaser cold open (45–90 s).** Build it as described in
    [cold-open.md](cold-open.md): 5–8 of the strongest lines, kinetic word captions,
    illustrative inserts, then a beat of black before the wide shot.
-4. **Grade.** Import [look.cube](look.cube) and apply it to every camera with an
-   `edit.apply` call whose operation is `processing.set` with a LUT (`colorSpace: "linear-srgb"`,
+4. **Grade.** Import [look.cube](look.cube) and apply it with an
+   `edit.apply` `processing.set` on each video track (`target: { kind: "track", id }`; a
+   new step has no `id`) with a LUT (`colorSpace: "linear-srgb"`,
    `interpolation: "trilinear"`). The intent, in [look.json](look.json): matte
    lifted blacks, highlights held well below white and slightly warm skin. Match the
    three cameras so a cut never changes the colour.
@@ -165,6 +166,9 @@ read alike. Then check by eye:
 - The brand mark is present and unchanged throughout the body.
 
 ## Limits
+
+Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
+the export fails with "Unsupported audio processing step" (Yap 0.1.51).
 
 Not yet proven with Yap's operations: the gold metallic glow on key words, charts
 that build while a line plays, and the blurred-backdrop inset card. Until they are,

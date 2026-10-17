@@ -103,3 +103,11 @@ capacity". Review fixes and the service wiring were done by hand.
   edge spaces) are written JSON-quoted. *Sound*: found in review; covered by a test.
 - **The create/delete wire test was written by hand.** Codex's sandbox can't open
   the service socket.
+
+## Slice 07 (proof, part 1)
+
+- **The export proof used the installed Yap 0.1.51, not a dev build.** *Sound*:
+  `edit.apply` and export don't depend on the preset operations, and the installed
+  app has the native media helper this worktree lacks.
+- **The proof grades the video track, not the output.** This is forced by the
+  output-target export bug recorded in slice 07.

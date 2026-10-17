@@ -45,3 +45,15 @@ test("a profile reports picture and sound levels a grade or mix can be judged ag
   assert.ok(Math.abs(profile.loudness.integratedLufs - expected) < 1, `${profile.loudness.integratedLufs}`);
   assert.ok(profile.loudness.momentary.length >= 5, "one loudness reading per second");
 });
+
+test("10-bit footage measures on the same 0–255 scale as 8-bit footage", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "preset-measure-10bit-"));
+  const tenBit = join(dir, "grey.mov");
+  const eightBit = join(dir, "grey.mp4");
+  const grey = ["-f", "lavfi", "-i", "color=c=0x808080:s=320x180:r=24:d=1"];
+  execFileSync("ffmpeg", ["-v", "error", "-y", ...grey, "-c:v", "prores_ks", "-pix_fmt", "yuv422p10le", tenBit]);
+  execFileSync("ffmpeg", ["-v", "error", "-y", ...grey, "-c:v", "libx264", "-pix_fmt", "yuv420p", eightBit]);
+  const [ten, eight] = await Promise.all([tenBit, eightBit].map((path) => measureVideo(path, { sampleEverySeconds: 0.5 })));
+  assert.ok(ten.picture.yavg <= 255, `10-bit luma ${ten.picture.yavg} is off the 8-bit scale`);
+  assert.ok(Math.abs(ten.picture.yavg - eight.picture.yavg) < 3, `${ten.picture.yavg} vs ${eight.picture.yavg}`);
+});

@@ -580,7 +580,7 @@
       "kind": "kit",
       "name": "Preset measurement kit",
       "description": "Shared tools for measuring, checking and documenting presets.",
-      "version": 1,
+      "version": 2,
       "files": [
         {
           "path": "check.mjs",
@@ -595,7 +595,7 @@
         {
           "path": "KIT.md",
           "bytes": 302,
-          "sha256": "61a350a337185a8c1397c2a8566f6ee46d45c53fe214a3e81a20bd0b787a7e21"
+          "sha256": "7206bd18c68c10470a101e83a320775a8604ec9375d6491d10b1a7c9d5f4c559"
         },
         {
           "path": "make-look-lut.mjs",
@@ -604,13 +604,13 @@
         },
         {
           "path": "measure.mjs",
-          "bytes": 6588,
-          "sha256": "b837e6ad3ab6e9a4226f4c6b42d9c5ede43bafa78fc722adc3c3a3746e7d69c5"
+          "bytes": 6746,
+          "sha256": "4e2a6f5abef2e0758866a80bddf20c7d66e904a0cd9bc38fd2646297c04d82c7"
         },
         {
           "path": "measure.test.mjs",
-          "bytes": 2498,
-          "sha256": "d9e69fcb9a8e81db832c4a526047b17bc28ead3d194f67c3946ea90360f6f2a7"
+          "bytes": 3378,
+          "sha256": "55d65297c384cb6cc63f1abe612a4bc863020ffdbafa5a29bf6f814caf9f771e"
         },
         {
           "path": "music.mjs",
@@ -649,7 +649,7 @@
       "kind": "preset",
       "name": "On-location conversation",
       "description": "A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.",
-      "version": 1,
+      "version": 2,
       "files": [
         {
           "path": "examples/ashe-frontier-tech/01-cold-open-street.jpg",
@@ -788,8 +788,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10626,
-          "sha256": "04c48cbc400b46423224ba09a6220c6baccd08b735d8ce592ee18a32122514ed"
+          "bytes": 10827,
+          "sha256": "2c6ebc946a25f3e6f5ab1f379ecc413c1e831651db78b915730e9fae631c74b0"
         },
         {
           "path": "shoot-plan.svg",
@@ -808,7 +808,7 @@
       "kind": "preset",
       "name": "Studio interview podcast",
       "description": "A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.",
-      "version": 1,
+      "version": 2,
       "files": [
         {
           "path": "cold-open.md",
@@ -967,8 +967,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10173,
-          "sha256": "445777ff522d71b4d9524dc972a61de12ac57a1201b1b65b65f3c7d40419918f"
+          "bytes": 10372,
+          "sha256": "8cda641e17a454009372a3be5a8d4dbec78a21ba4d335bc7688695384673ddce"
         },
         {
           "path": "shoot-plan.svg",
@@ -992,7 +992,7 @@
       "kind": "preset",
       "name": "Tactile launch film",
       "description": "A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.",
-      "version": 1,
+      "version": 2,
       "files": [
         {
           "path": "examples/humansand-persimmon/01-process-macro.jpg",
@@ -1106,8 +1106,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10705,
-          "sha256": "2bab3df270aaae3b8ea3904ca71bff667bbd08477b8f715d95795df86e5fc9ff"
+          "bytes": 10906,
+          "sha256": "01f51b1e287a6e0814718a9feabd268237a7f31abb07f15fdc4a80df0263f0a2"
         },
         {
           "path": "shoot-plan.svg",

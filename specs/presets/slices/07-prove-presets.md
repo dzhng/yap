@@ -28,3 +28,46 @@ minutes; if silent, decide on the evidence, record it here, close the shots, con
 with its fallback, and in the README's known unknowns. Don't change the product here.
 
 **Delegated:** fixture choice per preset and how many revise rounds.
+
+## Results
+
+### Export proof, part 1 (2026-10-17, installed Yap 0.1.51)
+
+This is the deferred step from slice 00. On `fixtures/video-editing-feedback/graham-picture.mov`
+it ran, through the public CLI:
+- `asset.import` of the footage and of `tactile-launch-film/look.cube`;
+- `project.create`;
+- `edit.apply` with `track.add`, `place`, and `processing.set` with the LUT on the video track;
+- `export.create`.
+
+The export committed.
+[Raw, predicted and exported frame](../assets/07-export-proof/raw-predicted-export.png):
+
+| | Lifted black (Y low) | Average luma | Highlights (Y high) | Saturation |
+| --- | --- | --- | --- | --- |
+| Raw fixture | 112 | 173 | 204 | 11.2 |
+| Cube simulated in linear sRGB | 125 | 175 | 199 | 9.7 |
+| Yap export | 122 | 171 | 194 | 9.6 |
+
+The rendered grade matches the cube's intent within a few levels, which H.264 and
+Rec.709 encoding account for. **The preset LUTs work as designed.**
+
+Findings, each fixed where it belongs:
+- **The LUT must target the video track, not `{ kind: "output" }`.** The output target
+  includes the audio chain. `edit.apply` accepts it, but the export fails with
+  "Unsupported audio processing step". All three presets now say "each video track"
+  (version 2). *Product bug:* `edit.apply` should refuse a video-only processor on a
+  target that includes audio.
+- **A new processing step must not carry an `id`.** A fresh `id` is refused with "Processing
+  step does not belong to this target", which misleads (the schema shows `id` as
+  optional). *Product bug:* the message should say that `id` names an existing step.
+- **`kit/measure.mjs` measured 10-bit footage on a 0–1023 scale** (the ProRes fixture read
+  as luma 687), which would fail every brightness target. It now converts to 8-bit
+  first, with a test. Kit version 2.
+
+### Part 2: a fresh agent edits raw footage into each style
+
+Blocked on footage. No retained fixture fits any of the three styles: the fixtures
+are 3-second talking heads and an untouched multicam session. Each preset's
+`## Shoot` says what to record. Ask the user for footage, per style, then run steps
+1–5 above.

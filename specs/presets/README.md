@@ -17,7 +17,8 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–06 are done; start at [slice 07](slices/07-prove-presets.md). Record every
+Slices 00–06 are done and slice 07's export proof is done. Next: get footage for one
+style from the user (see each preset's `## Shoot`), then run slice 07 part 2 for it. Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -43,7 +44,7 @@ TODO:
 - [x] [04 Refresh](slices/04-refresh.md): `preset-remote.ts` (commit-pinned GitHub fetch, streamed, timeouts), `preset-refresh.ts` (startup + daily, joined runs, state), `preset.update`.
 - [x] [05 Create and delete](slices/05-create-delete.md): `preset-scaffold.ts`, `preset.create`/`preset.delete`, `authoring/instructions.md`, injectable Trash.
 - [x] [06 Skill route](slices/06-skill-route.md): one paragraph in `skills/yap/SKILL.md`, a catalog section, and the `preset-style-routing` eval case.
-- [ ] [07 Prove presets](slices/07-prove-presets.md): each draft edits raw footage into its style.
+- [ ] [07 Prove presets](slices/07-prove-presets.md): export proof done (LUT renders as designed; two Yap bugs and a kit bug found). The fresh-agent edit of each style waits for footage shot to that preset's `## Shoot`.
 
 Update this section before ending your pass.
 

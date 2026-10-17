@@ -41,8 +41,10 @@ async function detectCuts(path, threshold) {
   return [...stderr.matchAll(/pts_time:([0-9.]+)/g)].map((m) => round(Number(m[1])));
 }
 
+// Levels are always on the 8-bit 0–255 scale: 10-bit footage (ProRes, HEVC) is converted
+// first, so one set of targets fits every source.
 async function pictureSamples(path, every) {
-  const { stdout } = await run(ffmpeg, ["-hide_banner", "-v", "error", "-i", path, "-an", "-vf", `fps=1/${every}:round=down,signalstats,metadata=print:file=-`, "-f", "null", "-"], big);
+  const { stdout } = await run(ffmpeg, ["-hide_banner", "-v", "error", "-i", path, "-an", "-vf", `fps=1/${every}:round=down,format=yuv420p,signalstats,metadata=print:file=-`, "-f", "null", "-"], big);
   const samples = [];
   for (const line of stdout.split("\n")) {
     const frame = line.match(/pts_time:([0-9.]+)/);

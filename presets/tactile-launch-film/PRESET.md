@@ -2,7 +2,7 @@
 id: tactile-launch-film
 name: Tactile launch film
 description: A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.
-version: 1
+version: 2
 references:
   - https://x.com/humansand/status/2098115046438215791
 ---
@@ -122,8 +122,9 @@ piano or soft strings in a low register, with no drums.
    Use a hard cut only where a new idea starts (about three in a film), and
    12–24 frame dissolves for changes inside an idea. The total
    is 35–50 s. Don't speed-ramp, shake or zoom-punch.
-3. **Grade.** Import [look.cube](look.cube) with `asset.import` and apply it to every clip with an `edit.apply` call whose
-   operation is `processing.set` with a LUT (`colorSpace: "linear-srgb"`,
+3. **Grade.** Import [look.cube](look.cube) with `asset.import` and apply it with an `edit.apply`
+   `processing.set` on each video track (`target: { kind: "track", id }`; a new step has
+   no `id`) with a LUT (`colorSpace: "linear-srgb"`,
    `interpolation: "trilinear"`). The cube is built for linear input. The intent is
    in [look.json](look.json): lifted warm blacks, cream highlights and about 20%
    less saturation. Then check one frame per shot. Highlights must not clip, and
@@ -170,6 +171,9 @@ read alike. Then check by eye:
 - The end card holds still for at least 4 s.
 
 ## Limits
+
+Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
+the export fails with "Unsupported audio processing step" (Yap 0.1.51).
 
 Not yet proven with Yap's operations: the particle transition (still 07), the
 round crop of the object on the end card, and the line-reveal animation. Until
