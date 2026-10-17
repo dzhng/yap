@@ -19,6 +19,9 @@ export type PresetIndex = { format: 1; packages: PresetManifest[] };
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024;
 const ID = /^[a-z0-9-]+$/;
+/** The one id rule for every package: preset, kit and authoring. */
+export const isPackageId = (value: unknown): value is string =>
+  typeof value === "string" && ID.test(value);
 const ENTRY = new Map<string, PresetKind>([
   ["PRESET.md", "preset"],
   ["KIT.md", "kit"],
@@ -34,21 +37,34 @@ function stripComment(value: string): string {
   for (let i = 0; i < value.length; i++) {
     const c = value[i];
     if ((c === "'" || c === '"') && (!quote || quote === c)) quote = quote ? undefined : c;
-    if (c === "#" && !quote && (i === 0 || /\s/.test(value[i - 1]!))) return value.slice(0, i).trim();
+    if (c === "#" && !quote && (i === 0 || /\s/.test(value[i - 1]!)))
+      return value.slice(0, i).trim();
   }
   return value.trim();
 }
 
 function scalar(value: string): string | number | boolean {
   const raw = stripComment(value);
-  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) return raw.slice(1, -1);
+  // The scaffold writes JSON-quoted names; undo its escapes.
+  if (raw.length > 1 && raw.startsWith('"') && raw.endsWith('"')) {
+    try {
+      return JSON.parse(raw) as string;
+    } catch {
+      return raw.slice(1, -1);
+    }
+  }
+  if (raw.length > 1 && raw.startsWith("'") && raw.endsWith("'")) return raw.slice(1, -1);
   if (/^\d+$/.test(raw)) return Number(raw);
   if (raw === "true") return true;
   if (raw === "false") return false;
   return raw;
 }
 
-function parseFrontmatter(text: string): { values?: Record<string, unknown>; body: string; error?: string } {
+function parseFrontmatter(text: string): {
+  values?: Record<string, unknown>;
+  body: string;
+  error?: string;
+} {
   const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/);
   if (lines[0] !== "---") return { body: text, error: "missing frontmatter" };
   const end = lines.indexOf("---", 1);
@@ -59,12 +75,14 @@ function parseFrontmatter(text: string): { values?: Record<string, unknown>; bod
     if (!line.trim() || line.trim().startsWith("#")) continue;
     const list = line.match(/^\s+-\s+(.+)$/);
     if (list) {
-      if (!listKey) return { body: lines.slice(end + 1).join("\n"), error: "list item without a key" };
+      if (!listKey)
+        return { body: lines.slice(end + 1).join("\n"), error: "list item without a key" };
       (values[listKey] as unknown[]).push(scalar(list[1]!));
       continue;
     }
     const match = line.match(/^([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$/);
-    if (!match) return { body: lines.slice(end + 1).join("\n"), error: `invalid frontmatter line: ${line}` };
+    if (!match)
+      return { body: lines.slice(end + 1).join("\n"), error: `invalid frontmatter line: ${line}` };
     const key = match[1]!;
     const value = match[2] ?? "";
     if (value === "") {
@@ -82,11 +100,14 @@ function normalizePath(path: string): string {
   return path.replaceAll("\\", "/").replace(/^\.\//, "");
 }
 
-function packageRootAndEntry(path: string): { root: string; entry: string; kind: PresetKind } | undefined {
+function packageRootAndEntry(
+  path: string,
+): { root: string; entry: string; kind: PresetKind } | undefined {
   const normalized = normalizePath(path);
   for (const [entry, kind] of ENTRY) {
     if (normalized === entry) return { root: "", entry, kind };
-    if (normalized.endsWith(`/${entry}`)) return { root: normalized.slice(0, -(entry.length + 1)), entry, kind };
+    if (normalized.endsWith(`/${entry}`))
+      return { root: normalized.slice(0, -(entry.length + 1)), entry, kind };
   }
   return undefined;
 }
@@ -96,7 +117,8 @@ function packageFiles(files: Map<string, Uint8Array>, root: string): Map<string,
   const prefix = root ? `${root}/` : "";
   for (const [raw, value] of files) {
     const path = normalizePath(raw);
-    if (path === root || path.startsWith(prefix)) out.set(prefix ? path.slice(prefix.length) : path, value);
+    if (path === root || path.startsWith(prefix))
+      out.set(prefix ? path.slice(prefix.length) : path, value);
   }
   return out;
 }
@@ -105,39 +127,76 @@ export function parsePackage(
   files: Map<string, Uint8Array>,
   policy: { origin: PresetOrigin },
 ): { ok: true; manifest: PresetManifest } | { ok: false; issues: PresetIssue[] } {
-  const entry = [...files.keys()].map(packageRootAndEntry).find(Boolean) as ReturnType<typeof packageRootAndEntry> | undefined;
-  if (!entry) return { ok: false, issues: [issue("missing-entry", "package has no recognized entry document")] };
+  const entry = [...files.keys()].map(packageRootAndEntry).find(Boolean) as
+    | ReturnType<typeof packageRootAndEntry>
+    | undefined;
+  if (!entry)
+    return {
+      ok: false,
+      issues: [issue("missing-entry", "package has no recognized entry document")],
+    };
   const scoped = packageFiles(files, entry.root);
   const source = scoped.get(entry.entry);
-  if (!source) return { ok: false, issues: [issue("missing-entry", `missing ${entry.entry}`, entry.entry)] };
+  if (!source)
+    return { ok: false, issues: [issue("missing-entry", `missing ${entry.entry}`, entry.entry)] };
   const text = new TextDecoder().decode(source);
   const parsed = parseFrontmatter(text);
   const issues: PresetIssue[] = [];
-  if (parsed.error || !parsed.values) issues.push(issue("frontmatter", parsed.error ?? "invalid frontmatter", entry.entry));
+  if (parsed.error || !parsed.values)
+    issues.push(issue("frontmatter", parsed.error ?? "invalid frontmatter", entry.entry));
   const values = parsed.values ?? {};
   const id = typeof values.id === "string" ? values.id : "";
   const version = typeof values.version === "number" ? values.version : NaN;
   if (!id) issues.push(issue("missing-id", "frontmatter id is required", entry.entry));
-  if (!Number.isInteger(version) || version < 1) issues.push(issue("bad-version", "frontmatter version must be a positive integer", entry.entry));
-  const expectedFolder = entry.kind === "preset" ? entry.root.split("/").at(-1) ?? "" : entry.kind;
-  if (!ID.test(id)) issues.push(issue("bad-id", `id must match [a-z0-9-]+: ${id || "<missing>"}`, entry.entry));
-  if (expectedFolder && id !== expectedFolder) issues.push(issue("id-folder", `id ${id} does not match folder ${expectedFolder}`, entry.entry));
+  if (!Number.isInteger(version) || version < 1)
+    issues.push(
+      issue("bad-version", "frontmatter version must be a positive integer", entry.entry),
+    );
+  const expectedFolder =
+    entry.kind === "preset" ? (entry.root.split("/").at(-1) ?? "") : entry.kind;
+  if (!ID.test(id))
+    issues.push(issue("bad-id", `id must match [a-z0-9-]+: ${id || "<missing>"}`, entry.entry));
+  if (expectedFolder && id !== expectedFolder)
+    issues.push(
+      issue("id-folder", `id ${id} does not match folder ${expectedFolder}`, entry.entry),
+    );
   const references = values.references;
-  if (references !== undefined && (!Array.isArray(references) || references.some((v) => typeof v !== "string"))) {
+  if (
+    references !== undefined &&
+    (!Array.isArray(references) || references.some((v) => typeof v !== "string"))
+  ) {
     issues.push(issue("references", "references must be a list of strings", entry.entry));
   } else {
     for (const ref of (references as string[] | undefined) ?? []) {
-      const valid = policy.origin === "repo" ? ref.startsWith("https://") : ref.startsWith("https://") || (resolve(ref) === ref && existsSync(ref));
-      if (!valid) issues.push(issue("reference", `reference must be https${policy.origin === "local" ? " or an existing absolute path" : ""}: ${ref}`, entry.entry));
+      const valid =
+        policy.origin === "repo"
+          ? ref.startsWith("https://")
+          : ref.startsWith("https://") || (resolve(ref) === ref && existsSync(ref));
+      if (!valid)
+        issues.push(
+          issue(
+            "reference",
+            `reference must be https${policy.origin === "local" ? " or an existing absolute path" : ""}: ${ref}`,
+            entry.entry,
+          ),
+        );
     }
   }
   if (entry.kind === "preset") {
-    if (!/^##\s+Shoot\s*$/m.test(parsed.body)) issues.push(issue("missing-shoot", "preset is missing ## Shoot", entry.entry));
-    if (!/^##\s+Edit\s*$/m.test(parsed.body)) issues.push(issue("missing-edit", "preset is missing ## Edit", entry.entry));
+    if (!/^##\s+Any footage\s*$/m.test(parsed.body))
+      issues.push(issue("missing-any-footage", "preset is missing ## Any footage", entry.entry));
+    if (!/^##\s+Shoot\s*$/m.test(parsed.body))
+      issues.push(issue("missing-shoot", "preset is missing ## Shoot", entry.entry));
+    if (!/^##\s+Edit\s*$/m.test(parsed.body))
+      issues.push(issue("missing-edit", "preset is missing ## Edit", entry.entry));
   }
   for (const [path, bytes] of scoped) {
-    if (bytes.byteLength >= MAX_FILE_BYTES) issues.push(issue("file-too-large", `file is ${bytes.byteLength} bytes; limit is 100 MiB`, path));
-    if (isLfsPointer(bytes)) issues.push(issue("git-lfs", "Git LFS pointer files are not allowed", path));
+    if (bytes.byteLength >= MAX_FILE_BYTES)
+      issues.push(
+        issue("file-too-large", `file is ${bytes.byteLength} bytes; limit is 100 MiB`, path),
+      );
+    if (isLfsPointer(bytes))
+      issues.push(issue("git-lfs", "Git LFS pointer files are not allowed", path));
   }
   if (issues.length) return { ok: false, issues };
   const manifest: PresetManifest = {
@@ -146,15 +205,26 @@ export function parsePackage(
     ...(typeof values.name === "string" ? { name: values.name } : {}),
     ...(typeof values.description === "string" ? { description: values.description } : {}),
     version,
-    ...(Array.isArray(references) && references.length ? { references: references as string[] } : {}),
-    files: [...scoped].map(([path, data]) => ({ path, bytes: data.byteLength, sha256: createHash("sha256").update(data).digest("hex") })).sort((a, b) => a.path.localeCompare(b.path)),
+    ...(Array.isArray(references) && references.length
+      ? { references: references as string[] }
+      : {}),
+    files: [...scoped]
+      .map(([path, data]) => ({
+        path,
+        bytes: data.byteLength,
+        sha256: createHash("sha256").update(data).digest("hex"),
+      }))
+      .sort((a, b) => a.path.localeCompare(b.path)),
   };
   return { ok: true, manifest };
 }
 
 function isLfsPointer(data: Uint8Array): boolean {
   const text = new TextDecoder().decode(data.subarray(0, 1024));
-  return text.startsWith("version https://git-lfs.github.com/spec/v1\n") && /\noid sha256:[0-9a-f]{64}\n/.test(text);
+  return (
+    text.startsWith("version https://git-lfs.github.com/spec/v1\n") &&
+    /\noid sha256:[0-9a-f]{64}\n/.test(text)
+  );
 }
 
 export function buildIndex(manifests: PresetManifest[]): PresetIndex {
@@ -177,7 +247,10 @@ function markdownLinks(text: string): string[] {
   return [...text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)].map((m) => m[1]!);
 }
 
-export function validateTree(root: string, policy: { origin: PresetOrigin } = { origin: "repo" }): PresetIssue[] {
+export function validateTree(
+  root: string,
+  policy: { origin: PresetOrigin } = { origin: "repo" },
+): PresetIssue[] {
   const issues: PresetIssue[] = [];
   const files = new Map<string, Uint8Array>();
   const symlinks: string[] = [];
@@ -200,15 +273,22 @@ export function validateTree(root: string, policy: { origin: PresetOrigin } = { 
   }
   walk(root);
   for (const [path, data] of files) {
-    if (data.byteLength >= MAX_FILE_BYTES) issues.push(issue("file-too-large", `file is ${data.byteLength} bytes; limit is 100 MiB`, path));
-    if (isLfsPointer(data)) issues.push(issue("git-lfs", "Git LFS pointer files are not allowed", path));
+    if (data.byteLength >= MAX_FILE_BYTES)
+      issues.push(
+        issue("file-too-large", `file is ${data.byteLength} bytes; limit is 100 MiB`, path),
+      );
+    if (isLfsPointer(data))
+      issues.push(issue("git-lfs", "Git LFS pointer files are not allowed", path));
   }
   for (const path of symlinks) issues.push(issue("symlink", "symlinks are not allowed", path));
-  if (policy.origin === "repo") for (const path of sourceDirs) issues.push(issue("source-folder", "source/ folders are not allowed in repo packages", path));
+  if (policy.origin === "repo")
+    for (const path of sourceDirs)
+      issues.push(issue("source-folder", "source/ folders are not allowed in repo packages", path));
   const packageRoots = new Set<string>();
   for (const path of files.keys()) {
     const candidate = packageRootAndEntry(path);
-    if (candidate && (candidate.root === "" || !candidate.root.includes("/"))) packageRoots.add(candidate.root);
+    if (candidate && (candidate.root === "" || !candidate.root.includes("/")))
+      packageRoots.add(candidate.root);
   }
   for (const packageRoot of packageRoots) {
     // parsePackage is scoped by the entry path, so call it with just this package.
@@ -221,9 +301,15 @@ export function validateTree(root: string, policy: { origin: PresetOrigin } = { 
     const parsed = parsePackage(scoped, policy);
     if (!parsed.ok)
       for (const found of parsed.issues)
-        issues.push(issue(found.code, found.message, found.path ? `${packageRoot}/${found.path}` : packageRoot));
+        issues.push(
+          issue(
+            found.code,
+            found.message,
+            found.path ? `${packageRoot}/${found.path}` : packageRoot,
+          ),
+        );
   }
-  const indexed = new Set<string>([...files.keys()]);
+  const indexed = new Set<string>(files.keys());
   for (const [path, data] of files) {
     if (!path.endsWith(".md")) continue;
     const text = new TextDecoder().decode(data);
@@ -234,10 +320,22 @@ export function validateTree(root: string, policy: { origin: PresetOrigin } = { 
       const resolved = normalizePath(normalize(join(dirname(path), clean)));
       if (resolved.startsWith("../") || !indexed.has(resolved)) {
         if (path.startsWith("authoring/template/")) continue;
-        issues.push(issue("broken-link", `relative Markdown link does not resolve to a file: ${target}`, path));
+        issues.push(
+          issue(
+            "broken-link",
+            `relative Markdown link does not resolve to a file: ${target}`,
+            path,
+          ),
+        );
       }
     }
   }
-  const unique = [...new Map(issues.map((item) => [`${item.code}:${item.path ?? ""}:${item.message}`, item])).values()];
-  return unique.sort((a, b) => `${a.path ?? ""}:${a.code}`.localeCompare(`${b.path ?? ""}:${b.code}`));
+  const unique = [
+    ...new Map(
+      issues.map((item) => [`${item.code}:${item.path ?? ""}:${item.message}`, item]),
+    ).values(),
+  ];
+  return unique.sort((a, b) =>
+    `${a.path ?? ""}:${a.code}`.localeCompare(`${b.path ?? ""}:${b.code}`),
+  );
 }

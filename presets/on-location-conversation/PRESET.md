@@ -2,7 +2,7 @@
 id: on-location-conversation
 name: On-location conversation
 description: A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.
-version: 5
+version: 6
 references:
   - https://x.com/ashebytes/status/2107522974568103969
 ---
@@ -201,17 +201,19 @@ node ../kit/timeline.mjs export-profile.json --out export-timeline.svg
 Put `export-timeline.svg` beside the example's `timeline.svg`: the rhythm should
 read alike. Then check by eye:
 
-- Every location is one continuous shot; no cuts inside it apart from the B-roll
-  bridges.
-- The cold open is 10–15 s and the ending is in proportion to the running time.
+- Each location holds as long and unbroken as the footage allows; any cut inside
+  it is calm, apart from the B-roll bridges.
+- The cold open is short (the reference's is 10–15 s) and the ending is in
+  proportion to the running time.
 - Each chapter label appears once per location and is readable on a phone.
 - Saturation lower than the raw footage and no clipped sky.
 - Loudness of the location segments varies by 1 LU or less.
 
 ## Limits
 
-Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
-the export fails with "Unsupported audio processing step".
+Grade each video track, not `{ kind: "output" }`: per-track grading lets you balance
+one shot, and on Yap 0.1.53 and earlier a LUT on the output fails the export with
+"Unsupported audio processing step".
 
 Not yet proven with Yap's operations: the chapter label's translucent box with a
 bar. Until it is, render the box and bar as a PNG overlay asset and lay the text over it.

@@ -3,7 +3,13 @@ import { createReadStream } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, dirname, resolve, relative } from "node:path";
 import { randomUUID } from "node:crypto";
-import type { PresetFile, PresetIndex, PresetKind, PresetManifest } from "./preset-format.js";
+import {
+  isPackageId,
+  type PresetFile,
+  type PresetIndex,
+  type PresetKind,
+  type PresetManifest,
+} from "./preset-format.js";
 import { readJsonOr, readLocalIds, writeJsonAtomic } from "./preset-store.js";
 
 export type PackageSource = {
@@ -50,9 +56,8 @@ export type PackageSelector = (remote: PresetManifest, installed?: InstalledPack
 // sufficient; cross-process locking would add machinery for an unsupported use.
 const queues = new Map<string, Promise<void>>();
 
-const PACKAGE_ID = /^[a-z0-9-]+$/;
 function validPackage(pkg: Pick<PresetManifest, "id" | "kind">): boolean {
-  if (typeof pkg.id !== "string" || !PACKAGE_ID.test(pkg.id)) return false;
+  if (!isPackageId(pkg.id)) return false;
   if (pkg.kind === "preset") return true;
   return (pkg.kind === "kit" || pkg.kind === "authoring") && pkg.id === pkg.kind;
 }
@@ -63,25 +68,38 @@ function folderFor(pkg: Pick<PresetManifest, "id" | "kind">): string {
 
 function safeRelative(path: string): string {
   const clean = path.replaceAll("\\", "/");
-  if (!clean || clean.startsWith("/") || clean.split("/").includes("..")) throw new Error(`invalid package path: ${path}`);
+  if (!clean || clean.startsWith("/") || clean.split("/").includes(".."))
+    throw new Error(`invalid package path: ${path}`);
   return clean;
 }
 
 async function withTargetQueue<T>(target: string, work: () => Promise<T>): Promise<T> {
   const previous = queues.get(target) ?? Promise.resolve();
   let release!: () => void;
-  const current = new Promise<void>((resolve) => { release = resolve; });
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   const queued = previous.then(() => current);
   queues.set(target, queued);
   await previous;
-  try { return await work(); } finally { release(); if (queues.get(target) === queued) queues.delete(target); }
+  try {
+    return await work();
+  } finally {
+    release();
+    if (queues.get(target) === queued) queues.delete(target);
+  }
 }
 
 export function newerThanInstalled(remote: PresetManifest, installed?: InstalledPackage): boolean {
   return !installed || remote.version > installed.version;
 }
 
-async function streamToFile(stream: ReadableStream<Uint8Array>, destination: string, expected: PresetFile, signal?: AbortSignal): Promise<void> {
+async function streamToFile(
+  stream: ReadableStream<Uint8Array>,
+  destination: string,
+  expected: PresetFile,
+  signal?: AbortSignal,
+): Promise<void> {
   await mkdir(dirname(destination), { recursive: true });
   const handle = await open(destination, "w", 0o600);
   const hash = createHash("sha256");
@@ -98,11 +116,21 @@ async function streamToFile(stream: ReadableStream<Uint8Array>, destination: str
         hash.update(chunk);
         await handle.write(chunk);
       }
-    } finally { reader.releaseLock(); }
-  } finally { await handle.close(); }
+    } finally {
+      reader.releaseLock();
+    }
+  } finally {
+    await handle.close();
+  }
   const digest = hash.digest("hex");
-  if (bytes !== expected.bytes) throw new Error(`byte count mismatch for ${expected.path}: expected ${expected.bytes}, got ${bytes}`);
-  if (digest !== expected.sha256) throw new Error(`sha256 mismatch for ${expected.path}: expected ${expected.sha256}, got ${digest}`);
+  if (bytes !== expected.bytes)
+    throw new Error(
+      `byte count mismatch for ${expected.path}: expected ${expected.bytes}, got ${bytes}`,
+    );
+  if (digest !== expected.sha256)
+    throw new Error(
+      `sha256 mismatch for ${expected.path}: expected ${expected.sha256}, got ${digest}`,
+    );
 }
 
 export async function installPackages(
@@ -113,7 +141,13 @@ export async function installPackages(
 ): Promise<InstallReport> {
   return withTargetQueue(resolve(target), async () => {
     const signal = options.signal;
-    const report: InstallReport = { installed: [], skipped: [], failed: [], removed: [], conflicts: [] };
+    const report: InstallReport = {
+      installed: [],
+      skipped: [],
+      failed: [],
+      removed: [],
+      conflicts: [],
+    };
     await mkdir(target, { recursive: true });
     const receiptPath = join(target, "receipt.json");
     const receipt = await readJsonOr<PresetReceipt>(receiptPath, { packages: {}, conflicts: {} });
@@ -148,19 +182,29 @@ export async function installPackages(
           continue;
         }
         if (!select(pkg, installed)) {
-          report.skipped.push({ id: pkg.id, reason: installed && pkg.version === installed.version ? "tie" : "older version" });
+          report.skipped.push({
+            id: pkg.id,
+            reason: installed && pkg.version === installed.version ? "tie" : "older version",
+          });
           continue;
         }
         const packageStage = join(stagingRoot, folderFor(pkg));
         try {
           for (const file of pkg.files) {
             const path = safeRelative(file.path);
-            await streamToFile(await source.file(pkg, path, file, signal), join(packageStage, path), file, signal);
+            await streamToFile(
+              await source.file(pkg, path, file, signal),
+              join(packageStage, path),
+              file,
+              signal,
+            );
           }
           const folder = folderFor(pkg);
           const installedPath = join(target, folder);
           const oldPath = join(stagingRoot, `.old-${folder}-${randomUUID()}`);
-          try { await rename(installedPath, oldPath); } catch (error) {
+          try {
+            await rename(installedPath, oldPath);
+          } catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           }
           await rename(packageStage, installedPath);
@@ -175,7 +219,10 @@ export async function installPackages(
           report.installed.push(pkg.id);
         } catch (error) {
           await rm(packageStage, { recursive: true, force: true });
-          report.failed.push({ id: pkg.id, reason: error instanceof Error ? error.message : String(error) });
+          report.failed.push({
+            id: pkg.id,
+            reason: error instanceof Error ? error.message : String(error),
+          });
         }
       }
       if (options.removeMissingDownloaded) {
@@ -183,15 +230,28 @@ export async function installPackages(
           if (installed.source !== "downloaded" || remoteIds.has(id) || locals.has(id)) continue;
           // An id-scoped refresh only owns that package (plus kit/authoring). Keep
           // other downloaded packages until a full refresh sees their absence.
-          if (options.removeSelector && !options.removeSelector({ id, kind: installed.kind, version: installed.version, files: installed.files }, installed)) continue;
-          await rm(join(target, folderFor({ id, kind: installed.kind })), { recursive: true, force: true });
+          if (
+            options.removeSelector &&
+            !options.removeSelector(
+              { id, kind: installed.kind, version: installed.version, files: installed.files },
+              installed,
+            )
+          )
+            continue;
+          await rm(join(target, folderFor({ id, kind: installed.kind })), {
+            recursive: true,
+            force: true,
+          });
           delete receipt.packages[id];
           report.removed.push(id);
         }
       }
-      if (report.installed.length || report.removed.length || receiptChanged) await writeJsonAtomic(receiptPath, receipt);
+      if (report.installed.length || report.removed.length || receiptChanged)
+        await writeJsonAtomic(receiptPath, receipt);
       return report;
-    } finally { await rm(stagingRoot, { recursive: true, force: true }); }
+    } finally {
+      await rm(stagingRoot, { recursive: true, force: true });
+    }
   });
 }
 
@@ -203,7 +263,8 @@ export function directorySource(root: string): PackageSource {
       void expect;
       const absolute = resolve(root, folderFor(pkg), safeRelative(path));
       const base = resolve(root);
-      if (relative(base, absolute).startsWith("..")) throw new Error(`invalid package path: ${path}`);
+      if (relative(base, absolute).startsWith(".."))
+        throw new Error(`invalid package path: ${path}`);
       if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       return new ReadableStream<Uint8Array>({
         async start(controller) {
@@ -213,10 +274,11 @@ export function directorySource(root: string): PackageSource {
               controller.enqueue(new Uint8Array(chunk as Buffer));
             }
             controller.close();
-          } catch (error) { controller.error(error); }
+          } catch (error) {
+            controller.error(error);
+          }
         },
       });
     },
   };
 }
-

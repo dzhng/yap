@@ -2,7 +2,7 @@
 id: studio-podcast
 name: Studio interview podcast
 description: A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.
-version: 5
+version: 6
 references:
   - https://x.com/a16z/status/2110385202581197049
 ---
@@ -181,19 +181,20 @@ node ../kit/timeline.mjs export-profile.json --out export-timeline.svg
 Put `export-timeline.svg` beside the example's `timeline.svg`: the rhythm should
 read alike. Then check by eye:
 
-- The teaser is 45–90 s with at least 15 cuts; the body has a median shot of
-  5–15 s, with no cut landing inside a word.
-- The active speaker is on screen for at least 90% of body time.
-- Sampled body frames have average luma 75–110/255; the three cameras' averages
-  are within 8 levels of each other.
+- The teaser is fast and the body calm, with no cut landing inside a word. (The
+  reference's teaser runs 45–90 s with 15 or more cuts; scale it to the footage.)
+- Whoever is speaking is on screen whenever there is an angle of them.
+- The camera angles match: their average luma is within about 8 levels of each
+  other.
 - The teaser passes [targets-teaser.json](targets-teaser.json) and the body passes
   [targets-body.json](targets-body.json) (commands in each `$about`).
 - The brand mark is present and unchanged throughout the body.
 
 ## Limits
 
-Never put the LUT on `{ kind: "output" }`: that target includes the audio chain, and
-the export fails with "Unsupported audio processing step".
+Grade each video track, not `{ kind: "output" }`: per-track grading lets you balance
+one shot, and on Yap 0.1.53 and earlier a LUT on the output fails the export with
+"Unsupported audio processing step".
 
 Not yet proven with Yap's operations: the gold metallic glow on key words, charts
 that build while a line plays, and the blurred-backdrop inset card. Until they are,

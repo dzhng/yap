@@ -1,6 +1,6 @@
 ---
 id: kit
-version: 3
+version: 4
 name: Preset measurement kit
 description: Shared tools for measuring, checking and documenting presets.
 ---

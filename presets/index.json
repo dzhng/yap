@@ -6,17 +6,17 @@
       "kind": "authoring",
       "name": "Preset authoring guide",
       "description": "Guidance for creating and measuring a video preset.",
-      "version": 3,
+      "version": 4,
       "files": [
         {
           "path": "AUTHORING.md",
-          "bytes": 11166,
-          "sha256": "5f735f19fdb7097ed7992cbcaff100d7a3f30e68b5c976f0e8843c541deff5ee"
+          "bytes": 11235,
+          "sha256": "016d8d4319105e4518c35e7d57b75ce8831f67ad89a0f48397c3d84ede67eed7"
         },
         {
           "path": "instructions.md",
-          "bytes": 965,
-          "sha256": "b6135e6ad7fdd5f2f30a76faab5daf46ab3af807eade0f4b58444e97fd0ac400"
+          "bytes": 1239,
+          "sha256": "11b092cb11d37b5f0fd27ebc42e46f817e5f0cf51c241c11fb97ffc727e9f895"
         },
         {
           "path": "reference/isometric-motion/examples/arcade-cabinet/arcade-cabinet.css",
@@ -580,12 +580,12 @@
       "kind": "kit",
       "name": "Preset measurement kit",
       "description": "Shared tools for measuring, checking and documenting presets.",
-      "version": 3,
+      "version": 4,
       "files": [
         {
           "path": "check.mjs",
-          "bytes": 2004,
-          "sha256": "7e9e93442f3eb9859c8d98f752d3a5c92fa4972c6d0e028f14f9afc994deeaa1"
+          "bytes": 2063,
+          "sha256": "6082db7bc4c10d0bb4b27267ea560d60434d673f2418670b82fb354bb320b850"
         },
         {
           "path": "check.test.mjs",
@@ -595,7 +595,7 @@
         {
           "path": "KIT.md",
           "bytes": 302,
-          "sha256": "f3d88d396638df73ec607fd67febc67748510ac99abdd08c48ab6a16c8a01587"
+          "sha256": "b2db81a03a8fe3173965e11faed4ca304750a1a2d7a9dcb2d1c6957f615cb564"
         },
         {
           "path": "make-look-lut.mjs",
@@ -649,7 +649,7 @@
       "kind": "preset",
       "name": "On-location conversation",
       "description": "A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.",
-      "version": 5,
+      "version": 6,
       "files": [
         {
           "path": "examples/ashe-frontier-tech/01-cold-open-street.jpg",
@@ -788,8 +788,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 12931,
-          "sha256": "28f7c5f50dad722d214fdcb2004253c9584b30c57963b104c53f741ce08e79fc"
+          "bytes": 13054,
+          "sha256": "4aedc808697f78acb8d53819a3b2050b63004e3bf6e2cb9ee6af3d6d87f177d2"
         },
         {
           "path": "shoot-plan.svg",
@@ -808,7 +808,7 @@
       "kind": "preset",
       "name": "Studio interview podcast",
       "description": "A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.",
-      "version": 5,
+      "version": 6,
       "files": [
         {
           "path": "cold-open.md",
@@ -967,8 +967,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 12173,
-          "sha256": "f39b55155a5ac1bc82760f7d1ff66a860ec0fa0fb3c07dc0d0d1746339d3fe8d"
+          "bytes": 12246,
+          "sha256": "11eb9edf1b04183e964cfefe898e7404af09d202c275e4048dcdc2a10925c6e0"
         },
         {
           "path": "shoot-plan.svg",
@@ -997,7 +997,7 @@
       "kind": "preset",
       "name": "Tactile launch film",
       "description": "A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.",
-      "version": 5,
+      "version": 6,
       "files": [
         {
           "path": "examples/humansand-persimmon/01-process-macro.jpg",
@@ -1111,8 +1111,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 13020,
-          "sha256": "f16596099c1fcd74d4c86da46be7cd5541256355a5765b6784dcdfb429e25f10"
+          "bytes": 13112,
+          "sha256": "aab830ac4c37e03afb0f5ceffef3937b2d48f51f9fc72e542ab922400daf1269"
         },
         {
           "path": "shoot-plan.svg",

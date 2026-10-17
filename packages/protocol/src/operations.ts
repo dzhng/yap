@@ -1305,23 +1305,43 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "List installed presets. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
-    .object({ operation: z.literal("preset.get"), params: z.object({ id: z.string().min(1) }).strict() })
+    .object({
+      operation: z.literal("preset.get"),
+      params: z.object({ id: z.string().min(1) }).strict(),
+    })
     .strict()
     .describe(
       "Read one preset by id. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
-    .object({ operation: z.literal("preset.update"), params: z.object({ id: z.string().min(1).optional() }).strict() })
+    .object({
+      operation: z.literal("preset.update"),
+      params: z.object({ id: z.string().min(1).optional() }).strict(),
+    })
     .strict()
-    .describe("Refresh installed presets from the pinned remote source, optionally selecting one preset plus shared kit and authoring packages."),
+    .describe(
+      "Refresh installed presets from the pinned remote source, optionally selecting one preset plus shared kit and authoring packages. An unreachable source is reported in the result and leaves the installed presets unchanged. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
   z
-    .object({ operation: z.literal("preset.create"), params: z.object({ name: z.string().min(1), references: z.array(z.string()).optional() }).strict() })
+    .object({
+      operation: z.literal("preset.create"),
+      params: z
+        .object({ name: z.string().min(1), references: z.array(z.string()).optional() })
+        .strict(),
+    })
     .strict()
-    .describe("Create a local preset style bundle from the authoring template. This is unrelated to settings.preset and to the preset field on voice.generate."),
+    .describe(
+      "Create a local preset style bundle from the authoring template. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
   z
-    .object({ operation: z.literal("preset.delete"), params: z.object({ id: z.string().min(1) }).strict() })
+    .object({
+      operation: z.literal("preset.delete"),
+      params: z.object({ id: z.string().min(1) }).strict(),
+    })
     .strict()
-    .describe("Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate."),
+    .describe(
+      "Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate.",
+    ),
   z
     .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
     .strict()

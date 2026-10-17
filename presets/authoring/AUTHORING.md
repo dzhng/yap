@@ -1,6 +1,6 @@
 ---
 id: authoring
-version: 3
+version: 4
 name: Preset authoring guide
 description: Guidance for creating and measuring a video preset.
 ---
@@ -41,8 +41,9 @@ These came from the user who commissioned the first presets. Each one is binding
   podcast mood on a holiday film. Every preset has `## Any footage`, which says how
   to carry the mood onto material it wasn't shot for, and it never rejects footage.
   `## Shoot` is advice for when the user asks what to film. In `targets.json`, mark
-  grade, loudness and cut rhythm `"aspect": "mood"` (these must pass), and length,
-  shot count and longest take `"aspect": "form"` (notes only).
+  grade, loudness and cut rhythm `"aspect": "mood"` (every example must pass them;
+  an edit fixes a FAIL or tells the user why it stands), and length, shot count
+  and longest take `"aspect": "form"` (notes only).
 - **Name by style.** Ids are general, lower-case and hyphenated. Sources live under
   `examples/<source-slug>/`.
 - **Capture as many references as you can, and be creative.** Stills are the

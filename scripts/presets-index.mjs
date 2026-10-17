@@ -32,10 +32,12 @@ async function packageManifests() {
     const files = await collect(join(root, entry.name));
     const parsed = parsePackage(files, { origin: "repo" });
     if (parsed.ok) {
-      if (parsed.manifest.id !== entry.name) manifests.push({ __issues: [{ message: `id ${parsed.manifest.id} does not match folder ${entry.name}` }] });
+      if (parsed.manifest.id !== entry.name)
+        manifests.push({
+          __issues: [{ message: `id ${parsed.manifest.id} does not match folder ${entry.name}` }],
+        });
       else manifests.push(parsed.manifest);
-    }
-    else manifests.push({ __issues: parsed.issues });
+    } else manifests.push({ __issues: parsed.issues });
   }
   return manifests;
 }
@@ -55,11 +57,25 @@ function packageChanged(current, previous) {
 
 function baseIndex() {
   if (process.env.PRESETS_BASE_INDEX) {
-    try { return JSON.parse(readFileSync(process.env.PRESETS_BASE_INDEX, "utf8")); } catch { return undefined; }
+    try {
+      return JSON.parse(readFileSync(process.env.PRESETS_BASE_INDEX, "utf8"));
+    } catch {
+      return undefined;
+    }
   }
   try {
-    const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
-    return JSON.parse(execFileSync("git", ["show", `${base}:presets/index.json`], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }));
+    const base = execFileSync("git", ["merge-base", "HEAD", "origin/main"], {
+      cwd: repo,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return JSON.parse(
+      execFileSync("git", ["show", `${base}:presets/index.json`], {
+        cwd: repo,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    );
   } catch {
     return undefined;
   }
@@ -77,13 +93,21 @@ async function exampleIssues(manifest) {
   const issues = [];
   const examples = join(root, manifest.id, "examples");
   let dirs;
-  try { dirs = await readdir(examples, { withFileTypes: true }); } catch { return issues; }
+  try {
+    dirs = await readdir(examples, { withFileTypes: true });
+  } catch {
+    return issues;
+  }
   for (const dir of dirs) {
     if (!dir.isDirectory()) continue;
     const profilePath = join(examples, dir.name, "profile.json");
     try {
       const rows = checkProfile(JSON.parse(await readFile(profilePath, "utf8")), targets);
-      for (const row of rows) if (!row.ok) issues.push(`${manifest.id}/examples/${dir.name}/profile.json: ${row.path} is outside targets`);
+      for (const row of rows)
+        if (!row.ok)
+          issues.push(
+            `${manifest.id}/examples/${dir.name}/profile.json: ${row.path} is outside targets`,
+          );
     } catch {
       // An example without a profile is not an example check failure.
     }
@@ -94,7 +118,8 @@ async function exampleIssues(manifest) {
 const manifests = await packageManifests();
 const issues = [];
 for (const manifest of manifests) {
-  if (manifest.__issues) issues.push(...manifest.__issues.map((item) => `${item.path ?? ""}: ${item.message}`));
+  if (manifest.__issues)
+    issues.push(...manifest.__issues.map((item) => `${item.path ?? ""}: ${item.message}`));
   else for (const problem of await exampleIssues(manifest)) issues.push(problem);
 }
 issues.push(...(await validateTree(root)).map((item) => `${item.path ?? ""}: ${item.message}`));
@@ -111,15 +136,19 @@ if (checking) {
   const previous = baseIndex();
   if (previous?.packages) {
     for (const manifest of validManifests) {
-      const old = previous.packages.find((item) => item.id === manifest.id && item.kind === manifest.kind);
-      if (packageChanged(manifest, old) && old && manifest.version <= old.version) issues.push(`${manifest.id}: files changed without a version bump`);
+      const old = previous.packages.find(
+        (item) => item.id === manifest.id && item.kind === manifest.kind,
+      );
+      if (packageChanged(manifest, old) && old && manifest.version <= old.version)
+        issues.push(`${manifest.id}: files changed without a version bump`);
     }
   }
 } else {
   await writeFile(indexPath, canonical(generated));
 }
 
-for (const manifest of validManifests) console.log(`${manifest.kind} ${manifest.id} ${manifest.version} ${manifest.files.length}`);
+for (const manifest of validManifests)
+  console.log(`${manifest.kind} ${manifest.id} ${manifest.version} ${manifest.files.length}`);
 if (issues.length) {
   for (const item of issues) console.error(`preset: ${item}`);
   process.exitCode = 1;

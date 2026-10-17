@@ -45,30 +45,45 @@ async function fetchWithTimeout(
   init: RequestInit,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(errorAt(url, "request timed out")), timeoutMs);
+  const timer = globalThis.setTimeout(
+    () => controller.abort(errorAt(url, "request timed out")),
+    timeoutMs,
+  );
   try {
     // `within` also covers a fetch that ignores the abort signal.
-    const response = await within(fetcher(url, { ...init, signal: controller.signal, redirect: "manual" }), timeoutMs, url);
+    const response = await within(
+      fetcher(url, { ...init, signal: controller.signal, redirect: "manual" }),
+      timeoutMs,
+      url,
+    );
     const location = response.headers.get("location");
     if (response.status >= 300 && response.status < 400) {
       if (!location) throw errorAt(url, `redirect without location`);
       const redirected = new URL(location, url).toString();
-      if (hostOf(redirected) !== hostOf(url)) throw errorAt(url, `redirect off-host to ${redirected}`);
+      if (hostOf(redirected) !== hostOf(url))
+        throw errorAt(url, `redirect off-host to ${redirected}`);
       return fetchWithTimeout(fetcher, redirected, timeoutMs, init);
     }
-    if (response.url && hostOf(response.url) !== hostOf(url)) throw errorAt(url, `redirect off-host to ${response.url}`);
+    if (response.url && hostOf(response.url) !== hostOf(url))
+      throw errorAt(url, `redirect off-host to ${response.url}`);
     if (!response.ok) throw errorAt(url, `request failed with HTTP ${response.status}`);
     return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(url)) throw error;
-    if (error instanceof Error && error.name === "AbortError") throw errorAt(url, "request timed out");
+    if (error instanceof Error && error.name === "AbortError")
+      throw errorAt(url, "request timed out");
     throw errorAt(url, error instanceof Error ? error.message : String(error));
   } finally {
     globalThis.clearTimeout(timer);
   }
 }
 
-async function readLimited(response: Response, url: string, limit: number, timeoutMs: number): Promise<Uint8Array> {
+async function readLimited(
+  response: Response,
+  url: string,
+  limit: number,
+  timeoutMs: number,
+): Promise<Uint8Array> {
   if (!response.body) throw errorAt(url, "response has no body");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -82,11 +97,18 @@ async function readLimited(response: Response, url: string, limit: number, timeo
       chunks.push(next.value);
     }
   } catch (error) {
-    throw error instanceof Error && error.message.includes(url) ? error : errorAt(url, error instanceof Error ? error.message : String(error));
-  } finally { reader.releaseLock(); }
+    throw error instanceof Error && error.message.includes(url)
+      ? error
+      : errorAt(url, error instanceof Error ? error.message : String(error));
+  } finally {
+    reader.releaseLock();
+  }
   const output = new Uint8Array(total);
   let offset = 0;
-  for (const chunk of chunks) { output.set(chunk, offset); offset += chunk.byteLength; }
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   return output;
 }
 
@@ -108,7 +130,9 @@ export function remoteSource(options: RemoteOptions = {}): PackageSource {
       const response = await fetchWithTimeout(fetcher, url, timeoutMs, {
         headers: { Accept: "application/vnd.github.sha" },
       });
-      const body = new TextDecoder().decode(await readLimited(response, url, 128, timeoutMs)).trim();
+      const body = new TextDecoder()
+        .decode(await readLimited(response, url, 128, timeoutMs))
+        .trim();
       if (!HEX40.test(body)) throw errorAt(url, `invalid commit ${body}`);
       commit = body.toLowerCase();
       return commit;
@@ -118,20 +142,29 @@ export function remoteSource(options: RemoteOptions = {}): PackageSource {
 
   const source: PackageSource = {
     source: "downloaded",
-    get commit() { return commit; },
+    get commit() {
+      return commit;
+    },
     async index(signal?: AbortSignal): Promise<PresetIndex> {
       if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       const pinned = await resolveCommit();
       const url = `${rawBase}/${repo}/${pinned}/presets/index.json`;
       const response = await fetchWithTimeout(fetcher, url, timeoutMs, {});
       try {
-        return JSON.parse(new TextDecoder().decode(await readLimited(response, url, maxIndexBytes, timeoutMs))) as PresetIndex;
+        return JSON.parse(
+          new TextDecoder().decode(await readLimited(response, url, maxIndexBytes, timeoutMs)),
+        ) as PresetIndex;
       } catch (error) {
         if (error instanceof Error && error.message.includes(url)) throw error;
         throw errorAt(url, error instanceof Error ? error.message : String(error));
       }
     },
-    async file(pkg: PresetManifest, path: string, expect: PresetFile, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+    async file(
+      pkg: PresetManifest,
+      path: string,
+      expect: PresetFile,
+      signal?: AbortSignal,
+    ): Promise<ReadableStream<Uint8Array>> {
       if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       const pinned = await resolveCommit();
       const url = `${rawBase}/${repo}/${pinned}/presets/${pkg.kind === "preset" ? `${pkg.id}/` : `${pkg.kind}/`}${path}`;
@@ -145,14 +178,22 @@ export function remoteSource(options: RemoteOptions = {}): PackageSource {
             if (signal?.aborted) throw signal.reason ?? new Error("aborted");
             // Inactivity timeout per read: a large file may take long, a stalled one may not.
             const next = await within(reader.read(), timeoutMs, url);
-            if (next.done) { reader.releaseLock(); controller.close(); }
-            else controller.enqueue(next.value);
+            if (next.done) {
+              reader.releaseLock();
+              controller.close();
+            } else controller.enqueue(next.value);
           } catch (error) {
             reader.releaseLock();
-            controller.error(error instanceof Error && error.message.includes(url) ? error : errorAt(url, error instanceof Error ? error.message : String(error)));
+            controller.error(
+              error instanceof Error && error.message.includes(url)
+                ? error
+                : errorAt(url, error instanceof Error ? error.message : String(error)),
+            );
           }
         },
-        cancel(reason) { void reader.cancel(reason); },
+        cancel(reason) {
+          void reader.cancel(reason);
+        },
       });
     },
   };

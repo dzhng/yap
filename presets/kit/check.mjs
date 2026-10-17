@@ -2,7 +2,8 @@
 // Compares a measured profile (measure.mjs) with a preset's targets.json and prints one row per target.
 //   node check.mjs <profile.json> <targets.json>     exits 1 when any mood target is out of range or unmeasured
 // targets.json: { "<dot.path>": { "range": [min, max], "aspect": "mood" | "form", "why": "what this protects" } }
-// A preset is a mood that fits any footage. "mood" targets (grade, loudness, cut rhythm) must pass.
+// A preset is a mood that fits any footage. "mood" targets (grade, loudness, cut rhythm) FAIL when out of
+// range: fix them, or tell the user why one stands.
 // "form" targets (length, shot count, longest take) describe the reference and depend on the
 // footage the user gave, so they are reported as notes and never fail. Unmarked targets are mood.
 import { readFileSync } from "node:fs";

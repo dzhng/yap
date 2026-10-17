@@ -65,12 +65,20 @@ describe("presets facade", () => {
       expect(presets.get(created.id).text).toContain(reference);
       const moved: string[] = [];
       const deleted = await (async () => {
-        const local = await createPresets({ root, bundled, trash: async (path) => { moved.push(path); } });
+        const local = await createPresets({
+          root,
+          bundled,
+          trash: async (path) => {
+            moved.push(path);
+          },
+        });
         return local.delete(created.id);
       })();
       expect(deleted.trashedPaths).toEqual([created.path]);
       expect(moved).toEqual([created.path]);
-    } finally { await rm(root, { recursive: true, force: true }); }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 
@@ -86,13 +94,66 @@ it("a broken bundled directory never stops the facade; the error is reported by 
 it("after a kit-only update, instructions never send the agent to preset.get the kit", async () => {
   const root = await mkdtemp(join(tmpdir(), "presets-update-kit-"));
   const fakeRefresh = {
-    run: async () => ({ installed: ["kit", "authoring"], skipped: [], failed: [], removed: [], conflicts: [] }),
-    state: () => ({ checkedAt: "2026-10-17T00:00:00.000Z", commit: "c".repeat(40), error: null, available: [], bytesDone: 0 }),
+    run: async () => ({
+      installed: ["kit", "authoring"],
+      skipped: [],
+      failed: [],
+      removed: [],
+      conflicts: [],
+    }),
+    state: () => ({
+      checkedAt: "2026-10-17T00:00:00.000Z",
+      commit: "c".repeat(40),
+      error: null,
+      available: [],
+      bytesDone: 0,
+    }),
     settled: async () => {},
     remoteIds: () => new Set<string>(),
   };
   const presets = await createPresets({ root, refresh: fakeRefresh as never });
   const result = await presets.update();
   expect(result.instructions).toEqual(["No presets changed."]);
+  await rm(root, { recursive: true, force: true });
+});
+
+it("an unreachable source is reported by preset.update, and the installed presets stay", async () => {
+  const root = await mkdtemp(join(tmpdir(), "presets-update-offline-"));
+  const offline = {
+    run: async () => {
+      throw new Error("GitHub commit lookup failed: getaddrinfo ENOTFOUND api.github.com");
+    },
+    state: () => ({
+      checkedAt: "2026-10-17T00:00:00.000Z",
+      commit: null,
+      error: "GitHub commit lookup failed: getaddrinfo ENOTFOUND api.github.com",
+      available: [],
+      bytesDone: 0,
+    }),
+    settled: async () => {},
+    remoteIds: () => new Set<string>(),
+  };
+  const presets = await createPresets({ root, bundled, refresh: offline as never });
+  const result = await presets.update("studio-podcast");
+  expect(result.report.failed).toEqual([
+    {
+      id: "studio-podcast",
+      reason: "GitHub commit lookup failed: getaddrinfo ENOTFOUND api.github.com",
+    },
+  ]);
+  expect(result.instructions.join(" ")).toMatch(/installed presets are unchanged/);
+  expect(presets.get("studio-podcast").source).toBe("bundled");
+  await rm(root, { recursive: true, force: true });
+});
+
+it("a reference that is a directory, not a file, is refused before anything is written", async () => {
+  const root = await mkdtemp(join(tmpdir(), "presets-ref-dir-"));
+  const presets = await createPresets({ root, bundled });
+  await expect(
+    presets.create({ name: "Folder ref", references: [tmpdir()] }),
+  ).rejects.toMatchObject({
+    code: "PRESET_REFERENCE_INVALID",
+  });
+  expect(presets.list().presets.some((preset) => preset.id === "folder-ref")).toBe(false);
   await rm(root, { recursive: true, force: true });
 });

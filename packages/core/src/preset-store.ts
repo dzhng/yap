@@ -2,10 +2,13 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { parsePackage, type PresetFile, type PresetManifest } from "./preset-format.js";
-import type { InstalledPackage, PresetReceipt } from "./preset-install.js";
-
-const PRESET_ID = /^[a-z0-9-]+$/;
+import {
+  isPackageId,
+  parsePackage,
+  type PresetFile,
+  type PresetManifest,
+} from "./preset-format.js";
+import type { PresetReceipt } from "./preset-install.js";
 
 export type PresetSource = "bundled" | "downloaded" | "local";
 export type PresetSummary = {
@@ -29,7 +32,9 @@ export type PresetDetails = {
 };
 
 export async function readJsonOr<T>(path: string, fallback: T): Promise<T> {
-  try { return JSON.parse(await readFile(path, "utf8")) as T; } catch (error) {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as T;
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
     throw error;
   }
@@ -53,23 +58,31 @@ export async function writeJsonAtomic(path: string, value: unknown): Promise<voi
 function metadata(path: string): Partial<PresetManifest> {
   try {
     const text = readFileSync(path);
-    const parsed = parsePackage(new Map([["PRESET.md", new Uint8Array(text)]]), { origin: "local" });
+    const parsed = parsePackage(new Map([["PRESET.md", new Uint8Array(text)]]), {
+      origin: "local",
+    });
     if (parsed.ok) return parsed.manifest;
   } catch {}
   return {};
 }
 
 function parseLocalIds(raw: unknown): Set<string> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("local.json must be an object with an ids array");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("local.json must be an object with an ids array");
   const value = (raw as { ids?: unknown }).ids;
-  if (!Array.isArray(value) || value.some((id) => typeof id !== "string") || Object.keys(raw).some((key) => key !== "ids"))
+  if (
+    !Array.isArray(value) ||
+    value.some((id) => typeof id !== "string") ||
+    Object.keys(raw).some((key) => key !== "ids")
+  )
     throw new Error("local.json must contain only ids: string[]");
   return new Set(value);
 }
 
 export function readLocalIds(root: string): Set<string> {
-  try { return parseLocalIds(JSON.parse(readFileSync(join(root, "local.json"), "utf8"))); }
-  catch (error) {
+  try {
+    return parseLocalIds(JSON.parse(readFileSync(join(root, "local.json"), "utf8")));
+  } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set();
     throw error;
   }
@@ -86,7 +99,9 @@ export class PresetStore {
     const receipt = this.readReceipt();
     const locals = readLocalIds(this.root);
     const ids = new Set<string>([
-      ...Object.entries(receipt.packages).filter(([, pkg]) => pkg.kind === "preset").map(([id]) => id),
+      ...Object.entries(receipt.packages)
+        .filter(([, pkg]) => pkg.kind === "preset")
+        .map(([id]) => id),
       ...locals,
     ]);
     return [...ids].sort().flatMap((id) => {
@@ -96,16 +111,18 @@ export class PresetStore {
       const entry = join(folder, "PRESET.md");
       if (!existsSync(entry)) return [];
       const info = metadata(entry);
-      return [{
-        id,
-        kind: "preset" as const,
-        name: info.name ?? id,
-        description: info.description ?? "",
-        version: info.version ?? installed?.version ?? 0,
-        source: local ? "local" as const : installed?.source ?? "downloaded" as const,
-        references: info.references ?? [],
-        ...(receipt.conflicts?.[id] ? { conflict: true } : {}),
-      }];
+      return [
+        {
+          id,
+          kind: "preset" as const,
+          name: info.name ?? id,
+          description: info.description ?? "",
+          version: info.version ?? installed?.version ?? 0,
+          source: local ? ("local" as const) : (installed?.source ?? ("downloaded" as const)),
+          references: info.references ?? [],
+          ...(receipt.conflicts?.[id] ? { conflict: true } : {}),
+        },
+      ];
     });
   }
 
@@ -114,7 +131,7 @@ export class PresetStore {
     const locals = readLocalIds(this.root);
     const installed = receipt.packages[id];
     // Only an installed or local preset id is served, so a crafted id can't reach outside the root.
-    if (!PRESET_ID.test(id) || (installed?.kind !== "preset" && !locals.has(id))) return undefined;
+    if (!isPackageId(id) || (installed?.kind !== "preset" && !locals.has(id))) return undefined;
     const path = join(this.root, id);
     const textPath = join(path, "PRESET.md");
     if (!existsSync(textPath)) return undefined;
@@ -126,17 +143,23 @@ export class PresetStore {
       kitPath: join(this.root, "kit"),
       guidePath: join(this.root, "authoring", "AUTHORING.md"),
       files,
-      source: locals.has(id) ? "local" : installed?.source ?? "downloaded",
+      source: locals.has(id) ? "local" : (installed?.source ?? "downloaded"),
     };
   }
 
-  readLocal(): string[] { return [...readLocalIds(this.root)].sort(); }
+  readLocal(): string[] {
+    return [...readLocalIds(this.root)].sort();
+  }
   installedIds(): string[] {
     const receipt = this.readReceipt();
-    return [...new Set([
-      ...Object.entries(receipt.packages).filter(([, pkg]) => pkg.kind === "preset").map(([id]) => id),
-      ...readLocalIds(this.root),
-    ])].sort();
+    return [
+      ...new Set([
+        ...Object.entries(receipt.packages)
+          .filter(([, pkg]) => pkg.kind === "preset")
+          .map(([id]) => id),
+        ...readLocalIds(this.root),
+      ]),
+    ].sort();
   }
   async addLocal(id: string): Promise<void> {
     const ids = parseLocalIds(await readJsonOr(join(this.root, "local.json"), { ids: [] }));
@@ -151,10 +174,13 @@ export class PresetStore {
 
   private readReceipt(): PresetReceipt {
     try {
-      const receipt = JSON.parse(readFileSync(join(this.root, "receipt.json"), "utf8")) as PresetReceipt;
+      const receipt = JSON.parse(
+        readFileSync(join(this.root, "receipt.json"), "utf8"),
+      ) as PresetReceipt;
       return { packages: receipt.packages ?? {}, conflicts: receipt.conflicts ?? {} };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { packages: {}, conflicts: {} };
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { packages: {}, conflicts: {} };
       throw error;
     }
   }
@@ -168,7 +194,11 @@ export class PresetStore {
         if (entry.isDirectory()) walk(full, rel);
         else if (entry.isFile()) {
           const data = readFileSync(full);
-          files.push({ path: rel, bytes: data.byteLength, sha256: createHash("sha256").update(data).digest("hex") });
+          files.push({
+            path: rel,
+            bytes: data.byteLength,
+            sha256: createHash("sha256").update(data).digest("hex"),
+          });
         }
       }
     };
@@ -176,4 +206,3 @@ export class PresetStore {
     return files.sort((a, b) => a.path.localeCompare(b.path));
   }
 }
-

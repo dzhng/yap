@@ -195,7 +195,9 @@ test("preview resolution is pinned and gives each draft size its own artifact", 
   expect(draft.jobId).not.toBe(full.jobId);
   await f.jobs.idle();
   expect(requests).toEqual([null, 80]);
-  expect((await f.preview.request({ projectId: f.projectId, maxLongEdge: 80 })).state).toBe("ready");
+  expect((await f.preview.request({ projectId: f.projectId, maxLongEdge: 80 })).state).toBe(
+    "ready",
+  );
 });
 test("pins an old revision through edits, repeated admission and cache eviction", async () => {
   const started = gate(),

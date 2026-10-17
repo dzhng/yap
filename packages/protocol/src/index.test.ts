@@ -93,12 +93,21 @@ it("advertises strict service-routed preset reads", () => {
     operation: "preset.list",
     params: {},
   });
-  expect(operationSchema.parse({ operation: "preset.get", params: { id: "studio-podcast" } })).toMatchObject({
+  expect(
+    operationSchema.parse({ operation: "preset.get", params: { id: "studio-podcast" } }),
+  ).toMatchObject({
     operation: "preset.get",
     params: { id: "studio-podcast" },
   });
-  expect(operationSchema.safeParse({ operation: "preset.list", params: { extra: true } }).success).toBe(false);
-  expect(operationSchema.safeParse({ operation: "preset.get", params: { id: "studio-podcast", extra: true } }).success).toBe(false);
+  expect(
+    operationSchema.safeParse({ operation: "preset.list", params: { extra: true } }).success,
+  ).toBe(false);
+  expect(
+    operationSchema.safeParse({
+      operation: "preset.get",
+      params: { id: "studio-podcast", extra: true },
+    }).success,
+  ).toBe(false);
   expect(operationNames.has("preset.list")).toBe(true);
   expect(operationNames.has("preset.get")).toBe(true);
   expect(appOperations.has("preset.list")).toBe(false);

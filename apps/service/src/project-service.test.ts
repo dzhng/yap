@@ -1413,7 +1413,9 @@ test("project transcript review reports a failed default model download as faile
   vi.stubGlobal("fetch", async () => {
     throw new Error("offline");
   });
-  cleanups.push(async () => vi.unstubAllGlobals());
+  cleanups.push(async () => {
+    vi.unstubAllGlobals();
+  });
   const f = await setup(async (operation) => {
     if (operation === "storage.clearRenderWorkspace") return { ok: true, data: { removed: true } };
     return {
@@ -2022,13 +2024,26 @@ test("preset reads cross the public wire without changing the catalog format", a
 
 test("presets refresh at startup and on preset.update, pinned to one commit, over the public wire", async () => {
   const commit = "b".repeat(40);
-  const text = "---\nid: wire-demo\nversion: 1\nname: Wire demo\ndescription: A preset served by the test.\n---\n\n## Shoot\n\nAnything.\n\n## Edit\n\nNothing.\n";
+  const text =
+    "---\nid: wire-demo\nversion: 1\nname: Wire demo\ndescription: A preset served by the test.\n---\n\n## Any footage\n\nAdapt.\n\n## Shoot\n\nAnything.\n\n## Edit\n\nNothing.\n";
   const index = {
     format: 1,
-    packages: [{
-      id: "wire-demo", kind: "preset", name: "Wire demo", description: "A preset served by the test.", version: 1,
-      files: [{ path: "PRESET.md", bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") }],
-    }],
+    packages: [
+      {
+        id: "wire-demo",
+        kind: "preset",
+        name: "Wire demo",
+        description: "A preset served by the test.",
+        version: 1,
+        files: [
+          {
+            path: "PRESET.md",
+            bytes: Buffer.byteLength(text),
+            sha256: createHash("sha256").update(text).digest("hex"),
+          },
+        ],
+      },
+    ],
   };
   const replies: Record<string, string> = {
     "https://api.test/repos/dzhng/yap/commits/main": commit,
@@ -2039,7 +2054,9 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
   const fetch = (async (input: string | URL) => {
     const url = String(input);
     requested.push(url);
-    return replies[url] === undefined ? new Response("missing", { status: 404 }) : new Response(replies[url]);
+    return replies[url] === undefined
+      ? new Response("missing", { status: 404 })
+      : new Response(replies[url]);
   }) as typeof globalThis.fetch;
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { refresh: { apiBase: "https://api.test", rawBase: "https://raw.test", fetch } },
@@ -2053,28 +2070,61 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
     ok: true,
     data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
   });
-  expect(requested.filter((url) => url.startsWith("https://raw.test")).every((url) => url.includes(commit))).toBe(true);
+  expect(
+    requested
+      .filter((url) => url.startsWith("https://raw.test"))
+      .every((url) => url.includes(commit)),
+  ).toBe(true);
 });
 
 test("a local preset is created, read and trashed over the public wire", async () => {
   const trashed: string[] = [];
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
-    presets: { bundled: join(import.meta.dirname, "../../../presets"), trash: async (path) => void trashed.push(path) },
+    presets: {
+      bundled: join(import.meta.dirname, "../../../presets"),
+      trash: async (path) => void trashed.push(path),
+    },
   });
-  const created = await f.call("preset.create", { name: "Vertical explainer", references: ["https://example.com/v"] });
+  const created = await f.call("preset.create", {
+    name: "Vertical explainer",
+    references: ["https://example.com/v"],
+  });
   expect(created).toMatchObject({
     ok: true,
-    data: { id: "vertical-explainer", path: expect.stringContaining("presets/vertical-explainer"), instructions: expect.any(Array) },
+    data: {
+      id: "vertical-explainer",
+      path: expect.stringContaining("presets/vertical-explainer"),
+      instructions: expect.any(Array),
+    },
   });
-  expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({ ok: true, data: { id: "vertical-explainer-2" } });
+  expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({
+    ok: true,
+    data: { id: "vertical-explainer-2" },
+  });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
-    data: { presets: expect.arrayContaining([expect.objectContaining({ id: "vertical-explainer", source: "local" })]) },
+    data: {
+      presets: expect.arrayContaining([
+        expect.objectContaining({ id: "vertical-explainer", source: "local" }),
+      ]),
+    },
   });
-  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({ ok: true, data: { source: "local", text: expect.stringContaining("https://example.com/v") } });
-  expect(await f.call("preset.create", { name: "Bad", references: ["notes.txt"] })).toMatchObject({ ok: false, error: { code: "PRESET_REFERENCE_INVALID" } });
-  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({ ok: false, error: { code: "PRESET_NOT_LOCAL" } });
-  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({ ok: true, data: { trashedPaths: [expect.stringContaining("vertical-explainer")] } });
+  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({
+    ok: true,
+    data: { source: "local", text: expect.stringContaining("https://example.com/v") },
+  });
+  expect(await f.call("preset.create", { name: "Bad", references: ["notes.txt"] })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_REFERENCE_INVALID" },
+  });
+  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({
+    ok: false,
+    error: { code: "PRESET_NOT_LOCAL" },
+  });
+  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({
+    ok: true,
+    data: { trashedPaths: [expect.stringContaining("vertical-explainer")] },
+  });
   expect(trashed).toHaveLength(1);
   expect(catalogFormat).toBe(29);
 });
