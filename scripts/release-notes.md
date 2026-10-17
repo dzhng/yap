@@ -2,6 +2,13 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.53
+
+Withdraws the 0.1.52 audio change. When an audio track's samples could not be
+placed on its declared clock, 0.1.52 filled the missing time with silence and
+reported it as recorded audio. Those reads fail again, as in 0.1.51. Audio that
+genuinely ends early is still reported as unavailable, not as silence.
+
 ## 0.1.52
 
 Transcription and shared audio inspection now tolerate AAC tracks whose final
