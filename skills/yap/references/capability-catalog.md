@@ -71,9 +71,11 @@ reference and text.
 
 `preset.list`, `preset.get`, `preset.update`, `preset.create` and `preset.delete`
 read, refresh, scaffold and remove style presets: skill-like folders for one kind
-of video, each with Shoot, Edit and Check guidance and a measuring kit. Every
-result carries `instructions` for the next step. Presets refresh from the Yap
-repository at launch and daily. Only local presets can be deleted.
+of video, each with Any footage, Shoot, Edit and Check guidance and a measuring
+kit. Every result carries `instructions` for the next step. Presets refresh from
+the Yap repository at launch and daily. `preset.create` runs only when the user
+asked for a preset or accepted an offer to save a finished project's style. Only
+local presets can be deleted.
 
 ## Models and runtime
 

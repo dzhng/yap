@@ -292,14 +292,21 @@ use [editorial checks](references/editorial-checks.md) for rendered-output revie
 For optional MCP use, read [MCP delivery](references/mcp.md); CLI is the default.
 
 **Presets.** When the user names a style, asks for a video "like" a kind they've
-seen, asks how to shoot for a style, or wants a new style made, run
-`yap preset.list`. Read the preset whose description matches with
-`yap preset.get --params '{"id":"…"}'` and follow its `instructions`. To make a new
-style, call `preset.create` and follow its `instructions`. A preset is a mood the
-user chose, not a footage requirement: apply it to whatever footage they gave and
-never reject it; give its Shoot advice only when they ask what to film or have not
-recorded yet. It is also not permission to edit beyond what they asked for. Presets are
-separate from this skill: never copy their content here.
+seen, or asks how to shoot for a style, run `yap preset.list`. Read the preset whose
+description matches with `yap preset.get --params '{"id":"…"}'` and follow its
+`instructions`. A preset is a mood the user chose, not a footage requirement: apply
+it to whatever footage they gave and never reject it; give its Shoot advice only
+when they ask what to film or have not recorded yet. It is also not permission to
+edit beyond what they asked for. Presets are separate from this skill: never copy
+their content here.
+
+Never create a preset on your own. Call `preset.create`, then follow its
+`instructions`, only after the user explicitly asks for a preset or says yes to
+your offer. Do offer: when a project is finished and the user has steered its style
+(a grade, cut rhythm, text treatment, music, framing or structure they chose or
+corrected), offer once, in a sentence, to save that style as a preset they can
+reuse on other footage, naming the choices it would capture. If they decline or
+don't answer, drop it.
 
 ## Invocation and identity
 

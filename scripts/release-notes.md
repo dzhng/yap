@@ -2,6 +2,13 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.55
+
+Agents no longer create presets on their own. When you finish a project whose
+style you shaped (a grade, cut rhythm, captions, music or structure), your agent
+offers once to save that style as a preset you can reuse on other footage, and
+creates it only if you say yes. You can still ask for a preset at any time.
+
 ## 0.1.54
 
 Adds presets: skill-like bundles that give an agent one mood of video (grade,

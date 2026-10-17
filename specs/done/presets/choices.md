@@ -123,6 +123,13 @@ Decisions made during implementation where the plan was silent, with a verdict.
 
 ## Skill route
 
+- **An agent never creates a preset on its own.** `preset.create` runs only when the
+  user asks for a preset or says yes to an offer. The skill tells agents to offer
+  once, at the end of a project whose style the user steered, naming the choices
+  the preset would capture. *Sound*: user decision after 0.1.54; the eval cases
+  `preset-offer-after-styled-project` and `preset-no-offer-for-mechanical-edit` pin
+  both sides.
+
 - **The routing paragraph sits in the skill's "Task references" section**, with
   the other "go read X" pointers. *Sound*.
 - **The eval case accepts an honest "unavailable"** when the service can't run in
