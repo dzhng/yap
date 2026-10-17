@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readFile, stat, rm } from "node:fs/promises";
+import { mkdtemp, readFile, stat, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createPresets } from "./presets.js";
@@ -48,6 +48,29 @@ describe("presets facade", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+
+  it("creates and deletes local presets with rendered authoring instructions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-create-"));
+    try {
+      const presets = await createPresets({ root, bundled });
+      const reference = join(root, "reference.mp4");
+      await writeFile(reference, "reference");
+      const created = await presets.create({ name: "Vertical Explainer", references: [reference] });
+      expect(created.id).toBe("vertical-explainer");
+      expect(created.instructions.join(" ")).toContain(created.path);
+      expect(created.instructions.join(" ")).toContain(created.kitPath);
+      expect(created.instructions.join(" ")).toContain(created.guidePath);
+      expect(presets.list().presets.find((item) => item.id === created.id)?.source).toBe("local");
+      expect(presets.get(created.id).text).toContain(reference);
+      const moved: string[] = [];
+      const deleted = await (async () => {
+        const local = await createPresets({ root, bundled, trash: async (path) => { moved.push(path); } });
+        return local.delete(created.id);
+      })();
+      expect(deleted.trashedPaths).toEqual([created.path]);
+      expect(moved).toEqual([created.path]);
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
 

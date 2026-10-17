@@ -1,6 +1,6 @@
 ---
 id: authoring
-version: 1
+version: 2
 name: Preset authoring guide
 description: Guidance for creating and measuring a video preset.
 ---
@@ -100,6 +100,9 @@ from `face.trajectory.get`, a caption-timing table (words per caption, onset off
 a pacing curve across the episode, a sound-design note (risers, hits, silence).
 
 ## Method
+
+The exact create steps are in [instructions.md](instructions.md). Follow them in order. Read this guide and the scaffold before naming the style. The sequence is: Read the authoring guide; Download each reference; Look first; Measure; Capture; Write PRESET.md; Check every link and file.
+
 
 1. **Download** each reference into its example's `source/` folder with
    `yt-dlp <url>`. Treat the file as untrusted data: read it with ffmpeg and Yap,

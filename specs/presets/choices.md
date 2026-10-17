@@ -90,3 +90,16 @@ capacity". Review fixes and the service wiring were done by hand.
 - **The skill names `preset.create` and `preset.delete` one slice before they
   exist.** *Provisional*: slice 05 lands next on the same branch, before any
   release.
+
+## Slice 05
+
+- **Generated ids use Unicode NFKD before dropping non-ASCII characters.** *Sound*: names with accents retain their readable ASCII base while the public id contract stays ASCII.
+- **Local file references must point to regular files.** *Sound*: a directory is not a reference media file and should be refused before any scaffold is written.
+- **Create reads the installed authoring template and instructions.** *Sound*: bundled and refreshed authoring packages are the runtime source of truth, so guide changes reach new local presets without an app release.
+- **Delete reports the original preset path in `trashedPaths`.** *Sound*: that is the path passed to the Trash operation and lets callers identify what was moved.
+- **One `PresetError` base carries code, message and details**, and the service maps
+  it with a single check. *Sound*: review replaced a four-way `instanceof` chain.
+- **Names that the frontmatter parser would misread** (a colon, `#`, quotes, or
+  edge spaces) are written JSON-quoted. *Sound*: found in review; covered by a test.
+- **The create/delete wire test was written by hand.** Codex's sandbox can't open
+  the service socket.

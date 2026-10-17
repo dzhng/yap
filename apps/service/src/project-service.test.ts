@@ -2056,6 +2056,29 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
   expect(requested.filter((url) => url.startsWith("https://raw.test")).every((url) => url.includes(commit))).toBe(true);
 });
 
+test("a local preset is created, read and trashed over the public wire", async () => {
+  const trashed: string[] = [];
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
+    presets: { bundled: join(import.meta.dirname, "../../../presets"), trash: async (path) => void trashed.push(path) },
+  });
+  const created = await f.call("preset.create", { name: "Vertical explainer", references: ["https://example.com/v"] });
+  expect(created).toMatchObject({
+    ok: true,
+    data: { id: "vertical-explainer", path: expect.stringContaining("presets/vertical-explainer"), instructions: expect.any(Array) },
+  });
+  expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({ ok: true, data: { id: "vertical-explainer-2" } });
+  expect(await f.call("preset.list", {})).toMatchObject({
+    ok: true,
+    data: { presets: expect.arrayContaining([expect.objectContaining({ id: "vertical-explainer", source: "local" })]) },
+  });
+  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({ ok: true, data: { source: "local", text: expect.stringContaining("https://example.com/v") } });
+  expect(await f.call("preset.create", { name: "Bad", references: ["notes.txt"] })).toMatchObject({ ok: false, error: { code: "PRESET_REFERENCE_INVALID" } });
+  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({ ok: false, error: { code: "PRESET_NOT_LOCAL" } });
+  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({ ok: true, data: { trashedPaths: [expect.stringContaining("vertical-explainer")] } });
+  expect(trashed).toHaveLength(1);
+  expect(catalogFormat).toBe(29);
+});
+
 test("a persisted queued voice request reaches its initialized owner after startup recovery", async () => {
   const f = await setup(async () => {
     throw Error("No native media execution expected");

@@ -6,12 +6,17 @@
       "kind": "authoring",
       "name": "Preset authoring guide",
       "description": "Guidance for creating and measuring a video preset.",
-      "version": 1,
+      "version": 2,
       "files": [
         {
           "path": "AUTHORING.md",
-          "bytes": 9978,
-          "sha256": "37943080d138728a4a53ee24853893f5ef11cbd94f200c7d88e034c754b52504"
+          "bytes": 10268,
+          "sha256": "8dc13ea24e3b400e0d0c5f27a3aae38e354472a4b6af7e044706c93de940fadb"
+        },
+        {
+          "path": "instructions.md",
+          "bytes": 965,
+          "sha256": "b6135e6ad7fdd5f2f30a76faab5daf46ab3af807eade0f4b58444e97fd0ac400"
         },
         {
           "path": "reference/isometric-motion/examples/arcade-cabinet/arcade-cabinet.css",

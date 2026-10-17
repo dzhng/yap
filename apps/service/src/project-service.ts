@@ -221,7 +221,7 @@ export async function startProjectService(options: {
   nativeExecutable?: string | undefined;
   ffmpeg?: FFmpegInstallation | undefined;
   /** Bundled presets to install at startup; `refresh` turns on the launch and daily refresh (off unless passed). */
-  presets?: { bundled?: string; refresh?: true | RemoteOptions };
+  presets?: { bundled?: string; refresh?: true | RemoteOptions; trash?: (path: string) => Promise<void> };
   version?: string | null;
   autoPrepareModels?: boolean;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
@@ -343,6 +343,7 @@ export async function startProjectService(options: {
       root: presetsRoot,
       ...(options.presets?.bundled ? { bundled: options.presets.bundled } : {}),
       ...(presetRefresh ? { refresh: presetRefresh } : {}),
+      ...(options.presets?.trash ? { trash: options.presets.trash } : {}),
     });
     presetRefresh?.start();
     const assets = new AssetStore(catalog, library);
@@ -1388,6 +1389,10 @@ export async function startProjectService(options: {
             return { ok: true, data: presets.get(operation.params.id) };
           case "preset.update":
             return { ok: true, data: await presets.update(operation.params.id) };
+          case "preset.create":
+            return { ok: true, data: await presets.create({ name: operation.params.name, ...(operation.params.references === undefined ? {} : { references: operation.params.references }) }) };
+          case "preset.delete":
+            return { ok: true, data: await presets.delete(operation.params.id) };
           case "model.status":
             return {
               ok: true,

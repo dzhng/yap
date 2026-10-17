@@ -128,6 +128,13 @@ export class PresetStore {
   }
 
   readLocal(): string[] { return [...readLocalIds(this.root)].sort(); }
+  installedIds(): string[] {
+    const receipt = this.readReceipt();
+    return [...new Set([
+      ...Object.entries(receipt.packages).filter(([, pkg]) => pkg.kind === "preset").map(([id]) => id),
+      ...readLocalIds(this.root),
+    ])].sort();
+  }
   async addLocal(id: string): Promise<void> {
     const ids = parseLocalIds(await readJsonOr(join(this.root, "local.json"), { ids: [] }));
     ids.add(id);

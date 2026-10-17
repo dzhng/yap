@@ -1315,6 +1315,14 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .strict()
     .describe("Refresh installed presets from the pinned remote source, optionally selecting one preset plus shared kit and authoring packages."),
   z
+    .object({ operation: z.literal("preset.create"), params: z.object({ name: z.string().min(1), references: z.array(z.string()).optional() }).strict() })
+    .strict()
+    .describe("Create a local preset style bundle from the authoring template. This is unrelated to settings.preset and to the preset field on voice.generate."),
+  z
+    .object({ operation: z.literal("preset.delete"), params: z.object({ id: z.string().min(1) }).strict() })
+    .strict()
+    .describe("Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate."),
+  z
     .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
     .strict()
     .describe(

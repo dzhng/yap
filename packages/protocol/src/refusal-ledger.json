@@ -1534,8 +1534,26 @@
         "skills/yap/scripts/batch-prepare.mjs": 2
       }
     },
+    "PRESET_NAME_UNUSABLE": {
+      "category": "malformed",
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
     "PRESET_NOT_FOUND": {
       "category": "missing-prerequisite",
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
+    "PRESET_NOT_LOCAL": {
+      "category": "conflict",
+      "files": {
+        "packages/core/src/presets.ts": 1
+      }
+    },
+    "PRESET_REFERENCE_INVALID": {
+      "category": "malformed",
       "files": {
         "packages/core/src/presets.ts": 1
       }

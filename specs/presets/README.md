@@ -17,7 +17,7 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–04 and 06 are done; start at [slice 05](slices/05-create-delete.md). Record every
+Slices 00–06 are done; start at [slice 07](slices/07-prove-presets.md). Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -41,7 +41,7 @@ TODO:
 - [x] [02 Install and store](slices/02-store.md): `preset-install.ts` (streaming sha256 install, atomic swap, receipt, conflicts) and `preset-store.ts` (list, get, `local.json`).
 - [x] [03 Read](slices/03-read.md): `preset.list`, `preset.get`, `instructions`, bundling.
 - [x] [04 Refresh](slices/04-refresh.md): `preset-remote.ts` (commit-pinned GitHub fetch, streamed, timeouts), `preset-refresh.ts` (startup + daily, joined runs, state), `preset.update`.
-- [ ] [05 Create and delete](slices/05-create-delete.md): local presets, generated ids, rendered `instructions`, Trash.
+- [x] [05 Create and delete](slices/05-create-delete.md): `preset-scaffold.ts`, `preset.create`/`preset.delete`, `authoring/instructions.md`, injectable Trash.
 - [x] [06 Skill route](slices/06-skill-route.md): one paragraph in `skills/yap/SKILL.md`, a catalog section, and the `preset-style-routing` eval case.
 - [ ] [07 Prove presets](slices/07-prove-presets.md): each draft edits raw footage into its style.
 

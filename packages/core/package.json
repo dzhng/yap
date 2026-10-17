@@ -376,6 +376,10 @@
       "types": "./dist/preset-remote.d.ts",
       "default": "./dist/preset-remote.js"
     },
+    "./preset-scaffold": {
+      "types": "./dist/preset-scaffold.d.ts",
+      "default": "./dist/preset-scaffold.js"
+    },
     "./presets": {
       "types": "./dist/presets.d.ts",
       "default": "./dist/presets.js"
