@@ -12,7 +12,10 @@ Bun installs workspace dependencies and orchestrates build scripts; Node runs th
 service and CLI, and Swift builds the native boundary. Run bun install before a
 checkout build. The [Node pin](../.node-version) and root manifest own tool versions.
 
-The [app builder](build-macos.mjs) composes the workspace and native outputs.
+The [app builder](build-macos.mjs) composes the workspace and native outputs,
+and bundles the repository's [presets](../presets/README.md) without their local
+`source/` folders. The [preset index](presets-index.mjs) regenerates and checks
+`presets/index.json`, which every install refreshes against.
 Manifests pin toolchains and dependencies. Native compilation explicitly selects
 SwiftPM’s native build system: controls checks link its modules/object map, and
 native runners consume its debug executable layout. A different build engine

@@ -56,9 +56,8 @@ commands. Documents are referenced by path for depth.
 audio clips and short video excerpts as help. The only limit is GitHub's: each
 file under 100 MiB, so no Git LFS (`raw.githubusercontent.com` serves an LFS
 pointer, not the bytes). Full reference videos stay in a local preset's
-`examples/<slug>/source/`. In the repository that folder is git-ignored and
-refused by the index check, so it is removed before shipping, and the app bundle
-drops it too. Shipped presets are public,
+`examples/<slug>/source/`. That folder is never read, listed or indexed: the
+tree walk skips it, Git ignores it, and the app bundle drops it. Shipped presets are public,
 so third-party excerpts stay short and each demonstrates one technique.
 
 **Updates like the app.** The service installs the bundled presets at startup,
@@ -66,10 +65,10 @@ then refreshes from `main` at startup and every 24 hours. `preset.update` runs t
 same refresh now. A failed refresh, including an unreachable source, keeps the
 last good copy and reports the error.
 
-**The library never changes.** The user's library is catalog format 29 and must
-keep working. Presets live in `~/.yap/presets/`, outside `~/.yap/library`, with
-their own version field; `catalogFormat`, the project document and every library
-table are unchanged.
+**The library never changes.** The user's existing library had to keep working
+unchanged. Presets live in `~/.yap/presets/`, outside `~/.yap/library`, with their
+own version field; `catalogFormat` (`packages/core/src/catalog.ts`), the project
+document and every library table are unchanged by presets.
 
 ## Contracts
 
@@ -104,8 +103,8 @@ each file's bytes and sha256. `--check` refuses:
   merge base;
 - a relative link that doesn't resolve to a file inside `presets/` (links across
   packages, such as `../kit/`, are fine);
-- symlinks, Git LFS pointers, `source/` folders, files of 100 MiB or more, and an
-  id that doesn't match its folder;
+- symlinks, Git LFS pointers, files of 100 MiB or more, and an id that doesn't
+  match its folder;
 - a package whose frontmatter, version, references or required sections are
   invalid;
 - an example whose `profile.json` fails a mood target in its preset's
@@ -130,13 +129,13 @@ each file's bytes and sha256. `--check` refuses:
 ## Principles and invariants
 
 - One owner per concept, in `packages/core/src`:
-  - `preset-format.ts` owns the package shape, validation and the id rule
-    (`isPackageId`);
-  - `preset-install.ts` is the only writer of bundled and downloaded packages and
-    of `receipt.json`, and owns precedence;
+  - `preset-format.ts` owns the package shape, validation, the id rule
+    (`isPackageId`), package folders (`folderFor`) and valid references
+    (`isValidReference`);
+  - `preset-install.ts` is the only writer of bundled and downloaded packages, and
+    owns `receipt.json` (`readReceipt`, `writeReceipt`) and precedence;
   - `preset-store.ts` is the only reader of preset content for operations, and
-    owns `local.json` (the installer and refresh also read the receipt and
-    `local.json` to decide what to install);
+    owns `local.json`;
   - `preset-remote.ts` owns the pinned GitHub source;
   - `preset-refresh.ts` owns the schedule and joins overlapping runs;
   - `preset-scaffold.ts` owns generated ids and writes new local presets;
@@ -152,6 +151,8 @@ each file's bytes and sha256. `--check` refuses:
 - Reads never choose between copies; the installer already chose. A higher
   version replaces the installed copy, a tie keeps it, a local preset is never
   touched, and only `downloaded` packages are removed when the index drops them.
+- An index whose `format` isn't 1 is refused as a failed install, so a future
+  format can't be misread by an older app.
 - Install is verify-then-rename: each package is staged, hashed while streaming,
   and swapped in, so a reader never sees a half-installed preset.
 - A remote index is untrusted input: ids and kinds outside the format are refused
@@ -169,8 +170,8 @@ each file's bytes and sha256. `--check` refuses:
 ## Pointers into the code
 
 - Operations: `packages/protocol/src/operations.ts` (`preset.list` … `preset.delete`);
-  service cases in `apps/service/src/project-service.ts`; `PresetError` mapping in
-  `apps/service/src/operation-errors.ts`.
+  service cases in `apps/service/src/project-service.ts`; refusals are core's
+  `CatalogError`, mapped by `apps/service/src/operation-errors.ts`.
 - Core tests: `packages/core/src/preset-*.test.ts` and `presets.test.ts` (tampered
   bytes, dropped streams, precedence, conflicts, path traversal, joined refresh,
   close draining a run, id reservation, frontmatter quoting).

@@ -1,7 +1,11 @@
-import { directorySource, installPackages, newerThanInstalled } from "./preset-install.js";
+import {
+  directorySource,
+  emptyInstallReport,
+  installPackages,
+  newerThanInstalled,
+} from "./preset-install.js";
 import { presetId, scaffold } from "./preset-scaffold.js";
-import { join, resolve } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
 import {
@@ -12,6 +16,8 @@ import {
 import { PresetStore, type PresetDetails, type PresetSummary } from "./preset-store.js";
 import type { PresetRefresh, RefreshState } from "./preset-refresh.js";
 import type { InstallReport } from "./preset-install.js";
+import { isValidReference } from "./preset-format.js";
+import { CatalogError } from "./catalog.js";
 
 export type Trash = (path: string) => Promise<void>;
 const productionTrash: Trash = (path) =>
@@ -31,43 +37,11 @@ export type PresetListResult = {
   instructions: string[];
 };
 export type PresetResult = PresetDetails & { instructions: string[] };
-
-/** A refusal from the preset owner; the service maps every one to its public code and details. */
-export class PresetError extends Error {
-  readonly retryable = false;
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly details: Record<string, string>,
-  ) {
-    super(message);
-    this.name = "PresetError";
-  }
-}
-export class PresetNotFoundError extends PresetError {
-  constructor(id: string) {
-    super("PRESET_NOT_FOUND", `Preset not found: ${id}`, { id });
-  }
-}
-export class PresetNotLocalError extends PresetError {
-  constructor(id: string) {
-    super("PRESET_NOT_LOCAL", `Preset is not local: ${id}`, { id });
-  }
-}
-export class PresetNameUnusableError extends PresetError {
-  constructor(name: string) {
-    super("PRESET_NAME_UNUSABLE", `Preset name has no usable characters: ${name}`, { name });
-  }
-}
-export class PresetReferenceInvalidError extends PresetError {
-  constructor(reference: string) {
-    super(
-      "PRESET_REFERENCE_INVALID",
-      `A reference must be an https URL or an absolute path to an existing file: ${reference}`,
-      { reference },
-    );
-  }
-}
+export type PresetUpdateResult = {
+  report: InstallReport;
+  refresh: RefreshState;
+  instructions: string[];
+};
 
 export class Presets {
   constructor(
@@ -91,43 +65,27 @@ export class Presets {
     };
   }
 
-  async update(
-    id?: string,
-  ): Promise<{ report: InstallReport; refresh: RefreshState; instructions: string[] }> {
-    if (!this.refresh) {
-      return {
-        report: {
-          installed: [],
-          skipped: [],
-          failed: [{ id: id ?? "presets", reason: "refresh is disabled" }],
-          removed: [],
-          conflicts: [],
-        },
-        refresh: this.list().refresh,
-        instructions: [
-          "Preset refresh is turned off in this service, so nothing was downloaded; the installed presets are unchanged.",
-        ],
-      };
-    }
+  async update(id?: string): Promise<PresetUpdateResult> {
+    // Nothing was changed: report why as an outcome, like a failed file.
+    const unchanged = (reason: string, instruction: string): PresetUpdateResult => ({
+      report: { ...emptyInstallReport(), failed: [{ id: id ?? "presets", reason }] },
+      refresh: this.list().refresh,
+      instructions: [instruction],
+    });
+    if (!this.refresh)
+      return unchanged(
+        "refresh is disabled",
+        "Preset refresh is turned off in this service, so nothing was downloaded; the installed presets are unchanged.",
+      );
     let report: InstallReport;
     try {
       report = await this.refresh.run(id);
     } catch (error) {
-      // An unreachable source is an outcome to report, like a failed file; nothing was changed.
       const reason = error instanceof Error ? error.message : String(error);
-      return {
-        report: {
-          installed: [],
-          skipped: [],
-          failed: [{ id: id ?? "presets", reason }],
-          removed: [],
-          conflicts: [],
-        },
-        refresh: this.list().refresh,
-        instructions: [
-          `The preset source could not be reached (${reason}); the installed presets are unchanged and still usable.`,
-        ],
-      };
+      return unchanged(
+        reason,
+        `The preset source could not be reached (${reason}); the installed presets are unchanged and still usable.`,
+      );
     }
     // Only presets can be read with preset.get; kit and authoring updates are shared files.
     const updated = report.installed.filter(
@@ -152,23 +110,24 @@ export class Presets {
     instructions: string[];
   }> {
     const references = input.references ?? [];
-    for (const reference of references) {
-      const validUrl = reference.startsWith("https://");
-      let validPath = false;
-      try {
-        validPath =
-          resolve(reference) === reference && existsSync(reference) && statSync(reference).isFile();
-      } catch {
-        validPath = false;
-      }
-      if (!validUrl && !validPath) throw new PresetReferenceInvalidError(reference);
-    }
+    for (const reference of references)
+      if (!isValidReference(reference, "local"))
+        throw new CatalogError(
+          "PRESET_REFERENCE_INVALID",
+          `A reference must be an https URL or an absolute path to an existing file: ${reference}`,
+          { reference },
+        );
     // Reserve every official id, including ones a refresh in flight is about to install.
     await this.refresh?.settled();
     const taken = this.refresh?.remoteIds() ?? new Set<string>();
     for (const id of this.store.installedIds()) taken.add(id);
     const id = presetId(input.name, taken);
-    if (!id) throw new PresetNameUnusableError(input.name);
+    if (!id)
+      throw new CatalogError(
+        "PRESET_NAME_UNUSABLE",
+        `Preset name has no usable characters: ${input.name}`,
+        { name: input.name },
+      );
     const path = join(this.store.root, id);
     await scaffold({
       template: join(this.store.root, "authoring", "template"),
@@ -200,7 +159,8 @@ export class Presets {
   async delete(
     id: string,
   ): Promise<{ id: string; trashedPaths: string[]; instructions: string[] }> {
-    if (!this.store.readLocal().includes(id)) throw new PresetNotLocalError(id);
+    if (!this.store.readLocal().includes(id))
+      throw new CatalogError("PRESET_NOT_LOCAL", `Preset is not local: ${id}`, { id });
     const path = join(this.store.root, id);
     await this.trash(path);
     await this.store.removeLocal(id);
@@ -213,7 +173,7 @@ export class Presets {
 
   get(id: string): PresetResult {
     const details = this.store.get(id);
-    if (!details) throw new PresetNotFoundError(id);
+    if (!details) throw new CatalogError("PRESET_NOT_FOUND", `Preset not found: ${id}`, { id });
     return {
       ...details,
       instructions: render(GET_INSTRUCTIONS_TEMPLATE, {

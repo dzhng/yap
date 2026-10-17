@@ -36,7 +36,7 @@ import type { SourceVisualObservations } from "@yap/core/source-scenes";
 import { MediaAudioInspection } from "@yap/core/audio-inspection";
 import { ProjectEvidenceInspection } from "@yap/core/project-evidence";
 import { Models } from "@yap/core/models";
-import { createPresets } from "@yap/core/presets";
+import { createPresets, type PresetsOptions } from "@yap/core/presets";
 import { PresetRefresh } from "@yap/core/preset-refresh";
 import { remoteSource, type RemoteOptions } from "@yap/core/preset-remote";
 import { runtimeMaterializer } from "./runtime-materialization.js";
@@ -221,11 +221,7 @@ export async function startProjectService(options: {
   nativeExecutable?: string | undefined;
   ffmpeg?: FFmpegInstallation | undefined;
   /** Bundled presets to install at startup; `refresh` turns on the launch and daily refresh (off unless passed). */
-  presets?: {
-    bundled?: string;
-    refresh?: true | RemoteOptions;
-    trash?: (path: string) => Promise<void>;
-  };
+  presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
   control?: { input: Readable; output: Writable; timeoutMs?: number };

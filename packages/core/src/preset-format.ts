@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
+import { lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, normalize, relative, resolve, dirname } from "node:path";
 
 export type PresetOrigin = "repo" | "local";
@@ -27,6 +27,22 @@ const ENTRY = new Map<string, PresetKind>([
   ["KIT.md", "kit"],
   ["AUTHORING.md", "authoring"],
 ]);
+
+/** The folder a package installs to: a preset under its id, kit and authoring under their kind. */
+export function folderFor(pkg: Pick<PresetManifest, "id" | "kind">): string {
+  return pkg.kind === "preset" ? pkg.id : pkg.kind;
+}
+
+/** A reference is an https URL; a local preset may also name an absolute path to an existing file. */
+export function isValidReference(reference: string, origin: PresetOrigin): boolean {
+  if (reference.startsWith("https://")) return true;
+  if (origin !== "local" || resolve(reference) !== reference) return false;
+  try {
+    return statSync(reference).isFile();
+  } catch {
+    return false;
+  }
+}
 
 function issue(code: string, message: string, path?: string): PresetIssue {
   return { code, ...(path ? { path } : {}), message };
@@ -127,9 +143,14 @@ export function parsePackage(
   files: Map<string, Uint8Array>,
   policy: { origin: PresetOrigin },
 ): { ok: true; manifest: PresetManifest } | { ok: false; issues: PresetIssue[] } {
-  const entry = [...files.keys()].map(packageRootAndEntry).find(Boolean) as
-    | ReturnType<typeof packageRootAndEntry>
-    | undefined;
+  // The shallowest entry is the package's; a deeper one (the authoring template's PRESET.md) is content.
+  const entry = [...files.keys()]
+    .map(packageRootAndEntry)
+    .filter((found) => found !== undefined)
+    .sort(
+      (a, b) =>
+        a.root.split("/").length - b.root.split("/").length || a.root.length - b.root.length,
+    )[0];
   if (!entry)
     return {
       ok: false,
@@ -168,15 +189,11 @@ export function parsePackage(
     issues.push(issue("references", "references must be a list of strings", entry.entry));
   } else {
     for (const ref of (references as string[] | undefined) ?? []) {
-      const valid =
-        policy.origin === "repo"
-          ? ref.startsWith("https://")
-          : ref.startsWith("https://") || (resolve(ref) === ref && existsSync(ref));
-      if (!valid)
+      if (!isValidReference(ref, policy.origin))
         issues.push(
           issue(
             "reference",
-            `reference must be https${policy.origin === "local" ? " or an existing absolute path" : ""}: ${ref}`,
+            `reference must be https${policy.origin === "local" ? " or an absolute path to an existing file" : ""}: ${ref}`,
             entry.entry,
           ),
         );
@@ -247,28 +264,27 @@ function markdownLinks(text: string): string[] {
   return [...text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+[^)]*)?\)/g)].map((m) => m[1]!);
 }
 
+/**
+ * Check a presets tree and return the manifest of every valid top-level package. A `source/`
+ * folder holds local, git-ignored reference videos: the walk never enters one.
+ */
 export function validateTree(
   root: string,
   policy: { origin: PresetOrigin } = { origin: "repo" },
-): PresetIssue[] {
+): { issues: PresetIssue[]; manifests: PresetManifest[] } {
   const issues: PresetIssue[] = [];
+  const manifests: PresetManifest[] = [];
   const files = new Map<string, Uint8Array>();
   const symlinks: string[] = [];
-  const sourceDirs: string[] = [];
   function walk(dir: string): void {
     for (const item of readdirSync(dir, { withFileTypes: true })) {
       const absolute = join(dir, item.name);
       const path = normalizePath(relative(root, absolute));
       const stat = lstatSync(absolute);
-      if (stat.isSymbolicLink()) {
-        symlinks.push(path);
-      } else if (stat.isDirectory()) {
-        if (item.name === "source") sourceDirs.push(path);
-        walk(absolute);
-      } else if (stat.isFile()) {
-        const data = new Uint8Array(readFileSync(absolute));
-        files.set(path, data);
-      }
+      if (stat.isSymbolicLink()) symlinks.push(path);
+      else if (stat.isDirectory()) {
+        if (item.name !== "source") walk(absolute);
+      } else if (stat.isFile()) files.set(path, new Uint8Array(readFileSync(absolute)));
     }
   }
   walk(root);
@@ -281,32 +297,19 @@ export function validateTree(
       issues.push(issue("git-lfs", "Git LFS pointer files are not allowed", path));
   }
   for (const path of symlinks) issues.push(issue("symlink", "symlinks are not allowed", path));
-  if (policy.origin === "repo")
-    for (const path of sourceDirs)
-      issues.push(issue("source-folder", "source/ folders are not allowed in repo packages", path));
-  const packageRoots = new Set<string>();
-  for (const path of files.keys()) {
-    const candidate = packageRootAndEntry(path);
-    if (candidate && (candidate.root === "" || !candidate.root.includes("/")))
-      packageRoots.add(candidate.root);
-  }
-  for (const packageRoot of packageRoots) {
-    // parsePackage is scoped by the entry path, so call it with just this package.
-    const prefix = packageRoot ? `${packageRoot}/` : "";
-    const scoped = new Map(
-      [...files]
-        .filter(([path]) => path.startsWith(prefix))
-        .map(([path, data]) => [prefix ? path.slice(prefix.length) : path, data] as const),
+  // Every top-level folder is a package; parsePackage sees its folder so it checks id against it.
+  for (const item of readdirSync(root, { withFileTypes: true })) {
+    if (!item.isDirectory() || item.name === "source") continue;
+    const prefix = `${item.name}/`;
+    const parsed = parsePackage(
+      new Map([...files].filter(([path]) => path.startsWith(prefix))),
+      policy,
     );
-    const parsed = parsePackage(scoped, policy);
-    if (!parsed.ok)
+    if (parsed.ok) manifests.push(parsed.manifest);
+    else
       for (const found of parsed.issues)
         issues.push(
-          issue(
-            found.code,
-            found.message,
-            found.path ? `${packageRoot}/${found.path}` : packageRoot,
-          ),
+          issue(found.code, found.message, found.path ? `${item.name}/${found.path}` : item.name),
         );
   }
   const indexed = new Set<string>(files.keys());
@@ -335,7 +338,10 @@ export function validateTree(
       issues.map((item) => [`${item.code}:${item.path ?? ""}:${item.message}`, item]),
     ).values(),
   ];
-  return unique.sort((a, b) =>
-    `${a.path ?? ""}:${a.code}`.localeCompare(`${b.path ?? ""}:${b.code}`),
-  );
+  return {
+    issues: unique.sort((a, b) =>
+      `${a.path ?? ""}:${a.code}`.localeCompare(`${b.path ?? ""}:${b.code}`),
+    ),
+    manifests,
+  };
 }

@@ -2,7 +2,6 @@ import { divide, fromTime, sampleAt, subtract } from "@yap/composition";
 import type { AudioWindowInput, ProjectRenderSupport } from "@yap/core/project-window";
 import { executeComposition } from "./composition-worker.js";
 import { withAudioProcessing, type AudioProcessingRuntime } from "./audio-processing.js";
-import { nativeProcessing } from "./native-processing.js";
 import { constants } from "node:fs";
 import { copyFile, mkdir, open } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -134,7 +133,7 @@ function nativeAudioSupport(
                       output: join(directory, "audio.wav"),
                       range: window.manifest.sampleRange,
                       clips: [...window.audio()],
-                      processing: nativeProcessing(window.processing()),
+                      processing: window.processing(),
                       assets,
                       ...statePayload(window, capabilities.rnnoise, capabilities.statePreparation),
                       ...retimePayload(window, capabilities.retime),
@@ -210,7 +209,7 @@ function statePayload(
     throw new CatalogError("NOT_READY", "The native audio state preparation recipe is unavailable");
   return {
     ...(external ? { statePreparationImplementationId: preparationId } : {}),
-    state: { ...state, processing: nativeProcessing(state.processing), implementationId: identity },
+    state: { ...state, implementationId: identity },
   };
 }
 export function audioDeadline(window: AudioWindowInput["window"], retained = false) {
@@ -381,7 +380,7 @@ export function projectMovieRenderer(
             maxLongEdge: request.maxLongEdge,
             ...pictureRecipe,
             settings: request.settings,
-            processing: nativeProcessing(request.window.processing()),
+            processing: request.window.processing(),
             assets: request.assets,
             fonts: request.fonts,
             luts: request.luts,
@@ -528,7 +527,7 @@ export function projectAudioRenderer(
                   ...retimePayload(window, capabilities.retime),
                 }),
             clips: [...window.audio()],
-            processing: nativeProcessing(window.processing()),
+            processing: window.processing(),
             assets,
           };
           const timeoutMs = audioDeadline(window, !!prepared);
@@ -608,7 +607,7 @@ export function projectFrameRenderer(
                 canvas: window.manifest.canvas,
                 ...pictureRecipe,
                 profile: "h264-rec709",
-                processing: nativeProcessing(window.processing()),
+                processing: window.processing(),
                 assets,
                 fonts,
                 luts,

@@ -23,7 +23,6 @@ import {
   resolveOutputSettings,
 } from "../composition/dist/index.js";
 import { projectMovieRenderer } from "../../apps/service/dist/project-render.js";
-import { nativeProcessing } from "../../apps/service/dist/native-processing.js";
 import { mediaWorker, nativeResult } from "../../apps/service/dist/worker.js";
 import { clearRenderWorkspace, withRenderAttempt } from "../../apps/service/dist/render.js";
 const execute = promisify(execFile);
@@ -434,7 +433,7 @@ test(
               range: short.window.manifest.range,
               canvas: short.window.manifest.canvas,
               settings: short.settings,
-              processing: nativeProcessing(short.window.processing()),
+              processing: short.window.processing(),
               assets: short.assets,
               fonts: [],
               audio: { range: short.window.manifest.sampleRange, clips: [...short.window.audio()] },

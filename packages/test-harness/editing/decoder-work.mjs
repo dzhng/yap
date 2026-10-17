@@ -15,7 +15,6 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import { createCompiler, validateComposition } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 
 const worker = process.env.YAP_NATIVE;
 assert(worker, "Set YAP_NATIVE to the native worker");
@@ -147,7 +146,7 @@ function render(
     output: join(out, `${label}.wav`),
     range: { start: (range.startUs * rate) / 1e6, end: (range.endUs * rate) / 1e6 },
     clips: [...window.audio()],
-    processing: nativeProcessing(window.processing()),
+    processing: window.processing(),
     assets: [
       {
         assetId: "a",

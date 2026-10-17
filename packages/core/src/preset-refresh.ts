@@ -1,13 +1,12 @@
-import { join } from "node:path";
 import {
   installPackages,
   newerThanInstalled,
   type InstallReport,
   type PackageSource,
   type PackageSelector,
-  type PresetReceipt,
+  readReceipt,
 } from "./preset-install.js";
-import { readJsonOr, readLocalIds } from "./preset-store.js";
+import { readLocalIds } from "./preset-store.js";
 import type { PresetIndex } from "./preset-format.js";
 
 export type RefreshState = {
@@ -124,8 +123,8 @@ export class PresetRefresh {
       const counted: PackageSource = {
         ...source,
         index: async () => index,
-        file: async (pkg, path, expect, signal) => {
-          const stream = await source.file(pkg, path, expect, signal);
+        file: async (pkg, path) => {
+          const stream = await source.file(pkg, path);
           const reader = stream.getReader();
           return new ReadableStream<Uint8Array>({
             async pull(controller) {
@@ -158,7 +157,7 @@ export class PresetRefresh {
         error: report.failed.length
           ? report.failed.map((failure) => `${failure.id}: ${failure.reason}`).join("; ")
           : null,
-        available: await this.available(index),
+        available: this.available(index),
         bytesDone: this.currentState.bytesDone,
       };
       return report;
@@ -173,11 +172,8 @@ export class PresetRefresh {
     }
   }
 
-  private async available(index: PresetIndex): Promise<Array<{ id: string; version: number }>> {
-    const receipt = await readJsonOr<PresetReceipt>(join(this.options.root, "receipt.json"), {
-      packages: {},
-      conflicts: {},
-    });
+  private available(index: PresetIndex): Array<{ id: string; version: number }> {
+    const receipt = readReceipt(this.options.root);
     const locals = readLocalIds(this.options.root);
     return index.packages
       .filter((pkg) => !locals.has(pkg.id) && newerThanInstalled(pkg, receipt.packages[pkg.id]))

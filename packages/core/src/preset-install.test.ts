@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -26,9 +26,9 @@ const content = (id: string, version: number, text = "## Any footage\n\n## Shoot
 const sourceFor = (
   packages: PresetManifest[],
   contents: Map<string, Uint8Array>,
-  source?: "bundled" | "downloaded",
+  source: "bundled" | "downloaded" = "downloaded",
 ): PackageSource => ({
-  ...(source ? { source } : {}),
+  source,
   index: async (): Promise<PresetIndex> => ({ format: 1, packages }),
   file: async (_pkg, path) => {
     const value = contents.get(path);
@@ -53,6 +53,28 @@ describe("preset installer", () => {
     expect(
       JSON.parse(await readFile(join(target, "receipt.json"), "utf8")).packages[pkg.id].version,
     ).toBe(1);
+  });
+
+  test("the first install clears staging left behind by a crashed one", async () => {
+    const target = await mkdtemp(join(tmpdir(), "preset-install-"));
+    const stale = join(target, ".staging", "crashed-run", "sample-style");
+    await mkdir(stale, { recursive: true });
+    await writeFile(join(stale, "PRESET.md"), "half written");
+    await installPackages(sourceFor([], new Map()), target);
+    expect(await readdir(join(target, ".staging"))).toEqual([]);
+  });
+
+  test("refuses an index in an unknown format without changing anything", async () => {
+    const target = await mkdtemp(join(tmpdir(), "preset-install-"));
+    const pkg = manifest();
+    const source = sourceFor([pkg], new Map([["PRESET.md", content(pkg.id, 1)]]));
+    const report = await installPackages(
+      { ...source, index: async () => ({ format: 2 as never, packages: [pkg] }) },
+      target,
+    );
+    expect(report.installed).toEqual([]);
+    expect(report.failed).toEqual([{ id: "index", reason: "unsupported preset index format: 2" }]);
+    await expect(stat(join(target, pkg.id))).rejects.toThrow();
   });
 
   test("tampered bytes fail with the path and preserve the previous copy", async () => {
@@ -84,6 +106,7 @@ describe("preset installer", () => {
     const beforeReceipt = await readFile(join(target, "receipt.json"), "utf8");
     const next = manifest("sample-style", 2);
     const source: PackageSource = {
+      source: "downloaded",
       index: async () => ({ format: 1, packages: [next] }),
       file: async () =>
         new ReadableStream({
@@ -215,7 +238,8 @@ test("refuses a remote package whose id or kind would escape the target", async 
     bytes: 1,
     sha256: createHash("sha256").update(text).digest("hex"),
   };
-  const source = {
+  const source: PackageSource = {
+    source: "downloaded",
     index: async () => ({
       format: 1 as const,
       packages: [
@@ -235,4 +259,25 @@ test("refuses a remote package whose id or kind would escape the target", async 
   expect(report.installed).toEqual([]);
   expect(report.failed.map((f) => f.id).sort()).toEqual(["../escaped", "kit"]);
   await expect(stat(join(outer, "escaped"))).rejects.toThrow();
+});
+
+test("a file that runs past its declared size is stopped, not downloaded to the end", async () => {
+  const target = await mkdtemp(join(tmpdir(), "preset-install-overrun-"));
+  const pkg = manifest();
+  let pulled = 0;
+  const endless: PackageSource = {
+    source: "downloaded",
+    index: async () => ({ format: 1, packages: [pkg] }),
+    file: async () =>
+      new ReadableStream({
+        pull(controller) {
+          pulled++;
+          if (pulled > 10_000) controller.close();
+          else controller.enqueue(new Uint8Array(64 * 1024));
+        },
+      }),
+  };
+  const report = await installPackages(endless, target);
+  expect(report.failed[0]?.reason).toMatch(/byte count/);
+  expect(pulled).toBeLessThan(10);
 });

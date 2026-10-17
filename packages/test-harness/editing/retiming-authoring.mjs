@@ -6,7 +6,6 @@ import { parseArgs } from "node:util";
 import { JourneyService, hash, poll, run, root } from "./source-evidence-fixture.mjs";
 import { compositionAsset } from "../../core/dist/assets.js";
 import { createCompiler, validateComposition } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import { mediaWorker, nativeResult } from "../../../apps/service/dist/worker.js";
 import { readAudioWaveFile } from "../../core/dist/audio-wave.js";
 
@@ -156,7 +155,7 @@ try {
         output,
         range: window.manifest.sampleRange,
         clips: [...window.audio()],
-        processing: nativeProcessing(window.processing()),
+        processing: window.processing(),
         assets: [
           { assetId: asset.id, streamId: stream.id, path: source, originUs: asset.originUs },
         ],

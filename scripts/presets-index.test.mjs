@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, copyFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,4 +76,28 @@ test("--check accepts a clean tree", async () => {
   const root = await tree();
   assert.equal((await invoke(root, false)).code, 0);
   assert.equal((await invoke(root)).code, 0);
+});
+
+test("--check reports each package problem once, including an id that does not match its folder", async () => {
+  const root = await tree();
+  await writeFile(
+    join(root, "demo", "PRESET.md"),
+    "---\nid: other\nversion: 1\n---\n## Any footage\n\n## Edit\n",
+  );
+  const result = await invoke(root);
+  assert.notEqual(result.code, 0);
+  const lines = result.stderr.trim().split("\n");
+  assert.equal(lines.filter((line) => line.includes("missing ## Shoot")).length, 1);
+  assert.equal(lines.filter((line) => line.includes("does not match folder demo")).length, 1);
+});
+
+test("source folders are skipped: never read and never indexed", async () => {
+  const root = await tree();
+  const source = join(root, "demo", "examples", "one", "source");
+  await mkdir(source);
+  await writeFile(join(source, "clip.mov"), "reference video");
+  await chmod(join(source, "clip.mov"), 0o000);
+  assert.equal((await invoke(root, false)).code, 0);
+  assert.equal((await invoke(root)).code, 0);
+  assert.doesNotMatch(await readFile(join(root, "index.json"), "utf8"), /clip\.mov/);
 });

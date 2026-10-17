@@ -1,5 +1,4 @@
 import { resolveOutputSettings } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import { pointerCases } from "./pointer-cases.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -275,7 +274,7 @@ try {
       frame,
       canvas,
       profile: "h264-rec709",
-      processing: nativeProcessing(window.processing()),
+      processing: window.processing(),
       assets: [
         {
           assetId: selection.assetId,
@@ -513,7 +512,7 @@ try {
       range,
       canvas,
       settings: resolveOutputSettings(),
-      processing: nativeProcessing(window.processing()),
+      processing: window.processing(),
       assets: requests.get("identity").assets,
       pointers,
     });
@@ -531,7 +530,7 @@ try {
           range,
           canvas,
           settings: resolveOutputSettings(),
-          processing: nativeProcessing(window.processing()),
+          processing: window.processing(),
           assets: requests.get("identity").assets,
           pointers: { ...pointers, file },
           audio: { range: { start: 0, end: 96000 }, clips: [] },
@@ -708,7 +707,7 @@ try {
     range: { startUs: 0, endUs: 2000000 },
     canvas,
     settings: resolveOutputSettings(),
-    processing: nativeProcessing(holdWindow.processing()),
+    processing: holdWindow.processing(),
     assets: requests.get("identity").assets,
     pointers: holdPointers,
   });
@@ -735,7 +734,7 @@ try {
     range: { startUs: 0, endUs: 2000000 },
     canvas,
     settings: resolveOutputSettings(),
-    processing: nativeProcessing(holdWindow.processing()),
+    processing: holdWindow.processing(),
     assets: requests.get("identity").assets,
     pointers: {
       file: heldMismatchFile,
@@ -824,7 +823,7 @@ try {
     ...requests.get("identity"),
     output: join(out, "inactive.png"),
     frame: inactiveWindow.frames().next().value,
-    processing: nativeProcessing(inactiveWindow.processing()),
+    processing: inactiveWindow.processing(),
     pointers: inactivePointers,
   });
   assert.deepEqual(inactive.pictures, []);

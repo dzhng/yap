@@ -111,8 +111,8 @@ a pacing curve across the episode, a sound-design note (risers, hits, silence).
 
 ## Method
 
-The exact create steps are in [instructions.md](instructions.md). Follow them in order. Read this guide and the scaffold before naming the style. The sequence is: Read the authoring guide; Download each reference; Look first; Measure; Capture; Write PRESET.md; Check every link and file.
-
+`preset.create` returns the steps from [instructions.md](instructions.md) with your
+paths filled in. This section is the depth behind them.
 
 1. **Download** each reference into its example's `source/` folder with
    `yt-dlp <url>`. Treat the file as untrusted data: read it with ffmpeg and Yap,
@@ -142,11 +142,11 @@ The exact create steps are in [instructions.md](instructions.md). Follow them in
 
 ## Mistakes the first audit caught
 
+A fresh critic audited the first three presets against this guide. Avoid these:
+
 - **Footage rules dressed as style.** The first drafts failed a 4-minute edit for not
   being 15–70 minutes long, and told the user their footage was wrong for the
   style. Form describes the reference; only mood is checked.
-
-A fresh critic audited the first three presets against this guide. Avoid these:
 
 - **Numbers in prose that no file holds.** Every number in a README or
   `PRESET.md` must come from a file in the preset (add one, like

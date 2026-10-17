@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -76,7 +76,7 @@ describe("preset format", () => {
     if (!result.ok) expect(result.issues.some((item) => item.code === "reference")).toBe(true);
   });
 
-  test("local references may name an existing absolute path only", () => {
+  test("local references may name an existing absolute path to a file only", () => {
     const files = preset();
     files.set(
       "PRESET.md",
@@ -94,6 +94,13 @@ describe("preset format", () => {
     const result = parsePackage(files, { origin: "local" });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.issues.some((item) => item.code === "reference")).toBe(true);
+    files.set(
+      "PRESET.md",
+      bytes(
+        `---\nid: sample-style\nversion: 1\nreferences:\n  - ${tmpdir()}\n---\n## Any footage\n\n## Shoot\n## Edit\n`,
+      ),
+    );
+    expect(parsePackage(files, { origin: "local" }).ok).toBe(false);
   });
 
   test("requires a preset id to match its folder", () => {
@@ -112,18 +119,51 @@ describe("preset format", () => {
     if (!result.ok) expect(result.issues.some((item) => item.code === "id-folder")).toBe(true);
   });
 
-  test("reports broken links, symlinks, and source folders", async () => {
+  test("reports broken links and symlinks", async () => {
     const root = await mkdtemp(join(tmpdir(), "preset-format-"));
-    await mkdir(join(root, "sample-style", "source"), { recursive: true });
+    await mkdir(join(root, "sample-style"), { recursive: true });
     await writeFile(
       join(root, "sample-style", "PRESET.md"),
       "---\nid: sample-style\nversion: 1\n---\n[missing](nope.md)\n## Any footage\n\n## Shoot\n## Edit\n",
     );
     await symlink("PRESET.md", join(root, "sample-style", "link.md"));
-    const issues = await validateTree(root);
+    const { issues } = validateTree(root);
     expect(issues.map((item) => item.code)).toEqual(
-      expect.arrayContaining(["broken-link", "symlink", "source-folder"]),
+      expect.arrayContaining(["broken-link", "symlink"]),
     );
+  });
+
+  test("source folders are local reference videos: never read and never indexed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "preset-format-"));
+    const source = join(root, "sample-style", "examples", "one", "source");
+    await mkdir(source, { recursive: true });
+    await writeFile(
+      join(root, "sample-style", "PRESET.md"),
+      "---\nid: sample-style\nversion: 1\n---\n## Any footage\n\n## Shoot\n## Edit\n",
+    );
+    await writeFile(join(source, "clip.mov"), "reference video");
+    await chmod(join(source, "clip.mov"), 0o000);
+    const { issues, manifests } = validateTree(root);
+    expect(issues).toEqual([]);
+    expect(manifests.map((m) => m.files.map((file) => file.path))).toEqual([["PRESET.md"]]);
+  });
+
+  test("a preset's id must match its folder in a tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "preset-format-"));
+    await mkdir(join(root, "sample-style"), { recursive: true });
+    await writeFile(
+      join(root, "sample-style", "PRESET.md"),
+      "---\nid: other-style\nversion: 1\n---\n## Any footage\n\n## Shoot\n## Edit\n",
+    );
+    const { issues, manifests } = validateTree(root);
+    expect(issues).toEqual([
+      {
+        code: "id-folder",
+        path: "sample-style/PRESET.md",
+        message: "id other-style does not match folder sample-style",
+      },
+    ]);
+    expect(manifests).toEqual([]);
   });
 
   test("changing one byte changes exactly one package index entry", () => {

@@ -1,5 +1,5 @@
 import type { PackageSource } from "./preset-install.js";
-import type { PresetIndex, PresetManifest, PresetFile } from "./preset-format.js";
+import { folderFor, type PresetIndex, type PresetManifest } from "./preset-format.js";
 
 export type RemoteOptions = {
   repo?: string;
@@ -145,8 +145,7 @@ export function remoteSource(options: RemoteOptions = {}): PackageSource {
     get commit() {
       return commit;
     },
-    async index(signal?: AbortSignal): Promise<PresetIndex> {
-      if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+    async index(): Promise<PresetIndex> {
       const pinned = await resolveCommit();
       const url = `${rawBase}/${repo}/${pinned}/presets/index.json`;
       const response = await fetchWithTimeout(fetcher, url, timeoutMs, {});
@@ -159,23 +158,16 @@ export function remoteSource(options: RemoteOptions = {}): PackageSource {
         throw errorAt(url, error instanceof Error ? error.message : String(error));
       }
     },
-    async file(
-      pkg: PresetManifest,
-      path: string,
-      expect: PresetFile,
-      signal?: AbortSignal,
-    ): Promise<ReadableStream<Uint8Array>> {
-      if (signal?.aborted) throw signal.reason ?? new Error("aborted");
+    // The installer checks each file's bytes and sha256.
+    async file(pkg: PresetManifest, path: string): Promise<ReadableStream<Uint8Array>> {
       const pinned = await resolveCommit();
-      const url = `${rawBase}/${repo}/${pinned}/presets/${pkg.kind === "preset" ? `${pkg.id}/` : `${pkg.kind}/`}${path}`;
-      void expect; // the installer checks bytes and sha256; there is no per-preset cap
+      const url = `${rawBase}/${repo}/${pinned}/presets/${folderFor(pkg)}/${path}`;
       const response = await fetchWithTimeout(fetcher, url, timeoutMs, {});
       if (!response.body) throw errorAt(url, "response has no body");
       const reader = response.body.getReader();
       return new ReadableStream<Uint8Array>({
         async pull(controller) {
           try {
-            if (signal?.aborted) throw signal.reason ?? new Error("aborted");
             // Inactivity timeout per read: a large file may take long, a stalled one may not.
             const next = await within(reader.read(), timeoutMs, url);
             if (next.done) {

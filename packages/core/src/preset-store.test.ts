@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -128,6 +128,26 @@ describe("preset store", () => {
     expect(new PresetStore(root).list()).toEqual([]);
     expect(new PresetStore(root).get("kit")).toBeUndefined();
   });
+});
+
+test("a local preset lists its files by size without reading them, and skips source folders", async () => {
+  const root = await mkdtemp(join(tmpdir(), "preset-store-local-"));
+  const folder = join(root, "my-style");
+  await mkdir(join(folder, "examples", "one", "source"), { recursive: true });
+  await writeFile(join(root, "local.json"), JSON.stringify({ ids: ["my-style"] }));
+  const text = "---\nid: my-style\nversion: 1\n---\n## Any footage\n\n## Shoot\n\n## Edit\n";
+  await writeFile(join(folder, "PRESET.md"), text);
+  // Unreadable files: listing must stat them, never read them.
+  await writeFile(join(folder, "notes.md"), "12345");
+  await chmod(join(folder, "notes.md"), 0o000);
+  await writeFile(join(folder, "examples", "one", "source", "clip.mov"), "reference video");
+  await chmod(join(folder, "examples", "one", "source", "clip.mov"), 0o000);
+  await writeFile(join(folder, "examples", "one", "profile.json"), "{}");
+  expect(new PresetStore(root).get("my-style")?.files).toEqual([
+    { path: "examples/one/profile.json", bytes: 2 },
+    { path: "notes.md", bytes: 5 },
+    { path: "PRESET.md", bytes: Buffer.byteLength(text) },
+  ]);
 });
 
 test("never reads outside the presets root, and only serves installed or local presets", async () => {

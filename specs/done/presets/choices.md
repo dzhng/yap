@@ -22,10 +22,18 @@ Decisions made during implementation where the plan was silent, with a verdict.
 - **An example with no `profile.json` is skipped, not failed.** *Provisional*: it
   lets a new example land before it is measured. Revisit if examples ever ship
   unmeasured.
-- **`presets-index.mjs` checks id against folder itself**, because `parsePackage`
-  sees folder-relative paths. *Accepted overlap*: one explicit duplicate rule, not
-  a second owner of the format. The id pattern itself has one owner,
-  `isPackageId` in `preset-format.ts`, used by the installer and the store.
+- **One pass over the tree.** `validateTree` parses each package once, with its
+  folder, so the id-matches-folder rule runs in core, and `presets-index.mjs` takes
+  its manifests from that pass. The id pattern, package folders and valid
+  references each have one owner in `preset-format.ts`. *Sound*: the release
+  review found the script parsing twice and reporting problems twice.
+- **`source/` folders are skipped, not refused.** The tree walk never enters them,
+  so a checkout can hold full reference videos (Git ignores them) and `preset.get`
+  on a local preset lists files by `stat` only, never reading or hashing them.
+  *Sound*: the release review found `preset.get` hashing whole reference videos on
+  the service's event loop.
+- **The index check runs in `test:tools` and in `presets-checks.yml`**, since every
+  install refreshes against `main`'s index. *Sound*.
 - **The index check tests examples only against `targets.json`.** Section targets
   (`targets-teaser.json`, `targets-body.json`) measure parts of an export, and an
   example's `profile.json` is the whole reference. *Provisional*: revisit if
@@ -60,6 +68,12 @@ Decisions made during implementation where the plan was silent, with a verdict.
   native change.
 
 ## Refresh
+
+- **Not shared with model preparation's downloader.** The two share about ten
+  lines of hash-and-count; models opens files exclusively, syncs them and raises a
+  typed error at each failure point, while presets read a stream from a source and
+  report a reason per package. *Accepted overlap*. Both stop a file at its first
+  overrun and clear stale staging at startup.
 
 - **Remote tests inject `fetch` instead of running an HTTP fixture server.**
   *Sound*: same contract (pinned URLs, statuses, streams), and it runs where
@@ -97,8 +111,13 @@ Decisions made during implementation where the plan was silent, with a verdict.
   refused before anything is written (`presets.test.ts`).
 - **Create reads the installed authoring template and instructions**, so guide
   changes reach new presets without an app release. *Sound*.
-- **One `PresetError` base carries code, message and details**, mapped by the
-  service in one check. *Sound*.
+- **Refusals are core's existing `CatalogError`** with the four `PRESET_*` codes.
+  *Sound*: an earlier `PresetError` hierarchy duplicated it.
+- **The isometric-motion skill is copied whole into `authoring/reference/`**, scripts
+  and examples included, about 1.8 MB that every install downloads. *Sound*: the
+  user asked for the skill copied in as the depth reference, and an author studies
+  how its examples and tools are built, not only its prose. Revisit if the
+  authoring package grows slow to refresh.
 - **Trash is injectable**; production uses `/usr/bin/trash`. *Sound*: the wire
   test uses a fake.
 

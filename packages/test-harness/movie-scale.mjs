@@ -14,7 +14,6 @@ import {
   projectToSource,
   sourceToProject,
 } from "../composition/dist/index.js";
-import { nativeProcessing } from "../../apps/service/dist/native-processing.js";
 import { renderFrames } from "../../helpers/mac/Tests/fixtures/render-frames.mjs";
 
 const dir =
@@ -289,7 +288,7 @@ for (const seconds of [10, 300]) {
     framesFile = join(dir, `${seconds}-frames.jsonl`);
   await writeFile(framesFile, compiledFrames.map((frame) => JSON.stringify(frame) + "\n").join(""));
   const audio = { range: window.manifest.sampleRange, clips: [...window.audio()] };
-  const processing = nativeProcessing(window.processing());
+  const processing = window.processing();
   const output = join(dir, seconds + ".mp4"),
     request = {
       id: "scale",

@@ -10,8 +10,8 @@
       "files": [
         {
           "path": "AUTHORING.md",
-          "bytes": 11235,
-          "sha256": "016d8d4319105e4518c35e7d57b75ce8831f67ad89a0f48397c3d84ede67eed7"
+          "bytes": 11086,
+          "sha256": "560d6dcba23efe2485144cc5466d54d484bae0b62b05eabde98ddef31b5b48ae"
         },
         {
           "path": "instructions.md",
@@ -565,8 +565,8 @@
         },
         {
           "path": "template/PRESET.md",
-          "bytes": 2106,
-          "sha256": "b87506561230155b8b6d85b545de1bf1d32da0efc6d8c21ab4cb0a6c0a95a116"
+          "bytes": 2200,
+          "sha256": "dc880f1a286aaa600e49dc27dbddea00289c1a4d72b873a543eabbc75d321656"
         },
         {
           "path": "template/targets.json",

@@ -10,7 +10,6 @@ import {
   resolveOutputSettings,
   validateComposition,
 } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/src/native-processing.ts";
 import {
   blendPixel,
   blendScenarios,
@@ -227,7 +226,7 @@ for (const scenario of blendScenarios) {
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
   });
   const frames = [...window.frames()],
-    processing = nativeProcessing(window.processing());
+    processing = window.processing();
   const frameRequest = {
     output: join(directory, "candidate.png"),
     canvas: document.canvas,

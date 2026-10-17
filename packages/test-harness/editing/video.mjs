@@ -1,5 +1,4 @@
 import { resolveOutputSettings } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
@@ -135,7 +134,7 @@ async function compile(
       range,
       canvas: document.canvas,
       settings: resolveOutputSettings(),
-      processing: nativeProcessing(compiled.processing()),
+      processing: compiled.processing(),
       assets: unique(bindings, (b) => b.assetId + b.streamId),
     },
   };

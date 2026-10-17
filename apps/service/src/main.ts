@@ -30,7 +30,7 @@ try {
           receiptSha256: process.env.YAP_FFMPEG_RECEIPT_SHA256 ?? "",
         }
       : undefined,
-    // Installed runs refresh presets at launch and daily; YAP_PRESETS_REFRESH=0 turns it off.
+    // Every run refreshes presets at launch and daily unless YAP_PRESETS_REFRESH=0 (tests opt in instead).
     presets: {
       ...(bundledPresets ? { bundled: bundledPresets } : {}),
       ...(process.env.YAP_PRESETS_REFRESH === "0" ? {} : { refresh: true as const }),

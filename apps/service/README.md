@@ -134,8 +134,8 @@ supported bundled LTS release includes [libuv's remap fix](https://github.com/li
 after rerunning the inherited-descriptor and worker-lifetime checks. It is one
 process-owner correction rather than a media-domain admission cap.
 
-Service shutdown drains jobs, readers, publication and storage observations before
-closing the catalog. The [release disposition](../../specs/done/agent-editing/release-closeout.md)
+Service shutdown drains jobs, readers, publication, storage observations and any
+preset refresh in flight before closing the catalog. The [release disposition](../../specs/done/agent-editing/release-closeout.md)
 records installed evidence separately from an isolated service check.
 
 [Selected-channel observations](src/source-channel.ts) share complete support,

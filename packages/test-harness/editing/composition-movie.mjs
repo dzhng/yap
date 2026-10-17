@@ -1,5 +1,4 @@
 import { resolveOutputSettings } from "../../composition/dist/index.js";
-import { nativeProcessing } from "../../../apps/service/dist/native-processing.js";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
@@ -227,7 +226,7 @@ try {
       range,
       canvas: document.canvas,
       settings: resolveOutputSettings(),
-      processing: nativeProcessing(window.processing()),
+      processing: window.processing(),
       assets: bindings,
     };
     const audio = {
@@ -328,7 +327,7 @@ try {
     const standaloneAudio = call("media.mixCompositionAudio", {
       ...audio,
       output: join(scratch, `audio-${sequence}.wav`),
-      processing: nativeProcessing(base.processing),
+      processing: base.processing,
       assets: bindings,
     });
     const decode = (path) =>
@@ -526,7 +525,7 @@ try {
           range,
           canvas: isolationDocument.canvas,
           settings: resolveOutputSettings(),
-          processing: nativeProcessing(window.processing()),
+          processing: window.processing(),
           assets,
           audio,
         });
@@ -540,7 +539,7 @@ try {
         const reference = call("media.mixCompositionAudio", {
           ...audio,
           assets,
-          processing: nativeProcessing(window.processing()),
+          processing: window.processing(),
           output: join(scratch, `${name}-${variant}.wav`),
         });
         const expected = ff("-i", reference.file, "-f", "f32le", "pipe:1");
@@ -662,7 +661,7 @@ try {
         range: cancelRange,
         canvas: empty.canvas,
         settings: resolveOutputSettings(),
-        processing: nativeProcessing(cancelWindow.processing()),
+        processing: cancelWindow.processing(),
         assets: [],
         audio: { range: { start: 0, end: 4800000 }, clips: [] },
       }),

@@ -1,26 +1,22 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { join, dirname, resolve, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  folderFor,
   isPackageId,
   type PresetFile,
   type PresetIndex,
   type PresetKind,
   type PresetManifest,
 } from "./preset-format.js";
-import { readJsonOr, readLocalIds, writeJsonAtomic } from "./preset-store.js";
+import { readLocalIds, writeJsonAtomic } from "./preset-store.js";
 
 export type PackageSource = {
-  index(signal?: AbortSignal): Promise<PresetIndex>;
-  file(
-    pkg: PresetManifest,
-    path: string,
-    expect: { bytes: number; sha256: string },
-    signal?: AbortSignal,
-  ): Promise<ReadableStream<Uint8Array>>;
-  source?: "bundled" | "downloaded";
+  index(): Promise<PresetIndex>;
+  file(pkg: PresetManifest, path: string): Promise<ReadableStream<Uint8Array>>;
+  source: "bundled" | "downloaded";
   commit?: string | undefined;
 };
 
@@ -36,6 +32,25 @@ export type PresetReceipt = {
   packages: Record<string, InstalledPackage>;
   conflicts: Record<string, { version: number }>;
 };
+
+/** The installed packages under a presets root; a missing receipt means nothing is installed. */
+export function readReceipt(root: string): PresetReceipt {
+  let receipt: Partial<PresetReceipt>;
+  try {
+    receipt = JSON.parse(
+      readFileSync(join(root, "receipt.json"), "utf8"),
+    ) as Partial<PresetReceipt>;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { packages: {}, conflicts: {} };
+    throw error;
+  }
+  return { packages: receipt.packages ?? {}, conflicts: receipt.conflicts ?? {} };
+}
+
+async function writeReceipt(root: string, receipt: PresetReceipt): Promise<void> {
+  await writeJsonAtomic(join(root, "receipt.json"), receipt);
+}
+
 export type InstallReport = {
   installed: string[];
   skipped: Array<{ id: string; reason: string }>;
@@ -48,22 +63,19 @@ export type InstallOptions = {
   removeMissingDownloaded?: boolean;
   /** With removeMissingDownloaded, only packages this accepts may be removed (an id-scoped refresh). */
   removeSelector?: PackageSelector | undefined;
-  signal?: AbortSignal;
 };
 export type PackageSelector = (remote: PresetManifest, installed?: InstalledPackage) => boolean;
 
 // The service is the sole owner of ~/.yap/presets, so an in-process queue is
 // sufficient; cross-process locking would add machinery for an unsupported use.
 const queues = new Map<string, Promise<void>>();
+/** Targets whose staging this process has cleared; anything there before was left by a crash. */
+const swept = new Set<string>();
 
 function validPackage(pkg: Pick<PresetManifest, "id" | "kind">): boolean {
   if (!isPackageId(pkg.id)) return false;
   if (pkg.kind === "preset") return true;
   return (pkg.kind === "kit" || pkg.kind === "authoring") && pkg.id === pkg.kind;
-}
-
-function folderFor(pkg: Pick<PresetManifest, "id" | "kind">): string {
-  return pkg.kind === "preset" ? pkg.id : pkg.kind;
 }
 
 function safeRelative(path: string): string {
@@ -90,6 +102,11 @@ async function withTargetQueue<T>(target: string, work: () => Promise<T>): Promi
   }
 }
 
+/** What an install reports before it has done anything. */
+export function emptyInstallReport(): InstallReport {
+  return { installed: [], skipped: [], failed: [], removed: [], conflicts: [] };
+}
+
 export function newerThanInstalled(remote: PresetManifest, installed?: InstalledPackage): boolean {
   return !installed || remote.version > installed.version;
 }
@@ -98,7 +115,6 @@ async function streamToFile(
   stream: ReadableStream<Uint8Array>,
   destination: string,
   expected: PresetFile,
-  signal?: AbortSignal,
 ): Promise<void> {
   await mkdir(dirname(destination), { recursive: true });
   const handle = await open(destination, "w", 0o600);
@@ -108,11 +124,15 @@ async function streamToFile(
     const reader = stream.getReader();
     try {
       while (true) {
-        if (signal?.aborted) throw signal.reason ?? new Error("aborted");
         const next = await reader.read();
         if (next.done) break;
         const chunk = next.value;
         bytes += chunk.byteLength;
+        // Stop at the first overrun; a stream may never end on its own.
+        if (bytes > expected.bytes) {
+          await reader.cancel().catch(() => {});
+          break;
+        }
         hash.update(chunk);
         await handle.write(chunk);
       }
@@ -140,21 +160,23 @@ export async function installPackages(
   options: InstallOptions = {},
 ): Promise<InstallReport> {
   return withTargetQueue(resolve(target), async () => {
-    const signal = options.signal;
-    const report: InstallReport = {
-      installed: [],
-      skipped: [],
-      failed: [],
-      removed: [],
-      conflicts: [],
-    };
+    const report = emptyInstallReport();
     await mkdir(target, { recursive: true });
-    const receiptPath = join(target, "receipt.json");
-    const receipt = await readJsonOr<PresetReceipt>(receiptPath, { packages: {}, conflicts: {} });
-    receipt.conflicts ??= {};
+    if (!swept.has(resolve(target))) {
+      await rm(join(target, ".staging"), { recursive: true, force: true });
+      swept.add(resolve(target));
+    }
+    const index = await source.index();
+    if (index.format !== 1) {
+      report.failed.push({
+        id: "index",
+        reason: `unsupported preset index format: ${String(index.format)}`,
+      });
+      return report;
+    }
+    const receipt = readReceipt(target);
     let receiptChanged = false;
     const locals = readLocalIds(target);
-    const index = await source.index(signal);
     const remoteIds = new Set(index.packages.map((pkg) => pkg.id));
     for (const id of Object.keys(receipt.conflicts)) {
       if (!locals.has(id) || !remoteIds.has(id)) {
@@ -192,12 +214,7 @@ export async function installPackages(
         try {
           for (const file of pkg.files) {
             const path = safeRelative(file.path);
-            await streamToFile(
-              await source.file(pkg, path, file, signal),
-              join(packageStage, path),
-              file,
-              signal,
-            );
+            await streamToFile(await source.file(pkg, path), join(packageStage, path), file);
           }
           const folder = folderFor(pkg);
           const installedPath = join(target, folder);
@@ -212,7 +229,7 @@ export async function installPackages(
           receipt.packages[pkg.id] = {
             kind: pkg.kind,
             version: pkg.version,
-            source: source.source ?? "downloaded",
+            source: source.source,
             ...(source.commit ? { commit: source.commit } : {}),
             files: [...pkg.files],
           };
@@ -247,7 +264,7 @@ export async function installPackages(
         }
       }
       if (report.installed.length || report.removed.length || receiptChanged)
-        await writeJsonAtomic(receiptPath, receipt);
+        await writeReceipt(target, receipt);
       return report;
     } finally {
       await rm(stagingRoot, { recursive: true, force: true });
@@ -259,18 +276,15 @@ export function directorySource(root: string): PackageSource {
   return {
     source: "bundled",
     index: async () => JSON.parse(await readFile(join(root, "index.json"), "utf8")) as PresetIndex,
-    file: async (pkg, path, expect, signal) => {
-      void expect;
+    file: async (pkg, path) => {
       const absolute = resolve(root, folderFor(pkg), safeRelative(path));
       const base = resolve(root);
       if (relative(base, absolute).startsWith(".."))
         throw new Error(`invalid package path: ${path}`);
-      if (signal?.aborted) throw signal.reason ?? new Error("aborted");
       return new ReadableStream<Uint8Array>({
         async start(controller) {
           try {
             for await (const chunk of createReadStream(absolute)) {
-              if (signal?.aborted) throw signal.reason ?? new Error("aborted");
               controller.enqueue(new Uint8Array(chunk as Buffer));
             }
             controller.close();

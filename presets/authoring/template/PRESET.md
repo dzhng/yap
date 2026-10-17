@@ -65,4 +65,5 @@ Then the checks only eyes can make.
 
 ## Limits
 
-What the footage must supply, and what current operations can't produce.
+What current operations can't produce yet, with the fallback to use, and how the
+mood shifts on footage unlike the reference. Never a condition on the user's footage.
