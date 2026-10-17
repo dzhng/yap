@@ -27,3 +27,14 @@ test("a target the profile cannot answer fails instead of passing silently", () 
   assert.equal(row.ok, false);
   assert.equal(row.value, null);
 });
+
+test("form targets describe the reference but never fail; mood targets do", () => {
+  const rows = checkProfile(profile, {
+    durationSeconds: { range: [900, 4200], aspect: "form", why: "the reference runs 51 min" },
+    "picture.yavg": { range: [130, 160], aspect: "mood", why: "bright window light" },
+  });
+  assert.deepEqual(rows.map(({ path, ok, verdict }) => [path, ok, verdict]), [
+    ["durationSeconds", true, "note"],
+    ["picture.yavg", false, "fail"],
+  ]);
+});

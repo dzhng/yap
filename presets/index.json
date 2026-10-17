@@ -6,12 +6,12 @@
       "kind": "authoring",
       "name": "Preset authoring guide",
       "description": "Guidance for creating and measuring a video preset.",
-      "version": 2,
+      "version": 3,
       "files": [
         {
           "path": "AUTHORING.md",
-          "bytes": 10268,
-          "sha256": "8dc13ea24e3b400e0d0c5f27a3aae38e354472a4b6af7e044706c93de940fadb"
+          "bytes": 11166,
+          "sha256": "5f735f19fdb7097ed7992cbcaff100d7a3f30e68b5c976f0e8843c541deff5ee"
         },
         {
           "path": "instructions.md",
@@ -565,13 +565,13 @@
         },
         {
           "path": "template/PRESET.md",
-          "bytes": 1865,
-          "sha256": "9ac09ac598c490584105df11a17b6f87c6659f5f2ff6606c022a4ffb7922e2f8"
+          "bytes": 2106,
+          "sha256": "b87506561230155b8b6d85b545de1bf1d32da0efc6d8c21ab4cb0a6c0a95a116"
         },
         {
           "path": "template/targets.json",
-          "bytes": 343,
-          "sha256": "f47ac14fade42f32462c90e815cd48d6914a7f9c5c8a80df5d3c515ec9da831f"
+          "bytes": 456,
+          "sha256": "3fe5b4ffea1c6568110dabf0d68f2b9a5df36f878c821e47299464dc06b1b581"
         }
       ]
     },
@@ -580,22 +580,22 @@
       "kind": "kit",
       "name": "Preset measurement kit",
       "description": "Shared tools for measuring, checking and documenting presets.",
-      "version": 2,
+      "version": 3,
       "files": [
         {
           "path": "check.mjs",
-          "bytes": 1453,
-          "sha256": "23b2c2e07265afaeb2312f156913f50988871f2ec6dc140fa7c8a29855d6128c"
+          "bytes": 2004,
+          "sha256": "7e9e93442f3eb9859c8d98f752d3a5c92fa4972c6d0e028f14f9afc994deeaa1"
         },
         {
           "path": "check.test.mjs",
-          "bytes": 1060,
-          "sha256": "159eccf2b29975a5198fe006ed69e3a5ef68ce6273141cbc6df2eae287a8c136"
+          "bytes": 1537,
+          "sha256": "c9bbe191b02135381032cb95b22459f0488b727706199f36bda1b319be0a83c3"
         },
         {
           "path": "KIT.md",
           "bytes": 302,
-          "sha256": "7206bd18c68c10470a101e83a320775a8604ec9375d6491d10b1a7c9d5f4c559"
+          "sha256": "f3d88d396638df73ec607fd67febc67748510ac99abdd08c48ab6a16c8a01587"
         },
         {
           "path": "make-look-lut.mjs",
@@ -649,7 +649,7 @@
       "kind": "preset",
       "name": "On-location conversation",
       "description": "A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.",
-      "version": 2,
+      "version": 3,
       "files": [
         {
           "path": "examples/ashe-frontier-tech/01-cold-open-street.jpg",
@@ -788,8 +788,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10827,
-          "sha256": "2c6ebc946a25f3e6f5ab1f379ecc413c1e831651db78b915730e9fae631c74b0"
+          "bytes": 11940,
+          "sha256": "6dc59b5aaf2f08771f178c7032fb8af59937b78a8e354f4ca033386413a10f92"
         },
         {
           "path": "shoot-plan.svg",
@@ -798,8 +798,8 @@
         },
         {
           "path": "targets.json",
-          "bytes": 971,
-          "sha256": "269a0522181877b1870515609560428cd552f1572232f9be011d962d907e93ec"
+          "bytes": 1132,
+          "sha256": "0a0fb678ead8ff9de770f7962cea19bb6747bb06222742d363f49874807bb20d"
         }
       ]
     },
@@ -808,7 +808,7 @@
       "kind": "preset",
       "name": "Studio interview podcast",
       "description": "A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.",
-      "version": 2,
+      "version": 3,
       "files": [
         {
           "path": "cold-open.md",
@@ -967,8 +967,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10372,
-          "sha256": "8cda641e17a454009372a3be5a8d4dbec78a21ba4d335bc7688695384673ddce"
+          "bytes": 11469,
+          "sha256": "78488277a18d0aae80c722184cfe6cfcf185836c103b9a40a284a5265bf49b72"
         },
         {
           "path": "shoot-plan.svg",
@@ -977,13 +977,13 @@
         },
         {
           "path": "targets-teaser.json",
-          "bytes": 577,
-          "sha256": "cf6a02937199ab17512ccd36092fa40abcd4d420758346ccaed1932fa34a088e"
+          "bytes": 763,
+          "sha256": "486e4681d238bf0ab3bee8c3ae5aac5d72eb09e89aff7066ec3fc8b22cf0005d"
         },
         {
           "path": "targets.json",
-          "bytes": 1158,
-          "sha256": "814c735e9bc05856290b407cdeea9dbc2b56f8a20be13e40f161a7f452c29264"
+          "bytes": 1335,
+          "sha256": "e13d3d8d73b01f4d2fb26e05abac211048628d6ff37a72019d80150adfc9b043"
         }
       ]
     },
@@ -992,7 +992,7 @@
       "kind": "preset",
       "name": "Tactile launch film",
       "description": "A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.",
-      "version": 2,
+      "version": 3,
       "files": [
         {
           "path": "examples/humansand-persimmon/01-process-macro.jpg",
@@ -1106,8 +1106,8 @@
         },
         {
           "path": "PRESET.md",
-          "bytes": 10906,
-          "sha256": "01f51b1e287a6e0814718a9feabd268237a7f31abb07f15fdc4a80df0263f0a2"
+          "bytes": 12146,
+          "sha256": "08f1cae61d980a498989565480889bc7fe705aa50e6c6ae8bc63e1d1f2d80ec3"
         },
         {
           "path": "shoot-plan.svg",
@@ -1116,8 +1116,8 @@
         },
         {
           "path": "targets.json",
-          "bytes": 1058,
-          "sha256": "8a5585f53d0e30143824eb2bea6172a55d492da5ea3ecf534289df80e9700144"
+          "bytes": 1235,
+          "sha256": "02d07260a9930c05f64502765e7309ab826c475fdc6c954a8678054e672eb99b"
         }
       ]
     }

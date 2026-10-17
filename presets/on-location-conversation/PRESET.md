@@ -2,7 +2,7 @@
 id: on-location-conversation
 name: On-location conversation
 description: A long-form (20–60 minute) two-person conversation filmed outdoors as one wide locked two-shot per location. The pair moves through several places, with a short B-roll cold open, small tracked-caps chapter labels and a faded-film daylight look. Use when the user wants a relaxed, documentary-feeling interview episode rather than a studio podcast.
-version: 2
+version: 3
 references:
   - https://x.com/ashebytes/status/2107522974568103969
 ---
@@ -18,6 +18,20 @@ and close-ups do in a studio show.
 
 It fails in two ways: cutting inside a location (it turns into a generic
 interview), or so many locations that no conversation has room to settle.
+
+## Any footage
+
+This preset is a mood, not a shot list: unhurried, documentary and natural, with
+faded daylight and room to think. The mood lives in the long holds that cut only
+when the place or topic changes, the faded-film grade, the natural sound, the short
+music-framed cold open and the sparse tracked-caps labels. Apply it to whatever the
+user gives you and never ask them to reshoot. Footage made for this style works best
+(see `## Shoot` when they ask what to film), but any footage can carry the mood:
+- **One speaker or many, indoors or out:** hold each take as long as it stays
+  interesting, and cut where the topic changes, not for variety.
+- **The cold open** comes from any B-roll or detail shots, or the most atmospheric
+  moments of the main footage.
+- **Chapters** follow topics when there are no locations.
 
 Choose the walk before the shoot: each location should suit the topic it holds.
 
@@ -74,7 +88,8 @@ to the tools it lists, or use ffmpeg from PATH.
 
 ## Shoot
 
-Ask the user for this before they record:
+Advice for footage made for this style, when the user asks what to film or hasn't
+recorded yet. It is never a requirement: see `## Any footage`.
 
 - **People.** Host and guest, each with a visible clip-on lav mic. The lav audio is
   the only dialogue source.
@@ -162,8 +177,10 @@ So:
 
 ## Check
 
-Measure the export and compare it with [targets.json](targets.json); fix every
-`FAIL` line or tell the user why it stands:
+Measure the export and compare it with [targets.json](targets.json). `FAIL` lines are
+mood (grade, loudness, cut rhythm): fix each or tell the user why it stands. `note`
+lines are form (length, shot count, longest take). They describe the reference,
+depend on the footage you were given, and are never a reason to pad, cut or reject.
 
 ```sh
 node ../kit/measure.mjs export.mp4 --sample-every 15 --out export-profile.json
@@ -189,5 +206,5 @@ the export fails with "Unsupported audio processing step" (Yap 0.1.51).
 Not yet proven with Yap's operations: the chapter label's translucent box with a
 bar. Until it is, render the box and bar as a PNG overlay asset and lay the text over it.
 
-The style depends on long uninterrupted takes. If the user's takes are cut up or
-reframed, say so and keep the single-framing rule within each piece you have.
+Short or cut-up takes still carry the mood. Hold each piece as long as it holds
+attention, and keep the cuts between pieces calm.

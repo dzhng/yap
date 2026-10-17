@@ -128,3 +128,12 @@ All five findings were confirmed in the code and fixed, test first.
   remote index**, not just newer ones. *Sound* (P2). A preset published after that
   index can still collide; the installer then records a conflict and the local
   preset keeps its id.
+
+## Presets are moods, not footage requirements
+
+- **`targets.json` aspects:** grade, loudness and median shot length (cutting rhythm)
+  are `mood`; duration, shot count and longest take are `form`, notes only.
+  *Sound*: form depends on the footage the user gave. Median shot length stays mood
+  because it is how the cut feels, at any length.
+- **`## Shoot` is advice, shown when the user asks what to film or hasn't
+  recorded.** *Sound*: user requirement.

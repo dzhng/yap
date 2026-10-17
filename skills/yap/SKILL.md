@@ -295,8 +295,10 @@ For optional MCP use, read [MCP delivery](references/mcp.md); CLI is the default
 seen, asks how to shoot for a style, or wants a new style made, run
 `yap preset.list`. Read the preset whose description matches with
 `yap preset.get --params '{"id":"…"}'` and follow its `instructions`. To make a new
-style, call `preset.create` and follow its `instructions`. A preset is the user's
-style choice, not permission to edit beyond what they asked for. Presets are
+style, call `preset.create` and follow its `instructions`. A preset is a mood the
+user chose, not a footage requirement: apply it to whatever footage they gave and
+never reject it; give its Shoot advice only when they ask what to film. It is also
+not permission to edit beyond what they asked for. Presets are
 separate from this skill: never copy their content here.
 
 ## Invocation and identity

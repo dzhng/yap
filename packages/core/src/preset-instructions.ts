@@ -18,9 +18,10 @@ export function render(template: string, vars: Record<string, string>): string[]
 }
 
 export const GET_INSTRUCTIONS_TEMPLATE = `
-1. Read PRESET.md at {{path}}.
-2. If the user has not recorded yet, follow ## Shoot and show {{path}}/shoot-plan.svg; otherwise follow ## Edit on their footage.
-3. Run ## Check with node {{kitPath}}/measure.mjs and node {{kitPath}}/check.mjs until every line is ok.
+1. Read PRESET.md at {{path}}, starting with the one idea and ## Any footage.
+2. If the user gave footage, follow ## Edit on it, whatever it is: never reject it or ask for a reshoot, and carry the preset's mood onto it.
+3. Only if the user asks what to film, or has not recorded yet, give the ## Shoot advice and show {{path}}/shoot-plan.svg.
+4. Run ## Check with node {{kitPath}}/measure.mjs and node {{kitPath}}/check.mjs: fix every FAIL (mood); note lines (form) depend on the footage and never fail.
 `;
 
 export const LIST_INSTRUCTIONS_TEMPLATE = `

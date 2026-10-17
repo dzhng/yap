@@ -17,8 +17,8 @@ drafts (fewest-slices, risk-first, seam-quality). The three presets are drafted 
 repo `presets/` with full example references (see [study notes](study.md)); the
 kit has 11 passing tests and the read operations are shipped._
 
-Slices 00–06 are done and slice 07's export proof is done. Next: get footage for one
-style from the user (see each preset's `## Shoot`), then run slice 07 part 2 for it. Record every
+Slices 00–06 are done and slice 07's export proof is done. Next: slice 07 part 2,
+one independent agent per preset on the launch-video session footage. Record every
 decision the spec left open in [choices.md](choices.md). Read [contracts](#contracts) and
 [invariants](#invariants) first; they are the decisions you inherit. Each slice
 names its seam, its proof and the freedoms it delegates.
@@ -44,7 +44,7 @@ TODO:
 - [x] [04 Refresh](slices/04-refresh.md): `preset-remote.ts` (commit-pinned GitHub fetch, streamed, timeouts), `preset-refresh.ts` (startup + daily, joined runs, state), `preset.update`.
 - [x] [05 Create and delete](slices/05-create-delete.md): `preset-scaffold.ts`, `preset.create`/`preset.delete`, `authoring/instructions.md`, injectable Trash.
 - [x] [06 Skill route](slices/06-skill-route.md): one paragraph in `skills/yap/SKILL.md`, a catalog section, and the `preset-style-routing` eval case.
-- [ ] [07 Prove presets](slices/07-prove-presets.md): export proof done (LUT renders as designed; two Yap bugs and a kit bug found). The fresh-agent edit of each style waits for footage shot to that preset's `## Shoot`.
+- [ ] [07 Prove presets](slices/07-prove-presets.md): export proof done (LUT renders as designed; two Yap bugs and a kit bug found). Part 2: one independent agent per preset edits the launch-video session footage.
 
 Update this section before ending your pass.
 
@@ -59,6 +59,7 @@ Update this section before ending your pass.
 | Compatibility or migrations? | None. The library and project formats don't change. | User requirement: the existing library keeps working. Presets have their own folder and their own version field. |
 | Does a preset update itself? | Yes. The service refreshes presets from the repo at launch and once a day, the same way the app already checks for updates and admin notices. `preset.update` stays as a manual trigger. A failed refresh keeps the last good copy. | User requirement: "continuously auto-update it, just like how it continuously auto-updates the app itself". |
 | What is in a preset folder? | Anything, as in a skill folder. `PRESET.md` is the entry point and links to its other files by relative path. | User requirement. A16z's cold open lives in its own `cold-open.md`; every preset ships a `look.cube` grade. |
+| Does a preset require particular footage? | No. A preset is a mood: grade, music, cut rhythm, pacing and text. It applies to any footage (a studio-podcast mood on a holiday film is valid). Every preset has `## Any footage` and never rejects footage; `## Shoot` is advice for when the user asks what to film. `targets.json` marks each target `mood` (must pass) or `form` (length, shot count, longest take: a note about the reference, never a failure). | User: "the presets should not have any restrictions on what the clips are… it's also about the mood, the atmosphere… If the user already gives footage… it should just take the footage and do the best it can." |
 | What does a preset operation return? | Explicit steps for the agent, not just documents. Each result carries `instructions`: ordered steps with real paths and commands. Documents are referenced by path for depth. | User: "the customer for all this is the agent… return instructions for the agent on how to use the guide… what's next basically", and asked for the literal field name `instructions`. |
 | What are a preset's references? | The source videos the style was learned from (https URLs, or absolute paths to the user's own files), recorded in `PRESET.md`. `preset.create` doesn't fetch them; the agent downloads them into the preset's `examples/<slug>/source/`. Any preset can hold as many stills, audio clips and short video excerpts as help a future agent. The only limit is GitHub's hard one: each file under 100 MiB, so no Git LFS is needed. There is no per-preset cap. Full reference videos stay local (in `source/`, dropped when shipping). | User: "don't give yourself so much artificial limitation… don't include a 5 GB video but you can include as many stills and as many audio and also smaller videos as you want", then "as high as you can without needing LFS… no arbitrary limits". Caution, recorded once: shipped presets are public, so third-party excerpts should be short and demonstrate one technique (a text animation, a cut, a mix move); full music cues are the riskiest to republish. |
 | Can a preset be deleted? | `preset.delete` removes local presets only, by moving them to the Trash. | User: "if we add a create then we should have a delete too". Official presets return on refresh, so deleting them would mislead. |
@@ -129,9 +130,10 @@ references:                   # style sources, links only
   - https://x.com/humansand/status/2098115046438215791
 ```
 
-The body has two required sections: `## Shoot`, telling the agent what footage to
-ask the user for, and `## Edit`, the procedure that turns that footage into the
-style, written as Yap operations. Optional sections cover what the style needs,
+The body has two required sections: `## Shoot`, advice on footage made for the
+style for when the user asks what to film, and `## Edit`, the procedure that
+carries the style onto whatever footage the user gives, written as Yap operations
+(`## Any footage` says how). Optional sections cover what the style needs,
 for example `## Look`, `## Captions` and `## Check`.
 
 `presets/index.json` lists every *package*: each preset, plus `kit` (entry

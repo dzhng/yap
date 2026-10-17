@@ -1,7 +1,7 @@
 {
- "$about": "Ranges an export must land in, widened from the examples' profile.json files. Every example must pass.",
- "durationSeconds": { "range": [0, 0], "why": "" },
- "shots.medianSeconds": { "range": [0, 0], "why": "" },
- "picture.yavg": { "range": [0, 255], "why": "" },
- "loudness.integratedLufs": { "range": [-24, -14], "why": "" }
+ "$about": "Mood targets an export must land in and form notes that describe the reference, widened from the examples' profile.json files. Every example must pass.",
+ "durationSeconds": {"range": [0, 0], "aspect": "form", "why": ""},
+ "shots.medianSeconds": {"range": [0, 0], "aspect": "mood", "why": ""},
+ "picture.yavg": {"range": [0, 255], "aspect": "mood", "why": ""},
+ "loudness.integratedLufs": {"range": [-24, -14], "aspect": "mood", "why": ""}
 }

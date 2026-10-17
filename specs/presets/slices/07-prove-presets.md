@@ -8,8 +8,8 @@ fix for the transcription bug (MP4 audio running past the video); until it lands
 extract audio to WAV first, as the guide says.
 
 **Per preset:**
-1. Footage: start with retained fixtures; if none fits the style, ask the user to
-   shoot to the preset's `## Shoot` (record the request; don't block other presets).
+1. Footage: any footage carries a preset's mood. Use retained fixtures or the user's
+   own footage; footage shot to the preset's `## Shoot` is a bonus, never a gate.
 2. A fresh agent with only the consumer skill gets "make this in the <style> style".
 3. It must read the preset (`preset.get`), follow `## Edit`, and run `## Check`
    until `kit/check.mjs` passes.
@@ -67,7 +67,9 @@ Findings, each fixed where it belongs:
 
 ### Part 2: a fresh agent edits raw footage into each style
 
-Blocked on footage. No retained fixture fits any of the three styles: the fixtures
-are 3-second talking heads and an untouched multicam session. Each preset's
-`## Shoot` says what to record. Ask the user for footage, per style, then run steps
-1–5 above.
+No longer blocked. Presets carry a mood onto any footage, so all three are proven
+on one set of raw footage: the launch-video session in the user's library (the
+same bytes as `fixtures/launch-video/session/`): five 4K DJI clips of one speaker
+by a window plus fireplace B-roll, a laptop camera take, a screen recording and
+narration. One independent agent per preset, each given only the footage, the
+preset and its `instructions`.

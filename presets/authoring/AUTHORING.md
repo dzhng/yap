@@ -1,6 +1,6 @@
 ---
 id: authoring
-version: 2
+version: 3
 name: Preset authoring guide
 description: Guidance for creating and measuring a video preset.
 ---
@@ -36,6 +36,13 @@ idea in a sentence and the two ways an edit fails it.
 
 These came from the user who commissioned the first presets. Each one is binding.
 
+- **A preset is a mood, not a footage requirement.** Grade, music, cut rhythm,
+  pacing and text carry the style onto any footage; the user can put a studio
+  podcast mood on a holiday film. Every preset has `## Any footage`, which says how
+  to carry the mood onto material it wasn't shot for, and it never rejects footage.
+  `## Shoot` is advice for when the user asks what to film. In `targets.json`, mark
+  grade, loudness and cut rhythm `"aspect": "mood"` (these must pass), and length,
+  shot count and longest take `"aspect": "form"` (notes only).
 - **Name by style.** Ids are general, lower-case and hyphenated. Sources live under
   `examples/<source-slug>/`.
 - **Capture as many references as you can, and be creative.** Stills are the
@@ -57,8 +64,10 @@ These came from the user who commissioned the first presets. Each one is binding
   trilinear interpolation; build cubes with `kit/make-look-lut.mjs`.
 - **Prove it with the kit.** Every example must pass its own preset's
   `targets.json`. If one doesn't, the target was set wrong; widen it and say why.
-- **Say what can't be done.** `## Limits` names what the footage must supply
-  (lighting can't be graded in) and which traits current operations can't make.
+- **Say what can't be done.** `## Limits` names traits current operations can't make
+  yet, each with a fallback, and how the mood shifts on footage it wasn't shot for
+  (a bright room gets a lighter version of a low-key grade). Never a condition on
+  the user's footage.
 - **Plain Git.** Never Git LFS: the app downloads presets from
   `raw.githubusercontent.com`, which serves LFS pointers, not bytes. Bump
   `version` on any change; the app refreshes presets once a day.
@@ -131,6 +140,10 @@ The exact create steps are in [instructions.md](instructions.md). Follow them in
     guide's rules and reference set, and fix what it finds.
 
 ## Mistakes the first audit caught
+
+- **Footage rules dressed as style.** The first drafts failed a 4-minute edit for not
+  being 15–70 minutes long, and told the user their footage was wrong for the
+  style. Form describes the reference; only mood is checked.
 
 A fresh critic audited the first three presets against this guide. Avoid these:
 

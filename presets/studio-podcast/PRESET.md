@@ -2,7 +2,7 @@
 id: studio-podcast
 name: Studio interview podcast
 description: A long-form (30–75 minute) three-camera studio interview in a dark, warmly lit set. It opens with a fast teaser cold open of the best lines, with kinetic word captions and illustrative inserts, then cuts to the active speaker and keeps a corner brand mark. Use when the user wants a polished tech or business interview podcast for YouTube or X.
-version: 2
+version: 3
 references:
   - https://x.com/a16z/status/2110385202581197049
 ---
@@ -18,6 +18,20 @@ only to whoever is speaking in a dark, warmly lit set.
 
 It fails in two ways: a teaser with no rise (just clips in order), or bringing the
 teaser's busyness (captions, inserts, fast cuts) into the body.
+
+## Any footage
+
+This preset is a mood, not a set: thoughtful, calm and intellectual, after one
+designed minute that sells the ideas. The mood lives in the matte, warm grade, the
+patient cutting to whoever matters in the moment, the teaser with kinetic key words
+and inserts, the tight dialogue sound and the quiet brand mark. Apply it to whatever
+the user gives you, even a holiday film or a single phone camera, and never ask them
+to reshoot. Footage made for this style works best (see `## Shoot` when they ask what
+to film), but any footage can carry the mood:
+- **The teaser** takes the strongest lines or moments, whatever the source.
+- **The body** holds shots patiently and cuts on sentences or beats.
+- **The grade** applies to every video track. It gives a lighter version of the look
+  in bright footage, which is still the look.
 
 Pick each teaser insert by what the line is doing:
 
@@ -71,7 +85,8 @@ to the tools it lists, or use ffmpeg from PATH.
 
 ## Shoot
 
-Ask the user for this before they record:
+Advice for footage made for this style, when the user asks what to film or hasn't
+recorded yet. It is never a requirement: see `## Any footage`.
 
 - **Set.** A dark wall (slate, charcoal or deep green), a round table in light
   wood, two warm practical lamps in shot, and one lit brand element on the back
@@ -145,8 +160,10 @@ So:
 
 ## Check
 
-Measure the export and compare it with [targets.json](targets.json); fix every
-`FAIL` line or tell the user why it stands:
+Measure the export and compare it with [targets.json](targets.json). `FAIL` lines are
+mood (grade, loudness, cut rhythm): fix each or tell the user why it stands. `note`
+lines are form (length, shot count, longest take). They describe the reference,
+depend on the footage you were given, and are never a reason to pad, cut or reject.
 
 ```sh
 node ../kit/measure.mjs export.mp4 --sample-every 15 --out export-profile.json
@@ -175,7 +192,7 @@ that build while a line plays, and the blurred-backdrop inset card. Until they a
 use plain gold text with a soft shadow, a chart revealed in two or three steps, and
 the flat cream card, and tell the user what differs.
 
-The low-key look comes from the set and the light. The LUT mattes and warms the
-image, but it can't make a bright room dark. If the room is bright, tell the user
-to expect a lighter result. With fewer than three cameras, cut between the
-cameras available and use crops of the wide shot (an `edit.apply` crop) as stand-in singles.
+The grade mattes and warms any footage. A bright room or an outdoor film gets a
+lighter version of the low-key look; apply it anyway. With fewer than three
+cameras, cut between the angles available, and use crops of a wide shot (an
+`edit.apply` crop) as stand-in singles.

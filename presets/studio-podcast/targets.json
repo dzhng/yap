@@ -1,11 +1,11 @@
 {
- "$about": "Ranges an export must land in, widened from the measured examples (see examples/*/profile.json). Run: node ../kit/measure.mjs export.mp4 --sample-every 15 --out p.json && node ../kit/check.mjs p.json targets.json. The teaser has its own rules in cold-open.md; check its first 90 s separately.",
- "durationSeconds": { "range": [1500, 4800], "why": "long form; the example runs 59 min" },
- "shots.medianSeconds": { "range": [4, 15], "why": "active-speaker cutting; the example's median is 6.4 s" },
- "shots.longestSeconds": { "range": [60, 400], "why": "long holds on one speaker are part of the calm; the example holds up to ~4.5 min" },
- "picture.yavg": { "range": [70, 115], "why": "low-key set; the example averages 90" },
- "picture.ylow": { "range": [30, 60], "why": "matte blacks; the example averages 44" },
- "picture.yhigh": { "range": [130, 185], "why": "highlights held well below white; the example averages 155" },
- "loudness.integratedLufs": { "range": [-25, -15], "why": "the example is −24; −16 for YouTube/X is fine" },
- "loudness.rangeLu": { "range": [0, 6], "why": "tight, controlled dialogue; the example's LRA is 4.1" }
+ "$about": "Mood targets an export must land in and form notes that describe the reference, widened from the measured examples (see examples/*/profile.json). Run: node ../kit/measure.mjs export.mp4 --sample-every 15 --out p.json && node ../kit/check.mjs p.json targets.json. The teaser has its own rules in cold-open.md; check its first 90 s separately.",
+ "durationSeconds": {"range": [1500, 4800], "aspect": "form", "why": "long form; the example runs 59 min"},
+ "shots.medianSeconds": {"range": [4, 15], "aspect": "mood", "why": "active-speaker cutting; the example's median is 6.4 s"},
+ "shots.longestSeconds": {"range": [60, 400], "aspect": "form", "why": "long holds on one speaker are part of the calm; the example holds up to ~4.5 min"},
+ "picture.yavg": {"range": [70, 115], "aspect": "mood", "why": "low-key set; the example averages 90"},
+ "picture.ylow": {"range": [30, 60], "aspect": "mood", "why": "matte blacks; the example averages 44"},
+ "picture.yhigh": {"range": [130, 185], "aspect": "mood", "why": "highlights held well below white; the example averages 155"},
+ "loudness.integratedLufs": {"range": [-25, -15], "aspect": "mood", "why": "the example is −24; −16 for YouTube/X is fine"},
+ "loudness.rangeLu": {"range": [0, 6], "aspect": "mood", "why": "tight, controlled dialogue; the example's LRA is 4.1"}
 }

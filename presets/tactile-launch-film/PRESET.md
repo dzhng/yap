@@ -2,7 +2,7 @@
 id: tactile-launch-film
 name: Tactile launch film
 description: A 30–60 second wordless launch or announcement film. Warm daylight close-ups of hands making a physical object that stands for the product, slow dissolves, small serif headlines that build line by line, and a calm end card. Use when the user wants a quiet, premium, crafted announcement with no one talking to camera.
-version: 2
+version: 3
 references:
   - https://x.com/humansand/status/2098115046438215791
 ---
@@ -18,6 +18,20 @@ cream end card, silence apart from music) exists to keep attention on that objec
 
 It fails in two ways: an object with no clear link to the product (pretty but
 meaningless), or text that does the explaining while the picture just decorates.
+
+## Any footage
+
+This preset is a mood, not a shot list: calm, warm, tactile and unhurried. The mood
+lives in the grade, the music, the long holds joined by dissolves, the near-silence
+and the few lines of quiet serif text. Apply it to whatever the user gives you and
+never ask them to reshoot. Footage made for this style works best (see `## Shoot`
+when they ask what to film), but any footage can carry the mood:
+- **Choose for stillness and touch.** Prefer the calmest moments: hands, objects,
+  surfaces, light through a window, slow movement. Hold them long.
+- **Let music lead.** If the footage has speech, keep one or two essential lines at
+  most, under the music, or turn the key sentences into the text lines.
+- **Keep the language:** dissolves between ideas, a hard cut only where a new idea
+  starts, the grade on every video track, and a still end card.
 
 Find the object before anything else. Say in one sentence what the hands make and
 what that means. Earlier mappings:
@@ -70,8 +84,8 @@ to the tools it lists, or use ffmpeg from PATH.
 
 ## Shoot
 
-Ask the user for this footage before they record. Read it back to them as a short
-checklist.
+Advice for footage made for this style, when the user asks what to film or hasn't
+recorded yet. It is never a requirement: see `## Any footage`.
 
 - **A physical metaphor for the product.** One object the user can make, draw,
   build or assemble by hand that stands for what the product does. The whole film
@@ -117,7 +131,9 @@ piano or soft strings in a low register, with no drums.
 ## Edit
 
 1. Import the clips and the music. Read the storyboards with `index.get` and pick
-   the steadiest 4–8 s from each shot. The cut follows the making order above.
+   the steadiest, most tactile 4–8 s moments. Order them so one idea builds: making,
+   then meaning, then scale, then the reveal. Footage shot to `## Shoot` maps onto
+   this directly; anything else is ordered by the same build.
 2. **Cut rhythm.** Hold each idea 4–25 s; the example's shots run 2.8 to 24 s.
    Use a hard cut only where a new idea starts (about three in a film), and
    12–24 frame dissolves for changes inside an idea. The total
@@ -152,8 +168,10 @@ piano or soft strings in a low register, with no drums.
 
 ## Check
 
-Measure the export and compare it with [targets.json](targets.json); fix every
-`FAIL` line or tell the user why it stands:
+Measure the export and compare it with [targets.json](targets.json). `FAIL` lines are
+mood (grade, loudness, cut rhythm): fix each or tell the user why it stands. `note`
+lines are form (length, shot count, longest take). They describe the reference,
+depend on the footage you were given, and are never a reason to pad, cut or reject.
 
 ```sh
 node ../kit/measure.mjs export.mp4 --sample-every 1 --scene 0.2 --out export-profile.json
@@ -179,6 +197,5 @@ Not yet proven with Yap's operations: the particle transition (still 07), the
 round crop of the object on the end card, and the line-reveal animation. Until
 they are, use a 12-frame dissolve, a square crop and a short fade, and tell the user.
 
-The look depends on the light at the shoot. The LUT can warm and soften window
-light, but it can't create it. If the footage is lit from overhead, tell the user
-the result will be flatter than the reference.
+The grade warms and softens whatever light the footage has. It can't create window
+light, so overhead-lit footage gets a flatter version of the look. Apply it anyway.

@@ -1,6 +1,6 @@
 {
- "$about": "The teaser's own ranges, checked on the first 90 s: ffmpeg -t 90 -i export.mp4 -c copy teaser.mp4 && node ../kit/measure.mjs teaser.mp4 --sample-every 1 --out t.json && node ../kit/check.mjs t.json targets-teaser.json",
- "shots.count": { "range": [20, 60], "why": "a fast teaser; the example cuts 35 times in its first 90 s" },
- "shots.medianSeconds": { "range": [1, 3.5], "why": "a cut every few seconds; the example's median is 1.6 s" },
- "loudness.integratedLufs": { "range": [-24, -14], "why": "lines at full voice over a low bed; the example is −21.8" }
+ "$about": "The teaser's own ranges, checked on the first 90 s: ffmpeg -t 90 -i export.mp4 -c copy teaser.mp4 && node ../kit/measure.mjs teaser.mp4 --sample-every 1 --out t.json && node ../kit/check.mjs t.json targets-teaser.json Mood targets (grade, loudness, cut rhythm) must pass; form notes (length, shot count, longest take) depend on the footage and never fail.",
+ "shots.count": {"range": [20, 60], "aspect": "form", "why": "a fast teaser; the example cuts 35 times in its first 90 s"},
+ "shots.medianSeconds": {"range": [1, 3.5], "aspect": "mood", "why": "a cut every few seconds; the example's median is 1.6 s"},
+ "loudness.integratedLufs": {"range": [-24, -14], "aspect": "mood", "why": "lines at full voice over a low bed; the example is −21.8"}
 }

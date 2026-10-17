@@ -15,6 +15,11 @@ references:
 
 It fails in two ways: …, or ….
 
+## Any footage
+
+What carries the mood (grade, music, cut rhythm, text, pacing), and how to carry it
+onto footage that wasn't shot for this style. Never reject footage.
+
 ## Examples
 
 Open the closest example before you plan.
@@ -33,7 +38,8 @@ Open the closest example before you plan.
 
 ## Shoot
 
-What to ask the user for before they record: people, cameras and angles, light,
+Advice for footage made for this style, when the user asks what to film or hasn't
+recorded yet. Never a requirement: people, cameras and angles, light,
 set, audio, coverage (shot list with lengths), and the copy or identity assets.
 
 ## Music
