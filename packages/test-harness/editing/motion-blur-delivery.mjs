@@ -110,7 +110,7 @@ try {
       background: "#000000ff",
     },
   });
-  const placed = await edit(created.project.projectId, created.revision.id, [
+  const placed = await edit(created.project.projectId, created.revision.revisionId, [
     { operation: "track.add", label: "pictures", track: { kind: "video", order: 0 } },
     {
       operation: "place",
@@ -127,7 +127,7 @@ try {
   const target = { kind: "clip", id: placed.edit.labels.motion };
   const baseRequest = {
     projectId: created.project.projectId,
-    revisionId: placed.revision.id,
+    revisionId: placed.revision.revisionId,
     atUs: 500001,
   };
   const baseResult = await renderFrame(baseRequest, join(out, "base.png"), "base frame");
@@ -153,7 +153,7 @@ try {
       },
     },
   };
-  const changed = await edit(created.project.projectId, placed.revision.id, [
+  const changed = await edit(created.project.projectId, placed.revision.revisionId, [
     {
       operation: "processing.set",
       target,
@@ -163,19 +163,19 @@ try {
       ],
     },
   ]);
-  const control = await edit(created.project.projectId, changed.revision.id, [
+  const control = await edit(created.project.projectId, changed.revision.revisionId, [
     { operation: "processing.set", target, steps: [trajectory] },
   ]);
   const blurRequest = {
     projectId: created.project.projectId,
-    revisionId: changed.revision.id,
+    revisionId: changed.revision.revisionId,
     atUs: 500001,
   };
   const blurredResult = await renderFrame(blurRequest, join(out, "blurred.png"), "blurred frame");
   const blurred = blurredResult.delivered;
   assert.equal(blurred.state, "ready");
   const controlResult = await renderFrame(
-    { projectId: created.project.projectId, revisionId: control.revision.id, atUs: 500001 },
+    { projectId: created.project.projectId, revisionId: control.revision.revisionId, atUs: 500001 },
     join(out, "control.png"),
     "unblurred trajectory control",
   );

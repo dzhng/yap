@@ -88,7 +88,7 @@ try {
   const projectId = created.project.projectId;
   const placed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
@@ -104,7 +104,7 @@ try {
       },
     ],
   });
-  const project = { projectId, revisionId: placed.revision.id };
+  const project = { projectId, revisionId: placed.revision.revisionId };
   report.checks.project = await measure(project);
   const prepared = await poll(
     () => call("audio.prepare", project),

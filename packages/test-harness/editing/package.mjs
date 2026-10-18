@@ -142,7 +142,7 @@ const placed = (asset, trackId, kind, label) => ({
     trackId,
     assetId: asset.id,
     ...(kind === "video" && asset.acquisitionId ? { acquisitionId: asset.acquisitionId } : {}),
-    streamId: asset.streams.find((stream) => stream.kind === kind).id,
+    streamId: asset.streams.find((stream) => stream.kind === kind).streamId,
     source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
     placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
   },
@@ -164,7 +164,7 @@ try {
   assert.equal((await call("model.status", { modelId: "parakeet" })).state, "ready");
   const transcriptParams = {
     assetId: speech.id,
-    streamId: speech.streams.find((stream) => stream.kind === "audio").id,
+    streamId: speech.streams.find((stream) => stream.kind === "audio").streamId,
     limit: 1000,
   };
   await call("transcript.transcribe", { assetId: speech.id, streamId: transcriptParams.streamId });
@@ -290,11 +290,11 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  service.assets.retain({ kind: "revision", id: created.revision.id }, [revisionOnly.id]);
+  service.assets.retain({ kind: "revision", id: created.revision.revisionId }, [revisionOnly.id]);
   const first = await call("edit.apply", {
     projectId,
     requestId: "first",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -325,14 +325,17 @@ try {
     }
     return { result, coverage, hashes };
   }
-  const historicalProjectIndex = await projectIndexSnapshot(first.revision.id, "donor-history");
-  const before = await render(projectId, first.revision.id, "donor-history");
+  const historicalProjectIndex = await projectIndexSnapshot(
+    first.revision.revisionId,
+    "donor-history",
+  );
+  const before = await render(projectId, first.revision.revisionId, "donor-history");
   const latest = await call(
     "edit.apply",
     {
       projectId,
       requestId: "replace",
-      expectedRevisionId: first.revision.id,
+      expectedRevisionId: first.revision.revisionId,
       operations: [
         {
           operation: "remove",
@@ -345,9 +348,12 @@ try {
     },
     { transport: "mcp" },
   );
-  const current = await render(projectId, latest.revision.id, "donor-current");
+  const current = await render(projectId, latest.revision.revisionId, "donor-current");
   assert.notEqual(current.video, before.video);
-  const currentProjectIndex = await projectIndexSnapshot(latest.revision.id, "donor-current");
+  const currentProjectIndex = await projectIndexSnapshot(
+    latest.revision.revisionId,
+    "donor-current",
+  );
   const history = await call("revision.history", { projectId });
   const directory = await realpath(out),
     exportId = randomUUID();
@@ -383,13 +389,13 @@ try {
   const donorUndo = await call("edit.undo", {
     projectId,
     requestId: "later-undo",
-    expectedRevisionId: latest.revision.id,
+    expectedRevisionId: latest.revision.revisionId,
   });
   const donorRestore = await call("edit.restore", {
     projectId,
     requestId: "later-restore",
     expectedRevisionId: donorUndo.id,
-    targetRevisionId: latest.revision.id,
+    targetRevisionId: latest.revision.revisionId,
   });
   const donorLater = await call("edit.apply", {
     projectId,
@@ -397,13 +403,13 @@ try {
     expectedRevisionId: donorRestore.id,
     operations: [{ operation: "canvas.set", canvas: { background: "#ff0000ff" } }],
   });
-  await projectIndexSnapshot(donorLater.revision.id, "donor-later-excluded");
+  await projectIndexSnapshot(donorLater.revision.revisionId, "donor-later-excluded");
   const historicalExportId = randomUUID();
   await call(
     "export.create",
     {
       projectId,
-      revisionId: latest.revision.id,
+      revisionId: latest.revision.revisionId,
       requestId: historicalExportId,
       directory,
       leaf: "historical.zip",
@@ -419,7 +425,7 @@ try {
   await rename(historicalExport.output, historicalPath);
   assert.equal(
     (await call("project.get", { projectId })).currentRevisionId,
-    donorLater.revision.id,
+    donorLater.revision.revisionId,
   );
   const corrupt = join(out, "corrupt.zip"),
     missing = join(out, "missing.zip");
@@ -506,7 +512,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   );
   const adopted = {
     project: await call("project.get", { projectId: adoptedJob.published.output.projectId }),
-    revision: { id: adoptedJob.published.output.revisionId },
+    revision: { revisionId: adoptedJob.published.output.revisionId },
   };
   const reopened = await call("package.open", { path: packagePath });
   const replayReady = await poll(
@@ -656,7 +662,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     history.revisions.map((revision) => revision.document),
   );
   assert.deepEqual(
-    await render(adopted.project.projectId, adopted.revision.id, "adopted-current"),
+    await render(adopted.project.projectId, adopted.revision.revisionId, "adopted-current"),
     current,
   );
   const undo = await call(
@@ -664,7 +670,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     {
       projectId: adopted.project.projectId,
       requestId: "undo",
-      expectedRevisionId: adopted.revision.id,
+      expectedRevisionId: adopted.revision.revisionId,
     },
     { transport: "mcp" },
   );
@@ -678,7 +684,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   const undoEdit = await call("edit.undo", {
     projectId: adopted.project.projectId,
     requestId: "undo-edit",
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
   });
   assert.deepEqual(undoEdit.document, undo.document);
   const historicalAdmission = await call("package.open", { path: historicalPath });
@@ -731,7 +737,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   const historicalUndoEdit = await call("edit.undo", {
     projectId: historicalProjectId,
     requestId: "historical-undo-edit",
-    expectedRevisionId: historicalEdit.revision.id,
+    expectedRevisionId: historicalEdit.revision.revisionId,
   });
   assert.deepEqual(
     await render(historicalProjectId, historicalUndoEdit.id, "selected-history-edit-undone"),
@@ -744,13 +750,13 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   const expanded = await call("edit.apply", {
     projectId: large.project.projectId,
     requestId: "many-tracks",
-    expectedRevisionId: large.revision.id,
+    expectedRevisionId: large.revision.revisionId,
     operations: Array.from({ length: 500 }, (_, order) => ({
       operation: "track.add",
       track: { kind: "audio", order },
     })),
   });
-  let largeHead = expanded.revision.id,
+  let largeHead = expanded.revision.revisionId,
     historyBytes = Buffer.byteLength(JSON.stringify(expanded.revision));
   for (let ordinal = 0; historyBytes <= archiveLimits.revisionBytes; ordinal++) {
     assert.ok(ordinal < 40, "History fixture failed to cross the recording inline budget");
@@ -760,7 +766,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
       expectedRevisionId: largeHead,
       operations: [{ operation: "canvas.set", canvas: { width: 161 + ordinal } }],
     });
-    largeHead = changed.revision.id;
+    largeHead = changed.revision.revisionId;
     historyBytes += Buffer.byteLength(JSON.stringify(changed.revision));
   }
   const expandedExportId = randomUUID();

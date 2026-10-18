@@ -190,10 +190,15 @@ try {
   }
   const edited = await call(
     "edit.apply",
-    { projectId, expectedRevisionId: created.revision.id, requestId: "occurrences", operations },
+    {
+      projectId,
+      expectedRevisionId: created.revision.revisionId,
+      requestId: "occurrences",
+      operations,
+    },
     { transport: "mcp" },
   );
-  const selection = { projectId, revisionId: edited.revision.id, maxLongEdge: 64 };
+  const selection = { projectId, revisionId: edited.revision.revisionId, maxLongEdge: 64 };
   report.project = { ...selection, labels: edited.edit.labels };
   const clipAt = (atUs) =>
     edited.edit.labels[`${["a", "b", "physical"][Math.floor(atUs / 1000000)]}-video`];
@@ -385,14 +390,14 @@ try {
     { projectId, atUs: 400000, maxLongEdge: 64 },
     "current-head",
   );
-  assert.equal(head.data.revisionId, changed.revision.id);
+  assert.equal(head.data.revisionId, changed.revision.revisionId);
   assert.ok(
     head.rgba.every((value) => value === 255),
     "New head must render the white gap background",
   );
   report.checks.history = {
     oldRevision: selection.revisionId,
-    currentRevision: changed.revision.id,
+    currentRevision: changed.revision.revisionId,
     historicalHash: historical.sha256,
     uncachedHash: fresh.sha256,
     currentHash: head.sha256,

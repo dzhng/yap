@@ -39,7 +39,7 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
     "retimed source",
   );
   const asset = await call("asset.get", { assetId: hash(source) });
-  const streamId = asset.streams.find((s) => s.kind === "audio").id;
+  const streamId = asset.streams.find((s) => s.kind === "audio").streamId;
   const report = { sourceSha256: hash(source), cases: [], listening: false };
   const audio = async (params, name) => {
     const path = join(out, `${name}.wav`);
@@ -72,7 +72,7 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
     const projectId = created.project.projectId;
     const placed = await call("edit.apply", {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
@@ -97,7 +97,7 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
         })),
       ],
     });
-    const selection = { projectId, revisionId: placed.revision.id };
+    const selection = { projectId, revisionId: placed.revision.revisionId };
     const full = await audio(selection, `${pitch}-full`);
     assert.equal(full.frames, occurrenceFrames * 2);
     assert.deepEqual(
@@ -289,11 +289,11 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
     }
     const split = await call("edit.apply", {
       projectId,
-      expectedRevisionId: placed.revision.id,
+      expectedRevisionId: placed.revision.revisionId,
       requestId: randomUUID(),
       operations: [{ operation: "split", clipIds: [placed.edit.labels.clip0], atUs: 1234567 }],
     });
-    const splitSelection = { projectId, revisionId: split.revision.id };
+    const splitSelection = { projectId, revisionId: split.revision.revisionId };
     const splitAudio = await audio(splitSelection, `${pitch}-split`);
     assert.deepEqual(splitAudio.pcm, full.pcm);
     const splitBuckets = await delivered("waveform.get", { ...splitSelection, bucketFrames });

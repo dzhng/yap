@@ -38,7 +38,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
       clip: {
         trackId: { label: "video" },
         assetId: media.id,
-        streamId: media.streams.find((s) => s.kind === "video").id,
+        streamId: media.streams.find((s) => s.kind === "video").streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
       },
@@ -111,7 +111,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
     const asset = await admit(files[name]);
     assets[name] = {
       assetId: asset.id,
-      streamId: asset.streams.find((s) => s.kind === "video").id,
+      streamId: asset.streams.find((s) => s.kind === "video").streamId,
     };
   }
   report.clockComparisons = [];

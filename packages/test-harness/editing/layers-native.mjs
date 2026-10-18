@@ -130,7 +130,7 @@ for (const [width, height] of [
         id,
         trackId: `${id}Track`,
         assetId: id,
-        streamId: assets.find((a) => a.id === id).streams[0].id,
+        streamId: assets.find((a) => a.id === id).streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
       })),

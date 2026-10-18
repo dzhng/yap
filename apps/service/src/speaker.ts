@@ -45,7 +45,7 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
             model: request.checkpoint,
             pcm: pcmPath,
             pcmSha256: receipt.sha256,
-            frames: receipt.frames,
+            frameCount: receipt.frames,
             sampleRate: receipt.sampleRate,
             output,
           },
@@ -56,7 +56,11 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
           report: await operand(output),
         };
         return {
-          pcm: { sha256: receipt.sha256, sampleRate: receipt.sampleRate, frames: receipt.frames },
+          pcm: {
+            sha256: receipt.sha256,
+            sampleRate: receipt.sampleRate,
+            frameCount: receipt.frames,
+          },
           operands,
           ...(result.ok
             ? {}

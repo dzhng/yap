@@ -431,10 +431,10 @@ const main = async () => {
   const placed = call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: placements,
   });
-  let revisionId = placed.revision.id;
+  let revisionId = placed.revision.revisionId;
   const projectClips = placementLabels.map((label) => placed.edit.labels[label]);
   const videoTrackId = placed.edit.labels[videoTrack];
   const audioTrackId = placed.edit.labels[audioTrack];
@@ -453,7 +453,7 @@ const main = async () => {
       },
     ],
   });
-  revisionId = edit.revision.id;
+  revisionId = edit.revision.revisionId;
   step("explicit project cuts", {
     projectId,
     revisionId,

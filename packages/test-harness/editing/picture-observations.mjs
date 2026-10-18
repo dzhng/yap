@@ -215,7 +215,7 @@ try {
       });
       const edit = await call("edit.apply", {
         projectId: created.project.projectId,
-        expectedRevisionId: created.revision.id,
+        expectedRevisionId: created.revision.revisionId,
         requestId: `place-${c.id}`,
         operations: [
           { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -230,7 +230,10 @@ try {
           },
         ],
       });
-      const project = { projectId: created.project.projectId, revisionId: edit.revision.id };
+      const project = {
+        projectId: created.project.projectId,
+        revisionId: edit.revision.revisionId,
+      };
       await inspect("project", project, 0);
       if (c.id === "graham") {
         for (const [name, exposureEV] of [
@@ -249,7 +252,7 @@ try {
               },
             ],
           });
-          project.revisionId = changed.revision.id;
+          project.revisionId = changed.revision.revisionId;
           await inspect(name, project, 0);
         }
         const original = row.frames.find((f) => f.kind === "project").receipt.observations.full

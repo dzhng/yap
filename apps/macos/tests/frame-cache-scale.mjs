@@ -77,7 +77,7 @@ test(
       assert.equal(videoStreams.length, 1, "The preserved generated fixture has one video stream");
       const params = {
         assetId: asset.id,
-        streamId: videoStreams[0].id,
+        streamId: videoStreams[0].streamId,
         atUs: 1_200_000_000,
       };
       const ready = () =>

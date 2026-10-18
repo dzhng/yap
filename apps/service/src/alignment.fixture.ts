@@ -21,7 +21,7 @@ export const alignmentSource: AlignmentEvidenceSource = {
   durationUs: 2000000,
   observationRange: { startUs: 0, endUs: 100000 },
   text: "Hi wrong Hi",
-  pcm: { sha256: sha("pcm"), sampleRate: 16000, frames: 1600 },
+  pcm: { sha256: sha("pcm"), sampleRate: 16000, frameCount: 1600 },
   decoder: {
     recipe: "source-selected-span-avfoundation-f32-16k-v1",
     workerSha256: sha("native"),

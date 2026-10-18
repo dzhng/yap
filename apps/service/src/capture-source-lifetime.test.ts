@@ -412,7 +412,7 @@ test("a recording used by a project refuses until cascade retires its copies and
     await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),
   );
   const binding = acquisition.bindings[0]!;
-  const created = data<{ project: { projectId: string }; revision: { id: string } }>(
+  const created = data<{ project: { projectId: string }; revision: { revisionId: string } }>(
     await f.call("project.create", {
       requestId: "authored-project",
       canvas: {
@@ -424,11 +424,11 @@ test("a recording used by a project refuses until cascade retires its copies and
     }),
   );
   const projectId = created.project.projectId;
-  data<{ revision: { id: string } }>(
+  data<{ revision: { revisionId: string } }>(
     await f.call("edit.apply", {
       projectId,
       requestId: "authored-placement",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
         {

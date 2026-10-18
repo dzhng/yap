@@ -337,7 +337,7 @@ try {
     });
     const placed = await call("edit.apply", {
       projectId: created.project.projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: `place-${host.id}`,
       operations: [
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -353,7 +353,10 @@ try {
         },
       ],
     });
-    const project = { projectId: created.project.projectId, revisionId: placed.revision.id };
+    const project = {
+      projectId: created.project.projectId,
+      revisionId: placed.revision.revisionId,
+    };
     const before = join(directory, "before.png");
     await frame(project, before, 0, { faceObservations: undefined });
     for (const c of cases.filter(
@@ -406,7 +409,7 @@ try {
           },
         ],
       });
-      project.revisionId = changed.revision.id;
+      project.revisionId = changed.revision.revisionId;
       const selection = { ...project },
         file = join(directory, `${c.id}.png`);
       const receipt = await frame(selection, file, 0, { faceObservations: undefined });
@@ -549,7 +552,7 @@ try {
           requestId: "geometry-split",
           operations: [{ operation: "split", clipIds: [clipId], atUs: 1_500_000 }],
         });
-        project.revisionId = split.revision.id;
+        project.revisionId = split.revision.revisionId;
         for (const atUs of [0, 1_750_000]) {
           const beforeSplit = join(directory, `split-reference-${atUs}.png`),
             afterSplit = join(directory, `split-${atUs}.png`);
@@ -563,7 +566,7 @@ try {
           requestId: "geometry-repeat",
           operations: [{ operation: "duplicate", clipIds: [clipId], atUs: 3_000_000 }],
         });
-        project.revisionId = repeated.revision.id;
+        project.revisionId = repeated.revision.revisionId;
         const repeatFile = join(directory, "repeat.png"),
           repeatReference = join(directory, "split-reference-0.png");
         await frame(project, repeatFile, 3_000_000, { faceObservations: undefined });
@@ -579,7 +582,7 @@ try {
             { operation: "retime", clipIds: [repeatId], durationUs: 3_000_000, ripple: "none" },
           ],
         });
-        project.revisionId = retimed.revision.id;
+        project.revisionId = retimed.revision.revisionId;
         const slow = join(directory, "retime.png"),
           original = join(directory, "retime-reference.png");
         await frame(project, slow, 4_000_000, { faceObservations: undefined });
@@ -610,7 +613,7 @@ try {
     });
     const placed = await call("edit.apply", {
       projectId: created.project.projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: "indexed-place",
       operations: [
         { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -630,7 +633,11 @@ try {
       ["source", indexed.source],
       [
         "project",
-        { projectId: created.project.projectId, revisionId: placed.revision.id, maxLongEdge: 640 },
+        {
+          projectId: created.project.projectId,
+          revisionId: placed.revision.revisionId,
+          maxLongEdge: 640,
+        },
       ],
     ]) {
       for (const faceObservations of [undefined, request]) {
@@ -745,7 +752,7 @@ try {
     });
     const placed = await call("edit.apply", {
       projectId: created.project.projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: "moving-place",
       operations: [
         { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -763,7 +770,7 @@ try {
     });
     const authored = await call("edit.apply", {
       projectId: created.project.projectId,
-      expectedRevisionId: placed.revision.id,
+      expectedRevisionId: placed.revision.revisionId,
       requestId: "moving-author",
       operations: [
         {
@@ -785,7 +792,7 @@ try {
         faceObservations: undefined,
       });
       await frame(
-        { projectId: created.project.projectId, revisionId: authored.revision.id },
+        { projectId: created.project.projectId, revisionId: authored.revision.revisionId },
         file,
         p.atUs,
         { faceObservations: undefined },

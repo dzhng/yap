@@ -38,7 +38,7 @@ export async function repairJoinAndRecheck(request, invoke) {
     requestId: repair.requestId,
     operations: repair.operations,
   });
-  const afterRevisionId = edited?.revision?.id;
+  const afterRevisionId = edited?.revision?.revisionId;
   if (typeof afterRevisionId !== "string" || afterRevisionId === revisionId)
     throw failure("ARTIFACT_CHANGED", "Repair did not advance the pinned revision");
 

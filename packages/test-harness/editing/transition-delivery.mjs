@@ -84,7 +84,7 @@ try {
   });
   const edited = await call("edit.apply", {
     projectId: project.project.projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "red-track", track: { kind: "video", order: 0 } },
@@ -95,7 +95,7 @@ try {
         clip: {
           trackId: { label: "red-track" },
           assetId: red.id,
-          streamId: red.streams[0].id,
+          streamId: red.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -106,7 +106,7 @@ try {
         clip: {
           trackId: { label: "blue-track" },
           assetId: blue.id,
-          streamId: blue.streams[0].id,
+          streamId: blue.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -123,12 +123,12 @@ try {
       },
     ],
   });
-  report.project = { projectId: project.project.projectId, revisionId: edited.revision.id };
+  report.project = { projectId: project.project.projectId, revisionId: edited.revision.revisionId };
   const samples = {};
   for (const atUs of [100000, 500000, 900000]) {
     const request = {
       projectId: project.project.projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       atUs,
       maxLongEdge: 64,
     };
@@ -172,7 +172,7 @@ try {
         "preview.get",
         {
           projectId: project.project.projectId,
-          revisionId: edited.revision.id,
+          revisionId: edited.revision.revisionId,
           range: { startUs: 0, endUs: 1000000 },
         },
         { output: preview },
@@ -196,7 +196,7 @@ try {
     });
     const pulseEdited = await call("edit.apply", {
       projectId: pulseProject.project.projectId,
-      expectedRevisionId: pulseProject.revision.id,
+      expectedRevisionId: pulseProject.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         { operation: "track.add", label: "pulse-track", track: { kind: "video", order: 0 } },
@@ -206,7 +206,7 @@ try {
           clip: {
             trackId: { label: "pulse-track" },
             assetId: red.id,
-            streamId: red.streams[0].id,
+            streamId: red.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
           },
@@ -224,7 +224,7 @@ try {
     for (const atUs of [100000, 500000, 900000]) {
       const request = {
         projectId: pulseProject.project.projectId,
-        revisionId: pulseEdited.revision.id,
+        revisionId: pulseEdited.revision.revisionId,
         atUs,
         maxLongEdge: 64,
       };
@@ -253,7 +253,7 @@ try {
           "preview.get",
           {
             projectId: pulseProject.project.projectId,
-            revisionId: pulseEdited.revision.id,
+            revisionId: pulseEdited.revision.revisionId,
             range: { startUs: 0, endUs: 1000000 },
           },
           { output: pulsePreview },
@@ -284,7 +284,7 @@ try {
   });
   const movingEdited = await call("edit.apply", {
     projectId: movingProject.project.projectId,
-    expectedRevisionId: movingProject.revision.id,
+    expectedRevisionId: movingProject.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "moving-a-track", track: { kind: "video", order: 0 } },
@@ -295,7 +295,7 @@ try {
         clip: {
           trackId: { label: index === 0 ? "moving-a-track" : "moving-b-track" },
           assetId: asset.id,
-          streamId: asset.streams.find((stream) => stream.kind === "video").id,
+          streamId: asset.streams.find((stream) => stream.kind === "video").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -316,7 +316,7 @@ try {
   for (const atUs of [100000, 500000, 900000]) {
     const request = {
       projectId: movingProject.project.projectId,
-      revisionId: movingEdited.revision.id,
+      revisionId: movingEdited.revision.revisionId,
       atUs,
       maxLongEdge: 64,
     };
@@ -373,7 +373,7 @@ try {
   });
   const audioEdited = await call("edit.apply", {
     projectId: audioProject.project.projectId,
-    expectedRevisionId: audioProject.revision.id,
+    expectedRevisionId: audioProject.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "audio-a-track", track: { kind: "audio", order: 0 } },
@@ -384,7 +384,7 @@ try {
         clip: {
           trackId: { label: index === 0 ? "audio-a-track" : "audio-b-track" },
           assetId: asset.id,
-          streamId: asset.streams.find((stream) => stream.kind === "audio").id,
+          streamId: asset.streams.find((stream) => stream.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -406,7 +406,7 @@ try {
     () =>
       call(
         "audio.get",
-        { projectId: audioProject.project.projectId, revisionId: audioEdited.revision.id },
+        { projectId: audioProject.project.projectId, revisionId: audioEdited.revision.revisionId },
         { output: audioFile },
       ),
     (value) => value.state === "ready",

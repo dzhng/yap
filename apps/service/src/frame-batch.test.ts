@@ -354,7 +354,7 @@ function writeAsBeforeNounIds(home: string) {
     text
       .replaceAll('"regionId":', '"id":')
       .replaceAll('"faceId":', '"id":')
-      .replaceAll('"native-source-picture-v8-cursor"', '"native-source-picture-v7-cursor"');
+      .replaceAll('"native-source-picture-v9-cursor"', '"native-source-picture-v7-cursor"');
   const db = new DatabaseSync(join(home, "library", "catalog.sqlite"));
   try {
     const tables = db

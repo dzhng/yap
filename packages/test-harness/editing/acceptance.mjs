@@ -250,13 +250,13 @@ try {
   const created = await call("project.create", request);
   const replay = await call("project.create", request);
   assert.equal(replay.project.projectId, created.project.projectId);
-  assert.equal(replay.revision.id, created.revision.id);
+  assert.equal(replay.revision.revisionId, created.revision.revisionId);
   report.project = await call("project.get", { projectId: created.project.projectId });
-  assert.equal(report.project.currentRevisionId, created.revision.id);
+  assert.equal(report.project.currentRevisionId, created.revision.revisionId);
   report.revision = (
     await call("revision.get", {
       projectId: created.project.projectId,
-      revisionId: created.revision.id,
+      revisionId: created.revision.revisionId,
     })
   ).revision;
   assert.deepEqual(report.revision.document.canvas, request.canvas);
@@ -287,7 +287,7 @@ try {
         brief: report.brief,
         libraryHome: home,
         projectId: created.project.projectId,
-        revisionId: created.revision.id,
+        revisionId: created.revision.revisionId,
         inputs: report.inputs.map(({ key, sha256, bytes, asset }) => ({
           key,
           sha256,

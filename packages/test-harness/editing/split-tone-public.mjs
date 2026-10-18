@@ -154,7 +154,7 @@ try {
   });
   const placed = await call("edit.apply", {
     projectId: project.project.projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -164,7 +164,7 @@ try {
         clip: {
           trackId: { label: "v" },
           assetId: source.id,
-          streamId: source.streams[0].id,
+          streamId: source.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
         },
@@ -174,7 +174,7 @@ try {
   const target = { kind: "clip", id: placed.edit.labels.shot };
   const request = {
     projectId: project.project.projectId,
-    revisionId: placed.revision.id,
+    revisionId: placed.revision.revisionId,
     atUs: 1,
     maxLongEdge: 320,
   };
@@ -188,7 +188,7 @@ try {
   const before = await pixels(beforePath);
   const gradedEdit = await call("edit.apply", {
     projectId: project.project.projectId,
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       {
@@ -207,7 +207,7 @@ try {
       },
     ],
   });
-  const gradedRequest = { ...request, revisionId: gradedEdit.revision.id };
+  const gradedRequest = { ...request, revisionId: gradedEdit.revision.revisionId };
   const gradedResult = await poll(
     () => call("frame.get", gradedRequest),
     (value) => value.state === "ready",

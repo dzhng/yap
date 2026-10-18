@@ -61,6 +61,56 @@ export type ExtractedAudio = {
   origin: ExtractionOrigin;
 };
 
+/** The retained job payload uses the public unit names; the in-memory owner keeps media math local. */
+export function publicExtraction(value: ExtractedAudio) {
+  const selection = value.origin.selection;
+  const { frames, origin, ...rest } = value as any;
+  const { frames: inputFrames, frameCount: inputFrameCount, ...input } = origin.input as any;
+  const { frames: outputFrames, frameCount: outputFrameCount, ...output } = origin.output as any;
+  return {
+    ...rest,
+    frameCount: frames,
+    input: { ...input, frameCount: inputFrames ?? inputFrameCount },
+    output: { ...output, frameCount: outputFrames ?? outputFrameCount },
+    origin: {
+      ...origin,
+      input: { ...input, frameCount: inputFrames ?? inputFrameCount },
+      output: { ...output, frameCount: outputFrames ?? outputFrameCount },
+      selection: {
+        ...selection,
+        sampleRange: {
+          startSamples: selection.sampleRange.start,
+          endSamples: selection.sampleRange.end,
+        },
+      },
+    },
+  };
+}
+export function parseExtractedAudio(value: unknown): ExtractedAudio {
+  const record = value as ExtractedAudio & {
+    frameCount: number;
+    origin: { selection: { sampleRange: { startSamples: number; endSamples: number } } };
+  };
+  const input = record.origin.input as any;
+  const output = record.origin.output as any;
+  return {
+    ...record,
+    frames: record.frameCount,
+    origin: {
+      ...record.origin,
+      input: { ...input, frames: input.frameCount },
+      output: { ...output, frames: output.frameCount },
+      selection: {
+        ...record.origin.selection,
+        sampleRange: {
+          start: record.origin.selection.sampleRange.startSamples,
+          end: record.origin.selection.sampleRange.endSamples,
+        },
+      },
+    },
+  } as ExtractedAudio;
+}
+
 /** Durable excerpts share audio selection/rendering and immutable assets, but do not own donors. */
 export class AudioExtraction {
   constructor(
@@ -199,11 +249,11 @@ export class AudioExtraction {
             supportDigest: canonical.source.supportDigest,
             unavailable: [],
           },
-          selectionImplementationId: "verified-whole-source-v1",
+          selectionImplementationId: "verified-whole-source-v2",
           input: dimensions,
           output: dimensions,
           conversion: {
-            implementationId: "verified-wav-copy-v1",
+            implementationId: "verified-wav-copy-v2",
             channelPolicy: "preserve",
             contextPolicy: "complete-source",
           },
@@ -219,7 +269,7 @@ export class AudioExtraction {
               sampleRange: { start: 0, end: complete.dimensions.frames },
               supportDigest: complete.source.supportDigest,
               unavailable: [],
-              implementationId: "verified-whole-source-v1",
+              implementationId: "verified-whole-source-v2",
             }
           : (await this.owners.audio.renderSelection(request.recipe, selectedPath, signal)).value;
         const input = {
@@ -324,7 +374,7 @@ export class AudioExtraction {
       };
       const publication = staged;
       return {
-        result: JSON.stringify(result),
+        result: JSON.stringify(publicExtraction(result)),
         publish: () => {
           publication.publish({ pinnedFile: false });
           this.owners.assets.retain({ kind: "job", id: job.jobId }, [result.assetId]);

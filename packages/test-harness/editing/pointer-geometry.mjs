@@ -101,7 +101,7 @@ async function project(source, canvas, stages) {
     "edit.apply",
     {
       projectId: initial.project.projectId,
-      expectedRevisionId: initial.revision.id,
+      expectedRevisionId: initial.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         {
@@ -169,7 +169,7 @@ async function project(source, canvas, stages) {
   );
   return {
     projectId: initial.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     labels: edited.edit.labels,
   };
 }

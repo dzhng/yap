@@ -32,7 +32,7 @@ export const speakerEvidenceSourceSchema = z.strictObject({
   pcm: z.strictObject({
     sha256,
     sampleRate: z.literal(16000),
-    frames: z
+    frameCount: z
       .int()
       .min(1280)
       .max(480000)
@@ -143,7 +143,7 @@ function seconds(v: string) {
 function normalized(source: SpeakerEvidenceSource, operands: SpeakerOperands) {
   const start = fromTime(source.observationRange.startUs),
     end = fromTime(source.observationRange.endUs);
-  const frames = source.pcm.frames;
+  const frames = source.pcm.frameCount;
   if (compare(subtract(end, start), rational(BigInt(frames) * 1_000_000n, 16_000n)) !== 0)
     invalid("Native speaker observation range differs from its PCM extent");
   const native = nativeSchema.safeParse(decodeJSON(operands.nativeReceipt));

@@ -46,7 +46,11 @@ import { createPresets, type PresetsOptions } from "@yap/core/presets";
 import { PresetRefresh } from "@yap/core/preset-refresh";
 import { remoteSource, type RemoteOptions } from "@yap/core/preset-remote";
 import { runtimeMaterializer } from "./runtime-materialization.js";
-import { TranscriptStore, type SpeechTranscriptionReceipt } from "@yap/core/transcript";
+import {
+  TranscriptStore,
+  publicTranscriptMetadata,
+  type SpeechTranscriptionReceipt,
+} from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
 import { SourceTranscriptRead } from "@yap/core/transcript-read";
 import { wordKind } from "@yap/core/word-kind";
@@ -126,11 +130,6 @@ function internalAudioSelection<T>(params: T): InternalAudioSelection<T> {
   } as InternalAudioSelection<T>;
 }
 
-function publicAudioOutput(value: any, source: boolean): any {
-  if (!source || !value || typeof value !== "object" || !("range" in value)) return value;
-  const { range, ...rest } = value;
-  return { ...rest, sourceRange: range };
-}
 import {
   listenLocal,
   prepareRuntimeDirectory,
@@ -763,7 +762,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: audioRenderer, prepared: preparedAudio },
       sourceRenderer: {
-        implementationId: "native-source-audio-v5",
+        implementationId: "native-source-audio-v6",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -792,7 +791,7 @@ export async function startProjectService(options: {
       probe,
       staging: join(library, "staging", "audio-extract"),
       converter: {
-        implementationId: "native-finite-pcm-v1",
+        implementationId: "native-finite-pcm-v2",
         convert: async ({ input, ...request }, signal) =>
           withRenderedFile(
             worker,
@@ -841,7 +840,7 @@ export async function startProjectService(options: {
       cache,
       loudness: ffmpegLoudnessAnalyzer(options.ffmpeg, nativeExecutable),
       renderer: {
-        implementationId: "native-acoustic-image-v1",
+        implementationId: "native-acoustic-image-v2",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -934,7 +933,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: projectPictures },
       imageRenderer: {
-        implementationId: "native-source-image-v3",
+        implementationId: "native-source-image-v4",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -945,7 +944,7 @@ export async function startProjectService(options: {
           ),
       },
       sourceRenderer: {
-        implementationId: "native-source-picture-v8-cursor",
+        implementationId: "native-source-picture-v9-cursor",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -1197,7 +1196,12 @@ export async function startProjectService(options: {
       return {
         ...job,
         published: job.published
-          ? { ...job.published, generation: String(job.published.generation) }
+          ? {
+              ...job.published,
+              generation: String(job.published.generation),
+              output: job.published.output,
+              issues: job.published.issues,
+            }
           : job.published,
         attemptGeneration: generation,
         state: mapWorkState(value.state, edgeWorkState),
@@ -1702,12 +1706,33 @@ export async function startProjectService(options: {
           case "model.list":
             return {
               ok: true,
-              data: models.page({
-                ...(operation.params.cursor === undefined
-                  ? {}
-                  : { cursor: operation.params.cursor }),
-                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
-              }),
+              data: (() => {
+                const page = models.page({
+                  ...(operation.params.cursor === undefined
+                    ? {}
+                    : { cursor: operation.params.cursor }),
+                  ...(operation.params.limit === undefined
+                    ? {}
+                    : { limit: operation.params.limit }),
+                });
+                return {
+                  ...page,
+                  models: page.models.map((model) => ({
+                    ...model,
+                    ...(model.generationProfile && typeof model.generationProfile === "object"
+                      ? {
+                          generationProfile: (() => {
+                            const { id: profileId, ...profile } = model.generationProfile;
+                            return {
+                              ...profile,
+                              ...(profileId === undefined ? {} : { profileId }),
+                            };
+                          })(),
+                        }
+                      : {}),
+                  })),
+                };
+              })(),
             };
           case "preset.list":
             return {
@@ -1741,17 +1766,38 @@ export async function startProjectService(options: {
               ok: true,
               data: (() => {
                 const { id, ...details } = presets.get(operation.params.presetId);
-                return { ...details, presetId: id };
+                return {
+                  ...details,
+                  files: details.files.map(({ bytes, ...file }) => ({ ...file, sizeBytes: bytes })),
+                  presetId: id,
+                };
               })(),
             };
           case "preset.update":
             return {
               ok: true,
-              data: {
-                ...(await presets.update(operation.params.presetId, operation.params.requestId)),
-                state: "ready",
-                jobId: null,
-              },
+              data: await (async () => {
+                const result = await presets.update(
+                  operation.params.presetId,
+                  operation.params.requestId,
+                );
+                return {
+                  ...result,
+                  ...(result.report
+                    ? {
+                        report: {
+                          ...result.report,
+                          skipped: result.report.skipped.map(({ id, ...item }) => ({
+                            ...item,
+                            presetId: id,
+                          })),
+                        },
+                      }
+                    : {}),
+                  state: "ready",
+                  jobId: null,
+                };
+              })(),
             };
           case "preset.create":
             return {
@@ -2103,7 +2149,7 @@ export async function startProjectService(options: {
                 };
               const result = await projectEvidence.speakers(operation.params);
               const labelsByGeneration = new Map<string, Map<number, string>>();
-              const rows = result.page?.rows.map((row) => {
+              const rows = result.page?.rows.map((row: any) => {
                 const key = `${row.assetId}:${row.generation}`;
                 let labels = labelsByGeneration.get(key);
                 if (!labels) {
@@ -2689,13 +2735,15 @@ export async function startProjectService(options: {
                 );
                 speakerCursor = speakerPage.nextCursor ?? undefined;
               } while (speakerCursor);
-              const words = page.rows.filter((row) => row.type === "word");
+              const words = page.rows
+                .filter((row) => row.type === "word")
+                .map((row) => ({ ...row, id: row.wordId }));
               const decorated = attributeTranscriptWords(words, turns, { labels });
               const byId = new Map(decorated.map((word) => [word.id, word.speaker]));
               attributedPage = {
                 ...page,
                 rows: page.rows.map((row) =>
-                  row.type === "word" ? { ...row, speaker: byId.get(row.id)! } : row,
+                  row.type === "word" ? { ...row, speaker: byId.get(row.wordId)! } : row,
                 ),
               };
             }
@@ -2707,7 +2755,7 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                transcript: metadata,
+                transcript: publicTranscriptMetadata(metadata),
                 ...(attributedPage.nextCursor === null
                   ? { nextCursor: null }
                   : {
@@ -2843,7 +2891,7 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                transcript: metadata,
+                transcript: publicTranscriptMetadata(metadata),
                 ...page,
                 nextCursor:
                   page.nextCursor === null
@@ -2909,7 +2957,7 @@ export async function startProjectService(options: {
               "projectId" in params
                 ? {
                     projectId: params.projectId,
-                    revisionId: projects.revision(params.projectId, params.revisionId).id,
+                    revisionId: projects.revision(params.projectId, params.revisionId).revisionId,
                   }
                 : {
                     assetId: params.assetId,
@@ -2948,7 +2996,7 @@ export async function startProjectService(options: {
               "projectId" in params
                 ? {
                     projectId: params.projectId,
-                    revisionId: projects.revision(params.projectId, params.revisionId).id,
+                    revisionId: projects.revision(params.projectId, params.revisionId).revisionId,
                   }
                 : {
                     assetId: params.assetId,
@@ -3118,9 +3166,7 @@ export async function startProjectService(options: {
               ok: true,
               data: {
                 ...status,
-                published: publishedOutput(status.published, (value) =>
-                  publicAudioOutput(value.audio, "assetId" in params),
-                ),
+                published: publishedOutput(status.published, (value) => value.audio),
                 delivery: status.published
                   ? delivery.open(
                       "assetId" in params
@@ -3145,7 +3191,7 @@ export async function startProjectService(options: {
                 projectId: params.projectId,
                 // The preview window is titled by the project's name, not its identifier.
                 title: project.title,
-                revisionId: revision.id,
+                revisionId: revision.revisionId,
                 ...(params.range === undefined ? {} : { range: params.range }),
               });
               native = answer.ok ? answer.data : { opened: false, error: answer.error };
@@ -3157,7 +3203,7 @@ export async function startProjectService(options: {
                 headRevisionId: project.currentRevisionId,
                 revision,
                 history: history.revisions.map((item) => ({
-                  id: item.id,
+                  revisionId: item.revisionId,
                   ordinal: item.ordinal,
                   createdAt: item.createdAt,
                   operation: item.operation,
@@ -3220,7 +3266,7 @@ export async function startProjectService(options: {
                   { limit: operation.params.limit },
                 );
               }
-              const rowIndexes = transcript.page.rows.flatMap((row, index) =>
+              const rowIndexes = transcript.page.rows.flatMap((row: any, index: number) =>
                 row.type === "word" ? [index] : [],
               );
               if (!rowIndexes.length) {
@@ -3265,17 +3311,24 @@ export async function startProjectService(options: {
             projects.requireRevision(operation.params.projectId, operation.params.revisionId);
             return {
               ok: true,
-              data: {
-                projectId: operation.params.projectId,
-                revisionId: operation.params.revisionId,
-                ...layoutDiagnostics(
+              data: (() => {
+                const diagnostics = layoutDiagnostics(
                   operation.params.samples.map((sample) => ({
                     ...sample,
                     texts: sample.texts.map(({ textId, ...text }) => ({ ...text, id: textId })),
                   })),
                   operation.params.maxIssueCount ?? 100,
-                ),
-              },
+                );
+                return {
+                  projectId: operation.params.projectId,
+                  revisionId: operation.params.revisionId,
+                  ...diagnostics,
+                  coverage: (() => {
+                    const { samples, ...coverage } = diagnostics.coverage;
+                    return { ...coverage, sampleCount: samples };
+                  })(),
+                };
+              })(),
             };
           case "project.create":
             return {
@@ -3324,7 +3377,10 @@ export async function startProjectService(options: {
               data: projects.seedText(operation.params.projectId, operation.params),
             };
           case "edit.apply":
-            return { ok: true, data: projects.apply(operation.params.projectId, operation.params) };
+            return {
+              ok: true,
+              data: projects.apply(operation.params.projectId, operation.params),
+            };
           case "speaker.correct":
             return {
               ok: true,
@@ -3377,14 +3433,23 @@ export async function startProjectService(options: {
           case "revision.history":
             return {
               ok: true,
-              data: projects.history(
-                operation.params.projectId,
-                operation.params.cursor,
-                operation.params.limit,
-              ),
+              data: (() => {
+                const page = projects.history(
+                  operation.params.projectId,
+                  operation.params.cursor,
+                  operation.params.limit,
+                );
+                return {
+                  ...page,
+                  revisions: page.revisions,
+                };
+              })(),
             };
           case "edit.undo":
-            return { ok: true, data: projects.undo(operation.params.projectId, operation.params) };
+            return {
+              ok: true,
+              data: projects.undo(operation.params.projectId, operation.params),
+            };
           case "edit.restore":
             return {
               ok: true,
@@ -3501,14 +3566,54 @@ export async function startProjectService(options: {
           case "package.open":
             return {
               ok: true,
-              data: await projectPackages.open(operation.params.path, operation.params.requestId),
+              data: await (async () => {
+                const result = await projectPackages.open(
+                  operation.params.path,
+                  operation.params.requestId,
+                );
+                const { id, ...rest } = result as { id?: string } & Record<string, unknown>;
+                return { ...rest, ...(id === undefined ? {} : { packageId: id }) };
+              })(),
             };
           case "package.status":
-            return { ok: true, data: projectPackages.status(operation.params.admissionId) };
+            return {
+              ok: true,
+              data: (() => {
+                const result = projectPackages.status(operation.params.admissionId) as Record<
+                  string,
+                  unknown
+                >;
+                const { id, admissions, ...rest } = result;
+                return {
+                  ...rest,
+                  ...(typeof id === "string" ? { packageId: id } : {}),
+                  ...(Array.isArray(admissions)
+                    ? {
+                        admissions: admissions.map((entry) => {
+                          const { id: admissionId, ...admission } = entry as Record<
+                            string,
+                            unknown
+                          >;
+                          return {
+                            ...admission,
+                            ...(typeof admissionId === "string" ? { packageId: admissionId } : {}),
+                          };
+                        }),
+                      }
+                    : {}),
+                };
+              })(),
+            };
           case "package.close":
             return {
               ok: true,
-              data: await projectPackages.closeAdmission(operation.params.admissionId),
+              data: await (async () => {
+                const result = (await projectPackages.closeAdmission(
+                  operation.params.admissionId,
+                )) as Record<string, unknown>;
+                const { id, ...rest } = result;
+                return { ...rest, ...(typeof id === "string" ? { packageId: id } : {}) };
+              })(),
             };
           case "package.adopt":
             return {
@@ -3529,7 +3634,10 @@ export async function startProjectService(options: {
           case "export.list":
             return { ok: true, data: mediaExports.list(operation.params) };
           case "export.status":
-            return { ok: true, data: mediaExports.status(operation.params.exportId) };
+            return {
+              ok: true,
+              data: mediaExports.publicStatus(operation.params.exportId),
+            };
           case "export.recover":
             return {
               ok: true,

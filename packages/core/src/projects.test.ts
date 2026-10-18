@@ -32,7 +32,7 @@ test("project edits survive restart and replay before stale-head checks with com
   const created = store.create({ requestId: "create", title: "Tutorial", canvas });
   const request = {
     requestId: "add",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "voice" },
       {
@@ -82,7 +82,7 @@ test("project edits survive restart and replay before stale-head checks with com
   expect(
     reopened.create({ canvas: { ...canvas }, title: "Tutorial", requestId: "create" }),
   ).toEqual(created);
-  expect(reopened.revision(created.project.projectId).id).toBe(edited.revision.id);
+  expect(reopened.revision(created.project.projectId).revisionId).toBe(edited.revision.revisionId);
   expect(() => reopened.apply(created.project.projectId, { ...request, operations: [] })).toThrow(
     /different arguments/,
   );
@@ -97,37 +97,47 @@ test("no-op receipts do not grow history; undo and restore append identities and
   const id = original.project.projectId;
   const one = store.apply(id, {
     requestId: "one",
-    expectedRevisionId: original.revision.id,
+    expectedRevisionId: original.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   const two = store.apply(id, {
     requestId: "two",
-    expectedRevisionId: one.revision.id,
+    expectedRevisionId: one.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { height: 240 } }],
   });
   const page = store.history(id, null, 1);
-  expect(page.revisions.map((r) => r.id)).toEqual([original.revision.id]);
-  const nothing = { requestId: "noop", expectedRevisionId: two.revision.id, operations: [] };
+  expect(page.revisions.map((r) => r.revisionId)).toEqual([original.revision.revisionId]);
+  const nothing = {
+    requestId: "noop",
+    expectedRevisionId: two.revision.revisionId,
+    operations: [],
+  };
   expect(store.apply(id, nothing).revision).toEqual(two.revision);
   expect(store.history(id).revisions.map((r) => r.ordinal)).toEqual([0, 1, 2]);
-  const undone = store.undo(id, { requestId: "undo-one", expectedRevisionId: two.revision.id });
+  const undone = store.undo(id, {
+    requestId: "undo-one",
+    expectedRevisionId: two.revision.revisionId,
+  });
   expect(undone.document).toEqual(one.revision.document);
-  expect(undone.id).not.toBe(one.revision.id);
+  expect(undone.revisionId).not.toBe(one.revision.revisionId);
   expect(store.apply(id, nothing).revision).toEqual(two.revision);
-  const undoneAgain = store.undo(id, { requestId: "undo-two", expectedRevisionId: undone.id });
+  const undoneAgain = store.undo(id, {
+    requestId: "undo-two",
+    expectedRevisionId: undone.revisionId,
+  });
   expect(undoneAgain.document).toEqual(original.revision.document);
   expect(() =>
-    store.undo(id, { requestId: "undo-empty", expectedRevisionId: undoneAgain.id }),
+    store.undo(id, { requestId: "undo-empty", expectedRevisionId: undoneAgain.revisionId }),
   ).toThrow(/No active edit/);
   const restored = store.restore(id, {
     requestId: "restore",
-    expectedRevisionId: undoneAgain.id,
-    targetRevisionId: two.revision.id,
+    expectedRevisionId: undoneAgain.revisionId,
+    targetRevisionId: two.revision.revisionId,
   });
   expect(restored.document).toEqual(two.revision.document);
-  expect(restored.id).not.toBe(two.revision.id);
+  expect(restored.revisionId).not.toBe(two.revision.revisionId);
   expect(
-    store.undo(id, { requestId: "undo-restore", expectedRevisionId: restored.id }).document,
+    store.undo(id, { requestId: "undo-restore", expectedRevisionId: restored.revisionId }).document,
   ).toEqual(original.revision.document);
   expect(store.history(id, page.nextCursor, 100).revisions.map((r) => r.ordinal)).toEqual([1, 2]);
 });
@@ -137,7 +147,7 @@ test("speaker corrections are one reversible revision with stale and replay-safe
   const created = store.create({ requestId: "create-speaker", canvas });
   const request = {
     requestId: "correct-speaker",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     corrections: [
       {
         id: "fix-1",
@@ -159,13 +169,13 @@ test("speaker corrections are one reversible revision with stale and replay-safe
   ).toThrow(/revision has changed/);
   const undone = store.undo(created.project.projectId, {
     requestId: "undo-speaker",
-    expectedRevisionId: corrected.id,
+    expectedRevisionId: corrected.revisionId,
   });
   expect(undone.speakerCorrections).toBeUndefined();
   const restored = store.restore(created.project.projectId, {
     requestId: "restore-speaker",
-    expectedRevisionId: undone.id,
-    targetRevisionId: corrected.id,
+    expectedRevisionId: undone.revisionId,
+    targetRevisionId: corrected.revisionId,
   });
   expect(restored.speakerCorrections).toEqual(request.corrections);
 });
@@ -211,7 +221,7 @@ test("late failed edits retain no partial state; historical revisions retain adm
   expect(() =>
     store.apply(id, {
       requestId: "attempt",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [...operations, { operation: "track.remove", trackId: { label: "audio" } }],
     }),
   ).toThrow(/clips explicitly/);
@@ -219,28 +229,35 @@ test("late failed edits retain no partial state; historical revisions retain adm
   expect(assets.references(asset.id)).toEqual([]);
   const placed = store.apply(id, {
     requestId: "attempt",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations,
   });
   const mapped = validateComposition(placed.revision.document, [compositionAsset(asset)]);
   expect(projectToSource(mapped, 10)).toMatchObject([{ sourceUs: 110, available: true }]);
   expect(projectToSource(mapped, 100)).toMatchObject([{ sourceUs: 200, available: false }]);
-  expect(assets.references(asset.id)).toEqual([{ kind: "revision", id: placed.revision.id }]);
+  expect(assets.references(asset.id)).toEqual([
+    { kind: "revision", id: placed.revision.revisionId },
+  ]);
   const removed = store.apply(id, {
     requestId: "remove",
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     operations: [{ operation: "remove", clipIds: [placed.edit.labels.clip], ripple: "none" }],
   });
   expect(removed.revision.document.clips).toEqual([]);
-  expect(assets.references(asset.id)).toEqual([{ kind: "revision", id: placed.revision.id }]);
-  const restored = store.undo(id, { requestId: "undo", expectedRevisionId: removed.revision.id });
+  expect(assets.references(asset.id)).toEqual([
+    { kind: "revision", id: placed.revision.revisionId },
+  ]);
+  const restored = store.undo(id, {
+    requestId: "undo",
+    expectedRevisionId: removed.revision.revisionId,
+  });
   expect(restored.document).toEqual(placed.revision.document);
   expect(
     assets
       .references(asset.id)
       .map((r) => r.id)
       .sort(),
-  ).toEqual([placed.revision.id, restored.id].sort());
+  ).toEqual([placed.revision.revisionId, restored.revisionId].sort());
 });
 
 test("independent catalog writers reject a stale head and keep project pagination scoped", async () => {
@@ -252,7 +269,7 @@ test("independent catalog writers reject a stale head and keep project paginatio
   const competitor = projectStoreFixture(catalog, new AssetStore(catalog, home), home);
   const request = {
     requestId: "writer-one",
-    expectedRevisionId: original.revision.id,
+    expectedRevisionId: original.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   };
   const changed = store.apply(original.project.projectId, request);
@@ -260,7 +277,7 @@ test("independent catalog writers reject a stale head and keep project paginatio
     competitor.apply(original.project.projectId, { ...request, requestId: "writer-two" }),
   ).toThrow(/revision has changed/);
   expect(competitor.revision(original.project.projectId)).toEqual(changed.revision);
-  expect(() => competitor.revision(second.project.projectId, changed.revision.id)).toThrow(
+  expect(() => competitor.revision(second.project.projectId, changed.revision.revisionId)).toThrow(
     /in project/,
   );
   const page = store.list({ limit: 1 });
@@ -317,7 +334,11 @@ test("deletion fences reads and replayed edits, survives restart, and retains cr
   const { home, path, catalog, store } = await setup();
   const created = store.create({ requestId: "delete-me", canvas });
   const id = created.project.projectId;
-  const request = { requestId: "noop", expectedRevisionId: created.revision.id, operations: [] };
+  const request = {
+    requestId: "noop",
+    expectedRevisionId: created.revision.revisionId,
+    operations: [],
+  };
   store.apply(id, request);
   expect(store.markDeleting(id)).toBe(true);
   expect(store.list().projects).toEqual([]);
@@ -345,13 +366,13 @@ test("large deleted histories retire in restartable pages without losing the tom
   const fixture = await setup({ memory: true });
   let { store, catalog } = fixture;
   const created = store.create({ requestId: "paged", canvas });
-  let head = created.revision.id;
+  let head = created.revision.revisionId;
   for (let i = 0; i < 1500; i++) {
     head = store.apply(created.project.projectId, {
       requestId: `edit-${i}`,
       expectedRevisionId: head,
       operations: [{ operation: "canvas.set", canvas: { width: 200 + i } }],
-    }).revision.id;
+    }).revision.revisionId;
   }
   // Exercise deletion on disk without charging setup for 1,500 independent durable commits.
   await backup(catalog.catalog, fixture.path);
@@ -371,7 +392,7 @@ test("large deleted histories retire in restartable pages without losing the tom
   expect(
     catalog.catalog.prepare("SELECT COUNT(*) AS count FROM project_requests").get()!.count,
   ).toBe(1500);
-  expect(store.revision(created.project.projectId).id).toBe(head);
+  expect(store.revision(created.project.projectId).revisionId).toBe(head);
   const id = created.project.projectId;
   store.markDeleting(id);
   let complete = false,
@@ -406,15 +427,18 @@ test("portable adoption preserves history and active undo independently and publ
   const id = initial.project.projectId;
   const first = donor.store.apply(id, {
     requestId: "first",
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   const second = donor.store.apply(id, {
     requestId: "second",
-    expectedRevisionId: first.revision.id,
+    expectedRevisionId: first.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { height: 240 } }],
   });
-  donor.store.undo(id, { requestId: "undo-second", expectedRevisionId: second.revision.id });
+  donor.store.undo(id, {
+    requestId: "undo-second",
+    expectedRevisionId: second.revision.revisionId,
+  });
   const snapshot = donor.store.snapshot(id);
   const input = { requestId: "adopt", packageIdentity: "verified-archive", snapshot };
   expect(() =>
@@ -429,7 +453,9 @@ test("portable adoption preserves history and active undo independently and publ
   expect(receiver.store.list().projects).toEqual([]);
   const adopted = receiver.store.prepareAdoption(input).publish(() => {});
   expect(adopted.project.projectId).not.toBe(id);
-  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(adopted.revision.id);
+  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(
+    adopted.revision.revisionId,
+  );
   expect(
     receiver.store.prepareAdoption(input).publish(() => {
       throw new Error("must not publish twice");
@@ -441,10 +467,10 @@ test("portable adoption preserves history and active undo independently and publ
   donor.store.markDeleting(id);
   const undone = receiver.store.undo(adopted.project.projectId, {
     requestId: "undo-first",
-    expectedRevisionId: adopted.revision.id,
+    expectedRevisionId: adopted.revision.revisionId,
   });
   expect(undone.document).toEqual(initial.revision.document);
-  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(undone.id);
+  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(undone.revisionId);
   expect(() =>
     receiver.store.prepareAdoption({ ...input, packageIdentity: "other" }).publish(() => {}),
   ).toThrow(/another package/);
@@ -479,7 +505,7 @@ test("portable adoption retains media used only by a past revision and restores 
   const created = donor.store.create({ requestId: "create", canvas });
   const placed = donor.store.apply(created.project.projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
       {
@@ -497,10 +523,10 @@ test("portable adoption retains media used only by a past revision and restores 
   });
   donor.store.apply(created.project.projectId, {
     requestId: "remove",
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     operations: [{ operation: "remove", clipIds: [placed.edit.labels.voice], ripple: "none" }],
   });
-  donor.assets.retain({ kind: "revision", id: created.revision.id }, [asset.id]);
+  donor.assets.retain({ kind: "revision", id: created.revision.revisionId }, [asset.id]);
   const staged = await receiver.assets.stagePortable(
     donor.assets.portable(asset.id),
     donor.assets.path(asset.id),
@@ -521,17 +547,20 @@ test("portable adoption retains media used only by a past revision and restores 
       .map((owner) => owner.id)
       .sort(),
   ).toEqual(
-    [adopted.revisionIds[placed.revision.id], adopted.revisionIds[created.revision.id]].sort(),
+    [
+      adopted.revisionIds[placed.revision.revisionId],
+      adopted.revisionIds[created.revision.revisionId],
+    ].sort(),
   );
   expect(receiver.store.snapshot(adopted.project.projectId).references).toContainEqual({
-    revisionId: adopted.revisionIds[created.revision.id],
+    revisionId: adopted.revisionIds[created.revision.revisionId],
     resources: [{ kind: "asset", id: asset.id }],
   });
   await rm(source);
   await rm(donor.assets.path(asset.id));
   const undone = receiver.store.undo(adopted.project.projectId, {
     requestId: "undo",
-    expectedRevisionId: adopted.revision.id,
+    expectedRevisionId: adopted.revision.revisionId,
   });
   expect(undone.document).toEqual(placed.revision.document);
   expect(receiver.assets.get(asset.id)).toEqual(asset);
@@ -578,23 +607,23 @@ test("historical snapshots pin their own history and undo before later restore a
   const id = initial.project.projectId;
   const first = donor.store.apply(id, {
     requestId: "one",
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   }).revision;
   const second = donor.store.apply(id, {
     requestId: "two",
-    expectedRevisionId: first.id,
+    expectedRevisionId: first.revisionId,
     operations: [{ operation: "canvas.set", canvas: { height: 240 } }],
   }).revision;
-  const undone = donor.store.undo(id, { requestId: "undo", expectedRevisionId: second.id });
+  const undone = donor.store.undo(id, { requestId: "undo", expectedRevisionId: second.revisionId });
   const restored = donor.store.restore(id, {
     requestId: "restore",
-    expectedRevisionId: undone.id,
-    targetRevisionId: second.id,
+    expectedRevisionId: undone.revisionId,
+    targetRevisionId: second.revisionId,
   });
   const later = donor.store.apply(id, {
     requestId: "later",
-    expectedRevisionId: restored.id,
+    expectedRevisionId: restored.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 640 } }],
   }).revision;
   for (const [selected, targets] of [
@@ -603,33 +632,37 @@ test("historical snapshots pin their own history and undo before later restore a
     [undone, [initial.revision]],
     [restored, [undone, initial.revision]],
   ] as const) {
-    const snapshot = donor.store.snapshot(id, selected.id);
-    expect(snapshot.project.currentRevisionId).toBe(selected.id);
-    expect(snapshot.revisions.map((r) => r.id)).toEqual(
+    const snapshot = donor.store.snapshot(id, selected.revisionId);
+    expect(snapshot.project.currentRevisionId).toBe(selected.revisionId);
+    expect(snapshot.revisions.map((r) => r.revisionId)).toEqual(
       [initial.revision, first, second, undone, restored]
         .slice(0, selected.ordinal + 1)
-        .map((r) => r.id),
+        .map((r) => r.revisionId),
     );
     const adopted = receiver.store
-      .prepareAdoption({ requestId: selected.id, packageIdentity: selected.id, snapshot })
+      .prepareAdoption({
+        requestId: selected.revisionId,
+        packageIdentity: selected.revisionId,
+        snapshot,
+      })
       .publish(() => {});
     let head = adopted.revision;
     expect(head.document).toEqual(selected.document);
     for (const target of targets) {
       head = receiver.store.undo(adopted.project.projectId, {
-        requestId: target.id,
-        expectedRevisionId: head.id,
+        requestId: target.revisionId,
+        expectedRevisionId: head.revisionId,
       });
       expect(head.document).toEqual(target.document);
     }
     expect(() =>
       receiver.store.undo(adopted.project.projectId, {
         requestId: "empty",
-        expectedRevisionId: head.id,
+        expectedRevisionId: head.revisionId,
       }),
     ).toThrow(/No active edit/);
   }
-  expect(donor.store.snapshot(id, later.id)).toEqual(donor.store.snapshot(id));
+  expect(donor.store.snapshot(id, later.revisionId)).toEqual(donor.store.snapshot(id));
   expect(donor.store.revision(id)).toEqual(later);
   expect(() => donor.store.snapshot(id, "missing")).toThrow(/Revision does not exist/);
 });
@@ -640,7 +673,7 @@ test("shared state membership survives replay, undo and restored history without
   const id = original.project.projectId;
   const placed = store.apply(id, {
     requestId: "state-place",
-    expectedRevisionId: original.revision.id,
+    expectedRevisionId: original.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
       {
@@ -661,7 +694,7 @@ test("shared state membership survives replay, undo and restored history without
   });
   const request = {
     requestId: "state-split",
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     operations: [
       { operation: "split", clipIds: [placed.edit.labels.clip!], atUs: 2000000, scope: "selected" },
     ],
@@ -670,21 +703,24 @@ test("shared state membership survives replay, undo and restored history without
   const token = split.revision.document.processing[0]!.steps[0]!.stateKey;
   expect(token).toBeTruthy();
   expect(store.apply(id, request)).toEqual(split);
-  const undone = store.undo(id, { requestId: "state-undo", expectedRevisionId: split.revision.id });
+  const undone = store.undo(id, {
+    requestId: "state-undo",
+    expectedRevisionId: split.revision.revisionId,
+  });
   expect(undone.document).toEqual(placed.revision.document);
   const fresh = store.apply(id, {
     ...request,
     requestId: "state-new-split",
-    expectedRevisionId: undone.id,
+    expectedRevisionId: undone.revisionId,
   });
   expect(fresh.revision.document.processing[0]!.steps[0]!.stateKey).not.toBe(token);
   const restored = store.restore(id, {
     requestId: "state-restore",
-    expectedRevisionId: fresh.revision.id,
-    targetRevisionId: split.revision.id,
+    expectedRevisionId: fresh.revision.revisionId,
+    targetRevisionId: split.revision.revisionId,
   });
   expect(restored.document).toEqual(split.revision.document);
-  expect(store.revision(id, split.revision.id).document).toEqual(split.revision.document);
+  expect(store.revision(id, split.revision.revisionId).document).toEqual(split.revision.document);
 });
 
 test("pinned revision availability respects exact membership and deletion without document hydration", async () => {
@@ -692,16 +728,16 @@ test("pinned revision availability respects exact membership and deletion withou
   const first = store.create({ requestId: "first", title: "first", canvas });
   const second = store.create({ requestId: "second", title: "second", canvas });
   const id = first.project.projectId;
-  expect(store.hasRevision(id, first.revision.id)).toBe(true);
-  expect(store.hasRevision(id, second.revision.id)).toBe(false);
-  expect(store.hasRevision("missing", first.revision.id)).toBe(false);
+  expect(store.hasRevision(id, first.revision.revisionId)).toBe(true);
+  expect(store.hasRevision(id, second.revision.revisionId)).toBe(false);
+  expect(store.hasRevision("missing", first.revision.revisionId)).toBe(false);
   // Availability is a row-membership contract, not a content parser.
   catalog.catalog
     .prepare("UPDATE project_revisions SET content=? WHERE id=?")
-    .run("not parsed", first.revision.id);
-  expect(store.hasRevision(id, first.revision.id)).toBe(true);
+    .run("not parsed", first.revision.revisionId);
+  expect(store.hasRevision(id, first.revision.revisionId)).toBe(true);
   store.markDeleting(id);
-  expect(store.hasRevision(id, first.revision.id)).toBe(false);
+  expect(store.hasRevision(id, first.revision.revisionId)).toBe(false);
 });
 
 test("pinned revision ownership preserves missing, foreign and deleted project refusals", async () => {
@@ -709,7 +745,7 @@ test("pinned revision ownership preserves missing, foreign and deleted project r
   const first = store.create({ requestId: "first", canvas });
   const second = store.create({ requestId: "second", canvas });
   const projectId = first.project.projectId,
-    revisionId = first.revision.id;
+    revisionId = first.revision.revisionId;
   expect(store.requireRevision(projectId, revisionId)).toBeUndefined();
   expect(store.revisionDependencies(projectId, revisionId)).toEqual([]);
   const error = (run: () => unknown) => {
@@ -728,7 +764,7 @@ test("pinned revision ownership preserves missing, foreign and deleted project r
   };
   for (const [project, revision] of [
     [projectId, "missing"],
-    [projectId, second.revision.id],
+    [projectId, second.revision.revisionId],
     ["missing", revisionId],
   ]) {
     const expected = error(() => store.revision(project!, revision!));
@@ -755,7 +791,7 @@ test("LUT-only revision dependencies survive cleared stacks, relocation and rest
   const id = original.project.projectId;
   const authored = donor.store.apply(id, {
     requestId: "look",
-    expectedRevisionId: original.revision.id,
+    expectedRevisionId: original.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -775,12 +811,12 @@ test("LUT-only revision dependencies survive cleared stacks, relocation and rest
   });
   const cleared = donor.store.apply(id, {
     requestId: "clear",
-    expectedRevisionId: authored.revision.id,
+    expectedRevisionId: authored.revision.revisionId,
     operations: [{ operation: "processing.set", target: { kind: "output" }, steps: [] }],
   });
   expect(donor.assets.references(lut.id)).toContainEqual({
     kind: "revision",
-    id: authored.revision.id,
+    id: authored.revision.revisionId,
   });
   const staged = await receiver.assets.stagePortable(
     donor.assets.portable(lut.id),
@@ -798,7 +834,7 @@ test("LUT-only revision dependencies survive cleared stacks, relocation and rest
   await rm(donor.assets.path(lut.id));
   const undone = receiver.store.undo(adopted.project.projectId, {
     requestId: "restore-look",
-    expectedRevisionId: adopted.revision.id,
+    expectedRevisionId: adopted.revision.revisionId,
   });
   expect(undone.document).toEqual(authored.revision.document);
   expect(receiver.assets.get(lut.id).lut).toEqual(lut.lut);

@@ -102,7 +102,7 @@ export async function fixture(
       targets: {
         pin: (t) => {
           if (t.kind === "project")
-            return { ...t, revisionId: projects.revision(t.projectId, t.revisionId).id };
+            return { ...t, revisionId: projects.revision(t.projectId, t.revisionId).revisionId };
           if (t.kind !== "asset") throw new Error("asset only");
           assets.get(t.assetId);
           return t;

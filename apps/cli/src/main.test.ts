@@ -436,7 +436,7 @@ it("CLI and real MCP transport share project edits, replay, history and structur
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const projectId = (created.data as { project: { projectId: string } }).project.projectId;
-  const initial = (created.data as { revision: { id: string } }).revision.id;
+  const initial = (created.data as { revision: { revisionId: string } }).revision.revisionId;
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entry, "mcp", "--socket", socket],
@@ -465,13 +465,13 @@ it("CLI and real MCP transport share project edits, replay, history and structur
   const seeded = await call("edit.apply", seedParams);
   if (!seeded.ok) throw new Error(JSON.stringify(seeded));
   const source = seeded.data as {
-    revision: { id: string; document: unknown };
+    revision: { revisionId: string; document: unknown };
     edit: { labels: { silence: string; voice: string } };
   };
   const params = {
     projectId,
     requestId: "cut-one",
-    expectedRevisionId: source.revision.id,
+    expectedRevisionId: source.revision.revisionId,
     operations: [
       {
         operation: "remove",
@@ -508,7 +508,7 @@ it("CLI and real MCP transport share project edits, replay, history and structur
     arguments: {
       projectId,
       requestId: "undo-one",
-      expectedRevisionId: first.result.data.revision.id,
+      expectedRevisionId: first.result.data.revision.revisionId,
     },
   });
   expect(undo.structuredContent).toMatchObject({

@@ -85,7 +85,7 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   if (!created.ok) throw new Error(JSON.stringify(created));
   const source = created.data as {
     project: { projectId: string };
-    revision: { id: string; document: unknown };
+    revision: { revisionId: string; document: unknown };
   };
   const duplicated = await f.call("project.duplicate", {
     requestId: "duplicate-project",
@@ -98,7 +98,7 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   if (!duplicated.ok) throw new Error(JSON.stringify(duplicated));
   const copy = duplicated.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   expect(
     await f.call("project.duplicate", {
@@ -115,7 +115,7 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("revision.history", { projectId: copy.project.projectId })).toMatchObject({
     ok: true,
-    data: { revisions: [{ id: copy.revision.id, ordinal: 0 }], nextCursor: null },
+    data: { revisions: [{ revisionId: copy.revision.revisionId, ordinal: 0 }], nextCursor: null },
   });
   expect(
     await f.call("project.delete", {
@@ -125,11 +125,11 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   ).toMatchObject({ ok: true, data: { projectId: source.project.projectId, deleted: true } });
   expect(await f.call("revision.get", { projectId: copy.project.projectId })).toMatchObject({
     ok: true,
-    data: { projectId: copy.project.projectId, revision: { id: copy.revision.id } },
+    data: { projectId: copy.project.projectId, revision: { revisionId: copy.revision.revisionId } },
   });
   expect(await f.call("inspect.open", { projectId: copy.project.projectId })).toMatchObject({
     ok: true,
-    data: { projectId: copy.project.projectId, revision: { id: copy.revision.id } },
+    data: { projectId: copy.project.projectId, revision: { revisionId: copy.revision.revisionId } },
   });
   expect(
     f.service.libraryUsers!.usersOf({ kind: "project", id: copy.project.projectId }),
@@ -402,7 +402,7 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   const catalog = new Catalog(join(home, "library/catalog.sqlite"));
   const cacheId = randomUUID();
@@ -417,7 +417,7 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
       );
     catalog.catalog
       .prepare("INSERT INTO resource_references VALUES(?,?,?,?)")
-      .run("acquisition", "acquisition-capture", "revision", revision.id);
+      .run("acquisition", "acquisition-capture", "revision", revision.revisionId);
     catalog.catalog
       .prepare(
         "INSERT INTO derived_cache(id,ownerKind,ownerId,touched,bytes) VALUES (?,'project',?,1,?)",
@@ -922,7 +922,7 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   await writeFile(archive, "x");
   const opened = await f.control("package.open", { path: archive });
   if (!opened.ok) throw new Error(JSON.stringify(opened));
-  const id = (opened.data as { id: string }).id;
+  const id = (opened.data as { packageId: string }).packageId;
   await expect
     .poll(() => f.control("package.status", { admissionId: id }))
     .toMatchObject({ ok: true, data: { state: "ready", packageHandle: expect.any(String) } });
@@ -1326,10 +1326,13 @@ test("audio preparation pins its revision and reuses failed work until explicit 
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const initial = created.data as { project: { projectId: string }; revision: { id: string } };
+  const initial = created.data as {
+    project: { projectId: string };
+    revision: { revisionId: string };
+  };
   const edited = await f.call("edit.apply", {
     projectId: initial.project.projectId,
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     requestId: "silence",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1346,7 +1349,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const selection = {
     projectId: initial.project.projectId,
-    revisionId: (edited.data as { revision: { id: string } }).revision.id,
+    revisionId: (edited.data as { revision: { revisionId: string } }).revision.revisionId,
   };
   const pending = await f.call("audio.prepare", selection);
   expect(pending.ok).toBe(true);
@@ -1376,7 +1379,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   expect(attempts).toBe(2);
   expect(await f.call("revision.get", selection)).toMatchObject({
     ok: true,
-    data: { revision: { id: selection.revisionId } },
+    data: { revision: { revisionId: selection.revisionId } },
   });
   expect(await f.call("audio.prepare", { projectId: selection.projectId })).toMatchObject({
     ok: false,
@@ -1598,7 +1601,13 @@ test("large provenance history cannot hide metadata and every origin remains pag
     operation: "asset.get",
     params: { assetId },
   });
-  expect(get).toMatchObject({ ok: true, data: { assetId, streams: metadata.streams } });
+  expect(get).toMatchObject({
+    ok: true,
+    data: {
+      assetId,
+      streams: metadata.streams.map(({ id, ...stream }) => ({ ...stream, streamId: id })),
+    },
+  });
   expect(Buffer.byteLength(JSON.stringify(get))).toBeLessThan(1024);
   const observed: ReturnType<AssetStore["origins"]>["origins"] = [];
   let cursor: ReturnType<AssetStore["origins"]>["nextCursor"] = null;
@@ -1710,13 +1719,13 @@ test("shutdown aborts an in-flight export destination admission before draining 
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   expect(
     await f.call("edit.apply", {
       projectId: project.projectId,
       requestId: "place",
-      expectedRevisionId: revision.id,
+      expectedRevisionId: revision.revisionId,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
         {
@@ -1883,12 +1892,12 @@ test("project transcript review reports a failed default model download as faile
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   const placed = await f.call("edit.apply", {
     projectId: project.projectId,
     requestId: "place",
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "speech" },
       {
@@ -1906,7 +1915,7 @@ test("project transcript review reports a failed default model download as faile
   if (!placed.ok) throw new Error(JSON.stringify(placed));
   const review = {
     projectId: project.projectId,
-    revisionId: (placed.data as { revision: { id: string } }).revision.id,
+    revisionId: (placed.data as { revision: { revisionId: string } }).revision.revisionId,
   };
   // The default model is fetched without asking; here the fetch fails.
   expect(await f.call("transcript.review", review)).toMatchObject({
@@ -1946,9 +1955,9 @@ test("project transcript paging uses shared jobs and returns an empty historical
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
-  const params = { projectId: project.projectId, revisionId: revision.id, limit: 1 };
+  const params = { projectId: project.projectId, revisionId: revision.revisionId, limit: 1 };
   const pending = await f.call("transcript.get", params);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
@@ -1957,7 +1966,7 @@ test("project transcript paging uses shared jobs and returns an empty historical
     ok: true,
     data: {
       projectId: project.projectId,
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
       state: "ready",
       dependencies: [],
       rows: [],
@@ -1971,7 +1980,7 @@ test("project transcript paging uses shared jobs and returns an empty historical
     ok: true,
     data: {
       projectId: project.projectId,
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
       state: "ready",
       entries: [],
       nextCursor: null,
@@ -2058,7 +2067,7 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
       published: {
         output: {
           ...selection,
-          frames: 1,
+          frameCount: 1,
           sampleRate: 48000,
           channels: 1,
           unavailable: [],
@@ -2090,13 +2099,15 @@ test("project export refuses a dangling prepared audio reference before native w
   if (!created.ok) throw Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   await f.service.close();
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
-  new ResourceReferences(catalog).retain("prepared-audio", { kind: "revision", id: revision.id }, [
-    JSON.stringify([project.projectId, "prepared-attempt"]),
-  ]);
+  new ResourceReferences(catalog).retain(
+    "prepared-audio",
+    { kind: "revision", id: revision.revisionId },
+    [JSON.stringify([project.projectId, "prepared-attempt"])],
+  );
   catalog.close();
   const service = await startProjectService({
     home: f.home,
@@ -2253,7 +2264,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v8-cursor",
+      implementationId: "native-source-picture-v9-cursor",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {
@@ -2273,7 +2284,7 @@ test("asset job and cache presence checks preserve source validation without hyd
             actualSourceUs: 0,
             width: 2,
             height: 1,
-            bytes: payload.length,
+            sizeBytes: payload.length,
           },
         },
       });

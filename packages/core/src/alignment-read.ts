@@ -100,7 +100,7 @@ export class SourceAlignmentRead {
         operand,
         encoding: "base64-original-utf8" as const,
         ...raw,
-        nextCursor: cursor(raw.nextOffset),
+        nextCursor: cursor(raw.nextOffsetBytes),
       };
     }
     if (!("wordCount" in this.metadata))

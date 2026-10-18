@@ -104,11 +104,11 @@ try {
   const members = Object.entries(sourceAssets).map(([name, asset]) => ({
     name,
     asset,
-    streamId: asset.streams.find((stream) => stream.kind === "video").id,
+    streamId: asset.streams.find((stream) => stream.kind === "video").streamId,
   }));
   const edited = await call("edit.apply", {
     projectId: project.project.projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "angles", track: { kind: "video", order: 0 } },
@@ -147,7 +147,7 @@ try {
       },
     ],
   });
-  report.project = { projectId: project.project.projectId, revisionId: edited.revision.id };
+  report.project = { projectId: project.project.projectId, revisionId: edited.revision.revisionId };
 
   const expected = {};
   for (const { name, asset, streamId } of members) {
@@ -166,7 +166,7 @@ try {
   for (const [name, atUs] of Object.entries({ A: 250000, B: 1250000, C: 2250000 })) {
     const request = {
       projectId: project.project.projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       atUs,
       maxLongEdge: 64,
     };
@@ -196,7 +196,7 @@ try {
         "preview.get",
         {
           projectId: project.project.projectId,
-          revisionId: edited.revision.id,
+          revisionId: edited.revision.revisionId,
           range: { startUs: 0, endUs: 3000000 },
         },
         { output: preview },

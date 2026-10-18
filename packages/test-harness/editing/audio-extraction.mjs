@@ -331,7 +331,7 @@ try {
   const asset = await imported(long, "long-marker");
   const selection = {
     assetId: asset.id,
-    streamId: asset.streams.find((s) => s.kind === "audio").id,
+    streamId: asset.streams.find((s) => s.kind === "audio").streamId,
   };
   monitor = setInterval(() => {
     if (!sampling)

@@ -124,7 +124,7 @@ test("the offline source observer returns original operands before its render at
     join(f.home, "observer-operands.json"),
     JSON.stringify({ original: f.raw, observed }),
   );
-  expect(observed.pcm).toEqual({ sha256: f.pcmSha256, sampleRate: 16000, frames: 480000 });
+  expect(observed.pcm).toEqual({ sha256: f.pcmSha256, sampleRate: 16000, frameCount: 480000 });
   expect(observed.operands.nativeReceipt).toBe(f.raw.nativeReceipt);
   expect(JSON.parse(observed.operands.report)).toEqual({
     ...JSON.parse(f.raw.report),

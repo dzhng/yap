@@ -274,7 +274,7 @@ async function fixture() {
     },
   });
   const placed = projects.apply(created.project.projectId, {
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -292,7 +292,7 @@ async function fixture() {
   });
   const selection = {
     projectId: created.project.projectId,
-    revisionId: placed.revision.id,
+    revisionId: placed.revision.revisionId,
     tap: { target: { kind: "output" as const }, point: { kind: "processed" as const } },
     range: { startUs: 1000001, endUs: 2000001 },
     rendition: { sampleRate: 16000, channels: 1 as const },
@@ -331,7 +331,7 @@ test("rendered recognition survives failed original transcription and maps actua
     revisionId: f.selection.revisionId,
     tap: f.selection.tap,
     range: f.selection.range,
-    sampleRange: { start: 48000, end: 96000 },
+    sampleRange: { startSamples: 48000, endSamples: 96000 },
   });
   const first = f.rendered.get({
     projectId: f.selection.projectId,
@@ -508,7 +508,7 @@ test("model absence is retryable and retained output reads refuse foreign revisi
     ],
   });
   expect(f.rendered.get(read).page.rows[0]).toMatchObject({ text: "rendered" });
-  expect(() => f.rendered.get({ ...read, revisionId: changed.revision.id })).toThrow(
+  expect(() => f.rendered.get({ ...read, revisionId: changed.revision.revisionId })).toThrow(
     "another revision",
   );
   const first = f.rendered.get({ ...read, limit: 1 });
@@ -559,18 +559,18 @@ test("a retained rendered publication without the current transcript policy cann
     expectedRevisionId: f.selection.revisionId,
     targetRevisionId: f.selection.revisionId,
   });
-  const selection = { ...f.selection, revisionId: restored.id };
+  const selection = { ...f.selection, revisionId: restored.revisionId };
   const historicalInput = JSON.parse(retained.input);
-  historicalInput.request.revisionId = restored.id;
+  historicalInput.request.revisionId = restored.revisionId;
   delete historicalInput.execution.policy;
   const historical = JSON.parse(retained.result);
-  historical.selection.revisionId = restored.id;
-  historical.pcm.origin.selection.revisionId = restored.id;
+  historical.selection.revisionId = restored.revisionId;
+  historical.pcm.origin.selection.revisionId = restored.revisionId;
   historical.transcript.engine.policy = "historical-policy";
   f.jobs.adoptArtifact(
     {
       ...retained,
-      target: { kind: "project", projectId: selection.projectId, revisionId: restored.id },
+      target: { kind: "project", projectId: selection.projectId, revisionId: restored.revisionId },
       attemptId: randomUUID(),
       input: JSON.stringify(historicalInput),
       result: JSON.stringify(historical),

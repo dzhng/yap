@@ -65,7 +65,10 @@ async function fixture(render = renderer) {
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+        };
       },
       isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.projectId),
       isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
@@ -127,7 +130,7 @@ async function fixture(render = renderer) {
   const projectId = created.project.projectId;
   const placed = projects.apply(projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "track" },
       {
@@ -286,7 +289,7 @@ test("warm published preview reuses the cached render for its pinned revision", 
       return renderer.render(request, signal);
     },
   });
-  const input = { projectId: f.projectId, revisionId: f.placed.revision.id };
+  const input = { projectId: f.projectId, revisionId: f.placed.revision.revisionId };
   const sourceBefore = await readFile(f.assets.path(f.asset.id));
 
   const cold = await f.preview.request(input);
@@ -428,7 +431,7 @@ test("binds supported gain throughout audio routing and output, but refuses unpr
   ];
   const edited = f.projects.apply(f.projectId, {
     requestId: "gain-tree",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       { operation: "group.add", group: { kind: "audio", order: 1 }, label: "outer" },
       {
@@ -473,7 +476,7 @@ test("binds supported gain throughout audio routing and output, but refuses unpr
   ).toEqual([0.1, 0.2, 0.3, 0.4, 0.5].map((gain) => [gain, renderer.implementationId]));
   f.projects.apply(f.projectId, {
     requestId: "stretch",
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     operations: [
       {
         operation: "retime",
@@ -572,7 +575,7 @@ async function addRetimedAudio(f: Awaited<ReturnType<typeof fixture>>) {
   }));
   return f.projects.apply(f.projectId, {
     requestId: "retimed-audio",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 1 }, label: "voice" },
       {
@@ -624,12 +627,12 @@ test("preflight pins the revision and callback rollback leaves admission reusabl
   await started.promise;
   f.projects.apply(f.projectId, {
     requestId: "edit-during-preflight",
-    expectedRevisionId: retimed.revision.id,
+    expectedRevisionId: retimed.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   release.resolve();
   const prepared = await pending;
-  expect(prepared.snapshot.revisionId).toBe(retimed.revision.id);
+  expect(prepared.snapshot.revisionId).toBe(retimed.revision.revisionId);
   expect(prepared.snapshot.retimeImplementationId).toBe("retime-fixture");
   expect(() =>
     prepared.submit(() => {
@@ -638,7 +641,7 @@ test("preflight pins the revision and callback rollback leaves admission reusabl
   ).toThrow("export intent rejected");
   expect(f.catalog.catalog.prepare("SELECT jobId FROM jobs").all()).toEqual([]);
   const pinned = structuredClone(prepared.snapshot);
-  prepared.snapshot.revisionId = f.projects.revision(f.projectId).id;
+  prepared.snapshot.revisionId = f.projects.revision(f.projectId).revisionId;
   prepared.snapshot.range.endUs = 1000000;
   const admitted = prepared.submit();
   admitted.range.endUs = 1000000;
@@ -652,7 +655,7 @@ test("preflight pins the revision and callback rollback leaves admission reusabl
   const ready = await f.preview.request(pinned);
   expect(ready.jobId).toBe(admitted.jobId);
   const content = JSON.parse(await readFile(ready.published!.preview.file, "utf8"));
-  expect(content.manifest.revisionId).toBe(retimed.revision.id);
+  expect(content.manifest.revisionId).toBe(retimed.revision.revisionId);
   expect(content.manifest.canvas.width).toBe(160);
 });
 
@@ -715,7 +718,7 @@ test("failed preview output is reclaimed and requires explicit same-revision ret
       return movie;
     },
   });
-  const input = { projectId: f.projectId, revisionId: f.placed.revision.id };
+  const input = { projectId: f.projectId, revisionId: f.placed.revision.revisionId };
   const admitted = await f.preview.request(input);
   await f.jobs.idle();
   const failed = await f.preview.request(input);
@@ -765,7 +768,7 @@ test("a movie whose text fell back to another face publishes with font issues", 
   }));
   const placed = f.projects.apply(f.projectId, {
     requestId: "caption",
-    expectedRevisionId: f.projects.revision(f.projectId).id,
+    expectedRevisionId: f.projects.revision(f.projectId).revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 1 }, label: "captions" },
       {

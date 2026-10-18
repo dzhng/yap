@@ -60,7 +60,7 @@ try {
         source = join(home, `${name}.${kind}`);
       await copyFile(join(fixture, "sources", `${name}.${kind}`), source);
       const asset = await imported(source),
-        selection = { assetId: asset.id, streamId: asset.streams[0].id };
+        selection = { assetId: asset.id, streamId: asset.streams[0].streamId };
       const first = await ready(selection),
         file = join(out, `${name}-cli.png`);
       const delivered = await call("frame.get", selection, { output: file });
@@ -213,7 +213,7 @@ try {
   await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [
       { operation: "track.add", label: "pictures", track: { kind: "video", order: 0 } },
       {
@@ -236,7 +236,7 @@ try {
   const video = await imported(join(root, "specs/done/agent-editing/assets/00-corpus/a.mov"));
   const videoSelection = {
     assetId: video.id,
-    streamId: video.streams.find((stream) => stream.kind === "video").id,
+    streamId: video.streams.find((stream) => stream.kind === "video").streamId,
   };
   for (const [params, code] of [
     [{ ...selection, atUs: 0 }, "UNSUPPORTED_MEDIA"],

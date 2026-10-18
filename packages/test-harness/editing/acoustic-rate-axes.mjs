@@ -55,7 +55,7 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
   const edited = await call("edit.apply", {
     requestId: randomUUID(),
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
       {
@@ -74,7 +74,7 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
   const report = {
     sourceSHA256: hash(source),
     projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     clickTime,
     frequencies,
     views: [],
@@ -84,7 +84,7 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
   try {
     for (const [name, selection, rate] of [
       ["source", { assetId: asset.id, streamId: stream.id }, nativeRate],
-      ["project", { projectId, revisionId: edited.revision.id }, 48000],
+      ["project", { projectId, revisionId: edited.revision.revisionId }, 48000],
     ]) {
       const fullPath = join(out, `rate-${name}-full.wav`),
         rangePath = join(out, `rate-${name}-range.wav`);

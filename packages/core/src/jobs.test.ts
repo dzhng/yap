@@ -163,7 +163,7 @@ function project(projects: ReturnType<typeof projectStoreFixture>) {
       background: "#000000ff",
     },
   });
-  return { projectId: created.project.projectId, revisionId: created.revision.id };
+  return { projectId: created.project.projectId, revisionId: created.revision.revisionId };
 }
 
 afterEach(async () => {
@@ -295,7 +295,7 @@ test("an edit during processing does not move the revision the work was admitted
   }).revision;
   attempt.finish("transcript-a");
   await queue.idle();
-  expect(projects.revision(projectId).id).toBe(edited.id);
+  expect(projects.revision(projectId).revisionId).toBe(edited.revisionId);
   expect(
     queue.status({
       target: { kind: "project" as const, projectId: projectId, revisionId: revisionId },
@@ -311,11 +311,12 @@ test("an edit during processing does not move the revision the work was admitted
     result: "transcript-a",
   });
   expect(
-    queue.submit({ ...request, target: { ...request.target, revisionId: edited.id } }).target,
+    queue.submit({ ...request, target: { ...request.target, revisionId: edited.revisionId } })
+      .target,
   ).toEqual({
     kind: "project",
     projectId,
-    revisionId: edited.id,
+    revisionId: edited.revisionId,
   });
 });
 
@@ -642,9 +643,9 @@ test("the same parameters on an edited revision never reuse the old running job"
   }).revision;
   const second = queue.submit({
     ...request,
-    target: { ...request.target, revisionId: revision.id },
+    target: { ...request.target, revisionId: revision.revisionId },
   });
-  expect(second.target).toEqual({ kind: "project", projectId, revisionId: revision.id });
+  expect(second.target).toEqual({ kind: "project", projectId, revisionId: revision.revisionId });
   expect(second.jobId).not.toBe(first.jobId);
 });
 
@@ -666,7 +667,7 @@ test("out-of-order results retain their own revision and input identities", asyn
   }).revision;
   const current = queue.submit({
     ...request,
-    target: { ...request.target, revisionId: edited.id },
+    target: { ...request.target, revisionId: edited.revisionId },
   });
   (await started(current.attemptId)).finish("new-revision-pixels");
   // An acknowledged next start proves the preceding result was durably settled.
@@ -675,12 +676,12 @@ test("out-of-order results retain their own revision and input identities", asyn
   oldWork.finish("old-revision-pixels");
   await queue.idle();
   expect(queue.status(current).published).toMatchObject({
-    target: { revisionId: edited.id },
+    target: { revisionId: edited.revisionId },
     input: "at=2",
     result: "new-revision-pixels",
   });
   expect(queue.status(alternate).published).toMatchObject({
-    target: { revisionId: edited.id },
+    target: { revisionId: edited.revisionId },
     input: "at=4",
     result: "other-time-pixels",
   });

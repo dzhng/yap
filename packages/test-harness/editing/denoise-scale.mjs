@@ -142,7 +142,7 @@ try {
         clip: {
           trackId,
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: span } },
           placement: { kind: "project", range: { startUs: i * span, endUs: (i + 1) * span } },
         },
@@ -156,13 +156,18 @@ try {
     revision = (
       await call(
         "edit.apply",
-        { projectId, expectedRevisionId: revision.id, requestId: `place-${first}`, operations },
+        {
+          projectId,
+          expectedRevisionId: revision.revisionId,
+          requestId: `place-${first}`,
+          operations,
+        },
         { transport: "mcp" },
       )
     ).revision;
   }
   report.observations.setupMs = performance.now() - setupAt;
-  const selection = { projectId, revisionId: revision.id },
+  const selection = { projectId, revisionId: revision.revisionId },
     preparingAt = performance.now();
   const submitted = await call("audio.prepare", selection);
   report.receipts.push(
@@ -235,7 +240,7 @@ try {
   await service.start();
   const range = {
     assetId: resultAsset.id,
-    streamId: resultAsset.streams[0].id,
+    streamId: resultAsset.streams[0].streamId,
     range: { startUs: (seconds - 1) * 1e6, endUs: seconds * 1e6 },
   };
   const lateAt = performance.now();

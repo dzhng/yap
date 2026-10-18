@@ -1164,8 +1164,28 @@ test("local transcription problems publish as issues on the words they touch", a
   // Word positions are line-local in raw evidence and transcript ordinals once published.
   const expected = [
     issue(unresolvedIssue),
-    { ...issue(clampedIssue), at: { word: 6 } },
-    issue(droppedIssue),
+    {
+      ...issue(clampedIssue),
+      at: { word: 6 },
+      evidence: {
+        window: 1,
+        observation: 2,
+        decoded: { startUs: 5500000, endUs: 8000000 },
+        startUs: 16560000,
+        endUs: 16720000,
+      },
+    },
+    {
+      ...issue(droppedIssue),
+      evidence: {
+        window: 1,
+        token: 6,
+        text: "bad",
+        startSeconds: "NaN",
+        endUs: 5200000,
+        confidence: 1,
+      },
+    },
   ];
   expect(status).toMatchObject({ state: "ready", published: { issues: expected } });
   const rows = new SourceTranscriptRead(f.transcripts, status.published!.transcript)
@@ -1220,7 +1240,7 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
   ]);
   expect(rows[1]).toEqual({
     type: "word",
-    id: "w0",
+    wordId: "w0",
     ordinal: 0,
     text: "Um,",
     kind: "filler",
@@ -1229,9 +1249,9 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
     sourceRange: { startUs: 1000000, endUs: 1300000 },
     partial: false,
   });
-  expect(rows[4]).toMatchObject({ id: "w3", kind: "vocalization", confidence: 0.75 });
+  expect(rows[4]).toMatchObject({ wordId: "w3", kind: "vocalization", confidence: 0.75 });
   expect(rows[8]).toMatchObject({
-    id: "w6",
+    wordId: "w6",
     text: "Uhm.",
     kind: "filler",
     instant: true,

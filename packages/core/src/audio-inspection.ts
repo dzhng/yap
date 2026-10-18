@@ -86,6 +86,45 @@ export type SourceAudioArtifact = SourceAudioResult &
     supportDigest: string;
     implementationId: string;
   };
+/** Decode the retained public audio receipt; old internal names are stale. */
+export function parsePublicAudioArtifact(
+  value: unknown,
+): SourceAudioArtifact | ProjectAudioArtifact {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio receipt is unavailable");
+  const record = value as Record<string, any>;
+  if (
+    "bytes" in record ||
+    "frames" in record ||
+    (!("projectId" in record) && "range" in record) ||
+    !Number.isSafeInteger(record.sizeBytes) ||
+    !Number.isSafeInteger(record.frameCount) ||
+    !record.sampleRange ||
+    !Number.isSafeInteger(record.sampleRange.startSamples) ||
+    !Number.isSafeInteger(record.sampleRange.endSamples)
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio receipt uses an obsolete shape");
+  const { sizeBytes, frameCount, sampleRange, sourceRange, ...rest } = record;
+  const range = "projectId" in record ? record.range : sourceRange;
+  if (!range) throw new CatalogError("ARTIFACT_CHANGED", "Audio receipt has no selected range");
+  return {
+    ...rest,
+    bytes: sizeBytes,
+    frames: frameCount,
+    sampleRange: { start: sampleRange.startSamples, end: sampleRange.endSamples },
+    range,
+  } as SourceAudioArtifact | ProjectAudioArtifact;
+}
+function publicAudioArtifact(value: any) {
+  const { bytes, frames, sampleRange, range, ...rest } = value;
+  return {
+    ...rest,
+    sizeBytes: bytes,
+    frameCount: frames,
+    sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
+    ...(range === undefined ? {} : "projectId" in value ? { range } : { sourceRange: range }),
+  };
+}
 const optionsSchema = z.strictObject({
   selection: sourceSelectionSchema,
   range: selectionRangeSchema,
@@ -874,7 +913,10 @@ export class MediaAudioInspection {
       signal.throwIfAborted();
       if (cached.bytes !== value.bytes) invalid("Published audio size differs from its receipt");
       // A processed project window carries its state splits and treatments' issues to every read.
-      return { result: JSON.stringify({ ...value, cacheId: output.id }), issues };
+      return {
+        result: JSON.stringify({ ...publicAudioArtifact(value), cacheId: output.id }),
+        issues,
+      };
     } catch (error) {
       this.owners.cache.remove(output.id);
       throw error;

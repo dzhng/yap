@@ -165,7 +165,7 @@ export function add(
     height: 1,
     sourceWidth: 1,
     sourceHeight: 1,
-    bytes: png.length,
+    sizeBytes: png.length,
     assetId: f.identity.assetId,
     streamId: f.identity.streamId,
     sample: {

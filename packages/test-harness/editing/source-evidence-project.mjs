@@ -28,7 +28,7 @@ export async function projectMasks(service, contexts, physicalTranscript, out) {
   const selected = [contexts[0].context.id, contexts[1].context.id, undefined];
   const edited = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "place-contexts",
     operations: [
       { operation: "track.add", label: "speech", track: { kind: "audio", order: 0 } },
@@ -74,7 +74,7 @@ export async function projectMasks(service, contexts, physicalTranscript, out) {
     ["partial", "whole", "whole"],
   );
   const compiled = [
-    ...createCompiler(model, edited.revision.id).audio({ startUs: 0, endUs: 38500000 }),
+    ...createCompiler(model, edited.revision.revisionId).audio({ startUs: 0, endUs: 38500000 }),
   ];
   assert.equal(compiled.length, 3, "Every occurrence must have an audio schedule");
   for (const [index, record] of compiled.entries()) {
@@ -104,7 +104,8 @@ export async function projectMasks(service, contexts, physicalTranscript, out) {
   }
   const file = join(out, "different-contexts.mp4");
   const preview = await poll(
-    () => call("preview.get", { projectId, revisionId: edited.revision.id }, { output: file }),
+    () =>
+      call("preview.get", { projectId, revisionId: edited.revision.revisionId }, { output: file }),
     (v) => v.state === "ready",
     "three-context actual movie",
   );
@@ -156,7 +157,7 @@ export async function projectMasks(service, contexts, physicalTranscript, out) {
   );
   return {
     projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     document: edited.revision.document,
     word,
     projections,

@@ -85,7 +85,7 @@ try {
     const asset = await call("asset.get", { assetId: imported.published.output.assetId });
     const selection = {
       assetId: asset.id,
-      streamId: asset.streams.find((stream) => stream.kind === "audio").id,
+      streamId: asset.streams.find((stream) => stream.kind === "audio").streamId,
       channel: 0,
       sourceRange: { startUs: 0, endUs: (input.frames * 1000000) / 16000 },
       text: "fortunate",

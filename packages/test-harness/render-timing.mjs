@@ -311,7 +311,7 @@ test(
       const projectId = created.project.projectId;
       const placed = await call("edit.apply", {
         projectId,
-        expectedRevisionId: created.revision.id,
+        expectedRevisionId: created.revision.revisionId,
         requestId: "tracks",
         operations: [
           ...["video", "narration", "system"].map((role, order) => ({
@@ -348,7 +348,7 @@ test(
       const trackIds = ["video", "narration", "system"].map((role) => placed.edit.labels[role]);
       const cut = await call("edit.apply", {
         projectId,
-        expectedRevisionId: placed.revision.id,
+        expectedRevisionId: placed.revision.revisionId,
         requestId: "cut",
         operations: [
           {
@@ -364,11 +364,11 @@ test(
           },
         ],
       });
-      const first = await call("preview.get", { projectId, revisionId: cut.revision.id });
+      const first = await call("preview.get", { projectId, revisionId: cut.revision.revisionId });
       await started.promise;
       const undo = await call("edit.undo", {
         projectId,
-        expectedRevisionId: cut.revision.id,
+        expectedRevisionId: cut.revision.revisionId,
         requestId: "undo",
       });
       assert.notEqual(undo.id, first.revisionId);
@@ -440,7 +440,10 @@ test(
         operations: [{ operation: "canvas.set", canvas: { background: "#010101ff" } }],
       });
       armLate = true;
-      const pending = await call("preview.get", { projectId, revisionId: next.revision.id });
+      const pending = await call("preview.get", {
+        projectId,
+        revisionId: next.revision.revisionId,
+      });
       await lateEntered.promise;
       const renderingJob = await call("job.get", { jobId: pending.jobId });
       const canceling = call("job.cancel", { jobId: pending.jobId });
@@ -450,7 +453,10 @@ test(
       );
       lateRelease.resolve();
       await canceling;
-      const canceled = await call("preview.get", { projectId, revisionId: next.revision.id });
+      const canceled = await call("preview.get", {
+        projectId,
+        revisionId: next.revision.revisionId,
+      });
       assert.equal(canceled.published, null);
       assert.equal(canceled.state, "idle");
       assert.equal(canceled.jobId, pending.jobId);
@@ -458,7 +464,7 @@ test(
       assert.equal(canceledJob.state, "canceled");
       assert.equal(canceledJob.generation, renderingJob.generation);
       assert.equal(
-        report.renders.some((render) => render.revisionId === next.revision.id),
+        report.renders.some((render) => render.revisionId === next.revision.revisionId),
         false,
       );
       assert.deepEqual(await readdir(join(home, "library", "render")), []);

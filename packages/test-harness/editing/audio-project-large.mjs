@@ -153,7 +153,10 @@ try {
       "admission",
     );
     const asset = await call("asset.get", { assetId: sha256 });
-    assets.push({ assetId: asset.id, streamId: asset.streams.find((s) => s.kind === "audio").id });
+    assets.push({
+      assetId: asset.id,
+      streamId: asset.streams.find((s) => s.kind === "audio").streamId,
+    });
   }
   const created = await call("project.create", {
     requestId: "large-project",
@@ -199,10 +202,13 @@ try {
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
     requestId: "100-clips",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations,
   });
-  const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+  const selection = {
+    projectId: created.project.projectId,
+    revisionId: edited.revision.revisionId,
+  };
   report.selection = selection;
   report.authored = {
     clips: 100,

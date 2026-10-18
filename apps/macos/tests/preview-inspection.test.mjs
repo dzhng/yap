@@ -134,7 +134,7 @@ test("public project preview pins an explicitly authored pointer movie through e
     const authored = await call("edit.apply", {
       projectId,
       requestId: "pointer-clip",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
         {
@@ -156,11 +156,14 @@ test("public project preview pins an explicitly authored pointer movie through e
         },
       ],
     });
-    const initial = await call("preview.get", { projectId, revisionId: authored.revision.id });
+    const initial = await call("preview.get", {
+      projectId,
+      revisionId: authored.revision.revisionId,
+    });
     const cut = await call("edit.apply", {
       projectId,
       requestId: "cut",
-      expectedRevisionId: authored.revision.id,
+      expectedRevisionId: authored.revision.revisionId,
       operations: [
         {
           operation: "remove",
@@ -172,7 +175,7 @@ test("public project preview pins an explicitly authored pointer movie through e
     });
     const params = { projectId, revisionId: initial.revisionId };
     const ready = await preview(params);
-    assert.equal(ready.published.output.revisionId, authored.revision.id);
+    assert.equal(ready.published.output.revisionId, authored.revision.revisionId);
     assert.equal(ready.published.output.durationUs, 4_000_000);
     await call("artifact.close", { token: ready.delivery.token });
     const output = join(home, "preview.mp4");
@@ -249,9 +252,12 @@ test("public project preview pins an explicitly authored pointer movie through e
     } finally {
       await client.close();
     }
-    assert.equal((await call("revision.get", { projectId })).revision.id, cut.revision.id);
+    assert.equal(
+      (await call("revision.get", { projectId })).revision.revisionId,
+      cut.revision.revisionId,
+    );
     assert.equal(hash("sha256", await readFile(join(source, "video.mov"))), before);
-    const editedParams = { projectId, revisionId: cut.revision.id };
+    const editedParams = { projectId, revisionId: cut.revision.revisionId };
     const edited = await preview(editedParams);
     assert.equal(edited.published.output.durationUs, 3_000_000);
     await call("artifact.close", { token: edited.delivery.token });

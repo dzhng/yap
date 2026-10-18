@@ -139,7 +139,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       { operation: "track.add", track: { kind: "audio", order: 1 }, label: "audio" },
@@ -158,7 +158,7 @@ try {
         clip: {
           trackId: { label: "audio" },
           assetId: narration.id,
-          streamId: narration.streams.find((v) => v.kind === "audio").id,
+          streamId: narration.streams.find((v) => v.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
         },
@@ -280,12 +280,12 @@ try {
   await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { background: "#080808ff" } }],
   });
   const historical = await call("preview.get", {
     projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     settings: balanced.entry.settings,
   });
   assert.equal(historical.published.output.cacheId, balanced.entry.cacheId);
@@ -314,7 +314,7 @@ try {
   const exportId = randomUUID(),
     request = {
       projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       exportId,
       kind: "video",
       directory: out,

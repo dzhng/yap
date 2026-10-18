@@ -74,7 +74,7 @@ try {
   const authored = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "video", order: 0 } },
       {
@@ -83,7 +83,7 @@ try {
         clip: {
           trackId: ref("track"),
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -112,7 +112,7 @@ try {
       },
     ],
   });
-  const selection = { projectId, revisionId: authored.revision.id };
+  const selection = { projectId, revisionId: authored.revision.revisionId };
   const original = [];
   for (let i = 0; i < 8; i++)
     original.push(await picture({ ...selection, atUs: i * 125000 }, "curve-" + i));
@@ -124,7 +124,7 @@ try {
     current = await call("edit.apply", {
       projectId,
       requestId: randomUUID(),
-      expectedRevisionId: current.revision.id,
+      expectedRevisionId: current.revision.revisionId,
       operations: [
         {
           operation: "processing.set",
@@ -134,7 +134,7 @@ try {
       ],
     });
     const control = await picture(
-      { projectId, revisionId: current.revision.id, atUs: i * 125000 },
+      { projectId, revisionId: current.revision.revisionId, atUs: i * 125000 },
       "constant-" + i,
     );
     assert.equal(
@@ -147,8 +147,8 @@ try {
   const restored = await call("edit.restore", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: current.revision.id,
-    targetRevisionId: authored.revision.id,
+    expectedRevisionId: current.revision.revisionId,
+    targetRevisionId: authored.revision.revisionId,
   });
   const split = await call("edit.apply", {
     projectId,
@@ -158,8 +158,12 @@ try {
   });
   for (let i = 0; i < 8; i++)
     assert.equal(
-      (await picture({ projectId, revisionId: split.revision.id, atUs: i * 125000 }, "split-" + i))
-        .sha256,
+      (
+        await picture(
+          { projectId, revisionId: split.revision.revisionId, atUs: i * 125000 },
+          "split-" + i,
+        )
+      ).sha256,
       original[i].sha256,
     );
   const movie = join(out, "full.mp4");
@@ -249,8 +253,8 @@ try {
   const windowBase = await call("edit.restore", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: split.revision.id,
-    targetRevisionId: authored.revision.id,
+    expectedRevisionId: split.revision.revisionId,
+    targetRevisionId: authored.revision.revisionId,
   });
   const unity = await call("edit.apply", {
     projectId,
@@ -265,13 +269,13 @@ try {
     ],
   });
   const dryOutput = await picture(
-    { projectId, revisionId: unity.revision.id, atUs: 125000 },
+    { projectId, revisionId: unity.revision.revisionId, atUs: 125000 },
     "window-unity-output",
   );
   const windowed = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: unity.revision.id,
+    expectedRevisionId: unity.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -286,7 +290,7 @@ try {
       },
     ],
   });
-  const windowSelection = { projectId, revisionId: windowed.revision.id };
+  const windowSelection = { projectId, revisionId: windowed.revision.revisionId };
   const dryTap = { target: { kind: "clip", id: clipId }, point: { kind: "dry" } };
   for (const atUs of [125000, 250000, 375000]) {
     const processed = await picture({ ...windowSelection, atUs }, `window-${atUs}`);

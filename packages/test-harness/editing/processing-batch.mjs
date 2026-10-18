@@ -37,7 +37,7 @@ try {
   const restored = await service.call("edit.restore", {
     projectId,
     expectedRevisionId: head.currentRevisionId,
-    targetRevisionId: before.revision.id,
+    targetRevisionId: before.revision.revisionId,
     requestId: randomUUID(),
   });
   assert.deepEqual(restored.document, before.revision.document);
@@ -78,9 +78,9 @@ try {
     };
     return bytes.subarray(header.offset);
   }
-  await audio(changed.revision.id, "full", { startUs: 0, endUs: 100000 }, expected);
+  await audio(changed.revision.revisionId, "full", { startUs: 0, endUs: 100000 }, expected);
   await audio(
-    changed.revision.id,
+    changed.revision.revisionId,
     "late",
     { startUs: 50000, endUs: 100000 },
     expected.subarray(2400 * 8),
@@ -90,7 +90,7 @@ try {
   assert.equal(stack.steps.at(-1).processor.gain, 0.5);
   const negative = await service.call("edit.apply", {
     projectId,
-    expectedRevisionId: changed.revision.id,
+    expectedRevisionId: changed.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "processing.set", target: stack.target, steps: stack.steps.slice(0, -1) },
@@ -100,7 +100,7 @@ try {
   for (let i = 0; i < expectedWithoutGain.length; i += 4)
     expectedWithoutGain.writeFloatLE(Math.fround(expectedWithoutGain.readFloatLE(i) * 2), i);
   const actual = await audio(
-    negative.revision.id,
+    negative.revision.revisionId,
     "missing-gain",
     { startUs: 0, endUs: 100000 },
     expectedWithoutGain,

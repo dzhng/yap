@@ -229,7 +229,7 @@ test("canceled package keeps admitted scene generation through regeneration and 
   const old = first.published.evidence;
   const original = f.scenes.sourcePage({ identity: old, limit: 10 }).chunks;
   const request = { ...f.request(), kind: "processed-package", leaf: "scene.zip" };
-  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
+  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
   await previewEntered.promise;
   shade = 128;
   f.jobs.regenerate(first.jobId, first.published.generation);
@@ -324,7 +324,7 @@ test("canceled package keeps admitted transcript bytes through regeneration and 
     ["original"],
   );
   const request = { ...f.request(), kind: "processed-package", leaf: "transcript.zip" };
-  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
+  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
   await previewEntered.promise;
   word = "active-newer";
   f.jobs.regenerate(first.jobId, first.published.generation);
@@ -460,7 +460,7 @@ async function placeVoice(f) {
   }));
   f.projects.apply(f.projectId, {
     requestId: "voice",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
       {
@@ -666,7 +666,7 @@ for (const kind of ["source", "project"])
     const original = await readFile(records.portableImage(old, 0).path);
     assert.deepEqual(original, png);
     const request = { ...f.request(), kind: "processed-package", leaf: `${kind}-index.zip` };
-    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
+    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
     await previewEntered.promise;
     png = grayPNG(255);
     for (const { frame } of records.page({ identity: old, limit: 200 }).entries) {

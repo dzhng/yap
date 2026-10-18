@@ -430,7 +430,7 @@ async function tinyAdmission(source) {
   const id = made.project.projectId;
   const edited = await call("edit.apply", {
     projectId: id,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: "tiny-run",
     operations: [
       { operation: "track.add", label: "a", track: { kind: "audio", order: 0 } },
@@ -438,7 +438,7 @@ async function tinyAdmission(source) {
         operation: "place",
         clip: {
           assetId: source.id,
-          streamId: source.streams.find((v) => v.kind === "audio").id,
+          streamId: source.streams.find((v) => v.kind === "audio").streamId,
           trackId: { label: "a" },
           source: { kind: "range", range: { startUs: 0, endUs: 2000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 2500 } },
@@ -447,7 +447,7 @@ async function tinyAdmission(source) {
       },
     ],
   });
-  const selected = { projectId: id, revisionId: edited.revision.id };
+  const selected = { projectId: id, revisionId: edited.revision.revisionId };
   const db = new DatabaseSync(join(home, "library/catalog.sqlite"), { readOnly: true });
   try {
     const count = () =>
@@ -488,7 +488,7 @@ async function edit(operations, name) {
     { projectId, expectedRevisionId: revisionId, requestId: name, operations },
     { transport: "mcp" },
   );
-  revisionId = result.revision.id;
+  revisionId = result.revision.revisionId;
   return result;
 }
 try {
@@ -499,7 +499,7 @@ try {
   const markerAssets = await Promise.all(input.markers.map(admit));
   const media = (asset, kind, range) => ({
     assetId: asset.id,
-    streamId: asset.streams.find((s) => s.kind === kind).id,
+    streamId: asset.streams.find((s) => s.kind === kind).streamId,
     source: { kind: "range", range },
   });
   const created = await call("project.create", {
@@ -507,7 +507,7 @@ try {
     canvas: { width, height, fps: { numerator: fps, denominator: 1 }, background: "#000000ff" },
   });
   projectId = created.project.projectId;
-  revisionId = created.revision.id;
+  revisionId = created.revision.revisionId;
   const placed = await edit(
     [
       { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -532,7 +532,7 @@ try {
   );
   const base = selection();
   const raw = await audio(
-    { assetId: source.id, streamId: source.streams.find((s) => s.kind === "audio").id },
+    { assetId: source.id, streamId: source.streams.find((s) => s.kind === "audio").streamId },
     "source-raw",
     full,
   );
@@ -578,7 +578,7 @@ try {
         clip: {
           trackId: placed.edit.labels[`markers${i}`],
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement:
             i === 0
@@ -700,7 +700,7 @@ try {
   const linkedEvidence = await eventRows(linkedSelection);
   const sourceEvidence = await eventRows({
     assetId: source.id,
-    streamId: source.streams.find((v) => v.kind === "video").id,
+    streamId: source.streams.find((v) => v.kind === "video").streamId,
   });
   assert(
     sourceEvidence.rows.some((r) => r.kind === "scene"),
@@ -996,7 +996,7 @@ try {
     "Real native work completes behind the existing reply barrier; public cancellation prevents publication and explicit retry succeeds. Native in-preparation cancellation belongs to retained native evidence.";
   assert.deepEqual(await prepare(linkedSelection), retainedLinked);
   const sourceAgain = await audio(
-    { assetId: source.id, streamId: source.streams.find((v) => v.kind === "audio").id },
+    { assetId: source.id, streamId: source.streams.find((v) => v.kind === "audio").streamId },
     "source-raw-after",
     full,
   );
@@ -1004,7 +1004,7 @@ try {
   assert.deepEqual(
     await eventRows({
       assetId: source.id,
-      streamId: source.streams.find((v) => v.kind === "video").id,
+      streamId: source.streams.find((v) => v.kind === "video").streamId,
     }),
     sourceEvidence,
   );
@@ -1012,7 +1012,7 @@ try {
     () =>
       call("waveform.get", {
         assetId: source.id,
-        streamId: source.streams.find((v) => v.kind === "audio").id,
+        streamId: source.streams.find((v) => v.kind === "audio").streamId,
         range: full,
         bucketFrames: 480,
       }),
@@ -1029,7 +1029,7 @@ try {
     ["end", 3016666, 90],
   ])
     await frame(
-      { assetId: source.id, streamId: source.streams.find((v) => v.kind === "video").id },
+      { assetId: source.id, streamId: source.streams.find((v) => v.kind === "video").streamId },
       "source-reference-" + name,
       atUs,
       counter,

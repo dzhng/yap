@@ -119,7 +119,7 @@ try {
       await call("edit.apply", {
         projectId: created.project.projectId,
         requestId: `place-${first}`,
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         operations,
       })
     ).revision;

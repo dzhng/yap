@@ -300,7 +300,7 @@ try {
     {
       projectId,
       requestId: "repeat-fixture",
-      expectedRevisionId: made.revision.id,
+      expectedRevisionId: made.revision.revisionId,
       operations: [
         { operation: "track.add", label: "speech", track: { kind: "audio", order: 0 } },
         ...[0, 8000000].map((atUs, i) => ({
@@ -317,7 +317,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const query = { projectId, revisionId: placed.revision.id };
+  const query = { projectId, revisionId: placed.revision.revisionId };
   const projected = await poll(
     () => call("transcript.get", { ...query, limit: 1000 }),
     (value) => value.state === "ready",
@@ -376,7 +376,7 @@ try {
       },
     ],
   });
-  const after = await audio(removed.revision.id, "explicit-cut");
+  const after = await audio(removed.revision.revisionId, "explicit-cut");
   const expectedPCM = Buffer.from(before);
   expectedPCM.fill(0, ((cut.startUs * 48000) / 1000000) * 8, ((cut.endUs * 48000) / 1000000) * 8);
   assert.deepEqual(after, expectedPCM, "Only the exact supplied interval may change");
@@ -385,7 +385,7 @@ try {
     () =>
       call("transcript.search", {
         projectId,
-        revisionId: removed.revision.id,
+        revisionId: removed.revision.revisionId,
         text: "Okay so",
         limit: 500,
       }),
@@ -400,7 +400,7 @@ try {
   assert.deepEqual(await readFile(retainedRaw), actualRaw);
   const undone = await call(
     "edit.undo",
-    { projectId, requestId: "undo-explicit-cut", expectedRevisionId: removed.revision.id },
+    { projectId, requestId: "undo-explicit-cut", expectedRevisionId: removed.revision.revisionId },
     { transport: "mcp" },
   );
   assert.deepEqual(undone.document, placed.revision.document);

@@ -110,7 +110,10 @@ export async function captionTimedMotion({
     audioPath,
   ]);
   const media = await admit(audioPath),
-    source = { assetId: media.id, streamId: media.streams.find((s) => s.kind === "audio").id };
+    source = {
+      assetId: media.id,
+      streamId: media.streams.find((s) => s.kind === "audio").streamId,
+    };
   const words = [
     { text: "new", source: { startUs: 0, endUs: 750000 } },
     { text: "omit", source: { startUs: 500000, endUs: 1000000 } },

@@ -68,7 +68,7 @@ export function portableProjectSpeakers(
     throw changed();
   const revisionId =
     input.revisionId ?? cursor?.revisionId ?? archive.snapshot.project.currentRevisionId;
-  const revision = archive.snapshot.revisions.find((value) => value.id === revisionId);
+  const revision = archive.snapshot.revisions.find((value) => value.revisionId === revisionId);
   if (!revision) throw new CatalogError("NOT_FOUND", "Revision is outside this package");
   const assets = new Map(
     archive.resources.flatMap((value) =>

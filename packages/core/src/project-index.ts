@@ -44,7 +44,7 @@ export type ProjectIndexCoverage = { project: TimeRange } & (
 export type ProjectIndexRecords = {
   identity: ProjectIndexIdentity;
   candidate: ProjectIndexCandidate;
-  frame: Omit<ProjectFrameArtifact, "cacheId">;
+  frame: z.infer<typeof retainedProjectFrameSchema>;
   coverage: ProjectIndexCoverage;
 };
 
@@ -62,7 +62,7 @@ export const portableProjectIndexMetadataSchema = projectPictureOptionsSchema
     durationUs: portableTime,
     candidateCount: portableTime.max(25000),
     coverageCount: portableTime.max(25000),
-    bytes: portableTime,
+    sizeBytes: portableTime,
   })
   .strict();
 export const portableProjectIndexRecordSchema = z.discriminatedUnion("kind", [

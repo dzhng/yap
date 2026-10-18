@@ -89,7 +89,7 @@ try {
         clip: {
           trackId: { label: kind },
           assetId: asset.id,
-          streamId: asset.streams.find((s) => s.kind === kind && s.decodable).id,
+          streamId: asset.streams.find((s) => s.kind === kind && s.decodable).streamId,
           source: { kind: "range", range: { startUs: 0, endUs: duration } },
           placement: {
             kind: "project",
@@ -100,7 +100,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: "repeat-markers",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations,
   });
   const exportId = randomUUID();
@@ -108,7 +108,7 @@ try {
     "export.create",
     {
       projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       kind: "video",
       exportId,
       directory: out,

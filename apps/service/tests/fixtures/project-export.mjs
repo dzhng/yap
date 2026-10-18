@@ -127,7 +127,7 @@ export async function fixture(
         assert.equal(target.kind, "project");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).id,
+          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
         };
       },
       isAvailable: (target) =>
@@ -393,7 +393,7 @@ export async function fixture(
     asset = assets.get(existing.asset.id);
     projectId = existing.projectId;
     placed = {
-      revision: projects.revision(projectId, existing.placed.revision.id),
+      revision: projects.revision(projectId, existing.placed.revision.revisionId),
     };
   } else {
     const path = join(home, "input.mov");
@@ -428,7 +428,7 @@ export async function fixture(
     projectId = initial.project.projectId;
     placed = projects.apply(projectId, {
       requestId: "place",
-      expectedRevisionId: initial.revision.id,
+      expectedRevisionId: initial.revision.revisionId,
       operations: [
         {
           operation: "track.add",

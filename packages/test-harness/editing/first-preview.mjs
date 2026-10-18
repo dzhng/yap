@@ -102,7 +102,7 @@ async function edit(requestId, operations) {
     expectedRevisionId: head,
     operations,
   });
-  head = result.revision.id;
+  head = result.revision.revisionId;
   return result;
 }
 async function preview(name, revisionId = head, range) {
@@ -436,7 +436,7 @@ async function lifecycle(refs, fullAudio) {
 }
 const source = (asset, kind, startUs, endUs) => ({
   assetId: asset.id,
-  streamId: asset.streams.find((stream) => stream.kind === kind && stream.decodable).id,
+  streamId: asset.streams.find((stream) => stream.kind === kind && stream.decodable).streamId,
   source: { kind: "range", range: { startUs, endUs } },
 });
 const place = (label, trackId, media, startUs, endUs) => ({
@@ -468,7 +468,7 @@ try {
     },
   });
   projectId = created.project.projectId;
-  head = created.revision.id;
+  head = created.revision.revisionId;
   const placed = await edit("place-independent-media", [
     { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
     { operation: "track.add", label: "voice", track: { kind: "audio", order: 0 } },

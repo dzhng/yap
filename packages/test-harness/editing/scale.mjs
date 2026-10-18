@@ -75,7 +75,7 @@ try {
       },
     });
     const projectId = made.project.projectId;
-    let revisionId = made.revision.id;
+    let revisionId = made.revision.revisionId;
     const apply = async (operations, name) => {
       const request = {
         projectId,
@@ -87,7 +87,7 @@ try {
       const at = performance.now();
       const response = await call("edit.apply", request);
       result.editMs.push({ name, ms: performance.now() - at });
-      revisionId = response.revision.id;
+      revisionId = response.revision.revisionId;
       return response;
     };
     const topology = routingTopology(depth, width);
@@ -106,7 +106,7 @@ try {
           clip: {
             trackId: tracks[lane],
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: endUs - startUs } },
             placement: { kind: "project", range: { startUs, endUs } },
           },

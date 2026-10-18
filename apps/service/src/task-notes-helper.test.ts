@@ -29,19 +29,19 @@ test("actual public metadata leaves transferred annotations historical without p
       fps: { numerator: 30, denominator: 1 },
       background: "#000000ff",
     },
-  })) as { project: { projectId: string }; revision: { id: string } };
+  })) as { project: { projectId: string }; revision: { revisionId: string } };
   const projectId = created.project.projectId;
   const notes = {
     version: 1,
     projectId,
-    revisionId: created.revision.id,
+    revisionId: created.revision.revisionId,
     intent: "Inspect the caller-selected first revision",
     candidates: [
       {
         id: "opening",
         decision: "selected",
         rationale: "Caller requested this boundary",
-        references: [{ projectId, revisionId: created.revision.id }],
+        references: [{ projectId, revisionId: created.revision.revisionId }],
       },
     ],
     unresolved: ["Preview evidence has not been transferred"],
@@ -49,7 +49,7 @@ test("actual public metadata leaves transferred annotations historical without p
       {
         key: "opening",
         relativePath: "opening.png",
-        reference: { projectId, revisionId: created.revision.id },
+        reference: { projectId, revisionId: created.revision.revisionId },
       },
     ],
   };
@@ -64,7 +64,7 @@ test("actual public metadata leaves transferred annotations historical without p
   const edited = (await invoke("edit.apply", {
     projectId,
     requestId: "notes-resize",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       {
         operation: "canvas.set",
@@ -76,7 +76,7 @@ test("actual public metadata leaves transferred annotations historical without p
         },
       },
     ],
-  })) as { revision: { id: string } };
+  })) as { revision: { revisionId: string } };
   const before = await invoke("revision.history", { projectId });
   const historical = await resumeTaskNotes({ notesPath }, invoke);
   const after = await invoke("revision.history", { projectId });
@@ -90,10 +90,10 @@ test("actual public metadata leaves transferred annotations historical without p
   }
   expect(current.stale).toBe(false);
   expect(historical.stale).toBe(true);
-  expect(historical.currentRevisionId).toBe(edited.revision.id);
+  expect(historical.currentRevisionId).toBe(edited.revision.revisionId);
   expect(historical.pinnedRevision).toMatchObject({
     state: "available",
-    revisionId: created.revision.id,
+    revisionId: created.revision.revisionId,
   });
   expect(historical.artifacts[0]).toMatchObject({
     state: "missing",

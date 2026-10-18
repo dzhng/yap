@@ -114,11 +114,14 @@ try {
   }
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "pressure",
     operations,
   });
-  const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+  const selection = {
+    projectId: created.project.projectId,
+    revisionId: edited.revision.revisionId,
+  };
   const preparation = await call("audio.prepare", selection);
   const failed = await settled(preparation.jobId);
   await writeFile(join(home, "native-calls.json"), JSON.stringify(calls, null, 2));
@@ -177,7 +180,8 @@ try {
         ]),
     });
     recovered = await settled(
-      (await call("audio.prepare", { ...selection, revisionId: revised.revision.id })).jobId,
+      (await call("audio.prepare", { ...selection, revisionId: revised.revision.revisionId }))
+        .jobId,
     );
   }
   await writeFile(join(home, "all-native-calls.json"), JSON.stringify(calls, null, 2));

@@ -91,7 +91,7 @@ try {
   const original = inspect(sourceHome);
   report.originalJobs = original.jobs;
   report.projectId = original.revision.projectId;
-  report.originalRevisionId = original.revision.id;
+  report.originalRevisionId = original.revision.revisionId;
   report.support = support(original.revision.document, 14400);
   report.sourceSha256 = hash(
     await readFile(join(sourceHome, "library/assets", report.support.assetId + ".wav")),
@@ -109,10 +109,10 @@ try {
     assert.deepEqual(prior.support, report.support);
     assert.equal(four.queryMs.length, 20);
     assert.ok(four.plotSha256);
-    assert.equal(four.revisionId, original.revision.id);
+    assert.equal(four.revisionId, original.revision.revisionId);
     assert.deepEqual(four.request, {
       projectId: report.projectId,
-      revisionId: original.revision.id,
+      revisionId: original.revision.revisionId,
       range: { startUs: 14400 * 1e6 - 250000, endUs: 14400 * 1e6 },
       fftFrames: 128,
       hopFrames: 48,
@@ -141,9 +141,9 @@ try {
       setupMs: [],
     };
     report.cases.push(trial);
-    assert.equal(inspect(trial.home).revision.id, original.revision.id);
+    assert.equal(inspect(trial.home).revision.revisionId, original.revision.revisionId);
     await save();
-    let revisionId = original.revision.id;
+    let revisionId = original.revision.revisionId;
     const service = new JourneyService(trial.home, trial, join(out, `native-${seconds}`));
     let stopping = false,
       sampling,
@@ -174,7 +174,7 @@ try {
             { transport: "mcp" },
           );
           trial.setupMs.push(performance.now() - setupAt);
-          revisionId = result.revision.id;
+          revisionId = result.revision.revisionId;
           if (first === 0 && values["move-reference"]) {
             const expected = JSON.parse(await readFile(resolve(values["move-reference"]), "utf8"));
             const db = new DatabaseSync(join(home, "library/catalog.sqlite"), { readOnly: true });

@@ -305,7 +305,7 @@ export class AlignmentProcessing {
       descriptor = { ...source, decoder, pcm: observed.pcm };
     if (
       !isDeepStrictEqual(observed.pcm.sampleRate, selected.expectedPCM.sampleRate) ||
-      observed.pcm.frames !== selected.expectedPCM.frames
+      observed.pcm.frameCount !== selected.expectedPCM.frames
     )
       throw new CatalogError(
         "INVALID_EVIDENCE",

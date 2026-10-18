@@ -47,6 +47,27 @@ export type PreparedAudio = Omit<ReturnType<typeof checkProjectAudioResult>, "fi
   identity: FileIdentity;
   sampleRange: { start: number; end: number };
 };
+function publicPreparedAudio(value: PreparedAudio) {
+  const { bytes, frames, sampleRange, ...rest } = value as any;
+  return {
+    ...rest,
+    sizeBytes: bytes,
+    frameCount: frames,
+    sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
+  };
+}
+function parsePublicPreparedAudio(value: unknown): PreparedAudio {
+  const record = value as Record<string, any>;
+  if ("bytes" in record || "frames" in record || record.sampleRange?.startSamples === undefined)
+    throw new CatalogError("ARTIFACT_CHANGED", "Prepared audio receipt uses an obsolete shape");
+  const { sizeBytes, frameCount, sampleRange, ...rest } = record;
+  return {
+    ...rest,
+    bytes: sizeBytes,
+    frames: frameCount,
+    sampleRange: { start: sampleRange.startSamples, end: sampleRange.endSamples },
+  } as PreparedAudio;
+}
 
 const portableSample = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const portablePreparedAudioSchema = z.strictObject({
@@ -346,7 +367,7 @@ export class PreparedAudioStore {
       };
       const publication = staged;
       return {
-        result: JSON.stringify(value),
+        result: JSON.stringify(publicPreparedAudio(value)),
         issues: preparedAudioIssues(plan.window.manifest, value),
         publish: () => {
           publication.publish();
@@ -498,7 +519,7 @@ export class PreparedAudioStore {
             },
             artifact: "prepared-audio",
             input: JSON.stringify({ ...recipe, revisionId: composition.revisionId }),
-            result: JSON.stringify(value),
+            result: JSON.stringify(publicPreparedAudio(value)),
           },
           issues,
         );
@@ -509,7 +530,7 @@ export class PreparedAudioStore {
   /** Bounded PCM view of an already published result; never invokes the renderer or model. */
   open(resourceId: string, range?: { start: number; end: number }) {
     const publication = this.publication(resourceId);
-    const value = JSON.parse(publication.result) as PreparedAudio;
+    const value = parsePublicPreparedAudio(JSON.parse(publication.result));
     const selection = range ?? value.sampleRange;
     if (
       !Number.isSafeInteger(selection.start) ||

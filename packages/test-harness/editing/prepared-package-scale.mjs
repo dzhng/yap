@@ -102,7 +102,7 @@ for (let first = 0; first < 10000; first += 500) {
       clip: {
         trackId,
         assetId: sourceAsset.id,
-        streamId: sourceAsset.streams[0].id,
+        streamId: sourceAsset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 720000 } },
         placement: { kind: "project", range: { startUs: i * 720000, endUs: (i + 1) * 720000 } },
       },
@@ -335,10 +335,10 @@ try {
     const retained = prepared.portable(staged.resourceId);
     assert.deepEqual(JSON.parse(retained.publication.input), {
       ...recipe,
-      revisionId: adoption.revision.id,
+      revisionId: adoption.revision.revisionId,
     });
     await writeFile(join(out, "donor-publication.json"), JSON.stringify(retained));
-    return { projectId: adoption.project.projectId, revisionId: adoption.revision.id };
+    return { projectId: adoption.project.projectId, revisionId: adoption.revision.revisionId };
   });
   report.checks.authenticatedOwnerRestoration = true;
   service = await startProjectService({ home: donor, worker: unavailableWorker });
@@ -404,7 +404,7 @@ try {
   });
   const undone = await call("edit.undo", {
     ...selected,
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     requestId: "undo-new-track",
   });
   assert.deepEqual(undone.document, document);

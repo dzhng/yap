@@ -3,7 +3,11 @@ import type { Issue } from "@yap/composition";
 import { CatalogError, dependencyRefusal } from "./catalog.js";
 import { JobDependencyLost, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
-import { pictureTextIssues, type MediaFrameInspection } from "./frame-inspection.js";
+import {
+  pictureTextIssues,
+  type MediaFrameInspection,
+  type ProjectFrameArtifact,
+} from "./frame-inspection.js";
 import { waitForIndexFrame, retainIndexFrame } from "./index-frame.js";
 import { encodeIndexRecord, type ScreenshotIndexStore } from "./screenshot-index.js";
 import type { SceneEvidenceMetadata, SceneEvidenceStore } from "./scene-evidence.js";
@@ -171,7 +175,7 @@ export async function materializeProjectIndex(
           status.retryable,
         );
       issues.add(status.published.issues);
-      const frame = status.published.frame;
+      const frame = status.published.frame as ProjectFrameArtifact;
       if (frame.implementationId !== identity.implementationId)
         throw new CatalogError("ARTIFACT_CHANGED", "Pinned picture renderer changed");
       await retainIndexFrame(
@@ -179,7 +183,11 @@ export async function materializeProjectIndex(
         frame,
         index.outputPath(identity, candidate.ordinal),
         signal,
-        (retained) => index.appendCandidate(identity, candidate, retained),
+        (retained) =>
+          index.appendCandidate(identity, candidate, {
+            ...(retained as any),
+            sizeBytes: (retained as any).sizeBytes ?? (retained as any).bytes,
+          }),
       );
       gap(candidate.visibleRange.startUs);
       index.appendCoverage(identity, {

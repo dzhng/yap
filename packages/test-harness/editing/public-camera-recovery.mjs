@@ -211,7 +211,7 @@ try {
     const authored = await service.call("edit.apply", {
       projectId: created.project.projectId,
       requestId: "explicit-recovered-layout",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations,
     });
     const exportId = randomUUID();

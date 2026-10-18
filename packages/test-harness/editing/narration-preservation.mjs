@@ -156,7 +156,7 @@ try {
   const [narration, footage, alternate] = assets;
   const media = (asset, kind, selected) => ({
     assetId: asset.id,
-    streamId: asset.streams.find((s) => s.kind === kind).id,
+    streamId: asset.streams.find((s) => s.kind === kind).streamId,
     source: { kind: "range", range: selected },
   });
   const made = await call("project.create", {
@@ -174,7 +174,7 @@ try {
     {
       projectId,
       requestId: "place",
-      expectedRevisionId: made.revision.id,
+      expectedRevisionId: made.revision.revisionId,
       operations: [
         { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -195,7 +195,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const original = { projectId, revisionId: placed.revision.id },
+  const original = { projectId, revisionId: placed.revision.revisionId },
     audioClip = placed.revision.document.clips.find((c) => c.id === placed.edit.labels.audioClip);
   const before = await audio(original, "original-full");
   assert(
@@ -219,7 +219,7 @@ try {
       },
     ],
   });
-  const replacement = { projectId, revisionId: replaced.revision.id };
+  const replacement = { projectId, revisionId: replaced.revision.revisionId };
   samePCM((await audio(replacement, "replaced-full")).pcm, before.pcm);
   assert.notEqual(await frame(replacement, "replaced-frame"), originalPicture);
   const edited = await call(
@@ -257,7 +257,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const selection = { projectId, revisionId: edited.revision.id };
+  const selection = { projectId, revisionId: edited.revision.revisionId };
   const after = await audio(selection, "edited-full");
   samePCM(after.pcm, before.pcm);
   assert.notEqual(
@@ -311,7 +311,12 @@ try {
   assert.deepEqual((await call("revision.get", original)).revision, placed.revision);
   assert.deepEqual(
     (await call("revision.history", { projectId })).revisions.map((r) => r.id),
-    [made.revision.id, placed.revision.id, replaced.revision.id, edited.revision.id],
+    [
+      made.revision.revisionId,
+      placed.revision.revisionId,
+      replaced.revision.revisionId,
+      edited.revision.revisionId,
+    ],
   );
   const undo = await call("edit.undo", {
     projectId,

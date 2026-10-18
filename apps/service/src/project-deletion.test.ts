@@ -161,7 +161,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
     const place = (project: typeof one) =>
       projects.apply(project.project.projectId, {
         requestId: "place",
-        expectedRevisionId: project.revision.id,
+        expectedRevisionId: project.revision.revisionId,
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
           {
@@ -181,7 +181,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
     const target = {
       kind: "project" as const,
       projectId: one.project.projectId,
-      revisionId: first.revision.id,
+      revisionId: first.revision.revisionId,
     };
     const cached = cache.reserve(target);
     await writeFile(cached.path, "cached first project");
@@ -214,7 +214,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
         .references(asset.id)
         .map((r) => r.id)
         .sort(),
-    ).toEqual([first.revision.id, second.revision.id].sort());
+    ).toEqual([first.revision.revisionId, second.revision.revisionId].sort());
     expect(() => projects.get(target.projectId)).toThrow(/does not exist/);
     expect(() => queue.retry(job.jobId)).toThrow();
     const failed = expect(removing).rejects.toMatchObject({
@@ -251,7 +251,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
           .references(asset.id)
           .map((ref) => ref.id)
           .sort(),
-      ).toEqual([first.revision.id, second.revision.id].sort());
+      ).toEqual([first.revision.revisionId, second.revision.revisionId].sort());
       expect(await readFile(cached.path, "utf8")).toBe("cached first project");
       expect(() => cache.acquire(cached.id)).toThrow(/does not exist/);
       releaseRead();
@@ -273,7 +273,9 @@ test("deletion drains canceled executors before releasing shared media; interrup
           )
           .all(target.projectId),
       ).toEqual([]);
-      expect(assets.references(asset.id)).toEqual([{ kind: "revision", id: second.revision.id }]);
+      expect(assets.references(asset.id)).toEqual([
+        { kind: "revision", id: second.revision.revisionId },
+      ]);
       expect(assets.get(asset.id)).toEqual(asset);
       expect(() => queue.job(job.jobId)).toThrow(/not found|does not exist/i);
       expect(projects.revision(two.project.projectId)).toEqual(second.revision);

@@ -262,7 +262,7 @@ test(
       const projectId = created.project.projectId;
       const clean = await call("edit.apply", {
         projectId,
-        expectedRevisionId: created.revision.id,
+        expectedRevisionId: created.revision.revisionId,
         requestId: "video",
         operations: [
           { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -360,7 +360,7 @@ test(
         await save(name + "-operands.json", summary);
         return { samples, summary, rawRGB };
       };
-      const a = await capture("clean", clean.revision.id);
+      const a = await capture("clean", clean.revision.revisionId);
       // A missing-pointer movie must fail the exact same visual predicate, without another render.
       assert.throws(
         () =>
@@ -379,7 +379,7 @@ test(
       await save("report.json", report);
       const pointed = await call("edit.apply", {
         projectId,
-        expectedRevisionId: clean.revision.id,
+        expectedRevisionId: clean.revision.revisionId,
         requestId: "pointer",
         operations: [
           {
@@ -389,7 +389,7 @@ test(
           },
         ],
       });
-      const b = await capture("pointer", pointed.revision.id);
+      const b = await capture("pointer", pointed.revision.revisionId);
       for (const item of [a, b]) {
         assert.equal(Math.round(Number(item.summary.frameMeta.format.duration) * 1e6), 300000);
         assert.deepEqual(

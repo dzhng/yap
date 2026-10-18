@@ -234,9 +234,16 @@ export const issueSchema = z.discriminatedUnion("code", [
         window: index,
         observation: index,
         decoded: selectionRangeSchema,
-        startSeconds: z.number().finite(),
-        endSeconds: z.number().finite(),
+        startUs: z.number().int().nonnegative().optional(),
+        endUs: z.number().int().nonnegative().optional(),
+        startSeconds: z.number().finite().optional(),
+        endSeconds: z.number().finite().optional(),
       })
+      .refine(
+        (value) =>
+          (value.startUs !== undefined && value.endUs !== undefined) ||
+          (value.startSeconds !== undefined && value.endSeconds !== undefined),
+      )
       .strict(),
   ),
   issue(
@@ -246,10 +253,17 @@ export const issueSchema = z.discriminatedUnion("code", [
         window: index,
         token: index,
         text: z.string().max(1024),
-        startSeconds: engineValueSchema,
-        endSeconds: engineValueSchema,
+        startSeconds: engineValueSchema.optional(),
+        endSeconds: engineValueSchema.optional(),
+        startUs: z.number().int().nonnegative().optional(),
+        endUs: z.number().int().nonnegative().optional(),
         confidence: engineValueSchema,
       })
+      .refine(
+        (value) =>
+          (value.startSeconds !== undefined && value.endSeconds !== undefined) ||
+          value.endUs !== undefined,
+      )
       .strict(),
   ),
   issue(

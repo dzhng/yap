@@ -19,6 +19,7 @@ import type { JobQueue, JobExecution, Job } from "./jobs.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
 import {
   MediaAudioInspection,
+  parsePublicAudioArtifact,
   type MediaAudioInput,
   type SourceAudioArtifact,
   type ProjectAudioArtifact,
@@ -127,6 +128,63 @@ function metadata(audio: AudioArtifact) {
         ...(audio.acquisitionId ? { acquisitionId: audio.acquisitionId } : {}),
         supportDigest: audio.supportDigest,
       };
+}
+function publicAcousticArtifact(value: AcousticArtifact) {
+  const { bytes, range, sampleRange, context, ...rest } = value as any;
+  return {
+    ...rest,
+    sizeBytes: bytes,
+    ...("projectId" in value ? { range } : { sourceRange: range }),
+    sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
+    ...(context
+      ? {
+          context: {
+            ...context,
+            sampleRange: {
+              startSamples: context.sampleRange.start,
+              endSamples: context.sampleRange.end,
+            },
+          },
+        }
+      : {}),
+  };
+}
+function parsePublicAcousticArtifact(value: unknown): AcousticArtifact {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt is unavailable");
+  const record = value as Record<string, any>;
+  if (
+    "bytes" in record ||
+    !Number.isSafeInteger(record.sizeBytes) ||
+    !record.sampleRange ||
+    !Number.isSafeInteger(record.sampleRange.startSamples) ||
+    !Number.isSafeInteger(record.sampleRange.endSamples)
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt uses an obsolete shape");
+  const { sizeBytes, sourceRange, sampleRange, context, ...rest } = record;
+  const project = "projectId" in record;
+  if (
+    (project && (sourceRange !== undefined || rest.range === undefined)) ||
+    (!project && (sourceRange === undefined || rest.range !== undefined))
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt uses an obsolete shape");
+  return {
+    ...rest,
+    bytes: sizeBytes,
+    range: project ? rest.range : sourceRange,
+    sampleRange: { start: sampleRange.startSamples, end: sampleRange.endSamples },
+    ...(context
+      ? {
+          context: {
+            ...context,
+            sampleRange: {
+              start: context.sampleRange.startSamples,
+              end: context.sampleRange.endSamples,
+            },
+          },
+        }
+      : {}),
+  } as AcousticArtifact;
 }
 export type AcousticArtifact = ReturnType<typeof metadata> & {
   file: string;
@@ -382,7 +440,7 @@ export class AcousticInspection {
         published: null,
       };
     if (artifact === "loudness") {
-      const audio = JSON.parse(dependency.status.published.result) as AudioArtifact;
+      const audio = parsePublicAudioArtifact(JSON.parse(dependency.status.published.result));
       assertLoudnessCoverage(audio);
     }
     const identity = {
@@ -486,7 +544,7 @@ export class AcousticInspection {
       source.generation !== options.audioGeneration
     )
       throw lost("Pinned audio generation is no longer available");
-    return JSON.parse(status.published.result) as AudioArtifact;
+    return parsePublicAudioArtifact(JSON.parse(status.published.result));
   }
   private measurement(job: Job, options: z.infer<typeof imageOptions>) {
     const source = this.owners.jobs.job(options.measurementJobId);
@@ -501,7 +559,7 @@ export class AcousticInspection {
       throw lost("Pinned acoustic measurements are no longer available");
     return {
       kind: source.artifact,
-      value: JSON.parse(status.published.result) as AcousticArtifact,
+      value: parsePublicAcousticArtifact(JSON.parse(status.published.result)),
     };
   }
   private async executeImage({ job, signal }: JobExecution, raw: unknown) {
@@ -521,9 +579,10 @@ export class AcousticInspection {
     try {
       if (lease.bytes > 16 * 1024 * 1024)
         throw new CatalogError("LIMIT_EXCEEDED", "Acoustic measurements exceed 16 MiB");
-      const bytes = Buffer.alloc(lease.bytes);
-      if (lease.read(bytes, 0) !== bytes.length) throw lost("Acoustic measurements are incomplete");
-      const document = JSON.parse(bytes.toString("utf8"));
+      const documentBytes = Buffer.alloc(lease.bytes);
+      if (lease.read(documentBytes, 0) !== documentBytes.length)
+        throw lost("Acoustic measurements are incomplete");
+      const document = JSON.parse(documentBytes.toString("utf8"));
       const evidence =
         measurement.kind === "waveform"
           ? {
@@ -552,9 +611,11 @@ export class AcousticInspection {
         throw lost("Acoustic image byte count differs from its receipt");
       signal.throwIfAborted();
       this.measurement(job, options);
+      const { bytes, ...publicReceipt } = receipt;
       return JSON.stringify({
-        ...measurement.value,
-        ...receipt,
+        ...publicAcousticArtifact(measurement.value),
+        ...publicReceipt,
+        sizeBytes: bytes,
         cacheId: output.id,
         measurements: {
           jobId: options.measurementJobId,
@@ -757,19 +818,21 @@ export class AcousticInspection {
       const published = await this.owners.cache.publish(output.id);
       signal.throwIfAborted();
       this.pinned(job, options);
-      return JSON.stringify({
-        ...description,
-        ...(context ? { context } : {}),
-        file: output.path,
-        bytes: published.bytes,
-        mediaType: "application/json",
-        cacheId: output.id,
-        analysis,
-        ...(analysis.kind === "waveform"
-          ? { bucketFrames: analysis.bucketFrames, bucketCount: analysis.bucketCount }
-          : {}),
-        audio: provenance,
-      } satisfies AcousticArtifact);
+      return JSON.stringify(
+        publicAcousticArtifact({
+          ...description,
+          ...(context ? { context } : {}),
+          file: output.path,
+          bytes: published.bytes,
+          mediaType: "application/json",
+          cacheId: output.id,
+          analysis,
+          ...(analysis.kind === "waveform"
+            ? { bucketFrames: analysis.bucketFrames, bucketCount: analysis.bucketCount }
+            : {}),
+          audio: provenance,
+        } as AcousticArtifact),
+      );
     } catch (error) {
       if (output) this.owners.cache.remove(output.id);
       throw error;

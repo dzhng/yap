@@ -33,12 +33,12 @@ test("join review refuses a foreign prepared tap without inference or authoring 
   if (!result.ok) throw Error(JSON.stringify(result));
   const { project, revision } = result.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   expect(
     await f.call("join.verify", {
       projectId: project.projectId,
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
       preparedResourceId: "foreign",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
       boundary: { trackId: "audio", projectAtUs: 0 },
@@ -48,8 +48,8 @@ test("join review refuses a foreign prepared tap without inference or authoring 
     }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
-    await f.call("revision.get", { projectId: project.projectId, revisionId: revision.id }),
-  ).toMatchObject({ ok: true, data: { revision: { id: revision.id } } });
+    await f.call("revision.get", { projectId: project.projectId, revisionId: revision.revisionId }),
+  ).toMatchObject({ ok: true, data: { revision: { revisionId: revision.revisionId } } });
 });
 
 test.runIf(process.platform === "darwin")(
@@ -87,22 +87,22 @@ test.runIf(process.platform === "darwin")(
       if (!reply.ok) throw Error(JSON.stringify(reply));
       return reply.data as T;
     }
-    const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-      "project.create",
-      {
-        requestId: "prepared-join-project",
-        canvas: {
-          width: 16,
-          height: 16,
-          fps: { numerator: 30, denominator: 1 },
-          background: "#000000ff",
-        },
+    const created = await call<{
+      project: { projectId: string };
+      revision: { revisionId: string };
+    }>("project.create", {
+      requestId: "prepared-join-project",
+      canvas: {
+        width: 16,
+        height: 16,
+        fps: { numerator: 30, denominator: 1 },
+        background: "#000000ff",
       },
-    );
+    });
     const projectId = created.project.projectId;
-    const edited = await call<{ revision: { id: string } }>("edit.apply", {
+    const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: "join-silence",
       operations: [
         { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -116,7 +116,7 @@ test.runIf(process.platform === "darwin")(
         },
       ],
     });
-    const revisionId = edited.revision.id;
+    const revisionId = edited.revision.revisionId;
     const selection = {
       projectId,
       revisionId,
@@ -150,7 +150,7 @@ test.runIf(process.platform === "darwin")(
         source: { before: { state: "not_applicable" }, after: { state: "not_applicable" } },
         rendered: { alignment: { state: "missing" }, recognition: { state: "missing" } },
         audio: {
-          dimensions: { sampleRate: 48000, channels: 2, frames: 48000 },
+          dimensions: { sampleRate: 48000, channels: 2, frameCount: 48000 },
           waveform: { buckets: expect.any(Array) },
           spectrum: { columns: expect.any(Array) },
         },
@@ -246,7 +246,7 @@ test.runIf(process.platform === "darwin")(
         phoneticCompleteness: "unknown",
       },
     });
-    const placed = await call<{ revision: { id: string } }>("edit.apply", {
+    const placed = await call<{ revision: { revisionId: string } }>("edit.apply", {
       projectId,
       expectedRevisionId: revisionId,
       requestId: "join-source",
@@ -264,7 +264,7 @@ test.runIf(process.platform === "darwin")(
         },
       ],
     });
-    const revised = { ...selection, revisionId: placed.revision.id };
+    const revised = { ...selection, revisionId: placed.revision.revisionId };
     expect(await f.call("join.verify", { ...input, revisionId: revised.revisionId })).toMatchObject(
       { ok: false, error: { code: "ARTIFACT_CHANGED" } },
     );

@@ -1322,21 +1322,21 @@ real(
           }),
         (value) => value.state === "ready",
       );
-      const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-        "project.create",
-        {
-          requestId: "project",
-          canvas: {
-            width: 16,
-            height: 16,
-            fps: { numerator: 30, denominator: 1 },
-            background: "#000000ff",
-          },
+      const created = await call<{
+        project: { projectId: string };
+        revision: { revisionId: string };
+      }>("project.create", {
+        requestId: "project",
+        canvas: {
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          background: "#000000ff",
         },
-      );
-      const edited = await call<{ revision: { id: string } }>("edit.apply", {
+      });
+      const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
         projectId: created.project.projectId,
-        expectedRevisionId: created.revision.id,
+        expectedRevisionId: created.revision.revisionId,
         requestId: "media",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1367,7 +1367,10 @@ real(
           },
         ],
       });
-      const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+      const selection = {
+        projectId: created.project.projectId,
+        revisionId: edited.revision.revisionId,
+      };
       const exportId = randomUUID();
       await call("export.create", {
         ...selection,
@@ -1662,21 +1665,21 @@ real(
       const imported = await call<{ jobId: string }>("asset.import", { requestId: "source", path });
       const importedJob = await job(imported.jobId);
       const assetId = (importedJob.published!.output as { assetId: string }).assetId;
-      const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-        "project.create",
-        {
-          requestId: "project",
-          canvas: {
-            width: 16,
-            height: 16,
-            fps: { numerator: 30, denominator: 1 },
-            background: "#000000ff",
-          },
+      const created = await call<{
+        project: { projectId: string };
+        revision: { revisionId: string };
+      }>("project.create", {
+        requestId: "project",
+        canvas: {
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          background: "#000000ff",
         },
-      );
-      const edited = await call<{ revision: { id: string } }>("edit.apply", {
+      });
+      const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
         projectId: created.project.projectId,
-        expectedRevisionId: created.revision.id,
+        expectedRevisionId: created.revision.revisionId,
         requestId: "media",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1721,7 +1724,10 @@ real(
           },
         ],
       });
-      const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+      const selection = {
+        projectId: created.project.projectId,
+        revisionId: edited.revision.revisionId,
+      };
       type Prepared = {
         state: string;
         jobId: string;
@@ -2066,7 +2072,7 @@ test("a failed 0.1.33 normalization job re-runs after an identity bump", async (
   const projectId = created.project.projectId;
   const revision = old.projects.apply(projectId, {
     requestId: "edit",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
       {
@@ -2096,7 +2102,7 @@ test("a failed 0.1.33 normalization job re-runs after an identity bump", async (
       },
     ],
   }).revision;
-  const input = { projectId, revisionId: revision.id };
+  const input = { projectId, revisionId: revision.revisionId };
   await old.prepared.request(input);
   await old.jobs.idle();
   const failed = await old.prepared.request(input);

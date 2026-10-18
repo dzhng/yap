@@ -68,7 +68,7 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  let revisionId = created.revision.id;
+  let revisionId = created.revision.revisionId;
   const selection = () => ({ projectId, revisionId });
   const edit = async (operations) => {
     const result = await call("edit.apply", {
@@ -77,7 +77,7 @@ try {
       requestId: randomUUID(),
       operations,
     });
-    revisionId = result.revision.id;
+    revisionId = result.revision.revisionId;
     return result;
   };
   const placed = await edit([
@@ -242,7 +242,7 @@ try {
       clip: {
         trackId: { label: "pictures" },
         assetId: still.id,
-        streamId: still.streams[0].id,
+        streamId: still.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: {
           kind: "project",
@@ -253,13 +253,13 @@ try {
   }
   const stillEdit = await call("edit.apply", {
     projectId: stillProject.project.projectId,
-    expectedRevisionId: stillProject.revision.id,
+    expectedRevisionId: stillProject.revision.revisionId,
     requestId: randomUUID(),
     operations: controlOperations,
   });
   const stillSelection = {
     projectId: stillProject.project.projectId,
-    revisionId: stillEdit.revision.id,
+    revisionId: stillEdit.revision.revisionId,
   };
   assert.deepEqual(
     (await picture({ ...stillSelection, atUs: 160001 }, "encode-control-frame")).pixels,

@@ -258,7 +258,7 @@ try {
   const screenOnly = await service.call("edit.apply", {
     projectId,
     requestId: "toggled-screen",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "screen-track", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "camera-track", track: { kind: "video", order: 1 } },
@@ -276,7 +276,7 @@ try {
   const withCamera = await service.call("edit.apply", {
     projectId,
     requestId: "toggled-camera",
-    expectedRevisionId: screenOnly.revision.id,
+    expectedRevisionId: screenOnly.revision.revisionId,
     operations: [
       place(
         "camera",
@@ -307,7 +307,7 @@ try {
   for (const [name, atUs] of Object.entries(projectTimes)) {
     const frames = [];
     for (const revision of [screenOnly.revision, withCamera.revision]) {
-      const frame = await projectFrame(revision.id, atUs);
+      const frame = await projectFrame(revision.revisionId, atUs);
       assert.equal(frame.state, "ready", JSON.stringify(frame));
       assert.equal(frame.published.output.frame.sampleAtUs, atUs);
       frames.push(frame.published.output);

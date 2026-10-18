@@ -26,6 +26,9 @@ import {
   historicalSpeechExecutionSchema,
   currentTranscript,
   portableTranscript,
+  publicTranscriptMetadata,
+  parsePublicTranscriptMetadata,
+  publicTranscriptIssues,
   type PortableTranscript,
   type SpeechTranscriber,
   type TranscriptStore,
@@ -250,7 +253,7 @@ export class TranscriptProcessing {
         "Transcript publication differs from source or engine identity",
       );
     this.jobs.adoptArtifact(
-      { ...identity, ...publication, result: JSON.stringify(metadata) },
+      { ...identity, ...publication, result: JSON.stringify(publicTranscriptMetadata(metadata)) },
       issues,
     );
   }
@@ -283,7 +286,7 @@ export class TranscriptProcessing {
           generation: selection.generation,
           ...(stale ? { stale: true } : {}),
         });
-      const metadata = JSON.parse(retained.result) as TranscriptMetadata;
+      const metadata = parsePublicTranscriptMetadata(JSON.parse(retained.result));
       if (!isDeepStrictEqual(metadata.source, sourceDescriptor(selected)))
         throw new CatalogError(
           "ARTIFACT_CHANGED",
@@ -315,7 +318,7 @@ export class TranscriptProcessing {
           : {
               generation: status.published.generation,
               issues: status.published.issues,
-              transcript: JSON.parse(status.published.result) as TranscriptMetadata,
+              transcript: parsePublicTranscriptMetadata(JSON.parse(status.published.result)),
             },
       models,
       dependencies: [],
@@ -425,7 +428,10 @@ export class TranscriptProcessing {
       scope,
       signal,
     );
-    return { result: JSON.stringify(transcript), issues };
+    return {
+      result: JSON.stringify(publicTranscriptMetadata(transcript)),
+      issues: publicTranscriptIssues(issues),
+    };
   }
 
   private async transcribeSource(

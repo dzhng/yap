@@ -81,14 +81,14 @@ export async function runRetimedGain(output) {
           },
         });
         const projectId = created.project.projectId;
-        let revisionId = created.revision.id;
+        let revisionId = created.revision.revisionId;
         const edit = async (operations) => {
           const result = await call(
             "edit.apply",
             { projectId, expectedRevisionId: revisionId, requestId: randomUUID(), operations },
             { transport: "mcp" },
           );
-          revisionId = result.revision.id;
+          revisionId = result.revision.revisionId;
           return result;
         };
         const placed = await edit([
@@ -99,7 +99,7 @@ export async function runRetimedGain(output) {
             clip: {
               trackId: { label: "track" },
               assetId: asset.id,
-              streamId: asset.streams.find((v) => v.kind === "audio").id,
+              streamId: asset.streams.find((v) => v.kind === "audio").streamId,
               source: { kind: "range", range: { startUs: 200000, endUs: 1200000 } },
               placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
             },

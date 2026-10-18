@@ -234,7 +234,7 @@ try {
     const asset = await call("asset.get", { assetId: job.published.output.assetId });
     const source = {
       assetId: asset.id,
-      streamId: asset.streams.find((v) => v.kind === "video").id,
+      streamId: asset.streams.find((v) => v.kind === "video").streamId,
     };
     row.import = { ack, job, source };
     const create = await call("project.create", {
@@ -248,7 +248,7 @@ try {
     });
     const editRequest = {
       projectId: create.project.projectId,
-      expectedRevisionId: create.revision.id,
+      expectedRevisionId: create.revision.revisionId,
       requestId: `place-${c.id}`,
       operations: [
         { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
@@ -264,7 +264,7 @@ try {
       ],
     };
     const edited = await call("edit.apply", editRequest);
-    const project = { projectId: create.project.projectId, revisionId: edited.revision.id };
+    const project = { projectId: create.project.projectId, revisionId: edited.revision.revisionId };
     row.project = { create, editRequest, edited };
     for (const [i, n] of c.frames.entries()) {
       const ref = references[i],

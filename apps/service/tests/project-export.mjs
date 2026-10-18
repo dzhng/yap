@@ -24,7 +24,7 @@ test("project export pins an omitted revision, replays it after edits and atomic
   await started.promise;
   f.projects.apply(f.projectId, {
     requestId: "resize",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   assert.equal((await f.exports.create(request)).snapshot.revisionId, first.snapshot.revisionId);
@@ -41,12 +41,12 @@ test("project export pins an omitted revision, replays it after edits and atomic
   });
   const bytes = await readFile(ready.output);
   const cached = (
-    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id })
+    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId })
   ).published.preview;
   assert.deepEqual(bytes, await readFile(cached.file));
   assert.equal(createHash("sha256").update(bytes).digest("hex"), ready.receipt.sha256);
   const data = JSON.parse(bytes.toString());
-  assert.equal(data.manifest.revisionId, f.placed.revision.id);
+  assert.equal(data.manifest.revisionId, f.placed.revision.revisionId);
   assert.equal(data.manifest.canvas.width, 160);
   assert.deepEqual(await readdir(f.output), [request.leaf]);
   assert.equal(f.exports.list({ projectId: f.projectId }).exports[0].projectId, f.projectId);
@@ -149,7 +149,7 @@ test("an evicted admitted preview regenerates through the same dependency job be
   const old = (await f.preview.request({ projectId: f.projectId })).published;
   f.projects.apply(f.projectId, {
     requestId: "advance-before-regeneration",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   f.cache.remove(old.preview.cacheId);
@@ -165,13 +165,13 @@ test("an evicted admitted preview regenerates through the same dependency job be
   assert.equal(renders, 2);
   assert.equal(
     JSON.parse(await readFile(ready.output, "utf8")).manifest.revisionId,
-    f.placed.revision.id,
+    f.placed.revision.revisionId,
   );
   assert.ok(
     (
       await f.preview.request({
         projectId: f.projectId,
-        revisionId: f.placed.revision.id,
+        revisionId: f.placed.revision.revisionId,
       })
     ).published.generation > old.generation,
   );
@@ -209,7 +209,7 @@ test("publication holds its cached read lease until the native copy finishes", a
   f.cache.remove(cacheId);
   assert.equal(
     JSON.parse(await readFile(join(f.output, request.leaf), "utf8")).manifest.revisionId,
-    f.placed.revision.id,
+    f.placed.revision.revisionId,
   );
 });
 
@@ -236,7 +236,10 @@ test("restart recovery observes an unacknowledged project commit without republi
     return s.state === "committed" && !s.cleanupPending && s;
   });
   assert.equal((await stat(recovered.output)).ino, before.ino);
-  assert.equal((await reopened.exports.create(request)).snapshot.revisionId, f.placed.revision.id);
+  assert.equal(
+    (await reopened.exports.create(request)).snapshot.revisionId,
+    f.placed.revision.revisionId,
+  );
   assert.deepEqual(await readdir(f.output), [request.leaf]);
 });
 
@@ -278,7 +281,7 @@ test("project retirement drains a late publication, removes only private state a
   assert.deepEqual(await readdir(f.output), [request.leaf]);
   assert.equal(
     JSON.parse(await readFile(join(f.output, request.leaf), "utf8")).manifest.revisionId,
-    f.placed.revision.id,
+    f.placed.revision.revisionId,
   );
 });
 
@@ -531,7 +534,7 @@ test("export discovery pages pinned summaries without admitting work and binds c
     exportId: ids[2],
     projectId: f.projectId,
     kind: "video",
-    revisionId: f.placed.revision.id,
+    revisionId: f.placed.revision.revisionId,
     jobId: page.exports[0].jobId,
     state: "queued",
     abandoning: false,
@@ -753,16 +756,16 @@ test("waiting export pins its revision before a busy heavy lane admits preview w
   assert.equal(f.jobs.job(requested.jobId).state, "waiting");
   f.projects.apply(f.projectId, {
     requestId: "edit-while-waiting",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   await f.jobs.closeContext(hold);
   await f.jobs.idle();
   const result = f.exports.status(request.exportId);
   assert.equal(result.state, "committed");
-  assert.equal(result.snapshot.revisionId, f.placed.revision.id);
+  assert.equal(result.snapshot.revisionId, f.placed.revision.revisionId);
   const movie = JSON.parse(await readFile(result.output, "utf8"));
-  assert.equal(movie.manifest.revisionId, f.placed.revision.id);
+  assert.equal(movie.manifest.revisionId, f.placed.revision.revisionId);
   assert.equal(movie.manifest.canvas.width, 160);
 });
 
@@ -787,7 +790,7 @@ test("canceled queued export regenerates its evicted preview at the original rev
   f.cache.remove(preview.cacheId);
   f.projects.apply(f.projectId, {
     requestId: "edit-after-cancel",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   });
   await f.jobs.closeContext(hold);
@@ -795,6 +798,6 @@ test("canceled queued export regenerates its evicted preview at the original rev
   await f.jobs.idle();
   const result = f.exports.status(request.exportId);
   assert.equal(result.state, "committed");
-  assert.equal(result.snapshot.revisionId, f.placed.revision.id);
+  assert.equal(result.snapshot.revisionId, f.placed.revision.revisionId);
   assert.deepEqual(await readFile(result.output), original);
 });

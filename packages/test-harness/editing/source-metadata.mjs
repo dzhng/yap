@@ -142,7 +142,7 @@ try {
     const arm = {
       cardinality,
       projectId: created.project.projectId,
-      revisionId: created.revision.id,
+      revisionId: created.revision.revisionId,
       clipIds: [],
     };
     async function apply(operations, requestId) {
@@ -152,7 +152,7 @@ try {
         requestId,
         operations,
       });
-      arm.revisionId = edited.revision.id;
+      arm.revisionId = edited.revision.revisionId;
       return edited;
     }
     arm.trackId = (

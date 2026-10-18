@@ -141,7 +141,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     const placed = await call("edit.apply", {
       projectId,
       requestId: "audio-tracks",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         ...["narration", "system"].map((role, order) => ({
           operation: "track.add",
@@ -170,7 +170,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     const edited = await call("edit.apply", {
       projectId,
       requestId: "cut",
-      expectedRevisionId: placed.revision.id,
+      expectedRevisionId: placed.revision.revisionId,
       operations: [
         {
           operation: "remove",
@@ -182,15 +182,15 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     });
     const params = {
       projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       range: { startUs: 500000, endUs: 2500000 },
     };
     const ready = await audio(params),
       excerpt = ready.published.output;
-    assert.equal(excerpt.frames, 96000);
+    assert.equal(excerpt.frameCount, 96000);
     assert.equal(excerpt.sampleRate, 48000);
     assert.deepEqual(excerpt.range, params.range);
-    assert.deepEqual(excerpt.sampleRange, { start: 24000, end: 120000 });
+    assert.deepEqual(excerpt.sampleRange, { startSamples: 24000, endSamples: 120000 });
     const right = edited.revision.document.clips.find(
       (clip) =>
         clip.assetId === binding(acquisition, "narration").assetId &&
@@ -251,9 +251,9 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     assert.ok(amplitude(1.7, 1000) > 0.055);
 
     assert.deepEqual((await audio(params)).published, ready.published);
-    const historical = await audio({ ...params, revisionId: placed.revision.id });
+    const historical = await audio({ ...params, revisionId: placed.revision.revisionId });
     assert.notEqual(historical.jobId, ready.jobId);
-    assert.equal(historical.published.output.revisionId, placed.revision.id);
+    assert.equal(historical.published.output.revisionId, placed.revision.revisionId);
     assert.deepEqual(
       historical.published.output.unavailable.filter((item) => item.ranges.length),
       [],
@@ -292,7 +292,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     });
     assert.equal(regenerated.jobId, ready.jobId);
     assert.equal(Number(regenerated.published.generation), Number(ready.published.generation) + 1);
-    assert.equal(regenerated.revisionId, edited.revision.id);
+    assert.equal(regenerated.revisionId, edited.revision.revisionId);
     assert.deepEqual(await hashes(), original);
   } finally {
     await service.close();
@@ -379,7 +379,7 @@ test("public source audio keeps native failure until explicit retry after restor
     await rename(registered, hidden);
     const params = {
       assetId: asset.assetId,
-      streamId: stream.id,
+      streamId: stream.streamId,
       sourceRange: { startUs: 0, endUs: 1000000 },
     };
     const failed = await waitFor(async () => {
@@ -404,7 +404,7 @@ test("public source audio keeps native failure until explicit retry after restor
     });
     assert.equal(result.jobId, failed.jobId);
     assert.equal(result.published.generation, "2");
-    assert.equal(result.published.output.frames, 48000);
+    assert.equal(result.published.output.frameCount, 48000);
     assert.deepEqual(await readFile(registered), original);
     // job.retry answers with the job's status. Retrying a ready job starts no new attempt: the
     // job reads exactly as before, and the item still serves the same publication.

@@ -66,7 +66,10 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
   assert.equal(hash(expected), oracle.fullPCMHash);
   const tail = expected.subarray(23890 * 4);
   assert.equal(hash(tail), oracle.latePCMHash);
-  const source = { assetId: asset.id, streamId: asset.streams.find((s) => s.kind === "audio").id };
+  const source = {
+    assetId: asset.id,
+    streamId: asset.streams.find((s) => s.kind === "audio").streamId,
+  };
   for (const [name, params, pcm] of [
     ["mixed-raw-late", { ...source, range: oracle.lateRange }, tail],
     ["mixed-raw-full", source, expected],
@@ -80,7 +83,7 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
   assert.equal(donor.originUs, 0);
   const videos = [asset, donor].map((value) => ({
     assetId: value.id,
-    streamId: value.streams.find((s) => s.kind === "video").id,
+    streamId: value.streams.find((s) => s.kind === "video").streamId,
   }));
   const normalized = (sample, origin, end = false) =>
     subtract(

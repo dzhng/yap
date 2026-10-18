@@ -99,7 +99,7 @@ try {
       },
     }),
     projectId = created.project.projectId;
-  let head = created.revision.id;
+  let head = created.revision.revisionId;
   const edit = async (operations) => {
     const result = await call("edit.apply", {
       projectId,
@@ -107,7 +107,7 @@ try {
       requestId: randomUUID(),
       operations,
     });
-    head = result.revision.id;
+    head = result.revision.revisionId;
     return result;
   };
   const scale = {
@@ -174,7 +174,7 @@ try {
       clip: {
         trackId: ref("track"),
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
       },
@@ -200,7 +200,10 @@ try {
   const original = [];
   for (let i = 0; i < 8; i++)
     original.push(
-      await picture({ projectId, revisionId: authored.revision.id, atUs: i * 125000 }, "zoom-" + i),
+      await picture(
+        { projectId, revisionId: authored.revision.revisionId, atUs: i * 125000 },
+        "zoom-" + i,
+      ),
     );
   if (box) {
     const before = await call("processing.get", {
@@ -272,7 +275,7 @@ try {
     ]);
     controls.push(
       await picture(
-        { projectId, revisionId: control.revision.id, atUs: i * 125000 },
+        { projectId, revisionId: control.revision.revisionId, atUs: i * 125000 },
         "constant-" + i,
       ),
     );
@@ -286,7 +289,7 @@ try {
     projectId,
     requestId: randomUUID(),
     expectedRevisionId: head,
-    targetRevisionId: authored.revision.id,
+    targetRevisionId: authored.revision.revisionId,
   });
   head = restored.id;
   const moved = await edit([
@@ -296,7 +299,7 @@ try {
     assert.equal(
       (
         await picture(
-          { projectId, revisionId: moved.revision.id, atUs: 2000000 + i * 125000 },
+          { projectId, revisionId: moved.revision.revisionId, atUs: 2000000 + i * 125000 },
           "moved-" + i,
         )
       ).sha256,
@@ -307,7 +310,7 @@ try {
     assert.equal(
       (
         await picture(
-          { projectId, revisionId: split.revision.id, atUs: 2000000 + i * 125000 },
+          { projectId, revisionId: split.revision.revisionId, atUs: 2000000 + i * 125000 },
           "split-" + i,
         )
       ).sha256,
@@ -328,7 +331,7 @@ try {
     assert.equal(
       (
         await picture(
-          { projectId, revisionId: trimmed.revision.id, atUs: 2000000 + i * 125000 },
+          { projectId, revisionId: trimmed.revision.revisionId, atUs: 2000000 + i * 125000 },
           "trim-" + i,
         )
       ).sha256,
@@ -357,14 +360,14 @@ try {
     assert.equal(
       (
         await picture(
-          { projectId, revisionId: windowed.revision.id, atUs: 2000000 + i * 125000 },
+          { projectId, revisionId: windowed.revision.revisionId, atUs: 2000000 + i * 125000 },
           "window-" + i,
         )
       ).sha256,
       expected.sha256,
       "Window activation differs from exact processed/dry control",
     );
-  const selection = { projectId, revisionId: split.revision.id, settings: report.settings };
+  const selection = { projectId, revisionId: split.revision.revisionId, settings: report.settings };
   const fullPath = join(out, "full.mp4"),
     rangePath = join(out, "range.mp4");
   await poll(
@@ -471,7 +474,7 @@ try {
       projectId,
       clipId,
       stepId,
-      movedRevisionId: moved.revision.id,
+      movedRevisionId: moved.revision.revisionId,
       head,
       fullPath,
       rangePath,

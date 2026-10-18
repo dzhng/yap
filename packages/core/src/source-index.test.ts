@@ -152,7 +152,7 @@ async function fixture(emptyAt?: number, allEmpty = false) {
     await writeFile(output, png);
     const frame: SourceIndexRecords["frame"] = {
       file: output,
-      bytes: png.length,
+      sizeBytes: png.length,
       mediaType: "image/png",
       width: 1,
       height: 1,
@@ -413,7 +413,7 @@ test("complete source coverage with no available pictures remains readable witho
   expect(metadata).toMatchObject({
     candidateCount: 0,
     coverageCount: 1,
-    bytes: 0,
+    sizeBytes: 0,
     durationUs: 1000000,
   });
   f.reopen();
@@ -686,7 +686,7 @@ test("retained index validation yields to a real cancellation timer before publi
     durationUs: 1000000,
     candidateCount: 0,
     coverageCount: 200,
-    bytes: 0,
+    sizeBytes: 0,
   };
   async function* records(): AsyncGenerator<PortableIndexRecord<SourceIndexRecords>> {
     for (let index = 0; index < 200; index++)

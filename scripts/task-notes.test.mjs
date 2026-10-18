@@ -54,7 +54,7 @@ test("transferred notes keep caller decisions historical and missing artifacts m
     if (operation === "project.get") return { projectId: "project", currentRevisionId: head };
     assert.equal(operation, "revision.get");
     assert.equal(params.revisionId, "chosen");
-    return { projectId: "project", revision: { id: "chosen", ordinal: 1 } };
+    return { projectId: "project", revision: { revisionId: "chosen", ordinal: 1 } };
   };
   const first = await resumeTaskNotes({ notesPath: join(recipient, "notes.json") }, invoke);
   assert.equal(first.stale, false);

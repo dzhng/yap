@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import * as protocol from "./index.js";
+import { keyViolation, valueNamingViolations } from "./naming.js";
 import {
   idempotentOperations,
   operationNames,
@@ -19,33 +20,6 @@ type JsonSchema = {
   $defs?: Record<string, JsonSchema>;
 };
 
-// A quantity names what it measures and ends in its unit: `durationUs`, `sizeBytes`, `atUs`.
-const units = ["Us", "Ms", "Bytes", "Hz", "Px", "Frames", "Samples", "Count", "Db", "Lufs"];
-const bareUnits = new Set(units.map((unit) => unit.toLowerCase()));
-const nonCanonicalUnits = ["Seconds", "Milliseconds", "Micros", "Sec"];
-const quantityWords = new Set([
-  "age",
-  "at",
-  "deadline",
-  "delay",
-  "duration",
-  "elapsed",
-  "end",
-  "eta",
-  "expires",
-  "gap",
-  "inference",
-  "interval",
-  "latency",
-  "length",
-  "offset",
-  "position",
-  "size",
-  "start",
-  "time",
-  "timeout",
-]);
-const lastWord = (key: string) => key.match(/[A-Z]?[a-z0-9]+$/)?.[0] ?? key;
 const isNumber = (schema: JsonSchema) =>
   [schema.type].flat().some((type) => type === "number" || type === "integer");
 
@@ -56,17 +30,8 @@ function namingViolations(schema: JsonSchema, path: string): string[] {
     if (!node || typeof node !== "object") return;
     for (const [key, child] of Object.entries(node.properties ?? {})) {
       const here = `${at}.${key}`;
-      if (key === "id" || key === "ids") found.push(`${here}: identity without a noun`);
-      if (isNumber(child)) {
-        if (bareUnits.has(key)) found.push(`${here}: unit without a noun`);
-        else if (nonCanonicalUnits.some((unit) => key.endsWith(unit)))
-          found.push(`${here}: non-canonical unit`);
-        else if (
-          quantityWords.has(lastWord(key).toLowerCase()) &&
-          !units.some((unit) => key.endsWith(unit))
-        )
-          found.push(`${here}: quantity without a unit`);
-      }
+      const reason = keyViolation(key, isNumber(child));
+      if (reason) found.push(`${here}: ${reason}`);
       walk(child, here);
     }
     for (const child of [node.items].flat()) walk(child, `${at}[]`);
@@ -151,6 +116,28 @@ describe("identity and naming lint", () => {
     expect(requestViolations(catalog, readOnlyOperations, idempotentOperations)).toEqual([]);
     for (const name of [...readOnlyOperations, ...idempotentOperations])
       expect(operationNames.has(name), name).toBe(true);
+  });
+
+  it("a response value is held to the same rule outside composition-owned paths", () => {
+    expect(
+      valueNamingViolations(
+        {
+          revision: { id: "r", document: { tracks: [{ id: "t" }] } },
+          sizeBytes: 3,
+          bytes: 3,
+          sampleRange: { start: 0, end: 4 },
+          rows: [{ id: "w" }],
+          snapshot: { settings: { video: { keyframeIntervalSeconds: 2 } } },
+        },
+        "op",
+      ),
+    ).toEqual([
+      "op.bytes: unit without a noun",
+      "op.revision.id: identity without a noun",
+      "op.rows[].id: identity without a noun",
+      "op.sampleRange.end: quantity without a unit",
+      "op.sampleRange.start: quantity without a unit",
+    ]);
   });
 
   it("removed aliases stay removed", () => {

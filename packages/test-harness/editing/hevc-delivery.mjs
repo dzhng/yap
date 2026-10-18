@@ -61,7 +61,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
   const placed = await call("edit.apply", {
     requestId: randomUUID(),
     projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: assets.flatMap(({ asset, stream }, i) => [
       {
         operation: "track.add",
@@ -83,7 +83,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       },
     ]),
   });
-  const revisionId = placed.revision.id;
+  const revisionId = placed.revision.revisionId;
   for (const codec of ["h264", "hevc"]) {
     const request = {
       projectId,

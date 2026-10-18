@@ -418,7 +418,7 @@ try {
   const construct = {
     projectId,
     requestId: "explicit-composition",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "screen-track", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "camera-track", track: { kind: "video", order: 1 } },
@@ -491,7 +491,7 @@ try {
     authored,
     failedConstructionAtomic: true,
   };
-  let head = authored.revision.id;
+  let head = authored.revision.revisionId;
   const references = new Map();
   for (const [role, source, times] of [
     ["screen", screen, [0, 100000, 200000, 500000, 700000]],
@@ -647,7 +647,7 @@ try {
         role === "audio"
           ? {
               assetId: alternateAudio.id,
-              streamId: alternateAudio.streams.find((stream) => stream.kind === "audio").id,
+              streamId: alternateAudio.streams.find((stream) => stream.kind === "audio").streamId,
               source: { kind: "range", range: range(0, 2000000) },
             }
           : {
@@ -665,7 +665,7 @@ try {
       },
       { transport: "cli" },
     );
-    head = replaced.revision.id;
+    head = replaced.revision.revisionId;
     for (const clip of authored.revision.document.clips.filter((clip) => clip.id !== ids[role]))
       assert.deepEqual(
         replaced.revision.document.clips.find((value) => value.id === clip.id),
@@ -782,14 +782,14 @@ try {
     assert.deepEqual(
       (
         await image(
-          { projectId: relocatedProject, revisionId: revision.id, atUs: 200000 },
+          { projectId: relocatedProject, revisionId: revision.revisionId, atUs: 200000 },
           `relocated-${role}`,
         )
       ).pixels,
       pixels,
     );
     assert.deepEqual(
-      await audioOutput(relocatedProject, revision.id, `relocated-${role}`),
+      await audioOutput(relocatedProject, revision.revisionId, `relocated-${role}`),
       role === "audio" ? replacementPCM : baselinePCM,
     );
   }

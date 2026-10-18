@@ -51,12 +51,12 @@ if (!values.read) {
       .all(values.project)
       .map((row) => row.targetId);
     const references = revisions.map((revision) => ({
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
       resources: history
         .prepare(
           "SELECT resourceKind AS kind,resourceId AS id FROM resource_references WHERE ownerKind='revision' AND ownerId=?",
         )
-        .all(revision.id),
+        .all(revision.revisionId),
     }));
     snapshot = { project, revisions, undo, references };
     const asset = JSON.parse(history.prepare("SELECT metadata FROM assets LIMIT 1").get().metadata);

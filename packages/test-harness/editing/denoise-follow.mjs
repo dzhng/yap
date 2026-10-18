@@ -29,7 +29,7 @@ export async function denoiseFollow({
   assert.equal(receipt.revisionId, inputs.revisionId);
   const frozenRevision = frozenReport.exchanges
     .map((exchange) => (exchange.response.structuredContent ?? exchange.response).data?.revision)
-    .find((revision) => revision?.id === inputs.revisionId);
+    .find((revision) => revision?.revisionId === inputs.revisionId);
   assert(frozenRevision);
   // The package head has output gain; the authenticated follow revision does not.
   assert(
@@ -104,7 +104,7 @@ export async function denoiseFollow({
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: made.revision.id,
+      expectedRevisionId: made.revision.revisionId,
       requestId: "follow-reauthor-document",
       operations,
     },
@@ -124,7 +124,7 @@ export async function denoiseFollow({
     "Public reauthoring changed more than generated identities",
   );
   record.reauthoring = { imports, identities: authored.edit.labels, revision, exactDocument: true };
-  const drySelection = { projectId, revisionId: revision.id };
+  const drySelection = { projectId, revisionId: revision.revisionId };
   const target = { kind: "output" };
   const tap = { target, point: { kind: "processed" } };
   const range = { startUs: 0, endUs: 4500000 };
@@ -139,7 +139,7 @@ export async function denoiseFollow({
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: revision.id,
+      expectedRevisionId: revision.revisionId,
       requestId: "follow-learned",
       operations: [
         {
@@ -151,7 +151,7 @@ export async function denoiseFollow({
     },
     { transport: "mcp" },
   );
-  const selection = { projectId, revisionId: changed.revision.id };
+  const selection = { projectId, revisionId: changed.revision.revisionId };
   const stack = await call("processing.get", { ...selection, target });
   record.stack = stack;
   const lateRange = { startUs: 3750000, endUs: 4250000 };

@@ -88,7 +88,7 @@ async function project(name, operations) {
   });
   const changed = await call("edit.apply", {
     projectId: made.project.projectId,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: `${name}-place`,
     operations,
   });
@@ -104,7 +104,7 @@ const placed = (asset, track, startUs, endUs, sourceStartUs = 0, label) => ({
   clip: {
     trackId: { label: track },
     assetId: asset.id,
-    streamId: asset.streams[0].id,
+    streamId: asset.streams[0].streamId,
     source: {
       kind: "range",
       range: { startUs: sourceStartUs, endUs: sourceStartUs + endUs - startUs },
@@ -147,7 +147,7 @@ try {
     () =>
       call("audio.extract", {
         assetId: reference.id,
-        streamId: reference.streams[0].id,
+        streamId: reference.streams[0].streamId,
         rendition: { sampleRate: 24000, channels: 1 },
       }),
     (v) => v.state === "ready",
@@ -182,7 +182,7 @@ try {
     "voice.generate",
     {
       ...base,
-      reference: { assetId: integer.id, streamId: integer.streams[0].id },
+      reference: { assetId: integer.id, streamId: integer.streams[0].streamId },
       text: "Integer input must be explicitly converted.",
     },
     { error: true },
@@ -318,7 +318,7 @@ try {
       clip: {
         trackId: { label: "video" },
         assetId: image.id,
-        streamId: image.streams[0].id,
+        streamId: image.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
       },
@@ -335,7 +335,7 @@ try {
   ];
   const authored = await call("edit.apply", {
     projectId: context.projectId,
-    expectedRevisionId: context.revision.id,
+    expectedRevisionId: context.revision.revisionId,
     requestId: "voice-context-transitions",
     operations: [
       { label: "prefix", range: transitionRanges[0], from: 1, to: 0 },
@@ -353,7 +353,7 @@ try {
   });
   context.revision = authored.revision;
   const target = { kind: "clip", id: context.labels.middle };
-  const oldSelection = { projectId: context.projectId, revisionId: context.revision.id };
+  const oldSelection = { projectId: context.projectId, revisionId: context.revision.revisionId };
   const baseline = await artifact("audio.get", oldSelection, "context-before.wav");
   const picture = await artifact(
     "frame.get",
@@ -363,7 +363,7 @@ try {
   const processing = await call("processing.get", { ...oldSelection, target });
   const replaced = await call("edit.apply", {
     projectId: context.projectId,
-    expectedRevisionId: context.revision.id,
+    expectedRevisionId: context.revision.revisionId,
     requestId: "voice-replace",
     operations: [
       {
@@ -380,7 +380,10 @@ try {
       },
     ],
   });
-  const replacementSelection = { projectId: context.projectId, revisionId: replaced.revision.id };
+  const replacementSelection = {
+    projectId: context.projectId,
+    revisionId: replaced.revision.revisionId,
+  };
   assert.deepEqual(
     (await call("processing.get", { ...replacementSelection, target })).steps,
     processing.steps,
@@ -406,11 +409,11 @@ try {
   }
   const room = await call("edit.apply", {
     projectId: context.projectId,
-    expectedRevisionId: replaced.revision.id,
+    expectedRevisionId: replaced.revision.revisionId,
     requestId: "voice-roomtone",
     operations: roomOperations,
   });
-  const roomSelection = { projectId: context.projectId, revisionId: room.revision.id };
+  const roomSelection = { projectId: context.projectId, revisionId: room.revision.revisionId };
   const mixed = await artifact("audio.get", roomSelection, "context-room.wav");
   const beforeInfo = readAudioWaveFile(join(out, "context-before.wav")),
     afterInfo = readAudioWaveFile(join(out, "context-room.wav"));
@@ -434,9 +437,9 @@ try {
   );
   report.context = {
     projectId: context.projectId,
-    baselineRevision: context.revision.id,
-    replacementRevision: replaced.revision.id,
-    roomRevision: room.revision.id,
+    baselineRevision: context.revision.revisionId,
+    replacementRevision: replaced.revision.revisionId,
+    roomRevision: room.revision.revisionId,
     replacementRange: { startUs: start, endUs: end },
     authoredComplementaryCrossfades: transitionRanges,
     transitionUs: 5000,
@@ -451,7 +454,7 @@ try {
   };
   const undoRoom = await call("edit.undo", {
     projectId: context.projectId,
-    expectedRevisionId: room.revision.id,
+    expectedRevisionId: room.revision.revisionId,
     requestId: "undo-room",
   });
   const undoReplacement = await call("edit.undo", {

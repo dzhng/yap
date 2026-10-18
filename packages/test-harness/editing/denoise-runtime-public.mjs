@@ -237,9 +237,9 @@ async function combinedTemporal(asset) {
   });
   const projectId = made.project.projectId;
   let revision = made.revision;
-  const selection = () => ({ projectId, revisionId: revision.id });
+  const selection = () => ({ projectId, revisionId: revision.revisionId });
   const edit = async (requestId, operations) => {
-    const request = { projectId, expectedRevisionId: revision.id, requestId, operations };
+    const request = { projectId, expectedRevisionId: revision.revisionId, requestId, operations };
     const result = await call("edit.apply", request, { transport: "mcp" });
     record.edits.push({ request, result });
     revision = result.revision;
@@ -263,7 +263,7 @@ async function combinedTemporal(asset) {
       clip: {
         trackId: { label: "first" },
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
       },
@@ -317,7 +317,7 @@ async function combinedTemporal(asset) {
       clip: {
         trackId: placed.edit.labels.second,
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
         placement: { kind: "project", range: { startUs: 2000000, endUs: 4000000 } },
       },
@@ -442,7 +442,11 @@ async function combinedTemporal(asset) {
   ]);
   const bypassPrepared = await prepare(selection());
   await inspect(bypassPrepared, 0, 5000000, "combined-bypass", 1, scale(prefix, 0.5), 2);
-  const undoRequest = { projectId, expectedRevisionId: revision.id, requestId: "combined-undo" };
+  const undoRequest = {
+    projectId,
+    expectedRevisionId: revision.revisionId,
+    requestId: "combined-undo",
+  };
   const undone = await call("edit.undo", undoRequest);
   record.edits.push({ operation: "edit.undo", request: undoRequest, result: undone });
   revision = undone;
@@ -450,7 +454,7 @@ async function combinedTemporal(asset) {
   await projectAudio(selection(), outputTap({ kind: "processed" }), "combined-undo", afterOrder, 2);
   const restoreRequest = {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     targetRevisionId: initial.revisionId,
     requestId: "combined-restore",
   };
@@ -511,7 +515,7 @@ async function unitRateJourney() {
   const projectId = made.project.projectId;
   const placed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -521,7 +525,7 @@ async function unitRateJourney() {
         clip: {
           trackId: { label: "audio" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
         },
@@ -533,7 +537,7 @@ async function unitRateJourney() {
       },
     ],
   });
-  const original = { projectId, revisionId: placed.revision.id },
+  const original = { projectId, revisionId: placed.revision.revisionId },
     first = await prepare(original);
   await inspect(first, 0, 5000000, "full");
   const originalStack = await call("processing.get", { ...original, target: { kind: "output" } });
@@ -560,7 +564,7 @@ async function unitRateJourney() {
       },
     ],
   });
-  const selected = { projectId, revisionId: gained.revision.id };
+  const selected = { projectId, revisionId: gained.revision.revisionId };
   const blocked = await service.arm("media.mixCompositionAudio"),
     pending = await call("audio.prepare", selected);
   await blocked();
@@ -598,14 +602,14 @@ async function unitRateJourney() {
   for (let at = 0; at < halfDry.length; at += 4)
     halfDry.writeFloatLE(Math.fround(halfDry.readFloatLE(at) * 0.5), at);
   await projectAudio(
-    { projectId, revisionId: bypassed.revision.id },
+    { projectId, revisionId: bypassed.revision.revisionId },
     outputTap({ kind: "processed" }),
     "bypassed-state",
     halfDry,
   );
   const undone = await call("edit.undo", {
     projectId,
-    expectedRevisionId: bypassed.revision.id,
+    expectedRevisionId: bypassed.revision.revisionId,
     requestId: "undo-bypass",
   });
   assert.deepEqual(undone.document, gained.revision.document);
@@ -659,7 +663,7 @@ async function unitRateJourney() {
   });
   const stereoPlaced = await call("edit.apply", {
     projectId: stereoMade.project.projectId,
-    expectedRevisionId: stereoMade.revision.id,
+    expectedRevisionId: stereoMade.revision.revisionId,
     requestId: "stereo-place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -668,7 +672,7 @@ async function unitRateJourney() {
         clip: {
           trackId: { label: "audio" },
           assetId: stereoAsset.id,
-          streamId: stereoAsset.streams[0].id,
+          streamId: stereoAsset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
         },
@@ -682,7 +686,7 @@ async function unitRateJourney() {
   });
   const stereoPrepared = await prepare({
     projectId: stereoMade.project.projectId,
-    revisionId: stereoPlaced.revision.id,
+    revisionId: stereoPlaced.revision.revisionId,
   });
   const rightExpected = gunzipSync(
     await readFile(
@@ -734,7 +738,7 @@ async function unitRateJourney() {
   });
   const longPlaced = await call("edit.apply", {
     projectId: longMade.project.projectId,
-    expectedRevisionId: longMade.revision.id,
+    expectedRevisionId: longMade.revision.revisionId,
     requestId: "cancel-domain",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -755,7 +759,7 @@ async function unitRateJourney() {
   });
   const inFlight = await call("audio.prepare", {
     projectId: longMade.project.projectId,
-    revisionId: longPlaced.revision.id,
+    revisionId: longPlaced.revision.revisionId,
   });
   const workspace = join(home, "library/render");
   const observation = await poll(
@@ -833,7 +837,7 @@ async function unitRateJourney() {
   });
   const refusal = await call(
     "audio.prepare",
-    { projectId, revisionId: unprepared.revision.id },
+    { projectId, revisionId: unprepared.revision.revisionId },
     { error: true },
   );
   assert.equal(refusal.code, "NOT_READY");

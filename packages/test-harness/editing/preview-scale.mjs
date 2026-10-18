@@ -106,7 +106,7 @@ export async function previewScale(service, out, limits, base, durationUs) {
     requestId: "preview-layout",
     operations,
   });
-  const selection = { projectId: base.projectId, revisionId: edited.revision.id };
+  const selection = { projectId: base.projectId, revisionId: edited.revision.revisionId };
   const result = {
     selection,
     output: { width: 1920, height: 1080, fps: 30 },

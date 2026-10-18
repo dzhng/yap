@@ -66,7 +66,7 @@ try {
   const request = {
     projectId,
     requestId: "stack",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "group.add", group: { kind: "audio", order: 0 }, label: "group" },
       {
@@ -89,7 +89,7 @@ try {
   const target = { kind: "track", id: applied.edit.labels.voice };
   const observed = await call("processing.get", {
     projectId,
-    revisionId: applied.revision.id,
+    revisionId: applied.revision.revisionId,
     target,
   });
   assert.deepEqual(observed.steps, [
@@ -102,7 +102,7 @@ try {
     {
       projectId,
       requestId: "rollback",
-      expectedRevisionId: applied.revision.id,
+      expectedRevisionId: applied.revision.revisionId,
       operations: [
         { operation: "canvas.set", canvas: { width: 320 } },
         {
@@ -115,7 +115,10 @@ try {
     false,
   );
   assert.equal(failed.code, "INVALID_EDIT");
-  assert.equal((await call("project.get", { projectId })).currentRevisionId, applied.revision.id);
+  assert.equal(
+    (await call("project.get", { projectId })).currentRevisionId,
+    applied.revision.revisionId,
+  );
   await mcp.close();
   mcp = undefined;
   await service.close();
@@ -124,15 +127,15 @@ try {
   const undone = await call("edit.undo", {
     projectId,
     requestId: "undo",
-    expectedRevisionId: applied.revision.id,
+    expectedRevisionId: applied.revision.revisionId,
   });
   assert.deepEqual(undone.document, created.revision.document);
-  assert.notEqual(undone.id, created.revision.id);
+  assert.notEqual(undone.id, created.revision.revisionId);
   const restored = await call("edit.restore", {
     projectId,
     requestId: "restore",
     expectedRevisionId: undone.id,
-    targetRevisionId: applied.revision.id,
+    targetRevisionId: applied.revision.revisionId,
   });
   assert.deepEqual(restored.document, applied.revision.document);
   let head = restored.id;
@@ -143,7 +146,7 @@ try {
       expectedRevisionId: head,
       operations,
     });
-    head = result.revision.id;
+    head = result.revision.revisionId;
     return result;
   }
   async function admit(name) {
@@ -259,7 +262,7 @@ try {
   ]) {
     const stack = await call("processing.get", {
       projectId,
-      revisionId: configured.revision.id,
+      revisionId: configured.revision.revisionId,
       target: scope,
     });
     assert.deepEqual(
@@ -345,7 +348,8 @@ try {
     [],
   );
   assert.deepEqual(
-    (await call("processing.get", { projectId, revisionId: applied.revision.id, target })).steps,
+    (await call("processing.get", { projectId, revisionId: applied.revision.revisionId, target }))
+      .steps,
     observed.steps,
   );
   const beforeNoop = await call("revision.history", { projectId });
@@ -356,7 +360,7 @@ try {
     operations: [],
   };
   const noop = await call("edit.apply", noopRequest);
-  assert.equal(noop.revision.id, head);
+  assert.equal(noop.revision.revisionId, head);
   assert.equal(noop.edit.changed, false);
   assert.deepEqual(await call("revision.history", { projectId }), beforeNoop);
   const conflict = await call(
@@ -388,7 +392,7 @@ try {
   assert.equal(contenders[1 - winner].ok, false);
   assert.equal(contenders[1 - winner].error.code, "STALE_REVISION");
   assert.equal(contenders[winner].data.revision.document.canvas.width, candidates[winner]);
-  head = contenders[winner].data.revision.id;
+  head = contenders[winner].data.revision.revisionId;
   assert.equal((await call("project.get", { projectId })).currentRevisionId, head);
   const rest = await call("revision.history", { projectId, cursor: firstPage.nextCursor });
   assert.deepEqual(rest.revisions, beforeNoop.revisions.slice(1));

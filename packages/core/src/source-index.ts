@@ -70,7 +70,7 @@ export type SourceIndexCoverage = { source: TimeRange } & (
 export type SourceIndexRecords = {
   identity: SourceIndexIdentity;
   candidate: SourceIndexCandidate;
-  frame: Omit<SourceFrameArtifact, "cacheId">;
+  frame: z.infer<typeof retainedSourceFrameSchema>;
   coverage: SourceIndexCoverage;
 };
 const portableTime = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -89,7 +89,7 @@ export const portableSourceIndexMetadataSchema = sourceSelectionSchema
     durationUs: portableTime,
     candidateCount: portableTime.max(25000),
     coverageCount: portableTime.max(25000),
-    bytes: portableTime,
+    sizeBytes: portableTime,
   })
   .strict();
 export const portableSourceIndexRecordSchema = z.discriminatedUnion("kind", [

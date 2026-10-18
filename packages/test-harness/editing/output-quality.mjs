@@ -82,7 +82,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "screen" },
       {
@@ -92,7 +92,7 @@ try {
           trackId: { label: "screen" },
           assetId: asset.id,
           ...(acquisitionId ? { acquisitionId } : {}),
-          streamId: asset.streams.find((x) => x.kind === "video").id,
+          streamId: asset.streams.find((x) => x.kind === "video").streamId,
           source: { kind: "range", range: { startUs, endUs: startUs + durationUs } },
           placement: { kind: "project", range: { startUs: 0, endUs: durationUs } },
         },

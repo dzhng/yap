@@ -232,7 +232,7 @@ try {
   const placed = await call("edit.apply", {
     projectId,
     requestId: "nested-routing",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "group.add", label: "outer", group: { kind: "audio", order: 0 } },
       {
@@ -271,7 +271,7 @@ try {
       })),
     ],
   });
-  const revisionId = placed.revision.id,
+  const revisionId = placed.revision.revisionId,
     range = { startUs: 333, endUs: 999000 };
   report.project = { projectId, revisionId };
   report.checks.taps = [];
@@ -351,7 +351,7 @@ try {
       },
     ],
   });
-  assert.notEqual(changed.revision.id, revisionId);
+  assert.notEqual(changed.revision.revisionId, revisionId);
   const changedAudio = await delivered(
     {
       projectId,
@@ -366,7 +366,10 @@ try {
   report.checks.changed = verify(changedAudio.bytes, range, 18.046875);
   await service.stop();
   await service.start();
-  assert.equal((await call("project.get", { projectId })).currentRevisionId, changed.revision.id);
+  assert.equal(
+    (await call("project.get", { projectId })).currentRevisionId,
+    changed.revision.revisionId,
+  );
   const historical = await delivered({ projectId, revisionId, range }, "mcp");
   assert.deepEqual(historical.bytes, ranged.bytes);
   report.checks.historyRestart = true;
@@ -380,7 +383,7 @@ try {
   const waveformRange = { startUs: 666, endUs: 777777 };
   const waveformRequest = {
     projectId,
-    revisionId: changed.revision.id,
+    revisionId: changed.revision.revisionId,
     range: waveformRange,
     bucketFrames: 479,
   };

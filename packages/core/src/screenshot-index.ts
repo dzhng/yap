@@ -44,7 +44,7 @@ export type ScreenshotIndexMetadata<D extends IndexRecords = IndexRecords> = D["
   durationUs: number;
   candidateCount: number;
   coverageCount: number;
-  bytes: number;
+  sizeBytes: number;
 };
 export type ScreenshotIndexEntry<D extends IndexRecords = IndexRecords> = {
   candidate: D["candidate"];
@@ -120,6 +120,11 @@ type Entry = {
 type Coverage = { sequence: number; ordinal: number | null; content: string };
 const where = "ownerKind=? AND ownerId=? AND generation=?";
 const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
+const imageSize = (frame: RetainedImage) => {
+  const size = frame.sizeBytes ?? frame.bytes;
+  if (size === undefined) invalid("Retained image has no byte receipt");
+  return size;
+};
 function invalid(message: string): never {
   throw new CatalogError("INVALID_EVIDENCE", message);
 }
@@ -129,7 +134,7 @@ function metadata<D extends IndexRecords>(row: Generation): ScreenshotIndexMetad
     durationUs: row.durationUs,
     candidateCount: row.candidateCount,
     coverageCount: row.coverageCount,
-    bytes: row.bytes,
+    sizeBytes: row.bytes,
   };
 }
 /** Producers can refuse oversized records before scheduling pictures; writes use the same budget. */
@@ -333,7 +338,7 @@ export class ScreenshotIndexStore<
       expected.durationUs,
       expected.candidateCount,
       expected.coverageCount,
-      expected.bytes,
+      expected.sizeBytes,
     ])
       if (!integer(count))
         throw new CatalogError("INVALID_PACKAGE", "Invalid retained index counts");
@@ -411,7 +416,7 @@ export class ScreenshotIndexStore<
               );
             const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
             try {
-              if ((await hashFile(file, frame.bytes, signal)).sha256 !== record.sha256)
+              if ((await hashFile(file, imageSize(frame), signal)).sha256 !== record.sha256)
                 throw new CatalogError(
                   "INVALID_PACKAGE",
                   "Retained index PNG conflicts with local bytes",
@@ -427,7 +432,7 @@ export class ScreenshotIndexStore<
               record.source,
               32 * 1024 * 1024,
             );
-            if (copied.bytes !== frame.bytes || copied.sha256 !== record.sha256)
+            if (copied.bytes !== imageSize(frame) || copied.sha256 !== record.sha256)
               throw new CatalogError(
                 "INVALID_PACKAGE",
                 "Retained index PNG differs from inventory",
@@ -454,7 +459,7 @@ export class ScreenshotIndexStore<
               .run(stat.size, ...key);
           }
           candidates++;
-          bytes += frame.bytes;
+          bytes += imageSize(frame);
         } else {
           const coverage = record.coverage;
           if (
@@ -500,7 +505,7 @@ export class ScreenshotIndexStore<
       if (
         candidates !== expected.candidateCount ||
         coverageCount !== expected.coverageCount ||
-        bytes !== expected.bytes
+        bytes !== expected.sizeBytes
       )
         throw new CatalogError("INVALID_PACKAGE", "Retained index inventory differs from metadata");
       if (!prior) {
@@ -632,7 +637,15 @@ export class ScreenshotIndexStore<
   }
   appendCandidate(identity: D["identity"], candidate: D["candidate"], frame: D["frame"]): void {
     const encodedCandidate = encodeIndexRecord(candidate),
-      encodedFrame = encodeIndexRecord(frame);
+      encodedFrame = encodeIndexRecord(
+        (() => {
+          const { bytes, sizeBytes, ...rest } = frame as D["frame"] & {
+            bytes?: number;
+            sizeBytes?: number;
+          };
+          return { ...rest, sizeBytes: sizeBytes ?? bytes };
+        })(),
+      );
     const path = this.outputPath(identity, candidate.ordinal);
     const previous = candidate.ordinal
       ? (JSON.parse(this.entry(identity, candidate.ordinal - 1).candidate) as D["candidate"])

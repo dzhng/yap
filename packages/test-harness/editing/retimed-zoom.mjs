@@ -217,14 +217,14 @@ export async function runRetimedZoom(output) {
       canvas: { width, height, fps: { numerator: fps, denominator: 1 }, background: "#000000ff" },
     });
     const projectId = created.project.projectId;
-    let revisionId = created.revision.id;
+    let revisionId = created.revision.revisionId;
     async function edit(operations) {
       const result = await call(
         "edit.apply",
         { projectId, expectedRevisionId: revisionId, requestId: randomUUID(), operations },
         { transport: "mcp" },
       );
-      revisionId = result.revision.id;
+      revisionId = result.revision.revisionId;
       return result;
     }
     const placed = await edit([
@@ -235,7 +235,7 @@ export async function runRetimedZoom(output) {
         clip: {
           trackId: { label: "track" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
         },
@@ -341,7 +341,7 @@ export async function runRetimedZoom(output) {
     const restored = await call("edit.restore", {
       projectId,
       expectedRevisionId: revisionId,
-      targetRevisionId: placed.revision.id,
+      targetRevisionId: placed.revision.revisionId,
       requestId: randomUUID(),
     });
     revisionId = restored.id;

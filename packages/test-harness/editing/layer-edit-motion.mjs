@@ -42,7 +42,7 @@ async function importMedia(fixture) {
     "import",
   );
   const asset = await call("asset.get", { assetId: fixture.sha256 });
-  return { assetId: asset.id, streamId: asset.streams[0].id };
+  return { assetId: asset.id, streamId: asset.streams[0].streamId };
 }
 function expected(frameIndex, clipOnly = false, screenVisible = true) {
   let surface = clipOnly ? background(canvas, [0, 0, 0, 0]) : background(canvas);
@@ -329,7 +329,7 @@ try {
   });
   const initial = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "screen-track", track: { kind: "video", order: 0 } },
@@ -359,7 +359,7 @@ try {
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: initial.revision.id,
+      expectedRevisionId: initial.revision.revisionId,
       requestId: "split",
       operations: [
         {
@@ -375,7 +375,7 @@ try {
   for (const atUs of [0, 200000, 300000, 333332, 333333, 333334, 400000, 900000, 999999]) {
     const sourceUs = Math.floor(atUs / 100000) * 100000;
     const before = await delivered(
-      initial.revision.id,
+      initial.revision.revisionId,
       atUs,
       `original-${atUs}`,
       sourceUs / 100000,
@@ -383,7 +383,7 @@ try {
       clipId,
     );
     const after = await delivered(
-      split.revision.id,
+      split.revision.revisionId,
       atUs,
       `split-${atUs}`,
       sourceUs / 100000,
@@ -395,7 +395,7 @@ try {
   report.checks.fractionalSplit = { splitAtUs, unchanged: true };
   const duplicate = await call("edit.apply", {
     projectId,
-    expectedRevisionId: split.revision.id,
+    expectedRevisionId: split.revision.revisionId,
     requestId: "copy",
     operations: [
       {
@@ -409,7 +409,7 @@ try {
   const copyId = duplicate.edit.labels.copy;
   for (const sourceUs of [0, 100000, 200000, 300000])
     await delivered(
-      duplicate.revision.id,
+      duplicate.revision.revisionId,
       1200000 + sourceUs,
       `copy-${sourceUs}`,
       sourceUs / 100000,
@@ -423,7 +423,7 @@ try {
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: duplicate.revision.id,
+      expectedRevisionId: duplicate.revision.revisionId,
       requestId: "move",
       operations: [{ operation: "move", clipIds: [copyId], atUs: destination, ripple: "none" }],
     },
@@ -434,7 +434,7 @@ try {
     const sourceUs =
       sample >= destination && sample < destination + splitAtUs ? sample - destination : null;
     await delivered(
-      moved.revision.id,
+      moved.revision.revisionId,
       atUs,
       `moved-${atUs}`,
       sourceUs === null ? null : Math.floor(sourceUs / 100000),
@@ -447,7 +447,7 @@ try {
   const keep = { startUs: 1833333, endUs: 2033333 };
   const trimmed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: moved.revision.id,
+    expectedRevisionId: moved.revision.revisionId,
     requestId: "trim",
     operations: [{ operation: "trim", clipId: copyId, range: keep, ripple: "none" }],
   });
@@ -455,7 +455,7 @@ try {
     const sample = Math.floor(atUs / 100000) * 100000;
     const sourceUs = sample >= keep.startUs && sample < keep.endUs ? sample - destination : null;
     await delivered(
-      trimmed.revision.id,
+      trimmed.revision.revisionId,
       atUs,
       `trimmed-${atUs}`,
       sourceUs === null ? null : Math.floor(sourceUs / 100000),
@@ -466,7 +466,7 @@ try {
     );
   }
   const before = await delivered(
-    initial.revision.id,
+    initial.revision.revisionId,
     200000,
     "protected-original-revision",
     2,
@@ -474,7 +474,7 @@ try {
     clipId,
   );
   const after = await delivered(
-    trimmed.revision.id,
+    trimmed.revision.revisionId,
     200000,
     "protected-original-clip",
     2,
@@ -482,8 +482,8 @@ try {
     clipId,
   );
   assert.equal(before.sha256, after.sha256);
-  const a = await protectedAudio(initial.revision.id, "original-audio"),
-    b = await protectedAudio(trimmed.revision.id, "protected-audio");
+  const a = await protectedAudio(initial.revision.revisionId, "original-audio"),
+    b = await protectedAudio(trimmed.revision.revisionId, "protected-audio");
   assert.equal(a.pcmSha256, b.pcmSha256);
   assert.equal(
     hash(await readFile(fixtures.motion.path)),
@@ -496,8 +496,8 @@ try {
       : sample >= keep.startUs && sample < keep.endUs
         ? sample - destination
         : null;
-  await movie(trimmed.revision.id, null, mapping, "whole");
-  await movie(trimmed.revision.id, { startUs: 1850001, endUs: 2050001 }, mapping, "range");
+  await movie(trimmed.revision.revisionId, null, mapping, "whole");
+  await movie(trimmed.revision.revisionId, { startUs: 1850001, endUs: 2050001 }, mapping, "range");
   report.checks.edits = {
     copyAtUs: 1200000,
     destination,

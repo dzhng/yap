@@ -443,7 +443,7 @@ test("asset.delete refuses a live project user with structured IN_USE details", 
       },
     });
     if (!created.ok) throw new Error(JSON.stringify(created));
-    const revisionId = (created.data as { revision: { id: string } }).revision.id;
+    const revisionId = (created.data as { revision: { revisionId: string } }).revision.revisionId;
     const projectId = (created.data as { project: { projectId: string } }).project.projectId;
     const catalog = fixture.service.captures.catalog;
     catalog
@@ -510,13 +510,13 @@ test("asset.delete cascade retires the recorded project and resumes from its pla
     if (!created.ok) throw new Error(JSON.stringify(created));
     const { project, revision } = created.data as {
       project: { projectId: string };
-      revision: { id: string };
+      revision: { revisionId: string };
     };
     fixture.service.captures.catalog
       .prepare(
         "INSERT INTO resource_references(resourceKind,resourceId,ownerKind,ownerId) VALUES(?,?,?,?)",
       )
-      .run("asset", assetId, "revision", revision.id);
+      .run("asset", assetId, "revision", revision.revisionId);
     const deleted = await fixture.call("asset.delete", {
       requestId: "asset-cascade-delete",
       assetId,
@@ -593,11 +593,11 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
     if (!created.ok) throw new Error(JSON.stringify(created));
     const { project, revision } = created.data as {
       project: { projectId: string };
-      revision: { id: string };
+      revision: { revisionId: string };
     };
     const placed = await fixture.call("edit.apply", {
       projectId: project.projectId,
-      expectedRevisionId: revision.id,
+      expectedRevisionId: revision.revisionId,
       requestId: "derived-chain-place",
       operations: [
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -849,11 +849,11 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
       if (!project.ok) throw new Error(JSON.stringify(project));
       const { project: projectData, revision } = project.data as {
         project: { projectId: string };
-        revision: { id: string };
+        revision: { revisionId: string };
       };
       const placed = await fixture.call("edit.apply", {
         projectId: projectData.projectId,
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         requestId: `boundary-place-${boundary}-${timing}`,
         operations: [
           { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },

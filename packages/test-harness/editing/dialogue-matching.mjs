@@ -60,7 +60,10 @@ try {
       "source admission",
     );
     const asset = await call("asset.get", { assetId: admitted.published.output.assetId });
-    assets.push({ assetId: asset.id, streamId: asset.streams.find((s) => s.kind === "audio").id });
+    assets.push({
+      assetId: asset.id,
+      streamId: asset.streams.find((s) => s.kind === "audio").streamId,
+    });
   }
   const created = await call("project.create", {
     requestId: "project",
@@ -74,7 +77,7 @@ try {
   const projectId = created.project.projectId;
   let edited = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "dialogue", track: { kind: "audio", order: 0 } },
@@ -93,7 +96,7 @@ try {
   assert.equal(clips.length, 2);
   edited = await call("edit.apply", {
     projectId,
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     requestId: "compressors",
     operations: clips.map((c) => ({
       operation: "processing.set",
@@ -119,11 +122,11 @@ try {
   };
   const before = [];
   for (let i = 0; i < clips.length; i++)
-    before.push(await measure(clips[i], i, "before-" + i, edited.revision.id));
+    before.push(await measure(clips[i], i, "before-" + i, edited.revision.revisionId));
   console.log("Two real processed speaker measurements delivered");
   const request = {
     projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     targetIntegratedLufs: -26,
     gainBounds: { minimumDb: -24, maximumDb: 24 },
     truePeakCeilingDbtp: -2,
@@ -167,7 +170,7 @@ try {
   });
   const after = [];
   for (let i = 0; i < clips.length; i++)
-    after.push(await measure(clips[i], i, "after-" + i, edited.revision.id));
+    after.push(await measure(clips[i], i, "after-" + i, edited.revision.revisionId));
   for (const evidence of after) {
     assert.ok(
       Math.abs(evidence.measurement.integratedLufs - request.targetIntegratedLufs) <= 0.2,
@@ -183,7 +186,7 @@ try {
   console.log("Both real hosts match independently after explicit gain edits");
   const normalized = await call("edit.apply", {
     projectId,
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     requestId: "master",
     operations: [
       {
@@ -204,7 +207,7 @@ try {
       },
     ],
   });
-  const selection = { projectId, revisionId: normalized.revision.id };
+  const selection = { projectId, revisionId: normalized.revision.revisionId };
   const prepared = await poll(
     () => call("audio.prepare", selection),
     (v) => v.state === "ready",

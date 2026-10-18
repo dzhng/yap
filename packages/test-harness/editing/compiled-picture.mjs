@@ -266,7 +266,7 @@ run("ffmpeg", [
 ]);
 const probed = call(native, "media.probe", { path: fractionalFile });
 assert.equal(probed.ok, true, JSON.stringify(probed));
-const fractionalStream = probed.data.streams.find((stream) => stream.kind === "video").id;
+const fractionalStream = probed.data.streams.find((stream) => stream.kind === "video").streamId;
 const fractionalDocument = {
   canvas: still.canvas,
   tracks: [{ id: "fractional-track", kind: "video", order: 0 }],
