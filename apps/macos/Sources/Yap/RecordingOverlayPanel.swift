@@ -392,6 +392,8 @@ private struct Glass<Content: View>: NSViewRepresentable {
         /// Glass given its look before it is in a window can stay dark on screen, while
         /// screenshots show it right; choosing the look again in Settings puts it right. So once
         /// the glass is on screen, its look is chosen again by way of another one, as Settings does.
+        /// This is a workaround, confirmed on a real display in v0.1.57; screenshots can't show the
+        /// bug, so no check here catches it. Removing it brings back clear glass that opens black.
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             guard window != nil, let kind else { return }
