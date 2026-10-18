@@ -66,7 +66,7 @@ final class CaptureView: NSView {
     private(set) var input: CaptureViewInput
     private let perform: (CaptureViewIntent) -> Void
     private let appIcon: NSImage?
-    let scrollView = NSScrollView()
+    let scrollView = OverlayScrollView()
     private let document = CaptureDocument()
     private let footer = CaptureDocument()
     private static let footerHeight: CGFloat = 62
@@ -86,7 +86,6 @@ final class CaptureView: NSView {
         wantsLayer = true
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay
         scrollView.verticalScrollElasticity = .none
         scrollView.documentView = document
         addSubview(scrollView)
@@ -482,11 +481,10 @@ final class SourcePickerButton: NSButton {
         }
         let visible = gap + 4.5 * (height + gap)
         guard content.frame.height > visible else { return content }
-        let scroller = NSScrollView(frame: NSRect(x: 0, y: 0, width: content.frame.width, height: visible))
+        let scroller = OverlayScrollView(frame: NSRect(x: 0, y: 0, width: content.frame.width, height: visible))
         scroller.appearance = content.appearance
         scroller.drawsBackground = false
         scroller.hasVerticalScroller = true
-        scroller.scrollerStyle = .overlay
         scroller.documentView = content
         if values.indices.contains(selected) {
             content.scrollToVisible(content.subviews[selected].frame.insetBy(dx: 0, dy: -gap))

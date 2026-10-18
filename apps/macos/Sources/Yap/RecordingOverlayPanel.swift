@@ -342,16 +342,16 @@ struct RecordingOverlayView: View {
 /// marks legible over a light page as well as a dark one.
 private struct Glass<Content: View>: NSViewRepresentable {
     /// The see-through lens AppKit draws for bubbles: a bright rim and refraction at the edge.
-    private static var clearVariant: Int { 11 }
+    fileprivate static var clearVariant: Int { 11 }
     /// Glass that keeps its own appearance instead of following its backdrop's.
-    private static var heldAppearance: Int { 1 }
+    fileprivate static var heldAppearance: Int { 1 }
     let kind: ControlsGlass
     let content: Content
 
     func makeNSView(context: Context) -> NSGlassEffectView {
         let glass = CapsuleGlass()
         glass.followingAppearance = glass.privateValue("_adaptiveAppearance")
-        apply(kind, to: glass)
+        glass.show(kind)
         let host = NSHostingView(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
         glass.contentView = host
@@ -359,7 +359,7 @@ private struct Glass<Content: View>: NSViewRepresentable {
     }
 
     func updateNSView(_ glass: NSGlassEffectView, context: Context) {
-        if let glass = glass as? CapsuleGlass, glass.kind != kind { apply(kind, to: glass) }
+        if let glass = glass as? CapsuleGlass, glass.kind != kind { glass.show(kind) }
         (glass.contentView as? NSHostingView<Content>)?.rootView = content
     }
 
@@ -367,27 +367,45 @@ private struct Glass<Content: View>: NSViewRepresentable {
         glass.contentView?.fittingSize
     }
 
-    /// Choosing a public style resets the variant, so clear sets its lens after the style.
-    private func apply(_ kind: ControlsGlass, to glass: CapsuleGlass) {
-        glass.kind = kind
-        switch kind {
-        case .light, .dark:
-            glass.style = .regular
-            glass.appearance = NSAppearance(named: kind == .light ? .aqua : .darkAqua)
-            glass.setPrivate("set_adaptiveAppearance:", Self.heldAppearance)
-        case .clear:
-            glass.style = .clear
-            glass.appearance = nil
-            if let following = glass.followingAppearance { glass.setPrivate("set_adaptiveAppearance:", following) }
-            glass.setPrivate("set_variant:", Self.clearVariant)
-        }
-    }
-
     /// Round ends at whatever height the row lays itself out to.
     private final class CapsuleGlass: NSGlassEffectView {
-        var kind: ControlsGlass?
+        private(set) var kind: ControlsGlass?
         /// The appearance setting the glass starts with, which follows its backdrop.
         var followingAppearance: Int?
+
+        /// Choosing a public style resets the variant, so clear sets its lens after the style.
+        func show(_ kind: ControlsGlass) {
+            self.kind = kind
+            switch kind {
+            case .light, .dark:
+                style = .regular
+                appearance = NSAppearance(named: kind == .light ? .aqua : .darkAqua)
+                setPrivate("set_adaptiveAppearance:", Glass.heldAppearance)
+            case .clear:
+                style = .clear
+                appearance = nil
+                if let followingAppearance { setPrivate("set_adaptiveAppearance:", followingAppearance) }
+                setPrivate("set_variant:", Glass.clearVariant)
+            }
+        }
+
+        /// Glass given its look before it is in a window can stay dark on screen, while
+        /// screenshots show it right; choosing the look again in Settings puts it right. So once
+        /// the glass is on screen, its look is chosen again by way of another one, as Settings does.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard window != nil, let kind else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil, self.kind == kind else { return }
+                let other: ControlsGlass = kind == .clear ? .dark : .clear
+                self.show(other)
+                // Settings may have chosen another look in between; that one stands.
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.window != nil, self.kind == other else { return }
+                    self.show(kind)
+                }
+            }
+        }
 
         func setPrivate(_ name: String, _ value: Int) {
             let select = NSSelectorFromString(name)

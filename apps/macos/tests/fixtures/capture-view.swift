@@ -21,6 +21,12 @@ import YapControls
         let input = fixture()
         let appIcon = NSImage(contentsOfFile: CommandLine.arguments[2])!
         let view = CaptureView(appIcon: appIcon, input: input) { recorded.append($0) }
+        // AppKit puts a scroll view back on the system's preferred scrollers whenever that
+        // preference changes, as it does while a mouse is connected. A reserved scroller would
+        // narrow the menu and clip its right edge.
+        view.scrollView.scrollerStyle = .legacy
+        precondition(view.scrollView.scrollerStyle == .overlay,
+                     "The capture menu keeps overlay scrollers whatever the system prefers")
         var withLastRecording = input
         withLastRecording.lastRecording = .init(recordingId: "fixture-recording", title: "Today — 0:12", canPlay: true, canCopyPrompt: true)
         let recent = CaptureView(appIcon: appIcon, input: withLastRecording) { recorded.append($0) }
