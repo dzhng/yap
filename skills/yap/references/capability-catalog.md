@@ -37,7 +37,9 @@ an empty history; it is distinct from the clip-level `duplicate` edit operation.
 `asset.get`, `asset.segments`, `asset.origins`, `asset.list`, `recording.get`,
 `recording.list`, `recording.delete`,
 `recording.cleanup`, and `storage.usage` discover admitted media, retain
-source identities, and reclaim only verified working files.
+source identities, and reclaim only verified working files. `storage.usage` also
+reports `modelBytes` for every regular file under the model directory, including
+model cache and staging files.
 
 ## Packages and jobs
 
@@ -90,8 +92,8 @@ local presets can be deleted.
 
 ## Models and runtime
 
-`model.list`, `model.status`, and `model.prepare` discover, inspect and prepare
-registered local models. Call a requested feature directly; use `model.prepare`
+`model.list`, `model.status`, `model.prepare`, and `model.remove` discover, inspect,
+prepare and remove registered local models. Call a requested feature directly; use `model.prepare`
 only after a `MODEL_NOT_PREPARED` error has explained the optional download and
 the user has approved it. `model.prepare` acquires and verifies model/runtime
 files; it does not run inference. `service.health` reports readiness without

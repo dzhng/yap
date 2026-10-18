@@ -1666,6 +1666,21 @@ test("selected-source transcript reads report unprepared models without download
     ok: true,
     data: { state: "unavailable" },
   });
+  expect(
+    await f.call("model.remove", { modelId: "parakeet", requestId: "remove-before-transcribe" }),
+  ).toMatchObject({
+    ok: true,
+    data: { modelId: "parakeet", deleted: true, freedBytes: 0 },
+  });
+  expect(await f.call("transcript.transcribe", selection)).toMatchObject({
+    ok: true,
+    data: { state: "unavailable", reason: "model_not_prepared", retryable: true },
+  });
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { presence: "absent" },
+  });
+  expect(requests.filter((operation) => operation === "speech.transcribe")).toEqual([]);
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
     data: {
@@ -2288,6 +2303,80 @@ test("model discovery crosses the public wire before either model is prepared", 
   });
 });
 
+test("model.remove reports exact model bytes, fences running requests, and rejects unknown models", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  const modelRoot = join(f.home, "library", "models");
+  for (const [relative, bytes] of [
+    ["parakeet/revision/model.bin", 13],
+    [".cache/parakeet/compiler.bin", 17],
+    [".staging/parakeet/flight/model.bin", 19],
+  ] as const) {
+    const path = join(modelRoot, relative);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, Buffer.alloc(bytes));
+  }
+  const before = await f.call("storage.usage", {});
+  if (!before.ok) throw new Error(JSON.stringify(before));
+  expect(before.data).toMatchObject({ modelBytes: 49 });
+  const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
+  const input = JSON.stringify({ modelId: "parakeet" });
+  catalog.catalog
+    .prepare(
+      "INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,errorCode,errorDetails,retryable,generation,queuedSequence,deferred,readmitted,inputSha256,input) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      "running-model",
+      "attempt",
+      "asset",
+      "asset",
+      "",
+      "fixture",
+      "heavy",
+      "running",
+      null,
+      null,
+      null,
+      1,
+      1,
+      999,
+      0,
+      0,
+      createHash("sha256").update(input).digest("hex"),
+      input,
+    );
+  expect(
+    await f.call("model.remove", { requestId: "remove-in-use", modelId: "parakeet" }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "MODEL_IN_USE", retryable: true, details: { modelId: "parakeet" } },
+  });
+  catalog.catalog.prepare("DELETE FROM jobs WHERE jobId=?").run("running-model");
+  const removed = await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" });
+  expect(removed).toEqual({
+    id: "test",
+    ok: true,
+    data: { modelId: "parakeet", deleted: true, freedBytes: 49 },
+  });
+  expect(await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" })).toEqual(
+    removed,
+  );
+  expect(
+    await f.call("model.remove", { requestId: "remove-model", modelId: "qwen3-tts-icl-v1" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
+  expect(await f.call("storage.usage", {})).toMatchObject({ ok: true, data: { modelBytes: 0 } });
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { modelId: "parakeet", presence: "absent" },
+  });
+  expect(
+    await f.call("model.remove", { requestId: "unknown-model", modelId: "missing" }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND", details: { kind: "model" } },
+  });
+  catalog.close();
+});
+
 test("preset reads cross the public wire without changing the catalog format", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { bundled: join(import.meta.dirname, "../../../presets") },
@@ -2466,7 +2555,7 @@ test("a persisted queued voice request reaches its initialized owner after start
   const library = join(f.home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
-    registry = new Models(library);
+    registry = new Models(library, globalThis.fetch, undefined, catalog);
   const model = registry.list().find((value) => value.modelId === voiceProfile.id)!;
   const bytes = Buffer.alloc(44 + 24000 * 4);
   bytes.write("RIFF");

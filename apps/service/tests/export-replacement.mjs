@@ -433,7 +433,10 @@ for (const mode of ["foreign", "symlink"])
     const storage = await f.good("storage.usage", {});
     if (mode === "symlink") {
       await writeFile(sentinel, Buffer.alloc(4 * 1024 * 1024, 0x61));
-      assert.equal((await f.good("storage.usage", {})).totalBytes, storage.totalBytes);
+      const after = await f.good("storage.usage", {});
+      // Model acquisition may settle between observations; external bytes must not affect
+      // the non-model managed total.
+      assert.equal(after.totalBytes - after.modelBytes, storage.totalBytes - storage.modelBytes);
       assert.equal(await readlink(displaced), sentinel);
     }
     if (process.env.YAP_EXPORT_EVIDENCE)

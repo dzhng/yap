@@ -80,7 +80,7 @@ async function fixture({
     transcripts: new TranscriptProcessing({
       jobs,
       transcripts,
-      models: new Models(home).transcription("parakeet"),
+      models: new Models(home, globalThis.fetch, undefined, catalog).transcription("parakeet"),
       asset: { assets, acquisitions },
       transcribe: async () => {
         throw Error("Capture inspection cannot infer speech");

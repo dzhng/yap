@@ -720,7 +720,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes. Models and external exports are excluded; files may change while scanned.",
+      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes; modelBytes counts every regular file under models/, including cache and staging. External exports are excluded; files may change while scanned.",
     ),
   z
     .object({
@@ -1216,6 +1216,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .strict()
     .describe(
       "Explicitly prepare the selected registered model. Supply absolute runtimeSource and modelSource when model.list marks them required. modelSource admits pinned local files; omission downloads only when the registered acquisition policy permits it. Returns preparation progress; poll model.status. Reuses ready files and joins current preparation. Status and execution never acquire dependencies.",
+    ),
+  z
+    .object({
+      operation: z.literal("model.remove"),
+      params: z.object({ modelId: id, requestId: id }).strict(),
+    })
+    .strict()
+    .describe(
+      "Remove every prepared file for the selected registered model, including its compiler cache and staging bytes. A running job that names the model is a retryable MODEL_IN_USE refusal. Removal persists across service restarts; call model.prepare explicitly to acquire it again.",
     ),
   z
     .object({

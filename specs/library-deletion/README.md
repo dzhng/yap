@@ -68,7 +68,7 @@ parallel; 09 waits for 08.
 - [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
 - [ ] 09 `recording.delete` takes its copies — [slices/09-recording-delete.md](slices/09-recording-delete.md)
 - [x] 10 `project.duplicate` — [slices/10-project-duplicate.md](slices/10-project-duplicate.md)
-- [ ] 11 `model.remove` and model storage — [slices/11-model-remove.md](slices/11-model-remove.md)
+- [x] 11 `model.remove` and model storage — [slices/11-model-remove.md](slices/11-model-remove.md)
 - [ ] 12 `media.list` — [slices/12-media-list.md](slices/12-media-list.md)
 - [ ] 13 App: imported videos in the Recordings tab — [slices/13-app-library-rows.md](slices/13-app-library-rows.md)
 - [ ] 14 App: one delete confirmation — [slices/14-app-delete-dialog.md](slices/14-app-delete-dialog.md)

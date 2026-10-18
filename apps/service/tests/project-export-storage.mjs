@@ -26,7 +26,7 @@ test("storage totals include failed private exports and exclude the committed ex
   assert.ok(bytes > 0);
   const one = await f.storage.usage();
   assert.equal(one.otherBytes, before.otherBytes + bytes);
-  assert.equal(one.totalBytes, one.sharedBytes + one.cacheBytes + bytes);
+  assert.equal(one.totalBytes, one.sharedBytes + one.cacheBytes + one.modelBytes + bytes);
   assert.equal(await readFile(join(f.output, "taken.mp4"), "utf8"), "external sentinel");
   const successful = randomUUID();
   await f.exports.create({

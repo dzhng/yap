@@ -180,6 +180,7 @@ function expectCallableContract(tools: AdvertisedTool[]) {
   ]);
   expect(required("transcript.review")).toEqual([["projectId"], ["assetId", "streamId"]]);
   expect(required("model.prepare")).toEqual(["modelId"]);
+  expect(required("model.remove")).toEqual(["modelId", "requestId"]);
   expect(tools.filter((tool) => !tool.description).map((tool) => tool.name)).toEqual([]);
 }
 

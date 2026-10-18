@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, truncate, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Models, parakeetModel } from "@yap/core/models";
+import { Catalog } from "@yap/core/catalog";
 import type { SpeechTranscriptionRequest } from "@yap/core/transcript";
 import { expect } from "vitest";
 import type { MediaWorker } from "./worker.js";
@@ -9,6 +10,7 @@ import type { MediaWorker } from "./worker.js";
 // Sparse sizes and stat-bound receipts exercise actual Models metadata/readiness only.
 // These are not model weights; the controlled transcription edge never reads them.
 export async function modelMetadata(library: string) {
+  const catalog = new Catalog(join(library, "catalog.sqlite"));
   const root = join(library, "models", "parakeet", parakeetModel.revision);
   const files: Record<string, { modifiedNs: string; inode: string }> = {};
   for (const file of parakeetModel.files) {
@@ -23,10 +25,13 @@ export async function modelMetadata(library: string) {
   await writeFile(
     receipt,
     JSON.stringify({
-      modelDigest: new Models(library).transcription("parakeet").modelDigest,
+      modelDigest: new Models(library, globalThis.fetch, undefined, catalog).transcription(
+        "parakeet",
+      ).modelDigest,
       files,
     }),
   );
+  catalog.close();
   return { directory: join(root, parakeetModel.folderName), receipt };
 }
 export const spoken = [

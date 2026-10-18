@@ -395,6 +395,7 @@ export async function startProjectService(options: {
       library,
       globalThis.fetch,
       undefined,
+      catalog,
       runtimeMaterializer(nativeExecutable),
     );
     const speakerLabels = new SpeakerLabelStore(catalog);
@@ -1735,6 +1736,17 @@ export async function startProjectService(options: {
               ok: true,
               data: { jobId: null, presence: modelPresence(modelId, model.state), ...model },
             };
+          }
+          case "model.remove": {
+            const { modelId, requestId } = operation.params;
+            // Resolve registration before consulting running work so an unknown identity always
+            // has the model-specific NOT_FOUND contract.
+            models.presence(modelId);
+            if (jobs!.hasRunningModelRequest(modelId))
+              throw new CatalogError("MODEL_IN_USE", "A running job is using this model", {
+                modelId,
+              });
+            return { ok: true, data: await models.remove(modelId, requestId) };
           }
           case "alignment.observe": {
             const params = operation.params;

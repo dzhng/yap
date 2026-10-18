@@ -119,7 +119,7 @@ export const alignmentProbe = {
 export function publishRetainedAlignment(catalog: Catalog, library: string, assetId: string) {
   const assets = new AssetStore(catalog, library),
     acquisitions = new AcquisitionStore(catalog),
-    models = new Models(library);
+    models = new Models(library, globalThis.fetch, undefined, catalog);
   const selected = selectAlignmentSource(assets, acquisitions, {
     assetId,
     streamId: "a1",

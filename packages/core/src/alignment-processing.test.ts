@@ -83,9 +83,14 @@ async function fixture() {
       entry: "execution/worker.py",
     },
   };
-  const models = new Models(home, () => {
-    throw new Error("network refused");
-  }, [manifest]);
+  const models = new Models(
+    home,
+    () => {
+      throw new Error("network refused");
+    },
+    [manifest],
+    catalog,
+  );
   await models.prepare(manifest.name, new AbortController().signal, { runtimeSource, modelSource });
   const evidence = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
   const requests: Parameters<AlignmentObserver>[0][] = [];

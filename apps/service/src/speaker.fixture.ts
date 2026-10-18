@@ -83,7 +83,7 @@ export async function publishControlledObservation(
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
     acquisitions = new AcquisitionStore(catalog),
-    models = new Models(library),
+    models = new Models(library, globalThis.fetch, undefined, catalog),
     selected = selectSpeakerSource(assets, acquisitions, input),
     evidence = new SpeakerEvidenceStore(catalog, assetSpeakerOwner(assets, acquisitions)),
     jobs = new JobQueue({

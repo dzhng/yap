@@ -19,7 +19,7 @@ import {
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
-import { CatalogError } from "./catalog.js";
+import { Catalog, CatalogError } from "./catalog.js";
 import { registeredModels, speakerModel } from "./model-registry.js";
 import { parakeetModel, Models, type ModelManifest } from "./models.js";
 
@@ -63,6 +63,8 @@ const serveFile: Handler = (path, response) => {
 async function fixture(handler: Handler = serveFile) {
   const home = await mkdtemp("/tmp/yap-speech-models-");
   cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const catalog = new Catalog(join(home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
   const requests: string[] = [];
   const server = createServer((request, response) => {
     const prefix = `/${manifest.repo}/resolve/${manifest.revision}/`;
@@ -80,17 +82,24 @@ async function fixture(handler: Handler = serveFile) {
     requests.push(String(input));
     return fetch(String(input).replace("https://huggingface.co", origin), init);
   };
-  const open = (network: typeof fetch = local) => new Models(home, network, [manifest]);
+  const open = (network: typeof fetch = local) => new Models(home, network, [manifest], catalog);
   const models = join(await realpath(home), "models");
   return {
     home,
     requests,
+    network: local,
+    catalog,
     open,
     models,
     revision: join(models, "tiny", "r1"),
     staged: () => readdir(join(models, ".staging")),
   };
 }
+const catalogFor = (home: string) => {
+  const catalog = new Catalog(join(home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  return catalog;
+};
 const offline: typeof fetch = () => {
   throw new Error("status and native requests must not use the network");
 };
@@ -155,16 +164,22 @@ test("the runtime pinned beside the model is the one the native worker resolves"
 
 test("the model digest names the pinned file list, not the order it is declared in", async () => {
   const { home } = await fixture();
-  const digest = new Models(home, offline, [manifest]).transcription("tiny").modelDigest;
+  const digest = new Models(home, offline, [manifest], catalogFor(home)).transcription(
+    "tiny",
+  ).modelDigest;
   const reordered = { ...manifest, files: [...manifest.files].reverse() };
-  expect(new Models(home, offline, [reordered]).transcription("tiny").modelDigest).toBe(digest);
+  expect(
+    new Models(home, offline, [reordered], catalogFor(home)).transcription("tiny").modelDigest,
+  ).toBe(digest);
   const repinned = {
     ...manifest,
     files: manifest.files.map((file, index) =>
       index ? file : { ...file, sha256: "0".repeat(64) },
     ),
   };
-  expect(new Models(home, offline, [repinned]).transcription("tiny").modelDigest).not.toBe(digest);
+  expect(
+    new Models(home, offline, [repinned], catalogFor(home)).transcription("tiny").modelDigest,
+  ).not.toBe(digest);
 });
 
 test("status, native requests and an already prepared model never use the network", async () => {
@@ -363,13 +378,115 @@ test("abort by every caller stops the download and leaves no model", async () =>
   expect(await staged()).toEqual([]);
 });
 
+test("removing a model wins an in-flight prepare and persists until explicit prepare", async () => {
+  const { handler, held } = stalling("Model.mlmodelc/weights/weight.bin");
+  const f = await fixture(handler);
+  const catalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  const models = new Models(f.home, f.network, [manifest], catalog);
+  const preparing = models.prepare("tiny", new AbortController().signal);
+  await vi.waitFor(() => expect(held).toHaveLength(1));
+  const removed = models.remove("tiny", "remove-tiny");
+  held[0]!.end(contents["Model.mlmodelc/weights/weight.bin"]!.subarray(1024));
+  await expect(preparing).rejects.toBeTruthy();
+  await expect(removed).resolves.toEqual({
+    modelId: "tiny",
+    deleted: true,
+    freedBytes: expect.any(Number),
+  });
+  expect(models.presence("tiny")).toBe("absent");
+  const requestsAfterRemoval = f.requests.length;
+  catalog.close();
+  const restartedCatalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => restartedCatalog.close());
+  const restarted = new Models(f.home, f.network, [manifest], restartedCatalog);
+  await restarted.prepareAuto(new AbortController().signal);
+  expect(await restarted.status("tiny")).toEqual({ state: "absent" });
+  expect(f.requests).toHaveLength(requestsAfterRemoval);
+  const explicit = restarted.prepare("tiny", new AbortController().signal);
+  await vi.waitFor(() => expect(held).toHaveLength(2));
+  held[1]!.end(contents["Model.mlmodelc/weights/weight.bin"]!.subarray(1024));
+  await explicit;
+  expect(await restarted.status("tiny")).toEqual({ state: "ready" });
+});
+
+test("replaying an incomplete removal resumes deletion and measures the bytes", async () => {
+  const f = await fixture();
+  const catalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  const models = new Models(f.home, f.network, [manifest], catalog);
+  await models.prepare("tiny", new AbortController().signal);
+  await mkdir(join(f.models, ".cache", "tiny"), { recursive: true });
+  await writeFile(join(f.models, ".cache", "tiny", "compiler.bin"), Buffer.alloc(7));
+  const receiptBytes = (await stat(join(f.revision, "receipt.json"))).size;
+  catalog.catalog
+    .prepare(
+      "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,?,?,?)",
+    )
+    .run("tiny", "crash", Date.now(), 0, null, null);
+  catalog.close();
+  const restartedCatalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => restartedCatalog.close());
+  const restarted = new Models(f.home, f.network, [manifest], restartedCatalog);
+
+  await expect(restarted.remove("tiny", "crash")).resolves.toEqual({
+    modelId: "tiny",
+    deleted: true,
+    freedBytes: manifest.files.reduce((total, file) => total + file.bytes, 0) + receiptBytes + 7,
+  });
+  expect(restarted.presence("tiny")).toBe("absent");
+});
+
+test("a removal interrupted before its files are gone finishes on restart, not on a later replay", async () => {
+  const f = await fixture();
+  const catalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  const models = new Models(f.home, f.network, [manifest], catalog);
+  await models.prepare("tiny", new AbortController().signal);
+  catalog.catalog
+    .prepare(
+      "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,?,?,?)",
+    )
+    .run("tiny", "crash", Date.now(), 0, null, null);
+  catalog.close();
+  const restartedCatalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => restartedCatalog.close());
+  const restarted = new Models(f.home, f.network, [manifest], restartedCatalog);
+
+  await restarted.prepareAuto(new AbortController().signal);
+  expect(restarted.presence("tiny")).toBe("absent");
+  await restarted.prepare("tiny", new AbortController().signal);
+  const replayed = await restarted.remove("tiny", "crash");
+  expect(replayed).toMatchObject({ modelId: "tiny", deleted: true });
+  expect(replayed.freedBytes).toBeGreaterThan(0);
+  expect(restarted.presence("tiny")).toBe("ready");
+});
+
+test("preparing clears the removal fence but keeps request receipts", async () => {
+  const f = await fixture();
+  const catalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  const models = new Models(f.home, f.network, [manifest], catalog);
+  await models.prepare("tiny", new AbortController().signal);
+  const first = await models.remove("tiny", "r1");
+  await models.prepare("tiny", new AbortController().signal);
+
+  await expect(models.remove("tiny", "r1")).resolves.toEqual(first);
+  expect(models.presence("tiny")).toBe("ready");
+  const second = await models.remove("tiny", "r2");
+  expect(second.freedBytes).toBe(first.freedBytes);
+  expect(models.presence("tiny")).toBe("absent");
+});
+
 test("a models directory that is a link is refused", async () => {
   const { home } = await fixture();
   const elsewhere = join(home, randomUUID());
   await mkdir(elsewhere);
   await symlink(elsewhere, join(home, "models"));
 
-  expect(() => new Models(home, offline, [manifest])).toThrow(failure("MODEL_STORAGE_FAILED"));
+  expect(() => new Models(home, offline, [manifest], catalogFor(home))).toThrow(
+    failure("MODEL_STORAGE_FAILED"),
+  );
 });
 
 async function voiceFixture() {
@@ -406,7 +523,7 @@ async function voiceFixture() {
       entry: "worker",
     },
   };
-  const owner = () => new Models(f.home, offline, [manifest, voice]);
+  const owner = () => new Models(f.home, offline, [manifest, voice], catalogFor(f.home));
   return {
     ...f,
     owner,
@@ -534,7 +651,7 @@ test("startup trusts an intact preparation receipt while execution still verifie
   await writeFile(runtime, Buffer.from("A pinned executable"));
   expect((await stat(runtime)).ino).toBe(before.ino);
 
-  const restarted = new Models(f.home, offline, [f.voice]);
+  const restarted = new Models(f.home, offline, [f.voice], catalogFor(f.home));
   await restarted.prepareAuto(new AbortController().signal);
   expect(restarted.statuses()).toEqual([
     { modelId: "voice", purpose: "voice", status: { state: "ready" } },
@@ -560,7 +677,7 @@ test("startup repairs a prepared model whose runtime lost or changed a file", as
 
     // Startup cannot repair this runtime without its explicit local source, so reaching full
     // verification and repair surfaces as that refusal rather than a false ready.
-    const restarted = new Models(f.home, offline, [f.voice]);
+    const restarted = new Models(f.home, offline, [f.voice], catalogFor(f.home));
     await expect(restarted.prepareAuto(new AbortController().signal)).rejects.toMatchObject({
       code: "MODEL_SOURCE_REQUIRED",
     });
@@ -607,9 +724,12 @@ test("canceling a local runtime admission drains its private stage without affec
 
 test("registered platform requirements cannot become false ready execution inputs", async () => {
   const f = await voiceFixture();
-  const models = new Models(f.home, offline, [
-    { ...f.voice, platform: { system: "unsupported", architecture: "unsupported" } },
-  ]);
+  const models = new Models(
+    f.home,
+    offline,
+    [{ ...f.voice, platform: { system: "unsupported", architecture: "unsupported" } }],
+    catalogFor(f.home),
+  );
   expect(await models.status("voice")).toMatchObject({
     state: "failed",
     code: "MODEL_PLATFORM_UNSUPPORTED",
@@ -640,7 +760,7 @@ test("runtime admission preserves pinned directory modes under a restrictive ser
       digest: createHash("sha256").update(JSON.stringify(entries)).digest("hex"),
     },
   };
-  const models = new Models(f.home, offline, [voice]);
+  const models = new Models(f.home, offline, [voice], catalogFor(f.home));
   const original = process.umask(0o077);
   try {
     await models.prepare("voice", new AbortController().signal, f.sources);
@@ -697,6 +817,7 @@ test("a locally sourced model refuses network acquisition before preparation and
       throw new Error("fixture network acquisition refused");
     },
     [speaker, f.voice],
+    catalogFor(f.home),
   );
   const listed = models.list();
   expect(
@@ -720,12 +841,15 @@ test("a locally sourced model refuses network acquisition before preparation and
 test("speaker runtime uses managed preparation and remains readable offline after restart", async () => {
   const f = await voiceFixture();
   const speaker: ModelManifest = { ...f.voice, name: "speaker", purpose: "speaker" };
-  const models = new Models(f.home, offline, [speaker]);
+  const models = new Models(f.home, offline, [speaker], catalogFor(f.home));
   await expect(models.runtime("speaker", "speaker")).rejects.toMatchObject({
     code: "MODEL_NOT_PREPARED",
   });
   await models.prepare("speaker", new AbortController().signal, f.sources);
-  const prepared = await new Models(f.home, offline, [speaker]).runtime("speaker", "speaker");
+  const prepared = await new Models(f.home, offline, [speaker], catalogFor(f.home)).runtime(
+    "speaker",
+    "speaker",
+  );
   expect(await readFile(prepared.python)).toEqual(Buffer.from("a pinned executable"));
   expect(prepared.python).not.toBe(join(f.runtime, "worker"));
   expect(prepared.modelRevision).toBe(speaker.revision);
@@ -757,12 +881,14 @@ test("alignment runtime keeps pinned checkpoint and runtime identity through man
     engine: { ...f.voice.engine, decoder: "nemo-auxiliary-ctc110-v1" },
     files: [f.voice.files[0]!],
   };
-  const models = new Models(f.home, offline, [alignment, f.voice]);
+  const models = new Models(f.home, offline, [alignment, f.voice], catalogFor(f.home));
   expect(() => models.alignment(f.voice.name)).toThrow(failure("INVALID_REQUEST"));
   const provider = models.alignment(alignment.name);
   await expect(provider.runtime()).rejects.toMatchObject({ code: "MODEL_NOT_PREPARED" });
   await models.prepare(alignment.name, new AbortController().signal, f.sources);
-  const restored = new Models(f.home, offline, [alignment]).alignment(alignment.name);
+  const restored = new Models(f.home, offline, [alignment], catalogFor(f.home)).alignment(
+    alignment.name,
+  );
   expect(restored.engine).toEqual(provider.engine);
   expect(restored.engine.workerSha256).toBe(pin("execution/worker.py", body).sha256);
   expect(restored.checkpoint).toBe(alignment.files[0]!.path);
@@ -810,6 +936,7 @@ test("model preparation acquires its pinned upstream inputs before materializati
       return new Response(new Uint8Array(body!));
     },
     [registered],
+    catalogFor(f.home),
     async ({ inputs, directory }) => {
       expect(await readFile(join(inputs, "interpreter.tar.gz"))).toEqual(archive);
       extracted++;
@@ -864,6 +991,7 @@ test("a corrupt upstream runtime input is refused before materialization and nev
     f.home,
     async () => new Response(corrupt),
     [registered],
+    catalogFor(f.home),
     async () => {
       extracted = true;
     },
@@ -910,6 +1038,7 @@ test("unavailable runtime execution refuses before acquiring any upstream bytes"
       return new Response("x");
     },
     [registered],
+    catalogFor(f.home),
   );
   await expect(models.prepare(registered.name, new AbortController().signal)).rejects.toMatchObject(
     { code: "MODEL_RUNTIME_UNAVAILABLE" },
@@ -996,7 +1125,7 @@ elif any(x.endswith("assemble.py") for x in a):
 test("the registered original speaker requires explicit preparation", async () => {
   const home = await mkdtemp("/tmp/yap-original-speaker-");
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const models = new Models(home, offline);
+  const models = new Models(home, offline, registeredModels, catalogFor(home));
   expect(speakerModel).toMatchObject({
     runtimeArtifact: {
       acquisition: {
