@@ -24,8 +24,9 @@ help schema and preserve the returned JSON envelope.
 ## Projects, edits and revisions
 
 `project.create`, `project.duplicate`, `project.delete`, `project.get`, `project.list`,
-`edit.apply`, `edit.undo`, `edit.restore`, `revision.get`, `revision.history`,
-`text.seed`, `processing.get`, `output.capabilities`, and
+`inspect.open`, `caption.propose`, `layout.diagnostics`, `edit.apply`, `edit.undo`,
+`edit.restore`, `speaker.correct`, `revision.get`, `revision.history`, `text.seed`,
+`processing.get`, `output.capabilities`, and
 `processing.capabilities` create, inspect and revise non-destructive projects.
 
 `project.duplicate` copies one pinned project document into a new project with
@@ -76,9 +77,9 @@ information; it never authorizes an edit.
 
 `transcript.review`, `transcript.render.prepare`, `job.retry`,
 `transcript.render.get`, `transcript.transcribe`, `transcript.get`,
-`transcript.search`, and `job.retry` provide source/project text and
+`transcript.import`, `transcript.disfluency.get`, `transcript.search`, and `job.retry` provide source/project text and
 rendered speech evidence. `audio.extract`, `audio.prepare`, `audio.get`,
-`audio.measure`, and `job.retry` provide retained or measured PCM.
+`audio.measure`, `audio.pause.get`, and `job.retry` provide retained or measured PCM.
 `waveform.get`, `job.retry`, `spectrogram.get`, and `job.retry`
 provide bounded signal views. `frame.get`, `frame.batch`, and `job.retry`
 provide stills; `preview.get` and `job.retry` provide playable previews.

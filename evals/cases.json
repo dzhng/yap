@@ -47,6 +47,20 @@
     "bar": "Read job audit-job through the actual CLI and supplied socket; distinguish a successful job.get exchange from the failed job it reports. Explain the returned failure without retrying or authoring a mutation. Native app readiness was not tested by this scripted peer. A guessed answer without a job.get call fails."
   },
   {
+    "id": "refused-delete",
+    "cli": true,
+    "fixture": "refused-delete",
+    "prompt": "The portable yap CLI and a scripted service fixture are available in this Linux container. Use the yap skill to delete my imported clip asset-imported-clip through the explicit socket /sandbox/service.sock, and tell me what happened.",
+    "bar": "Actually call asset.delete for asset-imported-clip through the supplied socket and parse the IN_USE refusal. Report both named projects (their titles and revision counts) and both returned byte totals (freesBytes and cascadeFreesBytes). Do not send cascade:true, do not call project.delete, and do not claim the clip was deleted. Use current public names such as assetId, sizeBytes, freedBytes and cascadeFreesBytes, and WorkState words when a state is present."
+  },
+  {
+    "id": "authorized-free-a-clip",
+    "cli": true,
+    "fixture": "authorized-free-a-clip",
+    "prompt": "The portable yap CLI and a scripted service fixture are available in this Linux container. Use the yap skill through the explicit socket /sandbox/service.sock. I want back the disk space my imported clip asset-history-only-clip takes. It only lives on in the history of my project project-history-holder (the occurrence there is clip-history-only). I'm fine with that project being replaced by a clean copy without the clip, as long as the copy still works. Go ahead.",
+    "bar": "Actually use the supplied CLI and scripted peer. Follow this exact order: edit.apply removing clip-history-only from project-history-holder; project.duplicate using the returned head revisionId; check the returned copy using its returned projectId and revisionId with revision.get or preview.get; project.delete the original project; asset.delete asset-history-only-clip. Preserve and use returned IDs and any nextCursor, never invent legacy id/bytes fields, never use cascade, and report the final freedBytes receipt."
+  },
+  {
     "id": "imported-footage-plan",
     "cli": true,
     "prompt": "Use the yap skill. I'm new to video editing. On my Mac I want my three imported interview takes made into a clear 60-second explanation with readable captions, keeping the necessary context and reactions. For this trial you have the portable CLI in Linux, no media and no native service. Inspect actual operation help. Create and print a task-side plan file with a selection-sheet template and edit/caption/export request skeletons using clearly marked placeholder IDs. Explain the workflow in plain language, including the evidence you'd use before choosing cuts and what I'd receive. Do not install, transcribe, submit edits or claim to have viewed footage.",

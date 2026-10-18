@@ -367,3 +367,8 @@ Implementation follow-up: retained audio, acoustic, frame, index, transcript and
 - **Review** (non-blocking). Mock comparison: accept with the list-wrap fix, done. Shots: [assets/14-delete-dialog](assets/14-delete-dialog/).
 
 - **Audio and acoustic producers keep an internal working type behind one typed boundary** (sound, reviewed). `audio-inspection.ts` and `acoustic-inspection.ts` write and read the stored/public record (`sizeBytes`, `frameCount`, `{startSamples,endSamples}`) through one explicit converter per record type inside the owning module; their internal artifact types keep `bytes`/`frames`/`{start,end}` for the media math. There is one stored and one public shape, no unit is guessed, and an old stored shape is refused `ARTIFACT_CHANGED`. Renaming every internal use across core was judged churn without a contract benefit; a service-level key translator (tried twice) was rejected.
+
+## Slice 15: skill recipe and evals
+
+- **Eval prompts state the user's goal, not the steps** (sound). The first draft spelled out the free-a-clip recipe and the "don't cascade" rule in the prompts, which tests prompt-following, not the skill; the bars still require the recipe order and no unasked cascade.
+- **Model trials use a local CLI bundle** (sound). No release carries the new operations yet, so the two cases run with `node evals/run.mjs --cli <bundle>` built from this branch; contracts-only checks pass offline.
