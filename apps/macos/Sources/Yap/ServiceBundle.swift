@@ -5,6 +5,9 @@ struct ServiceFailure: LocalizedError, Sendable {
     let code: String
     let message: String
     var retryable: Bool = false
+    /// The refusal's structured details as the service sent them (JSON), such as the users an
+    /// `IN_USE` delete names.
+    var details: Data? = nil
 
     var errorDescription: String? { "\(code): \(message)" }
 }

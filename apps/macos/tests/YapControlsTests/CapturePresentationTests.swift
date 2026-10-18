@@ -137,6 +137,12 @@ private func runOverlayCameraTests() {
     print("PASS the floating controls offer the live camera native reports")
 }
 
+/// The media.list rows a page of takes would produce, in the same order.
+func mediaRows(_ takes: [ControlsState.RecentTake]) -> [LibraryState.Media] {
+    takes.map { .init(kind: .recording, target: .recording($0.recordingId), title: $0.createdAt,
+        durationUs: $0.sourceDurationUs ?? 0, sizeBytes: 1_000, createdAt: $0.createdAt) }
+}
+
 func runSavedRecordingTests() {
     precondition(LibraryPresentation.agentPrompt(for: .recording("recording-1")) ==
         "I want you to use this recording with this ID with the Yap CLI: recording-1")
@@ -146,6 +152,7 @@ func runSavedRecordingTests() {
     let sibling = ControlsState.RecentTake(recordingId: "sibling", createdAt: first.createdAt,
         state: "complete", sourceDurationUs: 2_000_000, interruptionReason: nil)
     state.library.recent = [first, sibling]
+    state.library.media = mediaRows([first, sibling])
     let listed = LibraryPresentation.recordings(for: state).items.first!
     precondition(listed.title == ElapsedTime.shortTime(of: first.createdAt) && listed.details.first == "1:05",
                  "A recording is titled by when it was made, with its length once, below")
@@ -153,9 +160,12 @@ func runSavedRecordingTests() {
         var observed = state
         observed.library.recent = [.init(recordingId: "first", createdAt: first.createdAt,
             state: status, sourceDurationUs: duration, interruptionReason: nil)]
+        observed.library.media = mediaRows(observed.library.recent)
         let offered = LibraryPresentation.recordings(for: observed).items.flatMap(\.actions).filter(\.enabled).map(\.action)
-        let expected: [ControlsAction] = status == "canceled" ? [.copyRecordingPrompt("first")] : [.playRecording("first"), .copyRecordingPrompt("first")]
-        precondition(offered == expected, "Recordings expose playback and agent handoff only")
+        let expected: [ControlsAction] = status == "canceled"
+            ? [.copyRecordingPrompt("first"), .deleteRecording("first")]
+            : [.playRecording("first"), .copyRecordingPrompt("first"), .deleteRecording("first")]
+        precondition(offered == expected, "Recordings expose playback, agent handoff and deletion: \(offered)")
     }
     precondition(!state.library.beginDelete(.recording("unknown")))
     precondition(state.library.beginDelete(.recording("first")))
@@ -164,9 +174,12 @@ func runSavedRecordingTests() {
     precondition(page.items.flatMap(\.actions).contains { $0.action == .playRecording("first") && !$0.enabled })
     precondition(page.items.flatMap(\.actions).contains { $0.action == .playRecording("sibling") && $0.enabled })
     state.library.recent = [sibling]
+    state.library.media = mediaRows([sibling])
     state.library.finishDelete(.recording("first"), failure: "DELETE_FAILED: disk is unavailable")
     page = LibraryPresentation.recordings(for: state)
     precondition(page.items.flatMap(\.details).contains { $0.contains("DELETE_FAILED: disk is unavailable") })
+    precondition(page.items.flatMap(\.actions).contains { $0.action == .deleteRecording("first") && $0.title == "Retry Delete" && $0.enabled },
+                 "A delete that was not confirmed is offered again, under its own identity")
     state.service = .ready
     precondition(state.library.beginDelete(.recording("first")), "Retry uses its retained target")
     state.library.finishDelete(.recording("first"), failure: nil)
@@ -180,6 +193,7 @@ func runSavedRowOpenTests() {
     var state = ready()
     state.library.recent = [.init(recordingId: "take", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 1_000_000, interruptionReason: nil)]
+    state.library.media = mediaRows(state.library.recent)
     let project = #"{"projectId":"project","title":"Launch","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r1"}"#
     state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(project.utf8))]
     precondition(LibraryPresentation.recordings(for: state).items.first?.open == .playRecording("take"),
@@ -209,10 +223,62 @@ func runSavedProjectRowTests() {
     print("PASS a project row reads as a project and can still be handed to an agent")
 }
 
+func runSavedMediaTests() {
+    let page = #"""
+    {"media":[
+      {"kind":"recording","recordingId":"take","title":"2026-10-17T21:41:00Z","durationUs":252000000,"sizeBytes":61000000,"createdAt":"2026-10-17T21:41:00Z"},
+      {"kind":"imported","assetId":"a-1","title":"launch-teaser-v2.mp4","durationUs":42000000,"sizeBytes":22000000,"createdAt":"2026-10-17T20:46:00Z"}
+    ],"nextCursor":null}
+    """#
+    struct Page: Decodable { let media: [LibraryState.Media] }
+    let media = try! JSONDecoder().decode(Page.self, from: Data(page.utf8)).media
+    precondition(media.map(\.target) == [.recording("take"), .asset("a-1")], "media.list rows keep their own owner kinds")
+    let wrongOwner = #"{"kind":"imported","recordingId":"take","title":"x","durationUs":0,"sizeBytes":0,"createdAt":"2026-10-17T20:46:00Z"}"#
+    precondition((try? JSONDecoder().decode(LibraryState.Media.self, from: Data(wrongOwner.utf8))) == nil,
+                 "An imported row naming a recording is unreadable, not misfiled")
+    precondition(MediaTarget.asset("a-1").parameters == ["assetId": "a-1"])
+    precondition(LibraryPresentation.agentPrompt(for: .asset("a-1")) ==
+        "I want you to use this imported video with this asset ID with the Yap CLI: a-1")
+
+    var state = ready()
+    state.library.media = media
+    state.library.recent = [.init(recordingId: "take", createdAt: "2026-10-17T21:41:00Z",
+        state: "complete", sourceDurationUs: 252_000_000, interruptionReason: nil)]
+    var items = LibraryPresentation.recordings(for: state).items
+    precondition(items.map(\.id) == ["take", "a-1"], "The tab lists recordings and imports in media.list order")
+    let imported = items[1]
+    precondition(imported.kind == .imported && imported.title == "launch-teaser-v2.mp4" && imported.badge == "Imported",
+                 "An import is titled by its original filename and marked as imported")
+    precondition(imported.details == ["0:42", LibraryPresentation.byteCount(22_000_000), "imported \(ElapsedTime.shortTime(of: "2026-10-17T20:46:00Z"))"],
+                 "An import's length, size and arrival read once, below: \(imported.details)")
+    precondition(imported.actions.map(\.action) == [.playAsset("a-1"), .copyAssetPrompt("a-1"), .deleteAsset("a-1")]
+                 && imported.actions.allSatisfy(\.enabled) && imported.open == .playAsset("a-1"),
+                 "An import plays, hands off to an agent, and deletes")
+    precondition(items[0].badge == nil && items[0].kind == .recording, "A recording carries no badge")
+
+    precondition(state.library.beginDelete(.asset("a-1")))
+    state.library.media = [media[0]]
+    items = LibraryPresentation.recordings(for: state).items
+    precondition(items.last?.id == "a-1" && items.last?.status == "Deleting"
+                 && items.last?.actions.contains { $0.action == .playAsset("a-1") && !$0.enabled } == true,
+                 "An import being deleted stays listed as Deleting, and cannot be played")
+    state.library.finishDelete(.asset("a-1"), failure: nil)
+    precondition(LibraryPresentation.recordings(for: state).items.map(\.id) == ["take"], "A confirmed delete leaves the page")
+    precondition(!state.library.beginDelete(.asset("unknown")), "Only a listed import can be deleted")
+
+    let storage = LibraryPresentation.storage(.init(totalBytes: 2_300_000_000, modelBytes: 2_200_000_000, observedAt: "now"))
+    precondition(storage.total == "\(LibraryPresentation.byteCount(2_300_000_000)) used"
+                 && storage.media == "Media \(LibraryPresentation.byteCount(100_000_000))"
+                 && storage.models == "Models \(LibraryPresentation.byteCount(2_200_000_000))",
+                 "Storage reads as one total, then media and models: \(storage)")
+    print("PASS the Recordings tab lists recordings and imported videos from media.list")
+}
+
 func runSavedPagingTests() {
     var state = ready()
     state.library.recent = [.init(recordingId: "take", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 1_000_000, interruptionReason: nil)]
+    state.library.media = mediaRows(state.library.recent)
     let paging: Set<ControlsAction> = [.previousRecordings, .nextRecordings]
     precondition(LibraryPresentation.recordings(for: state).actions.filter { paging.contains($0.action) }.isEmpty,
                  "With one page there is no paging to offer")

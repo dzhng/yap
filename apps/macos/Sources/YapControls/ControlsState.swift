@@ -284,11 +284,14 @@ public struct ControlsState: Equatable, Sendable {
     }
 
     public struct StorageObservation: Equatable, Sendable, Decodable {
-        public init(totalBytes: Int64, observedAt: String) {
+        public init(totalBytes: Int64, modelBytes: Int64, observedAt: String) {
             self.totalBytes = totalBytes
+            self.modelBytes = modelBytes
             self.observedAt = observedAt
         }
         public let totalBytes: Int64
+        /// The part of the total that is prepared models, so media and models read apart.
+        public let modelBytes: Int64
         public let observedAt: String
     }
 

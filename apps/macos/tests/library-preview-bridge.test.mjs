@@ -237,7 +237,7 @@ child.on('close',(code,signal)=>{log({event:'close',operation,pid:child.pid,code
       assert(exchanges.every((x) => x.response?.ok));
       assert(
         exchanges.every((x) =>
-          ["project.create", "project.list", "project.get", "recording.list"].includes(
+          ["project.create", "project.list", "project.get", "media.list", "recording.get"].includes(
             x.request.operation,
           ),
         ),

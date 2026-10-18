@@ -336,3 +336,13 @@ Evidence and publication generations remain strings under the single public fiel
 
 - **The merged tie-break is `kind:identity` ascending after `createdAt` descending** (sound). `kind` keeps recordings and imports in one deterministic order, and the stable identity suffix makes equal timestamps and cross-kind boundaries cursor-safe.
 - **Media byte measurements use the deletion owner** (sound). `MediaListing` receives the service's `LibraryUsers.usersOf(subject).freesBytes` callback and invokes it only for rows on the returned page. This is the same path inventory used by asset and recording deletion; stored publication and asset metadata byte fields are not size owners. `durationUs` remains measured from the retained capture record for recordings and stream timing metadata for imports; titles remain the capture timestamp and import provenance basename.
+
+## Slice 13: imported videos in the Recordings tab
+
+- **The tab reads `media.list`, then `recording.get` for each recording on the page** (sound). `media.list` carries order and measured facts; a recording's status, sources and finalization come from the recording itself, so the existing status presentation and the source-job tick keep one owner. A page costs at most five extra reads.
+- **An import plays the library's own copy, located through `asset.get`'s `fileName`** (sound). The app already plays recordings from the library folder; `asset.get` already returns the immutable file name, so no service change was needed.
+- **Badge and detail line** (sound, delegated). The "Imported" badge is a small accent chip right after the title (light text on a muted accent in dark mode, as in the mock). The detail line reads duration · size · "imported <date>", matching the mock, though the word repeats the badge; the mock shows both.
+- **Long import titles truncate in the middle** (sound). A filename's ending (version, extension) is what tells two imports apart; the unprimed critique flagged tail truncation hiding it.
+- **The storage footer shows three lines: total, media, models** (sound). The sidebar is too narrow for the mock's single line; the critique found the one-line split truncated.
+- **Recording rows gain Delete, retried as "Retry Delete" after an unconfirmed delete** (sound). Same deletion state machine and request identity as projects; the confirmation dialog is slice 14.
+- **Review** (non-blocking). Before/after comparison against the mock's requirements: candidate accepted. Unprimed critique: dark-mode badge contrast and long-title truncation fixed; the subtle "Deleting" status and short-window scrolling are existing behaviour shared by every row, outside this slice's variable. Shots: [assets/13-app-rows](assets/13-app-rows/).

@@ -54,7 +54,7 @@ struct CheckFailure: Error, LocalizedError {
     var preparing = true
     init(_ evidence: Evidence) { self.evidence = evidence }
     func call(_ operation: String, _ params: [String: Any]) async throws(ServiceFailure) -> Data {
-        guard ["project.list", "project.get", "recording.list"].contains(operation) || operation == "project.create" && preparing else {
+        guard ["project.list", "project.get", "media.list", "recording.get"].contains(operation) || operation == "project.create" && preparing else {
             refused.append(["operation": operation, "params": params])
             evidence.record(["scope": "actual-metadata", "refusedBeforeForward": operation, "params": params])
             throw ServiceFailure(code: "FIXTURE_METADATA_ONLY", message: "Preview dispatch observed before service submission")
@@ -95,7 +95,7 @@ struct CheckFailure: Error, LocalizedError {
         var params = original
         let value: [String: Any]
         switch operation {
-        case "recording.list": value = ["recordings": [], "nextCursor": NSNull()]
+        case "media.list": value = ["media": [], "nextCursor": NSNull()]
         case "project.list": value = showProject ? ["projects": [project], "nextCursor": NSNull()] : empty
         case "project.get": value = project
         case "preview.get":

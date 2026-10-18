@@ -60,6 +60,7 @@ final class LibraryController {
         case .previewProject(let id): if usable(id) { preview(id) }
         case .exportProject(let id, let kind): if usable(id) { export(id, kind) }
         case .deleteRecording(let id): delete(.recording(id))
+        case .deleteAsset(let id): delete(.asset(id))
         case .deleteProject(let id): delete(.project(id))
         case .nextRecordings: nextRecordings()
         case .previousRecordings: previousRecordings()
@@ -97,15 +98,24 @@ final class LibraryController {
             do throws(ServiceFailure) {
                 var params: [String: Any] = ["limit": 5]
                 if let cursor { params["cursor"] = cursor }
-                let page: Recordings = try await read("recording.list", params)
+                let page: Media = try await read("media.list", params)
                 guard service == serviceGeneration && generation == recordingGeneration else { return }
-                guard page.recordings.count <= 5,
-                    Set(page.recordings.map(\.recordingId)).count == page.recordings.count,
-                    page.nextCursor.map({ !$0.isEmpty && !page.recordings.isEmpty }) ?? true else {
-                    throw Self.invalid("Unreadable recording page or cursor")
+                guard page.media.count <= 5,
+                    Set(page.media.map(\.target)).count == page.media.count,
+                    page.nextCursor.map({ !$0.isEmpty && !page.media.isEmpty }) ?? true else {
+                    throw Self.invalid("Unreadable media page or cursor")
                 }
-                for take in page.recordings { try validate(take) }
-                state.recent = page.recordings.filter { state.deletions[.recording($0.recordingId)] == nil }
+                // A recording row's status and sources come from the recording itself.
+                var takes: [ControlsState.RecentTake] = []
+                for case .recording(let id) in page.media.map(\.target) {
+                    let take: ControlsState.RecentTake = try await read("recording.get", ["recordingId": id])
+                    guard service == serviceGeneration && generation == recordingGeneration else { return }
+                    guard take.recordingId == id else { throw Self.invalid("Recording returned a different identity") }
+                    try validate(take)
+                    takes.append(take)
+                }
+                state.media = page.media.filter { state.deletions[$0.target] == nil }
+                state.recent = takes.filter { state.deletions[.recording($0.recordingId)] == nil }
                 state.nextRecordingCursor = page.nextCursor
                 recordingPageIndex = index; state.hasPreviousRecordingPage = index > 0
                 state.recordingFailure = nil
@@ -172,7 +182,11 @@ final class LibraryController {
         let service = serviceGeneration
         Task { @MainActor in
             do throws(ServiceFailure) {
-                let operation = target.parameters["recordingId"] == nil ? "project.delete" : "recording.delete"
+                let operation = switch target {
+                case .recording: "recording.delete"
+                case .asset: "asset.delete"
+                case .project: "project.delete"
+                }
                 var params = target.parameters
                 params["requestId"] = requestId
                 let receipt: Deletion = try await read(operation, params)
@@ -279,16 +293,16 @@ final class LibraryController {
         catch { throw Self.invalid("Unreadable \(operation) response: \(error.localizedDescription)") }
     }
     private static func invalid(_ message: String) -> ServiceFailure { .init(code: "INVALID_RESPONSE", message: message) }
-    private struct Recordings: Decodable {
-        let recordings: [ControlsState.RecentTake]
+    private struct Media: Decodable {
+        let media: [LibraryState.Media]
         let nextCursor: LibraryState.RecordingCursor?
-        private enum Keys: String, CodingKey { case recordings, nextCursor }
+        private enum Keys: String, CodingKey { case media, nextCursor }
         init(from decoder: Decoder) throws {
             let fields = try decoder.container(keyedBy: Keys.self)
             guard fields.contains(.nextCursor) else {
-                throw DecodingError.keyNotFound(Keys.nextCursor, .init(codingPath: decoder.codingPath, debugDescription: "Missing recording page cursor"))
+                throw DecodingError.keyNotFound(Keys.nextCursor, .init(codingPath: decoder.codingPath, debugDescription: "Missing media page cursor"))
             }
-            recordings = try fields.decode([ControlsState.RecentTake].self, forKey: .recordings)
+            media = try fields.decode([LibraryState.Media].self, forKey: .media)
             nextCursor = try fields.decodeIfPresent(String.self, forKey: .nextCursor)
         }
     }
@@ -306,16 +320,10 @@ final class LibraryController {
     }
     private struct Deletion: Decodable {
         let target: MediaTarget; let deleted: Bool; let freedBytes: Int64
-        private enum Keys: String, CodingKey { case projectId, recordingId, deleted, freedBytes }
+        private enum Keys: String, CodingKey { case deleted, freedBytes }
         init(from decoder: Decoder) throws {
+            target = try MediaTarget(from: decoder)
             let fields = try decoder.container(keyedBy: Keys.self)
-            if let projectId = try fields.decodeIfPresent(String.self, forKey: .projectId) {
-                target = .project(projectId)
-            } else if let recordingId = try fields.decodeIfPresent(String.self, forKey: .recordingId) {
-                target = .recording(recordingId)
-            } else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Deletion result has no owner identity"))
-            }
             deleted = try fields.decode(Bool.self, forKey: .deleted)
             freedBytes = try fields.decode(Int64.self, forKey: .freedBytes)
         }

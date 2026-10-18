@@ -102,8 +102,9 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         return ceil(field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)).height ?? 0)
     }
 
+    @discardableResult
     private func label(_ text: String, frame: NSRect, size: CGFloat, weight: NSFont.Weight = .regular,
-                       color: NSColor = .labelColor, in parent: NSView, wrap: Bool = false, passive: Bool = false) {
+                       color: NSColor = .labelColor, in parent: NSView, wrap: Bool = false, passive: Bool = false) -> NSTextField {
         let field = passive ? PassiveLabel(wrappingLabelWithString: text) : NSTextField(wrappingLabelWithString: text)
         field.font = .systemFont(ofSize: size, weight: weight)
         field.textColor = color
@@ -111,6 +112,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         field.lineBreakMode = wrap ? .byWordWrapping : .byTruncatingTail
         field.maximumNumberOfLines = wrap ? 0 : 1
         parent.addSubview(field)
+        return field
     }
     private func button(_ title: String, id: String, frame: NSRect, action: ControlsAction?, enabled: Bool = true, in parent: NSView) {
         let button = NSButton(title: title, target: self, action: #selector(activate(_:)))
@@ -150,14 +152,19 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             controls["tab.\(value.rawValue.lowercased())"] = button
             tabActions[ObjectIdentifier(button)] = value
         }
-        let storage = state.storage.map { ByteCountFormatter.string(fromByteCount: $0.totalBytes, countStyle: .file) } ?? "not measured"
+        let storage = state.storage.map(LibraryPresentation.storage)
         let footerY = max(200, bounds.height - 34)
-        label(state.storage == nil ? "Not measured" : "\(storage) used", frame: NSRect(x: 20, y: footerY + 4, width: 92, height: 16), size: 10, color: .secondaryLabelColor, in: self)
+        label(storage?.total ?? "Not measured", frame: NSRect(x: 20, y: footerY - 22, width: 92, height: 16), size: 10, color: .secondaryLabelColor, in: self)
+        // The same total, split: what is media and what is prepared models.
+        if let storage {
+            label(storage.media, frame: NSRect(x: 20, y: footerY - 6, width: 116, height: 15), size: 10, color: .tertiaryLabelColor, in: self)
+            label(storage.models, frame: NSRect(x: 20, y: footerY + 8, width: 116, height: 15), size: 10, color: .tertiaryLabelColor, in: self)
+        }
         let refresh = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh storage")!, target: self, action: #selector(activate(_:)))
         refresh.isBordered = false
         refresh.contentTintColor = .secondaryLabelColor
         refresh.toolTip = "Refresh storage"
-        refresh.frame = NSRect(x: 114, y: footerY, width: 22, height: 22)
+        refresh.frame = NSRect(x: 114, y: footerY - 25, width: 22, height: 22)
         refresh.isEnabled = state.service == .ready && !state.storageRefreshing
         refresh.identifier = .init("storage.refresh")
         addSubview(refresh)
@@ -225,7 +232,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             // Colour means something: a problem row is the only one that stands out.
             let attention = row.attention
             let tint: NSColor = attention ? .systemOrange : row.kind == .project ? .systemBlue : .secondaryLabelColor
-            let symbol = attention ? "exclamationmark.triangle.fill" : row.kind == .recording ? "video.fill" : row.kind == .project ? "square.stack.3d.up.fill" : "square.and.arrow.up.fill"
+            let symbol = attention ? "exclamationmark.triangle.fill" : row.kind == .recording ? "video.fill" : row.kind == .imported ? "film" : row.kind == .project ? "square.stack.3d.up.fill" : "square.and.arrow.up.fill"
             let tile = PassiveImage(frame: NSRect(x: 28, y: top + 12, width: 36, height: 36))
             tile.wantsLayer = true
             tile.layer?.cornerRadius = 9
@@ -235,7 +242,29 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             tile.imageScaling = .scaleNone
             tile.contentTintColor = tint
             document.addSubview(tile)
-            label(row.title, frame: NSRect(x: textX, y: top + 12, width: textWidth, height: 18), size: 13, weight: .semibold, in: document, passive: true)
+            // A badge sits right after the title and keeps its room; a long title gives way to it.
+            let badgeWidth = row.badge.map { ceil(($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width) + 12 } ?? 0
+            let titleRoom = row.badge == nil ? textWidth : textWidth - badgeWidth - 6
+            let titleWidth = min(titleRoom, ceil((row.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width) + 4)
+            let title = label(row.title, frame: NSRect(x: textX, y: top + 12, width: row.badge == nil ? textWidth : titleWidth, height: 18), size: 13, weight: .semibold, in: document, passive: true)
+            // A filename's end (its version and extension) is what tells two imports apart.
+            if row.kind == .imported { title.lineBreakMode = .byTruncatingMiddle }
+            if let badge = row.badge {
+                let chip = PassiveLabel(labelWithString: badge)
+                chip.font = .systemFont(ofSize: 10, weight: .medium)
+                // Light text on a muted accent reads in dark mode; the accent itself reads in light mode.
+                chip.textColor = NSColor(name: nil) { appearance in
+                    appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                        ? NSColor.controlAccentColor.blended(withFraction: 0.6, of: .white) ?? .white
+                        : .controlAccentColor
+                }
+                chip.alignment = .center
+                chip.wantsLayer = true
+                chip.layer?.cornerRadius = 4
+                chip.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+                chip.frame = NSRect(x: textX + titleWidth + 6, y: top + 13, width: badgeWidth, height: 16)
+                document.addSubview(chip)
+            }
             if !subtitle.isEmpty {
                 label(subtitle, frame: NSRect(x: textX, y: top + 32, width: textWidth, height: subtitleHeight), size: 11, color: attention ? .systemOrange : .secondaryLabelColor, in: document, wrap: true, passive: true)
             }

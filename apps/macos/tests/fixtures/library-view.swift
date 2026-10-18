@@ -7,6 +7,8 @@ import YapControls
         var state = ControlsState()
         state.service = .ready
         state.library.recent = [.init(recordingId: "fixture-recording", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil)]
+        state.library.media = [.init(kind: .recording, target: .recording("fixture-recording"), title: "2026-10-05T19:18:00Z", durationUs: 154_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-05T19:18:00Z"),
+            .init(kind: .imported, target: .asset("fixture-import"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z")]
         var actions: [ControlsAction] = []
         let view = LibraryView(state: state, exports: ExportsState()) { actions.append($0) }
         view.appearance = NSAppearance(named: .darkAqua)
@@ -22,6 +24,17 @@ import YapControls
         choose(play)
         choose(copy)
         precondition(actions == [.playRecording("fixture-recording"), .copyRecordingPrompt("fixture-recording")], "The native Library preserves shared recording actions")
+        guard let playImport = view.actionItem(identifier: ControlsAction.playAsset("fixture-import").id),
+              let copyImport = view.actionItem(identifier: ControlsAction.copyAssetPrompt("fixture-import").id),
+              let deleteImport = view.actionItem(identifier: ControlsAction.deleteAsset("fixture-import").id) else {
+            preconditionFailure("An imported video offers play, copy-agent-prompt and delete actions")
+        }
+        choose(playImport)
+        choose(copyImport)
+        choose(deleteImport)
+        precondition(actions.suffix(3) == [.playAsset("fixture-import"), .copyAssetPrompt("fixture-import"), .deleteAsset("fixture-import")],
+                     "The native Library dispatches an import's actions by its asset identity")
+        actions = [.playRecording("fixture-recording"), .copyRecordingPrompt("fixture-recording")]
         let denied = LibraryView(state: ControlsState(), exports: ExportsState()) { actions.append($0) }
         denied.update(state: { var locked = state; locked.service = .unavailable("fixture service failure"); return locked }(), exports: ExportsState())
         let deniedPlay = denied.actionItem(identifier: ControlsAction.playRecording("fixture-recording").id)!
@@ -82,7 +95,7 @@ import YapControls
             var controlFrames: [String: [Double]] = [:]
             var ids = ["library.filter"]
             switch tab {
-            case .recordings: ids += facts.library.recent.map { "actions.\($0.recordingId)" }
+            case .recordings: ids += facts.library.media.map { "actions.\($0.target.id)" }
             case .projects: ids += ["library.projects.previous", "library.projects.next"] + facts.library.projects.map { "actions.\($0.projectId)" }
             case .exports: ids += deliveries.records.map { "actions.\($0.exportId)" }
             }
@@ -128,7 +141,7 @@ import YapControls
     @MainActor static func fixture(long: Bool = false) -> ControlsState {
         var state = ControlsState()
         state.service = .ready
-        state.storage = .init(totalBytes: 2_400_000_000, observedAt: "2026-10-05T19:18:00Z")
+        state.storage = .init(totalBytes: 2_400_000_000, modelBytes: 2_200_000_000, observedAt: "2026-10-05T19:18:00Z")
         state.library.recent = [
             .init(recordingId: "fixture-recording-one", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil),
             .init(recordingId: long ? "recording-with-a-very-long-identity-for-a-camera-and-narration-observation-that-must-wrap" : "fixture-recording-two", createdAt: "2026-10-05T17:42:00Z", state: "finalizing", sourceDurationUs: 48_000_000, interruptionReason: nil, finalizationError: long ? .init(code: "FIXTURE_FINALIZATION", message: "A selected conference room camera source remains unavailable while the recording's publication is being inspected. Retry belongs to its existing owner.", retryable: true) : nil, sourceId: long ? "source-with-a-very-long-identity-that-remains-visible-without-displacing-the-action-menu" : nil),
@@ -142,6 +155,14 @@ import YapControls
             let last = state.library.recent[1]
             state.library.recent[1] = .init(recordingId: last.recordingId, createdAt: last.createdAt, state: last.state, sourceDurationUs: last.sourceDurationUs, interruptionReason: last.interruptionReason, finalizationError: last.finalizationError, sourceId: last.sourceId, sourceAdmissions: sources)
         }
+        // The tab's page order is media.list's: newest first, imports between recordings.
+        let takes = state.library.recent
+        state.library.media = [
+            .init(kind: .recording, target: .recording(takes[0].recordingId), title: takes[0].createdAt, durationUs: takes[0].sourceDurationUs ?? 0, sizeBytes: 61_000_000, createdAt: takes[0].createdAt),
+            .init(kind: .imported, target: .asset("fixture-import"), title: long ? "a-very-long-original-filename-for-an-imported-launch-teaser-that-must-not-push-the-badge-away-final-v2.mp4" : "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z"),
+            .init(kind: .recording, target: .recording(takes[1].recordingId), title: takes[1].createdAt, durationUs: takes[1].sourceDurationUs ?? 0, sizeBytes: 9_000_000, createdAt: takes[1].createdAt),
+            .init(kind: .recording, target: .recording(takes[2].recordingId), title: takes[2].createdAt, durationUs: takes[2].sourceDurationUs ?? 0, sizeBytes: 80_000_000, createdAt: takes[2].createdAt),
+        ]
         let projectJSON = """
         [{"projectId":"fixture-project","title":"Product demonstration","createdAt":"2026-10-05T19:18:00Z","currentRevisionId":"fixture-revision"}]
         """
@@ -152,6 +173,8 @@ import YapControls
         var state = fixture()
         _ = state.library.beginDelete(.recording("fixture-recording-one"))
         state.library.finishDelete(.recording("fixture-recording-one"), failure: "Fixture request was not confirmed; original source remains intact.")
+        // An import whose delete is still in flight reads as Deleting and cannot be played.
+        _ = state.library.beginDelete(.asset("fixture-import"))
         return state
     }
     static func exportFixture() -> ExportsState {

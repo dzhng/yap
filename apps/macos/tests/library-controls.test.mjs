@@ -48,18 +48,24 @@ import YapControls
         }
         let answer: [String: Any]
         switch operation {
-        case "recording.list":
+        case "media.list":
+            // The Recordings tab pages media.list; each recording's own facts come from recording.get.
+            func row(_ take: [String: Any]) -> [String: Any] {
+                ["kind": "recording", "recordingId": take["recordingId"]!, "title": take["createdAt"]!,
+                 "durationUs": take["sourceDurationUs"] as? Int ?? 0, "sizeBytes": 4096, "createdAt": take["createdAt"]!]
+            }
             if let recordingCatalog {
                 // The fake's opaque cursor still pins the page position, as the service's does.
                 let before = (params["cursor"] as? String).flatMap { Int($0.dropFirst("before-".count)) } ?? Int.max
                 let eligible = recordingCatalog.filter { ($0["creationSequence"] as! Int) < before && !deletedTargets.contains(.recording($0["recordingId"] as! String)) }
                 let page = Array(eligible.prefix(params["limit"] as! Int))
-                answer = ["recordings": page, "nextCursor": recordingCursorOverride ?? (eligible.count > page.count ? "before-\(page.last!["creationSequence"] as! Int)" : NSNull())]
+                answer = ["media": page.map(row), "nextCursor": recordingCursorOverride ?? (eligible.count > page.count ? "before-\(page.last!["creationSequence"] as! Int)" : NSNull())]
             } else {
-                answer = ["recordings": deletedTargets.contains(.recording(recording["recordingId"] as! String)) ? [] : [recording], "nextCursor": recordingNext]
+                answer = ["media": deletedTargets.contains(.recording(recording["recordingId"] as! String)) ? [] : [row(recording)], "nextCursor": recordingNext]
             }
         case "project.list": answer = ["projects": projects.filter { !deletedTargets.contains(.project($0["projectId"] as? String ?? "")) }, "nextCursor": next]
-        case "recording.get": answer = recording
+        case "recording.get":
+            answer = recordingCatalog?.first { $0["recordingId"] as? String == params["recordingId"] as? String } ?? recording
         case "job.get": answer = job
         case "processing.status": answer = ["state": params["artifact"] as? String == "transcript" ? "processing" : "ready", "reason": NSNull()]
         case "index.get": answer = ["state": "ready", "page": [:], "reason": NSNull()]
@@ -116,7 +122,7 @@ import YapControls
 
         var state = ControlsState(); state.service = .ready; state.library = library.state
         let recordingActions = LibraryPresentation.recordings(for: state).items.flatMap(\.actions)
-        precondition(recordingActions.map(\.action) == [.playRecording("same"), .copyRecordingPrompt("same")], "Recordings expose playback and agent handoff only")
+        precondition(recordingActions.map(\.action) == [.playRecording("same"), .copyRecordingPrompt("same"), .deleteRecording("same")], "Recordings expose playback, agent handoff and deletion")
         let projectActions = LibraryPresentation.projects(for: state, exports: .init()).items.flatMap(\.actions)
         precondition(projectActions.first { $0.action == .previewProject("same") }?.enabled == true)
         precondition(!script.calls.contains { ["processing.status", "index.get"].contains($0.0) })
@@ -156,7 +162,7 @@ import YapControls
         library.refreshRecordings()
         await until { library.state.recent.count == 1 }
         let lastTake = library.state.recent
-        script.failure = ("recording.list", "SERVICE_UNAVAILABLE")
+        script.failure = ("media.list", "SERVICE_UNAVAILABLE")
         library.refreshRecordings()
         await until { library.state.recordingFailure?.contains("SERVICE_UNAVAILABLE") == true }
         precondition(library.state.recent == lastTake, "Failed source reads retain the last good facts")
@@ -170,10 +176,13 @@ import YapControls
         let progress = LibraryController(call: { op, params throws(ServiceFailure) in try await source.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         progress.serviceChanged(ready: true)
         await until { progress.state.recent.count == 1 }
+        // The page read asks each listed recording for its own facts once; ticks are counted after it.
+        let pageReads = source.count("recording.get")
+        precondition(pageReads == 1, "The page reads its one recording once")
         source.recording["sourceAdmissions"] = [["kind": "primary", "sourceId": "source-one", "acquisitionId": "acq-one", "job": source.job, "admissionError": NSNull()]]
         progress.tick()
         await until { progress.state.recent.first?.sourceAdmissions?.first?.job?.state == "running" }
-        precondition(source.count("recording.get") == 1 && source.count("job.get") == 0)
+        precondition(source.count("recording.get") == pageReads + 1 && source.count("job.get") == 0)
         source.job["state"] = "ready"
         progress.tick()
         await until { progress.state.recent.first?.sourceAdmissions?.first?.job?.state == "ready" }
@@ -191,8 +200,9 @@ import YapControls
         let settled = LibraryController(call: { op, params throws(ServiceFailure) in try await neverOn.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         settled.serviceChanged(ready: true)
         await until { settled.state.recent.count == 1 && !settled.state.projectsRefreshing }
+        let settledReads = neverOn.count("recording.get")
         for _ in 0..<10 { settled.tick(); await Task.yield() }
-        precondition(neverOn.count("recording.get") == 0 && neverOn.count("job.get") == 0,
+        precondition(neverOn.count("recording.get") == settledReads && neverOn.count("job.get") == 0,
                      "A never-turned-on camera leaves nothing to poll: \(neverOn.calls.map(\.0))")
         var neverOnState = ControlsState(); neverOnState.service = .ready; neverOnState.library = settled.state
         let neverOnRow = LibraryPresentation.recordings(for: neverOnState).items[0]
@@ -211,7 +221,7 @@ import YapControls
         overlapping.recording["recordingId"] = "new-progress-owner"
         progressOwner.refreshRecordings()
         await until { progressOwner.state.recent.first?.recordingId == "new-progress-owner" }
-        overlapping.failure = ("recording.list", "NOT_READY"); progressOwner.refreshRecordings()
+        overlapping.failure = ("media.list", "NOT_READY"); progressOwner.refreshRecordings()
         await until { progressOwner.state.recordingFailure?.contains("NOT_READY") == true }
         overlapping.release()
         for _ in 0..<20 { await Task.yield() }
@@ -275,7 +285,7 @@ import YapControls
         changed.release()
         for _ in 0..<20 { await Task.yield() }
         precondition(generation.state.projects.first?.projectId == "page-one" && !generation.state.hasPreviousProjectPage)
-        changed.hold = "recording.list"; generation.refreshRecordings()
+        changed.hold = "media.list"; generation.refreshRecordings()
         await until { changed.held != nil }
         changed.recording["recordingId"] = "replacement"
         generation.serviceChanged(ready: false); generation.serviceChanged(ready: true)
@@ -325,7 +335,7 @@ import YapControls
         browsing.previousRecordings()
         await until { browsing.state.recent.map(\.recordingId) == ["take-8", "take-7", "take-6", "take-5", "take-4"] }
         precondition(!browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor != nil)
-        precondition(paged.calls.filter { $0.0 == "recording.list" }.allSatisfy { ($0.1["limit"] as? Int) == 5 }, "Browsing never widens the catalog read")
+        precondition(paged.calls.filter { $0.0 == "media.list" }.allSatisfy { ($0.1["limit"] as? Int) == 5 }, "Browsing never widens the catalog read")
         // An old page's held preparation read cannot starve the current page.
         paged.recordingCatalog = (1...7).reversed().map { sequence in
             row(sequence).merging(["sourceAdmissions": [["kind": "primary", "sourceId": "source-one", "acquisitionId": "acq-one", "job": paged.job, "admissionError": NSNull()]]]) { _, value in value }
@@ -353,7 +363,7 @@ import YapControls
             await until { browsing.state.recordingFailure == nil && !browsing.state.recordingsRefreshing }
         }
         // Backward navigation supersedes an older read of the page being left.
-        paged.hold = "recording.list"; browsing.refreshRecordings()
+        paged.hold = "media.list"; browsing.refreshRecordings()
         await until { paged.held != nil }
         browsing.previousRecordings()
         await until { browsing.state.recent.first?.recordingId == "take-7" && !browsing.state.recordingsRefreshing }

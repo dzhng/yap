@@ -380,7 +380,9 @@ final class ServiceHost: @unchecked Sendable {
                     .failure(
                         ServiceFailure(
                             code: error?["code"] as? String ?? "INTERNAL_ERROR",
-                            message: error?["message"] as? String ?? "Service operation failed")))
+                            message: error?["message"] as? String ?? "Service operation failed",
+                            retryable: error?["retryable"] as? Bool ?? false,
+                            details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })))
             }
         default:
             fail(code: "CONTROL_PROTOCOL", message: "Unknown service control event: \(event)")

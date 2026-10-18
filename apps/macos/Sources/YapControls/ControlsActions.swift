@@ -32,6 +32,9 @@ public enum ControlsAction: Hashable, Sendable {
     case previousRecordings
     case refreshLibrary
     case deleteRecording(String)
+    case playAsset(String)
+    case copyAssetPrompt(String)
+    case deleteAsset(String)
     /// Send an unconfirmed export request again under its original export ID.
     case resendExport(String)
     case retryExport(String)
@@ -63,6 +66,9 @@ public enum ControlsAction: Hashable, Sendable {
         case .restart: "capture.restart"
         case .playRecording(let id): "recording.play.\(id)"
         case .copyRecordingPrompt(let id): "recording.copyPrompt.\(id)"
+        case .playAsset(let id): "asset.play.\(id)"
+        case .copyAssetPrompt(let id): "asset.copyPrompt.\(id)"
+        case .deleteAsset(let id): "asset.delete.\(id)"
         case .copyProjectPrompt(let id): "project.copyPrompt.\(id)"
         case .previewProject(let id): "project.preview.\(id)"
         case .exportProject(let id, let kind): "project.export.\(kind.rawValue).\(id)"

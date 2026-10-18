@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import ScreenCaptureKit
+import UniformTypeIdentifiers
 import YapCapture
 import YapControls
 
@@ -354,7 +355,11 @@ final class RecordingControls: NSObject {
             copyAgentPrompt(.recording(recordingId))
         case .copyProjectPrompt(let projectId):
             copyAgentPrompt(.project(projectId))
-        case .deleteRecording,
+        case .playAsset(let assetId):
+            playAsset(assetId)
+        case .copyAssetPrompt(let assetId):
+            copyAgentPrompt(.asset(assetId))
+        case .deleteRecording, .deleteAsset,
             .previewProject, .exportProject, .deleteProject, .nextProjects, .previousProjects, .nextRecordings, .previousRecordings, .refreshLibrary:
             break // LibraryController handles these before capture selections.
         case .resendExport(let exportId):
@@ -772,6 +777,29 @@ final class RecordingControls: NSObject {
                 mediaType: "video/quicktime")
         }
     }
+
+    /// An import plays from the library's own copy, named by the asset's immutable file name.
+    private func playAsset(_ assetId: String) {
+        Task { @MainActor in
+            do throws(ServiceFailure) {
+                let asset = try await service().call("asset.get", ["assetId": assetId], as: AssetFile.self)
+                let file = URL(fileURLWithPath: home).appendingPathComponent("library/assets")
+                    .appendingPathComponent(asset.fileName)
+                guard asset.assetId == assetId, !asset.fileName.contains("/"),
+                    FileManager.default.fileExists(atPath: file.path) else {
+                    state.failure = "Imported media is unavailable."
+                    render()
+                    return
+                }
+                let type = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "video/quicktime"
+                recordingPreview.playLocalFile(title: asset.fileName, file: file.path, mediaType: type)
+            } catch {
+                state.failure = error.localizedDescription
+                render()
+            }
+        }
+    }
+    private struct AssetFile: Decodable { let assetId: String; let fileName: String }
 
     private func copyAgentPrompt(_ target: MediaTarget) {
         let prompt = LibraryPresentation.agentPrompt(for: target)
