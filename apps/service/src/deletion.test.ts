@@ -112,7 +112,9 @@ async function fixture(
           freesBytes: 0,
           cascadeFreesBytes: 0,
         }),
+        hasUsers: () => false,
       },
+      freedBytes: () => 0,
     }),
   );
   let closed = false;
@@ -237,6 +239,88 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     finish.resolve("late result");
     await finished;
   }
+});
+
+test("a plain parent deletion keeps member deletion plain", async () => {
+  const catalogHome = await mkdtemp("/tmp/yap-delete-mode-");
+  const store = new CaptureStore(join(catalogHome, "catalog.sqlite"), {
+    now: () => "fixture",
+    newId: randomUUID,
+  });
+  const plans = new DeletionPlans(store);
+  const deletion = new LibraryDeletion(plans);
+  const memberCalls: boolean[] = [];
+  deletion.register({
+    kind: "parent",
+    checkUsers: () => [{ memberKind: "member", memberId: "m" }],
+    tombstone: () => true,
+    drain: () => {},
+    files: () => {},
+    rows: () => true,
+    freedBytes: () => 0,
+    cascadeMembersWithoutCascade: true,
+    cascadeMembers: async (_subject, _members, _signal, deleteMember) => {
+      await deleteMember({ kind: "member", id: "m" });
+    },
+  });
+  deletion.register({
+    kind: "member",
+    checkUsers: (_subject, cascade) => {
+      memberCalls.push(cascade);
+      if (!cascade) throw new CatalogError("IN_USE", "member is used", {});
+      return [];
+    },
+    tombstone: () => true,
+    drain: () => {},
+    files: () => {},
+    rows: () => true,
+    freedBytes: () => 0,
+  });
+  await expect(deletion.delete({ kind: "parent", id: "p" })).rejects.toMatchObject({
+    code: "IN_USE",
+  });
+  expect(memberCalls).toEqual([false]);
+  await deletion.close();
+  store.close();
+  await rm(catalogHome, { recursive: true, force: true });
+});
+
+test("a persisted deletion refuses a conflicting cascade mode", async () => {
+  let armed = true;
+  const f = await fixture(undefined, undefined, undefined, (phase, _subject, timing) => {
+    if (armed && phase === "files" && timing === "before") {
+      armed = false;
+      throw new Error("hold plan");
+    }
+  });
+  const target = await f.take();
+  await expect(
+    f.deletion.delete({ kind: "recording", id: target.recordingId }, { cascade: false }),
+  ).rejects.toMatchObject({ code: "DELETE_FAILED" });
+  expect(() =>
+    f.deletion.delete({ kind: "recording", id: target.recordingId }, { cascade: true }),
+  ).toThrow(expect.objectContaining({ code: "REQUEST_CONFLICT" }));
+});
+
+test("an active deletion refuses a conflicting cascade mode", async () => {
+  const f = await fixture();
+  const target = await f.take();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  f.capture.quiesce = async () => {
+    entered.resolve();
+    await release.promise;
+  };
+  const first = f.deletion.delete(
+    { kind: "recording", id: target.recordingId },
+    { cascade: false },
+  );
+  await entered.promise;
+  expect(() =>
+    f.deletion.delete({ kind: "recording", id: target.recordingId }, { cascade: true }),
+  ).toThrow(expect.objectContaining({ code: "REQUEST_CONFLICT" }));
+  release.resolve();
+  await first;
 });
 
 test("delete removes donor files but never sibling donors or prepared speech models", async () => {

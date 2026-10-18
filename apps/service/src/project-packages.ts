@@ -1160,9 +1160,7 @@ export class ProjectPackages {
                   resource,
                   (value) => {
                     const parsed = portableSourceIndexRecordSchema.parse(value);
-                    return parsed.kind === "coverage"
-                      ? parsed
-                      : { ...parsed, frame: { ...parsed.frame, bytes: parsed.frame.sizeBytes } };
+                    return parsed;
                   },
                   signal,
                 ),
@@ -1230,12 +1228,7 @@ export class ProjectPackages {
                     );
                   return {
                     ...parsed,
-                    frame: {
-                      ...parsed.frame,
-                      bytes: parsed.frame.sizeBytes,
-                      projectId: metadata.projectId,
-                      revisionId,
-                    },
+                    frame: { ...parsed.frame, projectId: metadata.projectId, revisionId },
                   };
                 },
                 signal,

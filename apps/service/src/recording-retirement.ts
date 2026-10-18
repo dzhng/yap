@@ -7,7 +7,7 @@ import type { ManagedFiles } from "./managed-files.js";
 import type { DeletionRegistration, LibrarySubject } from "./library-deletion.js";
 import type { LibraryUsers } from "@yap/core/library-users";
 import { CatalogError } from "@yap/core/catalog";
-import { hasUsers } from "./asset-retirement.js";
+import { ResourceReferences } from "@yap/core/references";
 
 export type RecordingRetirementOwners = {
   store: CaptureStore;
@@ -16,17 +16,30 @@ export type RecordingRetirementOwners = {
   delivery: DerivativeDelivery;
   files: Pick<ManagedFiles, "removeRecordingDirectory">;
   sources: CaptureSources;
-  users: Pick<LibraryUsers, "usersOf">;
-  freedBytes?: (id: string, cascade: boolean) => number;
+  users: Pick<LibraryUsers, "usersOf" | "hasUsers">;
+  freedBytes: (id: string, cascade: boolean) => number;
 };
 
 export function recordingRetirement(owners: RecordingRetirementOwners): DeletionRegistration {
+  const references = owners.store.catalog ? new ResourceReferences(owners.store) : null;
+  const ownAcquisitions = (recordingId: string): string[] => {
+    if (!references) return [];
+    return (
+      owners.store.catalog
+        .prepare(
+          `SELECT id FROM acquisitions
+           WHERE json_extract(admission,'$.kind')='capture'
+             AND json_extract(admission,'$.recordingId')=?`,
+        )
+        .all(recordingId) as { id: string }[]
+    ).map(({ id }) => id);
+  };
   return {
     kind: "recording",
     errorMode: "preserve-catalog",
     checkUsers: (subject, cascade) => {
       const result = owners.users.usersOf({ kind: "recording", id: subject.id });
-      if (!cascade && hasUsers(result, { excludeAcquisitions: true }))
+      if (!cascade && owners.users.hasUsers(result, { excludeAcquisitions: true }))
         throw new CatalogError("IN_USE", "Recording is still used by the library", {
           recordingId: subject.id,
           ...result,
@@ -41,7 +54,20 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
     },
     tombstone: (subject) => {
       const recording = owners.store.markDeleting(subject.id);
-      if (recording) owners.delivery.revoke({ kind: "recording", id: subject.id });
+      if (recording) {
+        owners.delivery.revoke({ kind: "recording", id: subject.id });
+        const acquisitions = ownAcquisitions(subject.id);
+        references?.fence("acquisition", acquisitions);
+        references?.fence(
+          "asset",
+          acquisitions.flatMap((id) =>
+            references
+              .dependencies({ kind: "acquisition", id })
+              .filter((resource) => resource.kind === "asset")
+              .map((resource) => resource.id),
+          ),
+        );
+      }
       return recording !== null;
     },
     scope: (subject, signal, run) => owners.sources.retire(subject.id, signal, run),
@@ -87,6 +113,6 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       };
     },
     result: (subject) => ({ recordingId: subject.id, deleted: true }),
-    freedBytes: (subject, cascade) => owners.freedBytes?.(subject.id, cascade) ?? 0,
+    freedBytes: (subject, cascade) => owners.freedBytes(subject.id, cascade),
   };
 }

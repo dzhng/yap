@@ -44,6 +44,14 @@ export class LibraryUsers {
     this.plans = new DeletionPlans(catalog);
   }
 
+  hasUsers(result: LibraryUsersResult, options: { excludeAcquisitions?: boolean } = {}): boolean {
+    return (
+      result.usedBy.length > 0 ||
+      (!options.excludeAcquisitions && result.acquisitions.length > 0) ||
+      result.derivedAssets.length > 0
+    );
+  }
+
   usersOf(subject: LibraryUserSubject): LibraryUsersResult {
     const assetIds = this.assetClosure(subject);
     const acquisitionIds = this.acquisitionClosure(subject, assetIds);
@@ -85,7 +93,7 @@ export class LibraryUsers {
     for (const path of ownPaths) freePaths.add(path);
     for (const assetId of assetIds) {
       if (assetId === subject.id && subject.kind === "asset") continue;
-      if (this.assetHasLiveNonAssetOwner(assetId, assetIds)) continue;
+      if (this.assetHasLiveNonAssetOwner(assetId, assetIds, acquisitionIds)) continue;
       this.addAssetPath(freePaths, assetId);
     }
     for (const acquisitionId of acquisitionIds) {
@@ -190,9 +198,14 @@ export class LibraryUsers {
     };
   }
 
-  private assetHasLiveNonAssetOwner(assetId: string, closure: Set<string>): boolean {
+  private assetHasLiveNonAssetOwner(
+    assetId: string,
+    closure: Set<string>,
+    ownAcquisitions: Set<string>,
+  ): boolean {
     for (const owner of this.references.owners("asset", assetId)) {
       if (owner.kind === "asset" && closure.has(owner.id)) continue;
+      if (owner.kind === "acquisition" && ownAcquisitions.has(owner.id)) continue;
       if (owner.kind === "job" || owner.kind === "job-input") continue;
       if (owner.kind === "revision") {
         const project = this.projectUserForRevision(owner.id);
@@ -236,10 +249,6 @@ export class LibraryUsers {
 
   private addAcquisitionPath(paths: Set<string>, id: string): void {
     for (const path of this.files.acquisition(id)) paths.add(path);
-  }
-
-  private addRecordingPath(paths: Set<string>, id: string): void {
-    for (const path of this.files.recording(id)) paths.add(path);
   }
 
   private addProjectPath(paths: Set<string>, id: string): void {

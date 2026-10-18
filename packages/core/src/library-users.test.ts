@@ -200,3 +200,19 @@ test("reports a capture acquisition used by a project and counts its managed fil
     cascadeFreesBytes: acquisitionBytes + recordingBytes,
   });
 });
+
+test("does not treat a recording's own acquisition as a live asset owner", async () => {
+  const f = await fixture();
+  const asset = await addAsset(f, "asset-copy", "copy bytes");
+  addAcquisition(f, "capture-copy", "recording-own");
+  f.references.retain("asset", { kind: "acquisition", id: "capture-copy" }, [asset.id]);
+  const recordingPath = join(f.home, "recordings", "recording-own");
+  await mkdir(recordingPath, { recursive: true });
+  await writeFile(join(recordingPath, "take.mov"), "take bytes");
+  const recordingBytes = Number((await stat(join(recordingPath, "take.mov"))).size);
+  const result = new LibraryUsers(f.catalog, f.files).usersOf({
+    kind: "recording",
+    id: "recording-own",
+  });
+  expect(result.freesBytes).toBe(recordingBytes + asset.bytes);
+});

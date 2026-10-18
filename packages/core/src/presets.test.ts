@@ -100,6 +100,21 @@ describe("presets facade", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("replays a preset request after the facade is reconstructed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-replay-"));
+    try {
+      const first = await createPresets({ root, bundled });
+      const created = await first.create({ name: "Replay me", requestId: "preset-replay" });
+      const restarted = await createPresets({ root, bundled });
+      await expect(
+        restarted.create({ name: "Replay me", requestId: "preset-replay" }),
+      ).resolves.toEqual(created);
+      expect(restarted.list().presets.filter((preset) => preset.id === created.id)).toHaveLength(1);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 it("a broken bundled directory never stops the facade; the error is reported by list", async () => {

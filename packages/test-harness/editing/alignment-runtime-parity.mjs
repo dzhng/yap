@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { Models } from "../../core/dist/models.js";
+import { Catalog } from "../../core/dist/catalog.js";
 import {
   jsonWorker,
   nativeResult,
@@ -28,7 +29,13 @@ if (values.help) {
   process.exit(0);
 }
 for (const name of ["library", "reference", "output"]) assert(values[name], `Missing --${name}`);
-const models = new Models(resolve(values.library));
+const library = resolve(values.library);
+const models = new Models(
+  library,
+  globalThis.fetch,
+  undefined,
+  new Catalog(join(library, "catalog.sqlite")),
+);
 try {
   const selected = models.alignment("nemo-ctc110");
   const runtime = await selected.runtime();

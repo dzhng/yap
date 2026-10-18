@@ -109,6 +109,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
       delivery,
       exports,
       index,
+      freedBytes: () => 0,
     }),
   );
   let releaseRead: (() => void) | undefined;
@@ -237,6 +238,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
         delivery,
         exports,
         index,
+        freedBytes: () => 0,
       }),
     );
     try {
@@ -411,6 +413,7 @@ async function projectPlanFixture(home: string, fault?: DeletionFault) {
       delivery: new DerivativeDelivery(),
       exports: { retireOwner: async () => {} },
       index: { reclaim: async () => {} } as unknown as ScreenshotIndexStore<ProjectIndexRecords>,
+      freedBytes: () => 0,
     }),
   );
   return {

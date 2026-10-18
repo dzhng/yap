@@ -19,6 +19,7 @@ import type { InstallReport } from "./preset-install.js";
 import { isValidReference } from "./preset-format.js";
 import { CatalogError } from "./catalog.js";
 import { pageCursor } from "./page-cursor.js";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export type Trash = (path: string) => Promise<void>;
 const productionTrash: Trash = (path) =>
@@ -46,13 +47,47 @@ export type PresetUpdateResult = {
 
 export class Presets {
   private readonly requests = new Map<string, { input: string; result: unknown }>();
+  private readonly requestReceipts = new Map<string, { input: string; result: unknown }>();
+  private readonly requestReceiptPath: string;
   constructor(
     private readonly store: PresetStore,
     /** Why the bundled install failed, if it did; presets never stop the service starting. */
     private readonly installError: string | null = null,
     private readonly refresh?: PresetRefresh,
     private readonly trash: Trash = productionTrash,
-  ) {}
+  ) {
+    this.requestReceiptPath = join(this.store.root, ".request-receipts.json");
+    if (existsSync(this.requestReceiptPath)) {
+      try {
+        const saved = JSON.parse(readFileSync(this.requestReceiptPath, "utf8")) as Record<
+          string,
+          { input: string; result: unknown }
+        >;
+        for (const [id, receipt] of Object.entries(saved)) this.requestReceipts.set(id, receipt);
+      } catch {
+        // A damaged receipt file cannot authorize a replay; the preset files remain the source.
+      }
+    }
+  }
+  private saveRequestReceipt(requestId: string, receipt: { input: string; result: unknown }): void {
+    this.requestReceipts.set(requestId, receipt);
+    const temporary = `${this.requestReceiptPath}.tmp`;
+    writeFileSync(temporary, JSON.stringify(Object.fromEntries(this.requestReceipts)), {
+      mode: 0o600,
+    });
+    renameSync(temporary, this.requestReceiptPath);
+  }
+  private priorRequest(requestId: string | undefined, input: string) {
+    if (!requestId) return undefined;
+    const prior = this.requests.get(requestId) ?? this.requestReceipts.get(requestId);
+    if (!prior) return undefined;
+    if (prior.input !== input)
+      throw new CatalogError(
+        "REQUEST_CONFLICT",
+        "Request identity names different preset parameters",
+      );
+    return prior.result;
+  }
 
   list(): PresetListResult {
     return {
@@ -91,15 +126,11 @@ export class Presets {
 
   async update(id?: string, requestId?: string): Promise<PresetUpdateResult> {
     const input = JSON.stringify({ operation: "preset.update", presetId: id ?? null });
-    const prior = requestId ? this.requests.get(requestId) : undefined;
-    if (prior) {
-      if (prior.input !== input)
-        throw new CatalogError(
-          "REQUEST_CONFLICT",
-          "Request identity names a different preset update",
-        );
-      return prior.result as PresetUpdateResult;
-    }
+    const prior = this.priorRequest(requestId, input);
+    if (prior)
+      return (
+        prior instanceof Promise ? prior : Promise.resolve(prior)
+      ) as Promise<PresetUpdateResult>;
     const run = async (): Promise<PresetUpdateResult> => {
       // Nothing was changed: report why as an outcome, like a failed file.
       const unchanged = (reason: string, instruction: string): PresetUpdateResult => ({
@@ -137,7 +168,13 @@ export class Presets {
       return { report, refresh: this.list().refresh, instructions };
     };
     const result = run();
-    if (requestId) this.requests.set(requestId, { input, result });
+    if (requestId) {
+      this.requests.set(requestId, { input, result });
+      void result.then(
+        (value) => this.saveRequestReceipt(requestId, { input, result: value }),
+        () => {},
+      );
+    }
     return result;
   }
 
@@ -158,15 +195,11 @@ export class Presets {
       name: input.name,
       references: input.references ?? [],
     });
-    const prior = requestId ? this.requests.get(requestId) : undefined;
-    if (prior) {
-      if (prior.input !== requestInput)
-        throw new CatalogError(
-          "REQUEST_CONFLICT",
-          "Request identity names a different preset creation",
-        );
-      return prior.result as Awaited<ReturnType<Presets["create"]>>;
-    }
+    const prior = this.priorRequest(requestId, requestInput);
+    if (prior)
+      return (prior instanceof Promise ? prior : Promise.resolve(prior)) as Promise<
+        Awaited<ReturnType<Presets["create"]>>
+      >;
     const run = async () => {
       const references = input.references ?? [];
       for (const reference of references)
@@ -215,7 +248,13 @@ export class Presets {
       };
     };
     const result = run();
-    if (requestId) this.requests.set(requestId, { input: requestInput, result });
+    if (requestId) {
+      this.requests.set(requestId, { input: requestInput, result });
+      void result.then(
+        (value) => this.saveRequestReceipt(requestId, { input: requestInput, result: value }),
+        () => {},
+      );
+    }
     return result;
   }
 
@@ -224,15 +263,11 @@ export class Presets {
     requestId?: string,
   ): Promise<{ presetId: string; trashed: true; trashedPaths: string[]; instructions: string[] }> {
     const input = JSON.stringify({ operation: "preset.delete", presetId: id });
-    const prior = requestId ? this.requests.get(requestId) : undefined;
-    if (prior) {
-      if (prior.input !== input)
-        throw new CatalogError(
-          "REQUEST_CONFLICT",
-          "Request identity names a different preset deletion",
-        );
-      return prior.result as Awaited<ReturnType<Presets["delete"]>>;
-    }
+    const prior = this.priorRequest(requestId, input);
+    if (prior)
+      return (prior instanceof Promise ? prior : Promise.resolve(prior)) as Promise<
+        Awaited<ReturnType<Presets["delete"]>>
+      >;
     const run = async (): Promise<{
       presetId: string;
       trashed: true;
@@ -252,7 +287,13 @@ export class Presets {
       };
     };
     const result = run();
-    if (requestId) this.requests.set(requestId, { input, result });
+    if (requestId) {
+      this.requests.set(requestId, { input, result });
+      void result.then(
+        (value) => this.saveRequestReceipt(requestId, { input, result: value }),
+        () => {},
+      );
+    }
     return result;
   }
 

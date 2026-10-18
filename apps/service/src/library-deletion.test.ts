@@ -51,6 +51,7 @@ test("a failed phase resumes from its durable plan without reporting success ear
         return true;
       },
       result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
+      freedBytes: () => 0,
     };
     let fail = true;
     let deletion = new LibraryDeletion(plans, {
@@ -144,7 +145,9 @@ test("recording source admission stays fenced between file and row phases", asyn
           freesBytes: 0,
           cascadeFreesBytes: 0,
         }),
+        hasUsers: () => false,
       },
+      freedBytes: () => 0,
     }),
   );
   await deletion.delete({ kind: "recording", id: "one" });

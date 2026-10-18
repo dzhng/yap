@@ -120,8 +120,15 @@ async function completeMcpResult(client, descriptor, exchange) {
 /** Copies already prepared, hash-pinned files. No network fetch or preparation operation. */
 export async function copyModels(home, request) {
   const { parakeetModel: manifest, Models } = await import("../../../packages/core/dist/models.js");
+  const { Catalog } = await import("../../../packages/core/dist/catalog.js");
   assert.deepEqual(request.files, manifest.files);
-  const models = new Models(join(home, "library")).transcription("parakeet");
+  const library = join(home, "library");
+  const models = new Models(
+    library,
+    globalThis.fetch,
+    undefined,
+    new Catalog(join(library, "catalog.sqlite")),
+  ).transcription("parakeet");
   const target = join(home, "library/models", manifest.name, manifest.revision);
   const receipt = { modelDigest: models.modelDigest, files: {} };
   for (const file of manifest.files) {

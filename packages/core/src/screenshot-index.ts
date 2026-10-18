@@ -121,9 +121,7 @@ type Coverage = { sequence: number; ordinal: number | null; content: string };
 const where = "ownerKind=? AND ownerId=? AND generation=?";
 const integer = (n: number) => Number.isSafeInteger(n) && n >= 0;
 const imageSize = (frame: RetainedImage) => {
-  const size = frame.sizeBytes ?? frame.bytes;
-  if (size === undefined) invalid("Retained image has no byte receipt");
-  return size;
+  return frame.sizeBytes;
 };
 function invalid(message: string): never {
   throw new CatalogError("INVALID_EVIDENCE", message);
@@ -639,11 +637,7 @@ export class ScreenshotIndexStore<
     const encodedCandidate = encodeIndexRecord(candidate),
       encodedFrame = encodeIndexRecord(
         (() => {
-          const { bytes, sizeBytes, ...rest } = frame as D["frame"] & {
-            bytes?: number;
-            sizeBytes?: number;
-          };
-          return { ...rest, sizeBytes: sizeBytes ?? bytes };
+          return frame;
         })(),
       );
     const path = this.outputPath(identity, candidate.ordinal);

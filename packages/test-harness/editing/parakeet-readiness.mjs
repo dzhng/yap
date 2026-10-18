@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { Models, parakeetModel } from "../../core/dist/models.js";
+import { Catalog } from "../../core/dist/catalog.js";
 import { registeredModels } from "../../core/dist/model-registry.js";
 import { verifyRuntime } from "../../core/dist/model-files.js";
 import { runReadinessCommand, withReadinessProcesses } from "./parakeet-readiness-processes.mjs";
@@ -241,7 +242,13 @@ await withReadinessProcesses(
       { state: "ready", presence: "ready" },
     );
     await processes.stop();
-    const models = new Models(join(home, "library"));
+    const library = join(home, "library");
+    const models = new Models(
+      library,
+      globalThis.fetch,
+      undefined,
+      new Catalog(join(library, "catalog.sqlite")),
+    );
     assert.deepEqual(await models.status("parakeet"), { state: "ready" });
     report.nativeRequest = await models.transcription("parakeet").nativeRequest();
     await models.settled();

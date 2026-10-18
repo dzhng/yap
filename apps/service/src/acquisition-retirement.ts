@@ -38,31 +38,41 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
       await owners.jobs.forgetOwner({ kind: "acquisition", acquisitionId: subject.id });
       if (references.releaseOwnerPage({ kind: "acquisition", id: subject.id }) === 256)
         return false;
-      const resources = owners.catalog.catalog
-        .prepare(
-          "DELETE FROM resource_references WHERE rowid IN (SELECT rowid FROM resource_references WHERE resourceKind='acquisition' AND resourceId=? LIMIT 256)",
-        )
-        .run(subject.id);
-      if (Number(resources.changes) === 256) return false;
+      if (references.releaseResourcePage("acquisition", subject.id) === 256) return false;
       owners.catalog.catalog.prepare("DELETE FROM acquisitions WHERE id=?").run(subject.id);
+      references.unfence("acquisition", [subject.id]);
       return true;
     },
     cascadeMembers: async (_subject, members, signal, deleteMember) => {
+      const hasTombstonedAsset = members.some(
+        (member) =>
+          member.memberKind === "asset" && references.isTombstoned("asset", member.memberId),
+      );
       for (const member of members) {
         signal.throwIfAborted();
         if (member.memberKind !== "asset") continue;
         if (references.isTombstoned("asset", member.memberId)) continue;
+        // If this acquisition was reached through an asset cascade, the initiating
+        // asset is already tombstoned. Retire the acquisition without deleting its
+        // sibling assets.
+        if (hasTombstonedAsset) {
+          references.unfence("asset", [member.memberId]);
+          continue;
+        }
         // Content-addressed assets can be shared by an independent import. Keep the
         // shared asset (and that import) while retiring this acquisition; otherwise
         // let the registered asset owner cascade through its remaining users.
         if (
           references.owners("asset", member.memberId).some((owner) => owner.kind === "acquisition")
-        )
+        ) {
+          references.unfence("asset", [member.memberId]);
           continue;
+        }
         await deleteMember({ kind: member.memberKind, id: member.memberId });
       }
     },
+    cascadeMembersWithoutCascade: true,
     result: (subject) => ({ acquisitionId: subject.id, deleted: true }),
-    markersPage: () => ({ subjects: [], nextAfterId: null }),
+    freedBytes: () => 0,
   } satisfies DeletionRegistration;
 }

@@ -25,7 +25,9 @@ async function fixture(
     `CREATE TABLE assets (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, metadata TEXT NOT NULL); CREATE TABLE asset_origins (assetId TEXT NOT NULL, provenance TEXT NOT NULL);`,
   );
   const plans = new DeletionPlans(catalog);
-  const listing = new MediaListing(catalog, plans, sizeOf);
+  const listing = new MediaListing(catalog, plans, sizeOf, (recordingId) =>
+    catalog.listable(recordingId),
+  );
   return { catalog, listing, plans };
 }
 

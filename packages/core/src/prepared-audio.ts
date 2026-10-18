@@ -47,7 +47,7 @@ export type PreparedAudio = Omit<ReturnType<typeof checkProjectAudioResult>, "fi
   identity: FileIdentity;
   sampleRange: { start: number; end: number };
 };
-function publicPreparedAudio(value: PreparedAudio) {
+function encodePreparedAudioReceipt(value: PreparedAudio) {
   const { bytes, frames, sampleRange, ...rest } = value as any;
   return {
     ...rest,
@@ -56,7 +56,7 @@ function publicPreparedAudio(value: PreparedAudio) {
     sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
   };
 }
-function parsePublicPreparedAudio(value: unknown): PreparedAudio {
+function decodePreparedAudioReceipt(value: unknown): PreparedAudio {
   const record = value as Record<string, any>;
   if ("bytes" in record || "frames" in record || record.sampleRange?.startSamples === undefined)
     throw new CatalogError("ARTIFACT_CHANGED", "Prepared audio receipt uses an obsolete shape");
@@ -367,7 +367,7 @@ export class PreparedAudioStore {
       };
       const publication = staged;
       return {
-        result: JSON.stringify(publicPreparedAudio(value)),
+        result: JSON.stringify(encodePreparedAudioReceipt(value)),
         issues: preparedAudioIssues(plan.window.manifest, value),
         publish: () => {
           publication.publish();
@@ -519,7 +519,7 @@ export class PreparedAudioStore {
             },
             artifact: "prepared-audio",
             input: JSON.stringify({ ...recipe, revisionId: composition.revisionId }),
-            result: JSON.stringify(publicPreparedAudio(value)),
+            result: JSON.stringify(encodePreparedAudioReceipt(value)),
           },
           issues,
         );
@@ -530,7 +530,7 @@ export class PreparedAudioStore {
   /** Bounded PCM view of an already published result; never invokes the renderer or model. */
   open(resourceId: string, range?: { start: number; end: number }) {
     const publication = this.publication(resourceId);
-    const value = parsePublicPreparedAudio(JSON.parse(publication.result));
+    const value = decodePreparedAudioReceipt(JSON.parse(publication.result));
     const selection = range ?? value.sampleRange;
     if (
       !Number.isSafeInteger(selection.start) ||

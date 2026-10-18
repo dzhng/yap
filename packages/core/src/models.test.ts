@@ -478,6 +478,20 @@ test("preparing clears the removal fence but keeps request receipts", async () =
   expect(models.presence("tiny")).toBe("absent");
 });
 
+test("concurrent removals are serialized and only the first reports removed bytes", async () => {
+  const f = await fixture();
+  const catalog = new Catalog(join(f.home, "catalog.sqlite"));
+  cleanups.push(() => catalog.close());
+  const models = new Models(f.home, f.network, [manifest], catalog);
+  await models.prepare("tiny", new AbortController().signal);
+  const [first, second] = await Promise.all([
+    models.remove("tiny", "remove-1"),
+    models.remove("tiny", "remove-2"),
+  ]);
+  expect(first.freedBytes).toBeGreaterThan(0);
+  expect(second.freedBytes).toBe(0);
+});
+
 test("a models directory that is a link is refused", async () => {
   const { home } = await fixture();
   const elsewhere = join(home, randomUUID());

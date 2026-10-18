@@ -716,7 +716,7 @@ export async function startProjectService(options: {
       let flight = reviewModelPreparations.get(modelId);
       if (!flight) {
         flight = models
-          .prepare(modelId, modelLifetime.signal, {})
+          .prepare(modelId, modelLifetime.signal, {}, { clearRemoval: false })
           .catch((error) => {
             if (!modelLifetime.signal.aborted) console.error(error);
           })
@@ -1036,6 +1036,7 @@ export async function startProjectService(options: {
       catalog,
       plans,
       (subject) => libraryUsers!.usersOf(subject).freesBytes,
+      (recordingId) => captures.listable(recordingId),
     );
     indexes = new IndexProcessing({
       jobs: queue,
@@ -1177,8 +1178,7 @@ export async function startProjectService(options: {
         delivery,
         exports: mediaExports,
         index: projectIndex,
-        freedBytes: (id: string) =>
-          libraryUsers?.usersOf({ kind: "project", id } as never).freesBytes ?? 0,
+        freedBytes: (id: string) => libraryUsers!.usersOf({ kind: "project", id }).freesBytes,
       }),
     );
     libraryDeletion.register(
@@ -1858,7 +1858,11 @@ export async function startProjectService(options: {
             // Resolve registration before consulting running work so an unknown identity always
             // has the model-specific NOT_FOUND contract.
             models.presence(modelId);
-            if (jobs!.hasRunningModelRequest(modelId))
+            const priorRemoval = models.removal(requestId);
+            if (
+              !(priorRemoval?.modelId === modelId && priorRemoval.completed) &&
+              jobs!.hasRunningModelRequest(modelId)
+            )
               throw new CatalogError("MODEL_IN_USE", "A running job is using this model", {
                 modelId,
               });
@@ -3761,8 +3765,8 @@ export async function startProjectService(options: {
         sources: captureSources,
         users: libraryUsers!,
         freedBytes: (id, cascade) => {
-          const result = libraryUsers?.usersOf({ kind: "recording", id });
-          return result ? (cascade ? result.cascadeFreesBytes : result.freesBytes) : 0;
+          const result = libraryUsers!.usersOf({ kind: "recording", id });
+          return cascade ? result.cascadeFreesBytes : result.freesBytes;
         },
       }),
     );

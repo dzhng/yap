@@ -352,6 +352,7 @@ test("same-provenance project deletion and package close revoke only their own d
       delivery: f.delivery,
       exports: { retireOwner: async () => {} },
       index,
+      freedBytes: () => 0,
     }),
   );
   try {

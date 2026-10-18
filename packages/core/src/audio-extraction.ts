@@ -65,17 +65,17 @@ export type ExtractedAudio = {
 export function publicExtraction(value: ExtractedAudio) {
   const selection = value.origin.selection;
   const { frames, origin, ...rest } = value as any;
-  const { frames: inputFrames, frameCount: inputFrameCount, ...input } = origin.input as any;
-  const { frames: outputFrames, frameCount: outputFrameCount, ...output } = origin.output as any;
+  const { frames: inputFrames, ...input } = origin.input as any;
+  const { frames: outputFrames, ...output } = origin.output as any;
   return {
     ...rest,
     frameCount: frames,
-    input: { ...input, frameCount: inputFrames ?? inputFrameCount },
-    output: { ...output, frameCount: outputFrames ?? outputFrameCount },
+    input: { ...input, frameCount: inputFrames },
+    output: { ...output, frameCount: outputFrames },
     origin: {
       ...origin,
-      input: { ...input, frameCount: inputFrames ?? inputFrameCount },
-      output: { ...output, frameCount: outputFrames ?? outputFrameCount },
+      input: { ...input, frameCount: inputFrames },
+      output: { ...output, frameCount: outputFrames },
       selection: {
         ...selection,
         sampleRange: {
@@ -87,6 +87,20 @@ export function publicExtraction(value: ExtractedAudio) {
   };
 }
 export function parseExtractedAudio(value: unknown): ExtractedAudio {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio extraction receipt is not an object");
+  const raw = value as any;
+  if (
+    "frames" in raw ||
+    "bytes" in raw ||
+    "frames" in (raw.origin?.input ?? {}) ||
+    "frames" in (raw.origin?.output ?? {}) ||
+    raw.frameCount === undefined ||
+    raw.origin?.input?.frameCount === undefined ||
+    raw.origin?.output?.frameCount === undefined ||
+    raw.origin?.selection?.sampleRange?.startSamples === undefined
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio extraction receipt uses an obsolete shape");
   const record = value as ExtractedAudio & {
     frameCount: number;
     origin: { selection: { sampleRange: { startSamples: number; endSamples: number } } };

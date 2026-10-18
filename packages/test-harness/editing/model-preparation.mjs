@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { voiceProfile } from "../../core/dist/voice-profile.js";
 import { Models } from "../../core/dist/models.js";
+import { Catalog } from "../../core/dist/catalog.js";
 import { mediaWorker } from "../../../apps/service/dist/worker.js";
 import { voiceRenderer } from "../../../apps/service/dist/voice.js";
 import { JourneyService, poll, root, run, hash } from "./source-evidence-fixture.mjs";
@@ -100,7 +101,13 @@ try {
   });
   assert.deepEqual(await call("model.list", {}), discovered);
   await service.stop();
-  const models = new Models(join(home, "library"));
+  const library = join(home, "library");
+  const models = new Models(
+    library,
+    globalThis.fetch,
+    undefined,
+    new Catalog(join(library, "catalog.sqlite")),
+  );
   const prepared = await models.runtime("qwen3-tts-icl-v1", "voice");
   report.prepared = prepared;
   assert.notEqual(await realpath(prepared.model), await realpath(values.model));

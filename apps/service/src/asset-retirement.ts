@@ -45,17 +45,6 @@ function membersFor(result: LibraryUsersResult): Member[] {
   ];
 }
 
-export function hasUsers(
-  result: LibraryUsersResult,
-  options: { excludeAcquisitions?: boolean } = {},
-): boolean {
-  return (
-    result.usedBy.length > 0 ||
-    (!options.excludeAcquisitions && result.acquisitions.length > 0) ||
-    result.derivedAssets.length > 0
-  );
-}
-
 /** Retires an immutable asset and every retained generation owned by it. */
 export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistration {
   const references = new ResourceReferences(owners.catalog);
@@ -64,7 +53,7 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
     errorMode: "preserve-catalog",
     checkUsers: (subject, cascade) => {
       const result = owners.users.usersOf({ kind: "asset", id: subject.id });
-      if (!cascade && hasUsers(result))
+      if (!cascade && owners.users.hasUsers(result))
         throw new CoreCatalogError("IN_USE", "Asset is still used by the library", {
           assetId: subject.id,
           ...result,
@@ -97,12 +86,7 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
       signal.throwIfAborted();
       await owners.jobs.forgetOwner({ kind: "asset", assetId: subject.id });
       if (references.releaseOwnerPage({ kind: "asset", id: subject.id }) === 256) return false;
-      const resources = owners.catalog.catalog
-        .prepare(
-          "DELETE FROM resource_references WHERE rowid IN (SELECT rowid FROM resource_references WHERE resourceKind='asset' AND resourceId=? LIMIT 256)",
-        )
-        .run(subject.id);
-      if (Number(resources.changes) === 256) return false;
+      if (references.releaseResourcePage("asset", subject.id) === 256) return false;
       const origins = owners.catalog.catalog
         .prepare(
           "DELETE FROM asset_origins WHERE rowid IN (SELECT rowid FROM asset_origins WHERE assetId=? LIMIT 256)",
@@ -112,6 +96,7 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
       owners.catalog.transaction(() => {
         owners.catalog.catalog.prepare("DELETE FROM assets WHERE id=?").run(subject.id);
       });
+      references.unfence("asset", [subject.id]);
       return true;
     },
     cascadeMembers: async (_subject, members, signal, deleteMember) => {
@@ -122,13 +107,8 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
     },
     result: (subject) => ({ assetId: subject.id, deleted: true }),
     freedBytes: (subject, cascade) => {
-      try {
-        const users = owners.users.usersOf({ kind: "asset", id: subject.id });
-        return cascade ? users.cascadeFreesBytes : users.freesBytes;
-      } catch (error) {
-        if (error instanceof CoreCatalogError && error.code === "NOT_FOUND") return 0;
-        throw error;
-      }
+      const users = owners.users.usersOf({ kind: "asset", id: subject.id });
+      return cascade ? users.cascadeFreesBytes : users.freesBytes;
     },
   };
 }

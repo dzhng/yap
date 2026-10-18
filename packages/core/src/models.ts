@@ -305,6 +305,15 @@ class Preparation {
     await this.settled();
   }
 
+  validate(signal: AbortSignal, sources: ModelSources): void {
+    const unsupported = this.platformFailure();
+    if (unsupported) throw unsupported;
+    signal.throwIfAborted();
+    for (const path of [sources.runtimeSource, sources.modelSource])
+      if (path !== undefined && !isAbsolute(path))
+        throw new CatalogError("INVALID_REQUEST", "Model source paths must be absolute");
+  }
+
   async runtime(purpose: "voice" | "speaker" | "alignment"): Promise<PreparedRuntime> {
     const unsupported = this.platformFailure();
     if (unsupported) throw unsupported;
@@ -671,6 +680,7 @@ export class Models {
     return [...this.preparations.values()].some((preparation) => preparation.updateBlocked);
   }
   private readonly preparations = new Map<string, Preparation>();
+  private readonly removals = new Map<string, Promise<unknown>>();
   private readonly directory: string;
   constructor(
     home: string,
@@ -788,9 +798,14 @@ export class Models {
   async prepareAuto(signal: AbortSignal): Promise<void> {
     await Promise.all(
       [...this.preparations.values()]
-        .filter((model) => model.manifest.autoPrepare && !this.removed(model.manifest.name))
+        .filter((model) => model.manifest.autoPrepare)
         .map(async (model) => {
-          if (!(await model.intact(signal))) await model.prepare(signal, {});
+          if (this.removed(model.manifest.name)) return;
+          if (!(await model.intact(signal))) {
+            await this.removals.get(model.manifest.name);
+            if (this.removed(model.manifest.name)) return;
+            await this.prepare(model.manifest.name, signal, {}, { clearRemoval: false });
+          }
         }),
     );
   }
@@ -799,6 +814,12 @@ export class Models {
   }
   presence(modelId: string) {
     return this.selected(modelId).presence();
+  }
+  removal(requestId: string): { modelId: string; completed: boolean } | null {
+    const row = this.catalog.catalog
+      .prepare("SELECT modelId, completedAtMs FROM model_removals WHERE requestId=?")
+      .get(requestId) as { modelId: string; completedAtMs: number | null } | undefined;
+    return row ? { modelId: row.modelId, completed: row.completedAtMs !== null } : null;
   }
   /**
    * Readiness from each preparation receipt, for the cheap service health check. Runtime bytes
@@ -812,33 +833,59 @@ export class Models {
       status: model.snapshot(),
     }));
   }
-  prepare(modelId: string, signal: AbortSignal, sources: ModelSources = {}) {
+  prepare(
+    modelId: string,
+    signal: AbortSignal,
+    sources: ModelSources = {},
+    options: { clearRemoval?: boolean } = {},
+  ) {
     const model = this.selected(modelId);
-    this.clearRemoved(modelId);
-    return model.prepare(signal, sources);
+    model.validate(signal, sources);
+    const wait = this.removals.get(modelId);
+    if (!wait) {
+      if (options.clearRemoval !== false) this.clearRemoved(modelId);
+      return model.prepare(signal, sources);
+    }
+    return wait.then(() => {
+      if (options.clearRemoval !== false) this.clearRemoved(modelId);
+      return model.prepare(signal, sources);
+    });
   }
   async remove(modelId: string, requestId: string) {
-    const model = this.selected(modelId);
-    const prior = this.catalog.catalog
-      .prepare("SELECT modelId, freedBytes, completedAtMs FROM model_removals WHERE requestId=?")
-      .get(requestId) as
-      | { modelId: string; freedBytes: number; completedAtMs: number | null }
-      | undefined;
-    if (prior) {
-      if (prior.modelId !== modelId)
-        throw new CatalogError("REQUEST_CONFLICT", "Removal request ID names another model");
-      if (prior.completedAtMs !== null)
-        return { modelId, deleted: true as const, freedBytes: prior.freedBytes };
-      return this.finishRemoval(model, requestId);
+    const previous = this.removals.get(modelId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(async () => {
+        const model = this.selected(modelId);
+        const prior = this.catalog.catalog
+          .prepare(
+            "SELECT modelId, freedBytes, completedAtMs FROM model_removals WHERE requestId=?",
+          )
+          .get(requestId) as
+          | { modelId: string; freedBytes: number; completedAtMs: number | null }
+          | undefined;
+        if (prior) {
+          if (prior.modelId !== modelId)
+            throw new CatalogError("REQUEST_CONFLICT", "Removal request ID names another model");
+          if (prior.completedAtMs !== null)
+            return { modelId, deleted: true as const, freedBytes: prior.freedBytes };
+          return this.finishRemoval(model, requestId);
+        }
+        this.catalog.transaction(() => {
+          this.catalog.catalog
+            .prepare(
+              "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,0,NULL,NULL)",
+            )
+            .run(modelId, requestId, Date.now());
+        });
+        return this.finishRemoval(model, requestId);
+      });
+    this.removals.set(modelId, run);
+    try {
+      return await run;
+    } finally {
+      if (this.removals.get(modelId) === run) this.removals.delete(modelId);
     }
-    this.catalog.transaction(() => {
-      this.catalog.catalog
-        .prepare(
-          "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,0,NULL,NULL)",
-        )
-        .run(modelId, requestId, Date.now());
-    });
-    return this.finishRemoval(model, requestId);
   }
   private async finishRemoval(model: Preparation, requestId: string) {
     await model.cancel();

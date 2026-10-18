@@ -369,6 +369,7 @@ export async function fixture(
       delivery,
       exports,
       index,
+      freedBytes: () => 0,
     }),
   );
   const storage = new ManagedStorage(null, cache, home, (signal) =>

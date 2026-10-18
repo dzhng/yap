@@ -2494,6 +2494,30 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
     ok: true,
     data: { modelId: "parakeet", deleted: true, freedBytes: 49 },
   });
+  catalog.catalog
+    .prepare(
+      "INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,errorCode,errorDetails,retryable,generation,queuedSequence,deferred,readmitted,inputSha256,input) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      "running-after-removal",
+      "attempt",
+      "asset",
+      "asset",
+      "",
+      "fixture",
+      "heavy",
+      "running",
+      null,
+      null,
+      null,
+      1,
+      1,
+      999,
+      0,
+      0,
+      createHash("sha256").update(input).digest("hex"),
+      input,
+    );
   expect(await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" })).toEqual(
     removed,
   );

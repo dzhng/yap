@@ -59,6 +59,7 @@ export class MediaListing {
     private readonly catalog: Catalog,
     private readonly plans: DeletionPlans,
     private readonly sizeOf: (subject: MediaSizeSubject) => number,
+    private readonly recordingListable: (recordingId: string) => boolean,
   ) {}
 
   list(input: { cursor?: MediaCursor; limit?: number } = {}): {
@@ -82,7 +83,7 @@ export class MediaListing {
       .prepare(
         `SELECT recordingId,createdAt,sourceDurationUs
          FROM recordings
-         WHERE state!='canceled' AND recordingId NOT IN (SELECT recordingId FROM recording_deletions)`,
+         WHERE state!='canceled'`,
       )
       .all() as Array<{
       recordingId: string;
@@ -90,7 +91,11 @@ export class MediaListing {
       sourceDurationUs: number | null;
     }>;
     for (const recording of recordings) {
-      if (this.plans.isTombstoned("recording", recording.recordingId)) continue;
+      if (
+        !this.recordingListable(recording.recordingId) ||
+        this.plans.isTombstoned("recording", recording.recordingId)
+      )
+        continue;
       rows.push({
         kind: "recording",
         recordingId: recording.recordingId,

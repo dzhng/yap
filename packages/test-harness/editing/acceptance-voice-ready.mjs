@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { registeredModels } from "../../core/dist/model-registry.js";
 import { verifyRuntime } from "../../core/dist/model-files.js";
 import { Models } from "../../core/dist/models.js";
+import { Catalog } from "../../core/dist/catalog.js";
 import { identifyFile } from "./acceptance-inputs.mjs";
 import { JourneyService, poll } from "./source-evidence-fixture.mjs";
 
@@ -246,7 +247,13 @@ try {
     [],
   );
   await stop();
-  const models = new Models(join(inputs.libraryHome, "library"));
+  const library = join(inputs.libraryHome, "library");
+  const models = new Models(
+    library,
+    globalThis.fetch,
+    undefined,
+    new Catalog(join(library, "catalog.sqlite")),
+  );
   report.preparedVoice = await models.runtime(manifest.name, "voice");
   await models.settled();
   assert.equal(report.preparedVoice.runtimeDigest, declared.runtimeDigest);

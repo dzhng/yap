@@ -64,9 +64,10 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
           report: await operand(output),
           correspondence: "",
         };
-        if (!result.ok)
+        if (!result.ok) {
+          const { frames: _frames, ...publicPcm } = pcm;
           return {
-            pcm: { ...pcm, frameCount: pcm.frames },
+            pcm: { ...publicPcm, frameCount: pcm.frames },
             operands,
             failure: new CatalogError(
               result.error.code,
@@ -74,16 +75,21 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
               result.error.details,
             ),
           };
+        }
         try {
           const input = alignmentCorrespondenceInput(operands);
           operands.correspondence = JSON.stringify(
             nativeResult(await execute("speech.correspond", input, { signal, timeoutMs: 10000 })),
           );
-          return { pcm: { ...pcm, frameCount: pcm.frames }, operands };
+          const { frames: _frames, ...publicPcm } = pcm;
+          return { pcm: { ...publicPcm, frameCount: pcm.frames }, operands };
         } catch (error) {
           signal.throwIfAborted();
           return {
-            pcm: { ...pcm, frameCount: pcm.frames },
+            pcm: (() => {
+              const { frames: _frames, ...publicPcm } = pcm;
+              return { ...publicPcm, frameCount: pcm.frames };
+            })(),
             operands,
             failure:
               error instanceof CatalogError
