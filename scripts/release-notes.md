@@ -2,6 +2,13 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.57
+
+Scroll bars in the capture menu and the Library float over the content again while a
+mouse is connected, instead of narrowing the menu and cutting off its right edge. Clear
+recording controls now show their see-through glass on screen as soon as a take starts,
+instead of staying dark until another look was chosen.
+
 ## 0.1.56
 
 The floating recording controls now sit in macOS Liquid Glass. Settings > Recording >
