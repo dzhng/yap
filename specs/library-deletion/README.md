@@ -67,7 +67,7 @@ parallel; 09 waits for 08.
 - [x] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
 - [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
 - [ ] 09 `recording.delete` takes its copies — [slices/09-recording-delete.md](slices/09-recording-delete.md)
-- [ ] 10 `project.duplicate` — [slices/10-project-duplicate.md](slices/10-project-duplicate.md)
+- [x] 10 `project.duplicate` — [slices/10-project-duplicate.md](slices/10-project-duplicate.md)
 - [ ] 11 `model.remove` and model storage — [slices/11-model-remove.md](slices/11-model-remove.md)
 - [ ] 12 `media.list` — [slices/12-media-list.md](slices/12-media-list.md)
 - [ ] 13 App: imported videos in the Recordings tab — [slices/13-app-library-rows.md](slices/13-app-library-rows.md)

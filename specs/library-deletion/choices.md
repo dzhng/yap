@@ -295,3 +295,7 @@ Evidence and publication generations remain strings under the single public fiel
 
 - **`recording.get` without an id and no take refuses `NOT_FOUND`** (sound). The latest-take shorthand has the same absence contract as an id-specific get; macOS callers treat that refusal as “no take yet.”
 - **Stored job results keep `bytes` on published file receipts and `range` on the audio job publication** (questionable, user verdict pending). Both live inside job results retained on disk; renaming them would move every renderer pin that emits them and discard valid evidence. The naming lint covers operation params and exported protocol records, not retained job payloads. Revisit if a later slice already moves those pins.
+
+## Slice 10: project duplicate
+
+- **The default duplicate title is the source title followed by ` copy`** (sound). The wording is explicit, stable and keeps the source title intact while making the new project distinguishable in listings.

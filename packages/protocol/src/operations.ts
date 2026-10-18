@@ -372,6 +372,17 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Delete a project and drain its work while preserving original assets. Repeating deletion succeeds; creation retries never recreate it.",
     ),
   z
+    .object({
+      operation: z.literal("project.duplicate"),
+      params: project
+        .extend({ requestId: id, revisionId: id.optional(), title: z.string().optional() })
+        .strict(),
+    })
+    .strict()
+    .describe(
+      "Duplicate a project revision into a new independent project; replay requestId for the same copy, and use revisionId to choose a historical document. This is a project copy, distinct from the clip-level duplicate edit.",
+    ),
+  z
     .object({ operation: z.literal("project.get"), params: project })
     .strict()
     .describe("Read project metadata and its current revision identity."),

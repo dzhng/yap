@@ -23,10 +23,13 @@ help schema and preserve the returned JSON envelope.
 
 ## Projects, edits and revisions
 
-`project.create`, `project.delete`, `project.get`, `project.list`,
+`project.create`, `project.duplicate`, `project.delete`, `project.get`, `project.list`,
 `edit.apply`, `edit.undo`, `edit.restore`, `revision.get`, `revision.history`,
 `text.seed`, `processing.get`, `output.capabilities`, and
 `processing.capabilities` create, inspect and revise non-destructive projects.
+
+`project.duplicate` copies one pinned project document into a new project with
+an empty history; it is distinct from the clip-level `duplicate` edit operation.
 
 ## Inputs, assets and storage
 

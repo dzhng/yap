@@ -1989,7 +1989,7 @@
         "packages/core/src/assets.ts": 1,
         "packages/core/src/capture-store.ts": 1,
         "packages/core/src/presets.ts": 3,
-        "packages/core/src/projects.ts": 3,
+        "packages/core/src/projects.ts": 4,
         "packages/core/src/speaker-labels.ts": 1
       }
     },

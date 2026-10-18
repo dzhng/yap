@@ -3204,6 +3204,18 @@ export async function startProjectService(options: {
                 ...(operation.params.title === undefined ? {} : { title: operation.params.title }),
               }),
             };
+          case "project.duplicate":
+            return {
+              ok: true,
+              data: projects.duplicate({
+                requestId: operation.params.requestId,
+                projectId: operation.params.projectId,
+                ...(operation.params.revisionId === undefined
+                  ? {}
+                  : { revisionId: operation.params.revisionId }),
+                ...(operation.params.title === undefined ? {} : { title: operation.params.title }),
+              }),
+            };
           case "project.delete":
             return {
               ok: true,

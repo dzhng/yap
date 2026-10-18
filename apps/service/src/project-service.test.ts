@@ -57,6 +57,76 @@ test("recording.get without an id resolves the latest take and removed recording
   expect(latest.recordingId).not.toBe(older.recordingId);
 });
 
+test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  const canvas = {
+    width: 16,
+    height: 16,
+    fps: { numerator: 30, denominator: 1 },
+    background: "#000000ff",
+  };
+  const created = await f.call("project.create", {
+    requestId: "duplicate-source",
+    title: "Source",
+    canvas,
+  });
+  expect(created).toMatchObject({ ok: true });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const source = created.data as {
+    project: { projectId: string };
+    revision: { id: string; document: unknown };
+  };
+  const duplicated = await f.call("project.duplicate", {
+    requestId: "duplicate-project",
+    projectId: source.project.projectId,
+  });
+  expect(duplicated).toMatchObject({
+    ok: true,
+    data: { project: { title: "Source copy" }, revision: { document: source.revision.document } },
+  });
+  if (!duplicated.ok) throw new Error(JSON.stringify(duplicated));
+  const copy = duplicated.data as {
+    project: { projectId: string };
+    revision: { id: string };
+  };
+  expect(
+    await f.call("project.duplicate", {
+      requestId: "duplicate-project",
+      projectId: source.project.projectId,
+    }),
+  ).toEqual(duplicated);
+  expect(
+    await f.call("project.duplicate", {
+      requestId: "duplicate-project",
+      projectId: source.project.projectId,
+      title: "Different",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
+  expect(await f.call("revision.history", { projectId: copy.project.projectId })).toMatchObject({
+    ok: true,
+    data: { revisions: [{ id: copy.revision.id, ordinal: 0 }], nextCursor: null },
+  });
+  expect(
+    await f.call("project.delete", {
+      requestId: "delete-duplicate-source",
+      projectId: source.project.projectId,
+    }),
+  ).toMatchObject({ ok: true, data: { projectId: source.project.projectId, deleted: true } });
+  expect(await f.call("revision.get", { projectId: copy.project.projectId })).toMatchObject({
+    ok: true,
+    data: { projectId: copy.project.projectId, revision: { id: copy.revision.id } },
+  });
+  expect(await f.call("inspect.open", { projectId: copy.project.projectId })).toMatchObject({
+    ok: true,
+    data: { projectId: copy.project.projectId, revision: { id: copy.revision.id } },
+  });
+  expect(
+    f.service.libraryUsers!.usersOf({ kind: "project", id: copy.project.projectId }),
+  ).toMatchObject({
+    usedBy: [],
+  });
+});
+
 test("asset.list rows expose assetId and sizeBytes without legacy id or bytes", async () => {
   const f = await projectServiceFixture(cleanups, async (operation) =>
     operation === "media.probe"
