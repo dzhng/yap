@@ -26,6 +26,11 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
         throw error;
       }
     },
+    checkUsers: (subject) =>
+      references
+        .dependencies({ kind: "acquisition", id: subject.id })
+        .filter((resource) => resource.kind === "asset")
+        .map((resource) => ({ memberKind: "asset", memberId: resource.id })),
     drain: (subject) => owners.jobs.drainOwner({ kind: "acquisition", acquisitionId: subject.id }),
     files: (subject, signal) => owners.importer.purge(subject.id, signal),
     rows: async (subject, signal) => {
@@ -41,6 +46,21 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
       if (Number(resources.changes) === 256) return false;
       owners.catalog.catalog.prepare("DELETE FROM acquisitions WHERE id=?").run(subject.id);
       return true;
+    },
+    cascadeMembers: async (_subject, members, signal, deleteMember) => {
+      for (const member of members) {
+        signal.throwIfAborted();
+        if (member.memberKind !== "asset") continue;
+        if (references.isTombstoned("asset", member.memberId)) continue;
+        // Content-addressed assets can be shared by an independent import. Keep the
+        // shared asset (and that import) while retiring this acquisition; otherwise
+        // let the registered asset owner cascade through its remaining users.
+        if (
+          references.owners("asset", member.memberId).some((owner) => owner.kind === "acquisition")
+        )
+          continue;
+        await deleteMember({ kind: member.memberKind, id: member.memberId });
+      }
     },
     result: (subject) => ({ acquisitionId: subject.id, deleted: true }),
     markersPage: () => ({ subjects: [], nextAfterId: null }),

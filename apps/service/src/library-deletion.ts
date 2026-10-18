@@ -25,8 +25,13 @@ export type DeletionRegistration = {
     subject: LibrarySubject,
     members: readonly { memberKind: string; memberId: string }[],
     signal: AbortSignal,
-    deleteMember: (subject: LibrarySubject) => Promise<Record<string, unknown>>,
+    deleteMember: (
+      subject: LibrarySubject,
+      options?: { cascade?: boolean },
+    ) => Promise<Record<string, unknown>>,
   ) => void | Promise<void>;
+  /** Some subjects own members even when the public request is not a cascade. */
+  cascadeMembersWithoutCascade?: boolean;
   tombstone: (subject: LibrarySubject) => boolean | Promise<boolean>;
   scope?: (
     subject: LibrarySubject,
@@ -260,12 +265,15 @@ export class LibraryDeletion {
         plan = { ...plan, phase: "rows" };
       }
       if (plan.phase === "rows") {
-        if (plan.cascade && registration.cascadeMembers)
+        if (
+          registration.cascadeMembers &&
+          (plan.cascade || registration.cascadeMembersWithoutCascade)
+        )
           await registration.cascadeMembers(
             subject,
             this.plans.members(subject.kind, subject.id),
             this.lifetime.signal,
-            (member) => this.delete(member, { cascade: true }),
+            (member, options) => this.delete(member, { cascade: options?.cascade ?? true }),
           );
         await registration.clearTombstone?.(subject);
         if (this.options.fault) await this.boundary("clear", subject, "before");

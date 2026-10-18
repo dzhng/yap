@@ -1153,6 +1153,21 @@ export async function startProjectService(options: {
       options.deletionFault === undefined ? {} : { fault: options.deletionFault },
     );
     deletion = libraryDeletion;
+    const assetRetirementRegistration = assetRetirement({
+      catalog: captures,
+      assets,
+      users: libraryUsers!,
+      transcripts: transcriptStore,
+      importedTranscripts,
+      scenes: sceneRecords,
+      indexes: sourceIndex,
+      alignments: alignmentRecords,
+      speakers: speakerRecords,
+      cache,
+      jobs: queue,
+      files,
+      delivery,
+    });
     libraryDeletion.register(
       projectRetirement({
         catalog: captures,
@@ -1175,23 +1190,7 @@ export async function startProjectService(options: {
         jobs: queue,
       }),
     );
-    libraryDeletion.register(
-      assetRetirement({
-        catalog: captures,
-        assets,
-        users: libraryUsers!,
-        transcripts: transcriptStore,
-        importedTranscripts,
-        scenes: sceneRecords,
-        indexes: sourceIndex,
-        alignments: alignmentRecords,
-        speakers: speakerRecords,
-        cache,
-        jobs: queue,
-        files,
-        delivery,
-      }),
-    );
+    libraryDeletion.register(assetRetirementRegistration);
     const status = (jobId: string) => {
       const value = queue.inspect(jobId);
       const { generation, ...job } = value;
@@ -1412,7 +1411,12 @@ export async function startProjectService(options: {
               ok: true,
               data: await deletion!.delete(
                 { kind: "recording", id: operation.params.recordingId },
-                { requestId: operation.params.requestId },
+                {
+                  requestId: operation.params.requestId,
+                  ...(operation.params.cascade === undefined
+                    ? {}
+                    : { cascade: operation.params.cascade }),
+                },
               ),
             };
           case "asset.delete":
@@ -3647,7 +3651,11 @@ export async function startProjectService(options: {
         delivery,
         files,
         sources: captureSources,
-        freedBytes: (id) => libraryUsers?.usersOf({ kind: "recording", id }).freesBytes ?? 0,
+        users: libraryUsers!,
+        freedBytes: (id, cascade) => {
+          const result = libraryUsers?.usersOf({ kind: "recording", id });
+          return result ? (cascade ? result.cascadeFreesBytes : result.freesBytes) : 0;
+        },
       }),
     );
     listenerStarting = listenLocal({

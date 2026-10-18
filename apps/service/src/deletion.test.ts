@@ -104,6 +104,15 @@ async function fixture(
     recordingRetirement({
       ...owners,
       sources: new CaptureSources(store, acquisitions, jobs, home, owners.files),
+      users: {
+        usersOf: () => ({
+          usedBy: [],
+          acquisitions: [],
+          derivedAssets: [],
+          freesBytes: 0,
+          cascadeFreesBytes: 0,
+        }),
+      },
     }),
   );
   let closed = false;

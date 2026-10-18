@@ -36,6 +36,7 @@ export function isArtifactMaintenance(operation: string): boolean {
 const time = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const range = z.object({ startUs: time, endUs: time }).strict();
 const recording = z.object({ recordingId: id }).strict();
+const recordingDelete = recording.extend({ cascade: z.boolean().optional() }).strict();
 const sourceSelection = mediaClipSchema.pick({
   assetId: true,
   streamId: true,
@@ -716,11 +717,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("recording.delete"),
-      params: recording.extend({ requestId: id }),
+      params: recordingDelete.extend({ requestId: id }),
     })
     .strict()
     .describe(
-      "Delete a recording with its media, evidence, caches and open deliveries once capture has proved the take stopped. Retrying joins the same deletion; deleting an absent recording succeeds.",
+      "Delete a recording after capture has proved the take stopped. Its capture-origin copies and their evidence, assets and managed files are retired with it; a copy used by a project refuses with IN_USE details unless cascade is true, which also retires those projects. Retrying the same requestId returns the saved result.",
     ),
   z
     .object({

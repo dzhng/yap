@@ -59,8 +59,20 @@ export class LibraryUsers {
       .filter((id) => id !== subject.id || subject.kind !== "acquisition")
       .sort()
       .map((acquisitionId) => ({ kind: "acquisition" as const, acquisitionId }));
+    const recordingAssetIds =
+      subject.kind === "recording"
+        ? new Set(
+            [...acquisitionIds].flatMap((acquisitionId) =>
+              this.references
+                .dependencies({ kind: "acquisition", id: acquisitionId })
+                .filter((resource) => resource.kind === "asset")
+                .map((resource) => resource.id),
+            ),
+          )
+        : undefined;
     const derivedAssets = [...assetIds]
       .filter((id) => id !== subject.id || subject.kind !== "asset")
+      .filter((id) => !recordingAssetIds?.has(id))
       .sort()
       .map((assetId) => ({ kind: "asset" as const, assetId }));
     const ownPaths = this.subjectPaths(subject);
@@ -115,11 +127,13 @@ export class LibraryUsers {
   private acquisitionClosure(subject: LibraryUserSubject, assetIds: Set<string>): Set<string> {
     const result = new Set<string>();
     if (subject.kind === "acquisition") result.add(subject.id);
-    if (subject.kind === "recording")
+    if (subject.kind === "recording") {
       for (const row of this.recordingAcquisitions(subject.id)) result.add(row);
-    for (const assetId of assetIds)
-      for (const owner of this.references.owners("asset", assetId))
-        if (owner.kind === "acquisition") result.add(owner.id);
+    } else {
+      for (const assetId of assetIds)
+        for (const owner of this.references.owners("asset", assetId))
+          if (owner.kind === "acquisition") result.add(owner.id);
+    }
     return result;
   }
 

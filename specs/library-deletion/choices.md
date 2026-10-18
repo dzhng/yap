@@ -307,6 +307,13 @@ Evidence and publication generations remain strings under the single public fiel
 - **`ASSET_DELETED` is a non-retryable conflict and `IN_USE` is a non-retryable destructive refusal** (sound). A deleted import request cannot be replayed, while a live owner requires an explicit cascade decision.
 - **Finished deletion request results live in the durable deletion-plan owner** (sound). Replaying the same request after restart must return its saved `freedBytes` even after the subject row and plan are gone.
 
+## Slice 09: recording deletion
+
+- **Shared content-addressed assets survive while another acquisition owns them** (sound). The retiring acquisition releases only its ownership reference, so an independent import keeps the shared bytes and row.
+- **Recording-owned copies retire without a public cascade while projects require it** (sound). A recording owns its unused capture acquisitions, but a project or derived asset is a user that needs explicit cascade intent.
+- **Legacy markers have no members and keep the old semantics** (sound). Startup adopts a marker without reconstructing the new ownership plan, so it finishes the historical recording-only cleanup.
+- **Derived assets count as recording users** (sound). HDR conversions and generated voice assets remain users of their source and therefore produce the same `IN_USE` refusal as asset deletion.
+
 ## Slice 10: project duplicate
 
 - **The default duplicate title is the source title followed by ` copy`** (sound). The wording is explicit, stable and keeps the source title intact while making the new project distinguishable in listings.

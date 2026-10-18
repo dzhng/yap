@@ -337,6 +337,7 @@ export const filesWorker: MediaWorker = async (operation, params, options) => {
     });
     return { ok: true, data: { removed: true } };
   }
+  if (operation === "storage.removeCacheFiles") return { ok: true, data: { removed: true } };
   throw new Error(`Unexpected worker operation: ${operation}`);
 };
 
