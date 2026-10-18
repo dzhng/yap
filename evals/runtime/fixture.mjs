@@ -170,7 +170,7 @@ export async function deletionFixture(name) {
             error: refusal({
               assetId,
               usedBy,
-              freesBytes,
+              freesBytes: freedBytes,
               cascadeFreesBytes: freedBytes,
             }),
           });
