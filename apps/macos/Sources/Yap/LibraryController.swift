@@ -5,7 +5,10 @@ import YapControls
 @MainActor
 final class LibraryController {
     typealias Call = @MainActor (String, [String: Any]) async throws(ServiceFailure) -> Data
+    /// Asks the person one delete question and answers whether they confirmed it.
+    typealias Confirm = @MainActor (DeleteConfirmation) async -> Bool
     private let call: Call
+    private let confirm: Confirm
     private let changed: () -> Void
     private let closePreview: (MediaTarget) -> Void
     private let forgetExports: (MediaTarget) -> Void
@@ -25,12 +28,12 @@ final class LibraryController {
     private var projectPages: [LibraryState.ProjectCursor?] = [nil]
     private var projectPageIndex = 0
 
-    init(call: @escaping Call, changed: @escaping () -> Void,
+    init(call: @escaping Call, confirm: @escaping Confirm, changed: @escaping () -> Void,
         closePreview: @escaping (MediaTarget) -> Void, forgetExports: @escaping (MediaTarget) -> Void,
         deleted: @escaping () -> Void,
         preview: @escaping (String) -> Void, export: @escaping (String, ExportsState.Kind) -> Void)
     {
-        self.call = call; self.changed = changed; self.closePreview = closePreview
+        self.call = call; self.confirm = confirm; self.changed = changed; self.closePreview = closePreview
         self.forgetExports = forgetExports; self.deleted = deleted
         self.preview = preview; self.export = export
     }
@@ -59,9 +62,9 @@ final class LibraryController {
         switch action {
         case .previewProject(let id): if usable(id) { preview(id) }
         case .exportProject(let id, let kind): if usable(id) { export(id, kind) }
-        case .deleteRecording(let id): delete(.recording(id))
-        case .deleteAsset(let id): delete(.asset(id))
-        case .deleteProject(let id): delete(.project(id))
+        case .deleteRecording(let id): requestDelete(.recording(id))
+        case .deleteAsset(let id): requestDelete(.asset(id))
+        case .deleteProject(let id): requestDelete(.project(id))
         case .nextRecordings: nextRecordings()
         case .previousRecordings: previousRecordings()
         case .nextProjects: nextProjects()
@@ -173,8 +176,19 @@ final class LibraryController {
         }
     }
 
-    func delete(_ target: MediaTarget) {
-        guard ready, state.beginDelete(target), let requestId = state.deletions[target]?.requestId else { return }
+    /// A new delete is confirmed first; retrying one the service never confirmed resends that same
+    /// request, cascade included, without asking again.
+    func requestDelete(_ target: MediaTarget) {
+        guard ready, state.deletions[target]?.isPending != true else { return }
+        if let failed = state.deletions[target] { delete(target, cascade: failed.cascade); return }
+        guard let dialog = state.confirmation(for: target) else { return }
+        Task { @MainActor in
+            if await confirm(dialog) { delete(target, cascade: false) }
+        }
+    }
+
+    func delete(_ target: MediaTarget, cascade: Bool = false) {
+        guard ready, state.beginDelete(target, cascade: cascade), let requestId = state.deletions[target]?.requestId else { return }
         // Catalog answers started before this action cannot restore the retired owner.
         recordingGeneration = UUID(); projectGeneration = UUID(); jobsReading = false
         state.recordingsRefreshing = false; state.projectsRefreshing = false; pendingRecordings = false; pendingProjects = false
@@ -187,8 +201,9 @@ final class LibraryController {
                 case .asset: "asset.delete"
                 case .project: "project.delete"
                 }
-                var params = target.parameters
+                var params: [String: Any] = target.parameters
                 params["requestId"] = requestId
+                if cascade { params["cascade"] = true }
                 let receipt: Deletion = try await read(operation, params)
                 guard service == serviceGeneration else { return }
                 guard receipt.target == target && receipt.deleted else {
@@ -200,6 +215,20 @@ final class LibraryController {
                 forgetExports(target); deleted()
             } catch {
                 guard service == serviceGeneration else { return }
+                // Something still uses it: the refusal itself says what, and asking once more is
+                // the only way the users go too.
+                if error.code == "IN_USE", !cascade, let details = error.details,
+                    let inUse = try? JSONDecoder().decode(DeleteConfirmation.InUse.self, from: details),
+                    let name = state.confirmationName(for: target) {
+                    state.finishDelete(target, failure: error.localizedDescription)
+                    if await confirm(.cascade(target, name: name, inUse: inUse)) {
+                        delete(target, cascade: true)
+                    } else {
+                        state.cancelDelete(target)
+                    }
+                    refresh()
+                    return
+                }
                 state.finishDelete(target, failure: error.localizedDescription)
             }
             refresh()

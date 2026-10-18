@@ -274,6 +274,66 @@ func runSavedMediaTests() {
     print("PASS the Recordings tab lists recordings and imported videos from media.list")
 }
 
+func runDeleteConfirmationTests() {
+    var state = ready()
+    state.library.media = [
+        .init(kind: .imported, target: .asset("a-1"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-17T20:46:00Z"),
+        .init(kind: .recording, target: .recording("take"), title: "2026-10-16T15:05:00Z", durationUs: 9_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-16T15:05:00Z"),
+    ]
+    let project = #"{"projectId":"p-1","title":"Q4 demo","createdAt":"2026-10-13T22:12:00Z","currentRevisionId":"r-9"}"#
+    state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(project.utf8))]
+    let size = { LibraryPresentation.byteCount($0) }
+
+    let imported = state.library.confirmation(for: .asset("a-1"))!
+    precondition(imported == .init(title: "Delete “launch-teaser-v2.mp4”?", users: [], lead: nil,
+        message: "Removes Yap’s copy and its transcripts (\(size(22_000_000))). Your original file isn’t touched. This can’t be undone.",
+        confirm: "Delete", cascade: false), "An import's dialog says its original is untouched: \(imported)")
+    let recording = state.library.confirmation(for: .recording("take"))!
+    precondition(recording.title == "Delete “\(ElapsedTime.shortTime(of: "2026-10-16T15:05:00Z"))”?"
+        && recording.message == "Removes the recording and its transcripts (\(size(61_000_000))). This can’t be undone."
+        && recording.confirm == "Delete" && !recording.cascade, "A recording is named by when it was made: \(recording)")
+    let projectDialog = state.library.confirmation(for: .project("p-1"))!
+    precondition(projectDialog.title == "Delete “Q4 demo”?" && projectDialog.message.hasSuffix("This can’t be undone.")
+        && projectDialog.confirm == "Delete", "A project uses the same dialog")
+    precondition(state.library.confirmation(for: .asset("unlisted")) == nil, "Only a listed item can be confirmed")
+
+    // An IN_USE refusal's own details become the cascade dialog; nothing is queried.
+    let refusal = #"""
+    {"assetId":"a-1","usedBy":[{"kind":"project","projectId":"p-1","title":"Q4 demo","revisions":14},
+      {"kind":"project","projectId":"p-2","title":"Bug report: export","revisions":1}],
+     "acquisitions":[],"derivedAssets":[],"freesBytes":22000000,"cascadeFreesBytes":1400000000}
+    """#
+    let inUse = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(refusal.utf8))
+    let cascade = DeleteConfirmation.cascade(.recording("take"), name: "Yesterday 3:05 PM", inUse: inUse)
+    precondition(cascade == .init(title: "Delete “Yesterday 3:05 PM”?",
+        users: ["Project “Q4 demo” — 14 revisions", "Project “Bug report: export” — 1 revision"],
+        lead: "This recording is used by:",
+        message: "Deleting it also deletes these projects (\(size(1_400_000_000)) total). This can’t be undone.",
+        confirm: "Delete all", cascade: true), "The cascade dialog lists the refusal's users: \(cascade)")
+    let derivedOnly = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"usedBy":[],"acquisitions":[],"derivedAssets":[{"kind":"asset","assetId":"d"}],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
+    let derived = DeleteConfirmation.cascade(.asset("a-1"), name: "x.mp4", inUse: derivedOnly)
+    precondition(derived.users.isEmpty && derived.lead == nil
+        && derived.message == "Deleting it also deletes 1 file made from it (\(size(2)) total). This can’t be undone.",
+        "Users the service names only by count are said as a count, never as projects: \(derived)")
+
+    // A cascade is a new request; declining it leaves the row as it was.
+    precondition(state.library.beginDelete(.asset("a-1")))
+    let plainId = state.library.deletions[.asset("a-1")]!.requestId
+    state.library.finishDelete(.asset("a-1"), failure: "IN_USE: used by 2 projects")
+    precondition(state.library.beginDelete(.asset("a-1"), cascade: true))
+    let cascadeId = state.library.deletions[.asset("a-1")]!.requestId
+    precondition(cascadeId != plainId && state.library.deletions[.asset("a-1")]!.cascade, "Cascade carries its own request identity")
+    state.library.finishDelete(.asset("a-1"), failure: "SERVICE_STOPPED: lost")
+    precondition(state.library.beginDelete(.asset("a-1"), cascade: true) && state.library.deletions[.asset("a-1")]!.requestId == cascadeId,
+                 "Retrying the cascade keeps its identity")
+    state.library.finishDelete(.asset("a-1"), failure: "x")
+    state.library.cancelDelete(.asset("a-1"))
+    let items = LibraryPresentation.recordings(for: state).items
+    precondition(state.library.deletions.isEmpty && items.first { $0.id == "a-1" }?.status == nil
+        && items.first { $0.id == "a-1" }?.actions.allSatisfy(\.enabled) == true, "Declining leaves the row as it was")
+    print("PASS one delete dialog: plain, imported and cascade, from the row and the refusal only")
+}
+
 func runSavedPagingTests() {
     var state = ready()
     state.library.recent = [.init(recordingId: "take", createdAt: "2026-09-15T18:04:05Z",

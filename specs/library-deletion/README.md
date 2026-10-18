@@ -71,7 +71,7 @@ parallel; 09 waits for 08.
 - [x] 11 `model.remove` and model storage — [slices/11-model-remove.md](slices/11-model-remove.md)
 - [x] 12 `media.list` — [slices/12-media-list.md](slices/12-media-list.md)
 - [x] 13 App: imported videos in the Recordings tab — [slices/13-app-library-rows.md](slices/13-app-library-rows.md)
-- [ ] 14 App: one delete confirmation — [slices/14-app-delete-dialog.md](slices/14-app-delete-dialog.md)
+- [x] 14 App: one delete confirmation — [slices/14-app-delete-dialog.md](slices/14-app-delete-dialog.md)
 - [ ] 15 Skill recipe and evals — [slices/15-skill-and-evals.md](slices/15-skill-and-evals.md)
 - [ ] 16 Full check, review, release — [slices/16-closeout.md](slices/16-closeout.md)
 

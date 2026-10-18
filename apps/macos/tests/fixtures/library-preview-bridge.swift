@@ -117,7 +117,7 @@ struct CheckFailure: Error, LocalizedError {
     var closed: [String] { calls.filter { $0["operation"] as? String == "artifact.close" }.map { ($0["params"] as! [String: Any])["token"] as! String } }
 }
 @MainActor func library(_ call: @escaping LibraryController.Call, _ preview: PreviewController) -> LibraryController {
-    LibraryController(call: call, changed: {}, closePreview: { preview.close(target: $0) }, forgetExports: { _ in },
+    LibraryController(call: call, confirm: { _ in true }, changed: {}, closePreview: { preview.close(target: $0) }, forgetExports: { _ in },
         deleted: {}, preview: { preview.open($0) }, export: { _, _ in })
 }
 /// The player first asks for a bounded draft: the opening ten seconds at its draft long edge.

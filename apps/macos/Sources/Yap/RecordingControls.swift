@@ -70,6 +70,8 @@ final class RecordingControls: NSObject {
         call: { [weak self] operation, params throws(ServiceFailure) in
             guard let self else { throw Self.noService }
             return try await self.service().call(operation, params)
+        }, confirm: { [weak self] dialog in
+            await DeleteAlert.ask(dialog, on: self?.libraryWindow.sheetParent)
         }, changed: { [weak self] in
             guard let self else { return }
             state.library = library.state

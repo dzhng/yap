@@ -346,3 +346,13 @@ Evidence and publication generations remain strings under the single public fiel
 - **The storage footer shows three lines: total, media, models** (sound). The sidebar is too narrow for the mock's single line; the critique found the one-line split truncated.
 - **Recording rows gain Delete, retried as "Retry Delete" after an unconfirmed delete** (sound). Same deletion state machine and request identity as projects; the confirmation dialog is slice 14.
 - **Review** (non-blocking). Before/after comparison against the mock's requirements: candidate accepted. Unprimed critique: dark-mode badge contrast and long-title truncation fixed; the subtle "Deleting" status and short-window scrolling are existing behaviour shared by every row, outside this slice's variable. Shots: [assets/13-app-rows](assets/13-app-rows/).
+
+## Slice 14: one delete confirmation
+
+- **Wording follows the approved mock** (sound). Plain: "Delete “name”?", what is removed with its measured size, "Your original file isn’t touched" for imports, "This can’t be undone." Cascade: "This <kind> is used by:", one line per project ("Project “title” — N revisions"), "Deleting it also deletes these projects (size total)", button "Delete all". The unprimed critique questioned "Delete all", the cascade sentence and naming a recording by its time; those are the mock's approved choices and stay.
+- **Users the refusal names only by count are said as a count, never as projects** (sound). Derived files and recording sources appear as "N files made from it" / "N recording sources", so the dialog never invents a project or lists assets on its own.
+- **A project's plain dialog names no size** (questionable). `project.list` carries no size and the app makes no query of its own; the cascade dialog always has the refusal's total.
+- **The cascade is its own request** (sound). It follows a refused plain delete with different parameters, so it gets a new `requestId`; retrying either keeps that request's identity. "Retry Delete" resends the already-confirmed request without asking again; a declined cascade restores the row.
+- **The users list is an accessory text view with a hanging indent** (sound). Plain informative text wrapped a long project line back under its bullet (both reviewers flagged it); the count is kept with its project by non-breaking spaces.
+- **Destructive button contrast is unverified live** (known). The harness renders the alert in an inactive offscreen window, where AppKit draws the destructive button pale; in the app it is a sheet on the active Library window.
+- **Review** (non-blocking). Mock comparison: accept with the list-wrap fix, done. Shots: [assets/14-delete-dialog](assets/14-delete-dialog/).

@@ -7,6 +7,8 @@ final class LibraryWindow {
     let view: LibraryView
     private let window: NSWindow
     var isVisible: Bool { window.isVisible }
+    /// Where the delete question is asked, as a sheet.
+    var sheetParent: NSWindow { window }
 
     init(perform: @escaping (ControlsAction) -> Void) {
         view = LibraryView(state: ControlsState(), exports: ExportsState(), perform: perform)

@@ -30,6 +30,8 @@ import YapControls
     var deletes: [MediaTarget] = []
     var deletedTargets: Set<MediaTarget> = []
     var wrongDelete = false
+    /// When set, a plain delete is refused IN_USE with these details; a cascade goes through.
+    var inUse: [String: Any]?
     var lostDelete: String?
     var failure: (String, String)?
     var hold: String?
@@ -69,10 +71,16 @@ import YapControls
         case "job.get": answer = job
         case "processing.status": answer = ["state": params["artifact"] as? String == "transcript" ? "processing" : "ready", "reason": NSNull()]
         case "index.get": answer = ["state": "ready", "page": [:], "reason": NSNull()]
-        case "recording.delete", "project.delete":
-            deletes.append(params["projectId"] == nil ? .recording(params["recordingId"] as! String) : .project(params["projectId"] as! String))
+        case "recording.delete", "project.delete", "asset.delete":
+            let target: MediaTarget = params["projectId"].map { .project($0 as! String) }
+                ?? params["assetId"].map { .asset($0 as! String) } ?? .recording(params["recordingId"] as! String)
+            if let inUse, params["cascade"] as? Bool != true {
+                Self.exchanges.append(["operation": operation, "params": params, "error": "IN_USE"])
+                throw ServiceFailure(code: "IN_USE", message: "used by projects", details: try! JSONSerialization.data(withJSONObject: inUse))
+            }
+            deletes.append(target)
             if !wrongDelete { deletedTargets.insert(deletes.last!) }
-            let owner: [String: Any] = params["projectId"].map { ["projectId": $0] } ?? ["recordingId": params["recordingId"]!]
+            let owner: [String: Any] = target.parameters
             answer = (wrongDelete ? ["projectId": "wrong-target"] : owner).merging(["deleted": true, "freedBytes": 4096]) { first, _ in first }
         default: throw ServiceFailure(code: "UNKNOWN_OPERATION", message: operation)
         }
@@ -99,7 +107,7 @@ import YapControls
         let script = Script()
         var closed: [MediaTarget] = [], forgotten: [MediaTarget] = [], previews: [MediaTarget] = []
         var exports: [(MediaTarget, ExportsState.Kind)] = []
-        let library = LibraryController(call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) }, changed: {}, closePreview: { closed.append($0) }, forgetExports: { forgotten.append($0) }, deleted: {}, preview: { previews.append(.project($0)) }, export: { exports.append((.project($0), $1)) })
+        let library = LibraryController(call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) }, confirm: { _ in true }, changed: {}, closePreview: { closed.append($0) }, forgetExports: { forgotten.append($0) }, deleted: {}, preview: { previews.append(.project($0)) }, export: { exports.append((.project($0), $1)) })
         library.serviceChanged(ready: true)
         await until { !library.state.projectsRefreshing && library.state.recent.count == 1 }
         precondition(library.state.projects.map(\.projectId) == ["same"])
@@ -173,7 +181,7 @@ import YapControls
         // Pending source admission is discovered without restarting work; terminal jobs stop reads.
         let source = Script()
         source.recording["sourceAdmissions"] = [["kind": "primary", "sourceId": "source-one", "acquisitionId": NSNull(), "job": NSNull(), "admissionError": NSNull()]]
-        let progress = LibraryController(call: { op, params throws(ServiceFailure) in try await source.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let progress = LibraryController(call: { op, params throws(ServiceFailure) in try await source.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         progress.serviceChanged(ready: true)
         await until { progress.state.recent.count == 1 }
         // The page read asks each listed recording for its own facts once; ticks are counted after it.
@@ -197,7 +205,7 @@ import YapControls
             ["kind": "primary", "sourceId": "source-one", "acquisitionId": "acq-one", "job": neverOn.job, "admissionError": NSNull(), "publication": ["state": "published", "error": NSNull()]],
             ["kind": "camera", "sourceId": "camera-one", "acquisitionId": NSNull(), "job": NSNull(), "admissionError": NSNull(), "publication": ["state": "unavailable", "error": ["code": "CAMERA_NOT_TURNED_ON", "message": "The camera was never turned on"]]],
         ]
-        let settled = LibraryController(call: { op, params throws(ServiceFailure) in try await neverOn.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let settled = LibraryController(call: { op, params throws(ServiceFailure) in try await neverOn.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         settled.serviceChanged(ready: true)
         await until { settled.state.recent.count == 1 && !settled.state.projectsRefreshing }
         let settledReads = neverOn.count("recording.get")
@@ -213,7 +221,7 @@ import YapControls
         // A delayed job answer for the old row cannot clear the next row's source job failure.
         let overlapping = Script()
         overlapping.recording["sourceAdmissions"] = [["kind": "primary", "sourceId": "source-one", "acquisitionId": "acq-one", "job": overlapping.job, "admissionError": NSNull()]]
-        let progressOwner = LibraryController(call: { op, params throws(ServiceFailure) in try await overlapping.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let progressOwner = LibraryController(call: { op, params throws(ServiceFailure) in try await overlapping.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         progressOwner.serviceChanged(ready: true)
         await until { progressOwner.state.recent.count == 1 && !progressOwner.state.projectsRefreshing }
         overlapping.hold = "job.get"; progressOwner.tick()
@@ -231,7 +239,7 @@ import YapControls
         // Lost/malformed deletion keeps the typed identity even after discovery hides its owner.
         let lost = Script()
         var lostClosed: [MediaTarget] = [], lostForgotten: [MediaTarget] = []
-        let deletion = LibraryController(call: { op, params throws(ServiceFailure) in try await lost.call(op, params) }, changed: {}, closePreview: { lostClosed.append($0) }, forgetExports: { lostForgotten.append($0) }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let deletion = LibraryController(call: { op, params throws(ServiceFailure) in try await lost.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { lostClosed.append($0) }, forgetExports: { lostForgotten.append($0) }, deleted: {}, preview: { _ in }, export: { _, _ in })
         deletion.serviceChanged(ready: true)
         await until { deletion.state.projects.count == 1 && deletion.state.recent.count == 1 }
         lost.lostDelete = "TIMEOUT"
@@ -259,7 +267,7 @@ import YapControls
 
         // A page read held over deletion cannot restore the deleted project on release.
         let late = Script()
-        let fenced = LibraryController(call: { op, params throws(ServiceFailure) in try await late.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let fenced = LibraryController(call: { op, params throws(ServiceFailure) in try await late.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         fenced.serviceChanged(ready: true)
         await until { fenced.state.projects.count == 1 && !fenced.state.projectsRefreshing }
         late.hold = "project.list"; fenced.refreshProjects()
@@ -271,7 +279,7 @@ import YapControls
         precondition(fenced.state.projects.isEmpty, "Late discovery cannot restore a deleted owner")
         // A changed page or service generation rejects old answers, including old action receipts.
         let changed = Script()
-        let generation = LibraryController(call: { op, params throws(ServiceFailure) in try await changed.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let generation = LibraryController(call: { op, params throws(ServiceFailure) in try await changed.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         generation.serviceChanged(ready: true)
         await until { generation.state.projects.count == 1 && !generation.state.projectsRefreshing }
         changed.projects = [["projectId": "page-two", "title": "Second page", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-two"]]; changed.next = NSNull()
@@ -305,7 +313,7 @@ import YapControls
         for code in ["INVALID_RESPONSE", "SERVICE_STOPPED", "SERVICE_UNAVAILABLE"] {
             let ambiguous = Script()
             var retired: [MediaTarget] = []
-            let recovery = LibraryController(call: { op, params throws(ServiceFailure) in try await ambiguous.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { retired.append($0) }, deleted: {}, preview: { _ in }, export: { _, _ in })
+            let recovery = LibraryController(call: { op, params throws(ServiceFailure) in try await ambiguous.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { retired.append($0) }, deleted: {}, preview: { _ in }, export: { _, _ in })
             recovery.serviceChanged(ready: true)
             await until { recovery.state.projects.count == 1 && !recovery.state.projectsRefreshing }
             ambiguous.lostDelete = code
@@ -325,7 +333,7 @@ import YapControls
             paged.recording.merging(["recordingId": "take-\(sequence)", "creationSequence": sequence]) { _, value in value }
         }
         paged.recordingCatalog = (1...7).reversed().map(row)
-        let browsing = LibraryController(call: { op, params throws(ServiceFailure) in try await paged.call(op, params) }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        let browsing = LibraryController(call: { op, params throws(ServiceFailure) in try await paged.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         browsing.serviceChanged(ready: true)
         await until { browsing.state.recent.map(\.recordingId) == ["take-7", "take-6", "take-5", "take-4", "take-3"] }
         paged.recordingCatalog!.insert(row(8), at: 0)
@@ -383,6 +391,34 @@ import YapControls
         precondition(paged.deletes == [.recording("take-7"), .recording("take-7")], "Retry targets its captured recording, not a row occupying its old position")
         browsing.serviceChanged(ready: false)
         for consumer in [library, progress, deletion, fenced, generation] { consumer.serviceChanged(ready: false) }
+
+        // One dialog: asked before the first call, and again from an IN_USE refusal's own details.
+        let asking = Script()
+        asking.recording["sourceAdmissions"] = []
+        var asked: [DeleteConfirmation] = []
+        var answer = false
+        let confirmed = LibraryController(call: { op, params throws(ServiceFailure) in try await asking.call(op, params) }, confirm: { asked.append($0); return answer }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        confirmed.serviceChanged(ready: true)
+        await until { confirmed.state.recent.count == 1 && !confirmed.state.projectsRefreshing }
+        confirmed.perform(.deleteRecording("same"))
+        await until { asked.count == 1 }
+        for _ in 0..<20 { await Task.yield() }
+        precondition(asked[0].confirm == "Delete" && !asked[0].cascade && asking.count("recording.delete") == 0
+                     && confirmed.state.deletions.isEmpty, "Cancel sends nothing and leaves no deletion behind")
+        asking.inUse = ["recordingId": "same", "usedBy": [["kind": "project", "projectId": "p", "title": "Q4 demo", "revisions": 14]],
+            "acquisitions": [], "derivedAssets": [], "freesBytes": 10, "cascadeFreesBytes": 2000]
+        answer = true
+        confirmed.perform(.deleteRecording("same"))
+        await until { asked.count == 3 }
+        await until { confirmed.state.deletions.isEmpty && asking.deletes == [.recording("same")] }
+        let sent = Script.exchanges.filter { $0["operation"] as? String == "recording.delete" }.suffix(2).map { $0["params"] as! [String: Any] }
+        precondition(asked[2].cascade && asked[2].confirm == "Delete all" && asked[2].users == ["Project “Q4 demo” — 14 revisions"],
+                     "The refusal becomes the cascade dialog, listing its users: \(asked[2])")
+        precondition(sent.count == 2 && sent[0]["cascade"] == nil && sent[1]["cascade"] as? Bool == true
+                     && sent[0]["requestId"] as? String != sent[1]["requestId"] as? String,
+                     "The plain delete goes first; confirming the cascade sends cascade:true as its own request: \(sent)")
+        asking.inUse = nil
+        confirmed.serviceChanged(ready: false)
         print("PASS native library pages, typed deletion and source-only recording facts")
         print(String(data: try! JSONSerialization.data(withJSONObject: Script.exchanges), encoding: .utf8)!)
     }

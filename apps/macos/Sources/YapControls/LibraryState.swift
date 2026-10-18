@@ -100,6 +100,9 @@ public struct LibraryState: Equatable, Sendable {
         /// One deletion keeps one replay identity: retrying after a lost reply asks the service for
         /// the original result instead of deleting again.
         public let requestId: String
+        /// Whether this request also deletes the item's users. A cascade is a different request
+        /// from the plain delete it follows, so it has its own identity.
+        public var cascade = false
         public let title: String
         public let take: ControlsState.RecentTake?
         /// The page row, so a deletion still shows after its row leaves the page.
@@ -108,10 +111,11 @@ public struct LibraryState: Equatable, Sendable {
         public var isPending: Bool { failure == nil }
     }
 
-    public mutating func beginDelete(_ target: MediaTarget) -> Bool {
+    public mutating func beginDelete(_ target: MediaTarget, cascade: Bool = false) -> Bool {
         guard deletions[target]?.isPending != true else { return false }
         if let old = deletions[target] {
-            deletions[target] = .init(target: target, requestId: old.requestId, title: old.title, take: old.take, media: old.media)
+            deletions[target] = .init(target: target, requestId: old.cascade == cascade ? old.requestId : UUID().uuidString,
+                cascade: cascade, title: old.title, take: old.take, media: old.media)
             return true
         }
         let requestId = UUID().uuidString
@@ -121,16 +125,42 @@ public struct LibraryState: Equatable, Sendable {
             let take = recent.first { $0.recordingId == id }
             guard take != nil || row != nil else { return false }
             let title = take.map(LibraryPresentation.recordingTitle(of:)) ?? ElapsedTime.shortTime(of: row!.createdAt)
-            deletions[target] = .init(target: target, requestId: requestId, title: title, take: take, media: row)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: title, take: take, media: row)
         case .asset:
             guard let row else { return false }
-            deletions[target] = .init(target: target, requestId: requestId, title: row.title, take: nil, media: row)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: row.title, take: nil, media: row)
         case .project(let id):
             guard let project = projects.first(where: { $0.projectId == id }) else { return false }
-            deletions[target] = .init(target: target, requestId: requestId, title: project.title, take: nil, media: nil)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: project.title, take: nil, media: nil)
         }
         return true
     }
+    /// The person declined: nothing was deleted, so the row reads as it did before.
+    public mutating func cancelDelete(_ target: MediaTarget) {
+        guard let request = deletions.removeValue(forKey: target) else { return }
+        if case .recording = target, let take = request.take, !recent.contains(where: { $0.recordingId == take.recordingId }) {
+            recent.append(take)
+        }
+        if let row = request.media, !media.contains(where: { $0.target == target }) { media.append(row) }
+    }
+
+    /// The name the delete dialog uses for a listed item: an import's filename, a recording's
+    /// time (as its row reads), a project's title.
+    public func confirmationName(for target: MediaTarget) -> String? {
+        if let row = media.first(where: { $0.target == target }) ?? deletions[target]?.media {
+            return row.kind == .imported ? row.title : ElapsedTime.shortTime(of: row.createdAt)
+        }
+        if case .project(let id) = target { return projects.first { $0.projectId == id }?.title ?? deletions[target]?.title }
+        return nil
+    }
+
+    /// The plain dialog for a listed item, with its measured size where the page has one.
+    public func confirmation(for target: MediaTarget) -> DeleteConfirmation? {
+        guard let name = confirmationName(for: target) else { return nil }
+        let size = (media.first { $0.target == target } ?? deletions[target]?.media)?.sizeBytes
+        return .plain(target, name: name, sizeBytes: size)
+    }
+
     public mutating func finishDelete(_ target: MediaTarget, failure: String?) {
         guard deletions[target] != nil else { return }
         if let failure { deletions[target]?.failure = failure; return }
