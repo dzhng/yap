@@ -904,4 +904,40 @@ export class ScreenshotIndexStore<
       await setImmediate();
     }
   }
+
+  /** Force removal for owner retirement; retained index references cannot outlive the owner. */
+  async purge(owner: IndexOwner, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT identity,candidateCount FROM screenshot_index_generations WHERE ownerKind=? AND ownerId=? ORDER BY rowid LIMIT 1",
+        )
+        .get(...ownerIdentity(owner)) as { identity: string; candidateCount: number } | undefined;
+      if (!row) return;
+      const identity = JSON.parse(row.identity) as D["identity"];
+      const directory = this.directory(identity);
+      for (let ordinal = 0; ordinal <= row.candidateCount; ordinal++) {
+        try {
+          unlinkSync(join(directory, `${ordinal}.png`));
+        } catch (error) {
+          if (!missing(error)) throw error;
+        }
+      }
+      for (const table of ["screenshot_index_entries", "screenshot_index_coverage"])
+        this.store.catalog
+          .prepare(`DELETE FROM ${table} WHERE ownerKind=? AND ownerId=? AND generation=?`)
+          .run(...this.key(identity));
+      try {
+        rmdirSync(directory);
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+      this.store.catalog
+        .prepare(
+          "DELETE FROM screenshot_index_generations WHERE ownerKind=? AND ownerId=? AND generation=?",
+        )
+        .run(...this.key(identity));
+    }
+  }
 }

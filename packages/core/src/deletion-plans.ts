@@ -15,6 +15,15 @@ export type DeletionPlan = {
   createdAt: string;
 };
 
+export type DeletionRequest = {
+  requestId: string;
+  subjectKind: string;
+  subjectId: string;
+  cascade: boolean;
+  freedBytes: number;
+  result: Record<string, unknown> | null;
+};
+
 /** Durable deletion intent shared by every library subject. */
 export class DeletionPlans {
   constructor(private readonly store: Catalog) {
@@ -36,7 +45,93 @@ export class DeletionPlans {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS deletion_plan_members_subject
         ON deletion_plan_members(subjectKind, subjectId);
+      CREATE TABLE IF NOT EXISTS deletion_requests (
+        requestId TEXT PRIMARY KEY,
+        subjectKind TEXT NOT NULL,
+        subjectId TEXT NOT NULL,
+        cascade INTEGER NOT NULL CHECK(cascade IN (0,1)),
+        freedBytes INTEGER NOT NULL,
+        result TEXT
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS deletion_requests_subject
+        ON deletion_requests(subjectKind, subjectId);
     `);
+  }
+
+  request(requestId: string): DeletionRequest | null {
+    const row = this.store.catalog
+      .prepare(
+        "SELECT requestId,subjectKind,subjectId,cascade,freedBytes,result FROM deletion_requests WHERE requestId=?",
+      )
+      .get(requestId) as
+      | {
+          requestId: string;
+          subjectKind: string;
+          subjectId: string;
+          cascade: number;
+          freedBytes: number;
+          result: string | null;
+        }
+      | undefined;
+    return row
+      ? {
+          requestId: row.requestId,
+          subjectKind: row.subjectKind,
+          subjectId: row.subjectId,
+          cascade: row.cascade === 1,
+          freedBytes: row.freedBytes,
+          result: row.result === null ? null : (JSON.parse(row.result) as Record<string, unknown>),
+        }
+      : null;
+  }
+
+  requestsForSubject(subjectKind: string, subjectId: string): DeletionRequest[] {
+    const rows = this.store.catalog
+      .prepare(
+        "SELECT requestId,subjectKind,subjectId,cascade,freedBytes,result FROM deletion_requests WHERE subjectKind=? AND subjectId=? ORDER BY requestId",
+      )
+      .all(subjectKind, subjectId) as Array<{
+      requestId: string;
+      subjectKind: string;
+      subjectId: string;
+      cascade: number;
+      freedBytes: number;
+      result: string | null;
+    }>;
+    return rows.map((row) => ({
+      requestId: row.requestId,
+      subjectKind: row.subjectKind,
+      subjectId: row.subjectId,
+      cascade: row.cascade === 1,
+      freedBytes: row.freedBytes,
+      result: row.result === null ? null : (JSON.parse(row.result) as Record<string, unknown>),
+    }));
+  }
+
+  recordRequest(
+    requestId: string,
+    subjectKind: string,
+    subjectId: string,
+    cascade: boolean,
+    freedBytes: number,
+  ): void {
+    this.store.catalog
+      .prepare(
+        "INSERT OR IGNORE INTO deletion_requests(requestId,subjectKind,subjectId,cascade,freedBytes,result) VALUES(?,?,?,?,?,NULL)",
+      )
+      .run(requestId, subjectKind, subjectId, cascade ? 1 : 0, freedBytes);
+  }
+
+  saveSubjectRequestResults(
+    subjectKind: string,
+    subjectId: string,
+    result: Record<string, unknown>,
+  ): void {
+    this.store.catalog
+      .prepare(
+        "UPDATE deletion_requests SET result=? WHERE subjectKind=? AND subjectId=? AND result IS NULL",
+      )
+      .run(JSON.stringify(result), subjectKind, subjectId);
   }
 
   get(subjectKind: string, subjectId: string): DeletionPlan | null {

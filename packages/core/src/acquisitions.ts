@@ -570,6 +570,11 @@ export class AcquisitionImporter {
   managedPaths(acquisitionId: string): readonly string[] {
     return [join(this.directory, acquisitionId)];
   }
+  /** Remove one admitted acquisition after its queue owner has drained. */
+  async purge(acquisitionId: string, signal: AbortSignal): Promise<void> {
+    await this.evidence.purge({ kind: "acquisition", acquisitionId }, signal);
+    await rm(join(this.directory, acquisitionId), { recursive: true, force: true });
+  }
   async prepareImport(requestId: string, path: string): Promise<PreparedAcquisition> {
     if (!requestId || !isAbsolute(path))
       throw new CatalogError(

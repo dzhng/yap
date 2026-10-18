@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { statSync } from "node:fs";
 import { fileIdentity, type IdentifiedFile } from "./files.js";
@@ -235,6 +235,32 @@ export class ImportedTranscriptStore {
       )
       .get(sourceKey(source)) as { generation: string } | undefined;
     return row ? this.get(source, row.generation) : null;
+  }
+
+  /** The owning asset has been fenced; reclaim every imported generation and its raw file tree. */
+  async purge(assetId: string, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT generation FROM imported_transcripts WHERE json_extract(source,'$.assetId')=? ORDER BY rowid LIMIT 1",
+        )
+        .get(assetId) as { generation: string } | undefined;
+      if (!row) break;
+      await rm(join(this.home, "transcripts", "imported", assetId, row.generation), {
+        recursive: true,
+        force: true,
+      });
+      this.store.transaction(() => {
+        this.store.catalog
+          .prepare("DELETE FROM imported_transcript_cues WHERE generation=?")
+          .run(row.generation);
+        this.store.catalog
+          .prepare("DELETE FROM imported_transcripts WHERE generation=?")
+          .run(row.generation);
+      });
+    }
+    await rm(join(this.home, "transcripts", "imported", assetId), { recursive: true, force: true });
   }
 
   portableGenerations(assetId: string): PortableImportedTranscript[] {

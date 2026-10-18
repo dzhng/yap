@@ -479,6 +479,19 @@ export class AlignmentEvidenceStore {
       if (rows.length < 100) return;
     }
   }
+  /** Force removal for owner retirement; retained references cannot outlive the asset. */
+  async purge(assetId: string, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT generation,policy FROM alignment_evidence_generations WHERE ownerId=? ORDER BY rowid LIMIT 1",
+        )
+        .get(assetId) as { generation: string; policy: "alignment-v1" } | undefined;
+      if (!row) return;
+      this.remove({ owner: { kind: "asset", assetId }, ...row });
+    }
+  }
   private row(identity: AlignmentEvidenceIdentity) {
     return this.store.catalog
       .prepare(

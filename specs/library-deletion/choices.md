@@ -295,3 +295,14 @@ Evidence and publication generations remain strings under the single public fiel
 
 - **`recording.get` without an id and no take refuses `NOT_FOUND`** (sound). The latest-take shorthand has the same absence contract as an id-specific get; macOS callers treat that refusal as “no take yet.”
 - **Stored job results keep `bytes` on published file receipts and `range` on the audio job publication** (questionable, user verdict pending). Both live inside job results retained on disk; renaming them would move every renderer pin that emits them and discard valid evidence. The naming lint covers operation params and exported protocol records, not retained job payloads. Revisit if a later slice already moves those pins.
+
+## Slice 08: asset deletion
+
+- **Cascade ownership stays in `LibraryDeletion`** (sound). Asset retirement records members and the coordinator invokes the registered project, asset and acquisition retirements, so there is one crash-resumable deletion path.
+- **The subject's own files and rows finish before cascade members run** (sound). The asset is fenced and removed first; recorded members then retire through their own owners without sharing a second asset cleanup path.
+- **Member traversal uses the plan's stable `(memberKind, memberId)` order** (sound). Replaying the same plan sees the same members and can safely skip members already retired before a crash.
+- **Row cleanup uses 256-row pages** (sound). The page matches the existing owner-reference and job-retirement bounds and keeps each resume turn bounded.
+- **Asset retirement force-purges retained evidence** (sound). Once the asset is tombstoned, no retained transcript, scene, index, alignment, speaker or cache reference can outlive its source asset.
+- **Cascade results report `cascadeFreesBytes`** (sound). A cascade removes every user recorded by the refusal query, so its byte result must match the same measured closure the refusal exposed.
+- **`ASSET_DELETED` is a non-retryable conflict and `IN_USE` is a non-retryable destructive refusal** (sound). A deleted import request cannot be replayed, while a live owner requires an explicit cascade decision.
+- **Finished deletion request results live in the durable deletion-plan owner** (sound). Replaying the same request after restart must return its saved `freedBytes` even after the subject row and plan are gone.

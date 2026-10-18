@@ -65,7 +65,7 @@ parallel; 09 waits for 08.
 - [x] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
 - [x] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
 - [x] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
-- [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
+- [x] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
 - [ ] 09 `recording.delete` takes its copies — [slices/09-recording-delete.md](slices/09-recording-delete.md)
 - [ ] 10 `project.duplicate` — [slices/10-project-duplicate.md](slices/10-project-duplicate.md)
 - [ ] 11 `model.remove` and model storage — [slices/11-model-remove.md](slices/11-model-remove.md)

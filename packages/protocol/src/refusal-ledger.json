@@ -140,6 +140,13 @@
         "packages/core/src/assets.ts": 2
       }
     },
+    "ASSET_DELETED": {
+      "category": "conflict",
+      "retryable": false,
+      "files": {
+        "packages/core/src/assets.ts": 2
+      }
+    },
     "AUDIO_FORMAT_CHANGED": {
       "category": "conflict",
       "retryable": false,
@@ -1211,6 +1218,13 @@
         "packages/composition/src/source-projection.ts": 2
       }
     },
+    "IN_USE": {
+      "category": "destructive",
+      "retryable": false,
+      "files": {
+        "apps/service/src/asset-retirement.ts": 1
+      }
+    },
     "IO_ERROR": {
       "category": "execution-failure",
       "retryable": false,
@@ -1577,6 +1591,8 @@
       "retryable": false,
       "files": {
         "apps/cli/src/wait.ts": 1,
+        "apps/service/src/acquisition-retirement.ts": 1,
+        "apps/service/src/asset-retirement.ts": 1,
         "apps/service/src/capture-sources.ts": 1,
         "apps/service/src/exports.ts": 2,
         "apps/service/src/package-registry.ts": 2,
@@ -1983,7 +1999,7 @@
         "apps/service/src/capture-sources.ts": 1,
         "apps/service/src/delivery.ts": 1,
         "apps/service/src/exports.ts": 5,
-        "apps/service/src/library-deletion.ts": 1,
+        "apps/service/src/library-deletion.ts": 2,
         "apps/service/src/project-packages.ts": 1,
         "packages/core/src/acquisitions.ts": 3,
         "packages/core/src/assets.ts": 1,

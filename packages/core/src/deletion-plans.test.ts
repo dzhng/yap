@@ -24,7 +24,11 @@ test("deletion plan tables are additive and idempotent on format 29", async () =
           "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'deletion_%' ORDER BY name",
         )
         .all(),
-    ).toEqual([{ name: "deletion_plan_members" }, { name: "deletion_plans" }]);
+    ).toEqual([
+      { name: "deletion_plan_members" },
+      { name: "deletion_plans" },
+      { name: "deletion_requests" },
+    ]);
     second.close();
   } finally {
     await rm(home, { recursive: true, force: true });

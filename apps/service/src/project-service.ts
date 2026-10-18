@@ -1,9 +1,11 @@
 import { verifyJoin } from "./join-verification.js";
 import { AssetConversionJobs, assetConversionRuntime } from "./asset-conversion.js";
 import { UpdateAdmission } from "./update-admission.js";
-import { LibraryDeletion } from "./library-deletion.js";
+import { LibraryDeletion, type DeletionFault } from "./library-deletion.js";
 import { recordingRetirement } from "./recording-retirement.js";
 import { projectRetirement } from "./project-retirement.js";
+import { assetRetirement } from "./asset-retirement.js";
+import { acquisitionRetirement } from "./acquisition-retirement.js";
 import { CaptureCleanup } from "./capture-cleanup.js";
 import { ManagedStorage } from "@yap/core/storage";
 import { filteredPage, pageCursor, pageEnvelope, pageFilters } from "@yap/core/page-cursor";
@@ -245,6 +247,7 @@ export async function startProjectService(options: {
   presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
+  deletionFault?: DeletionFault;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
 }) {
   const started = performance.now();
@@ -1014,7 +1017,13 @@ export async function startProjectService(options: {
     await sourceIndex.recoverPending("asset", new AbortController().signal);
     await projectIndex.recoverPending("project", new AbortController().signal);
     libraryUsers = new LibraryUsers(captures, {
-      asset: (id) => [assets.path(id)],
+      asset: (id) => [
+        assets.path(id),
+        join(library, "transcripts", "assets", id),
+        join(library, "transcripts", "imported", id),
+        ...sourceIndex.ownedPaths({ kind: "asset", assetId: id }),
+        ...cache.ownedPaths({ kind: "asset", assetId: id }),
+      ],
       acquisition: (id) => acquisitionImports.managedPaths(id),
       recording: (id) => files.recordingPaths(id),
       project: (id) => [
@@ -1132,7 +1141,10 @@ export async function startProjectService(options: {
     await speakers.cleanup(modelLifetime.signal);
     await alignments.cleanup(modelLifetime.signal);
     await indexes.cleanup(modelLifetime.signal);
-    const libraryDeletion = new LibraryDeletion(plans);
+    const libraryDeletion = new LibraryDeletion(
+      plans,
+      options.deletionFault === undefined ? {} : { fault: options.deletionFault },
+    );
     deletion = libraryDeletion;
     libraryDeletion.register(
       projectRetirement({
@@ -1146,6 +1158,31 @@ export async function startProjectService(options: {
         index: projectIndex,
         freedBytes: (id: string) =>
           libraryUsers?.usersOf({ kind: "project", id } as never).freesBytes ?? 0,
+      }),
+    );
+    libraryDeletion.register(
+      acquisitionRetirement({
+        catalog: captures,
+        store: acquisitions,
+        importer: acquisitionImports,
+        jobs: queue,
+      }),
+    );
+    libraryDeletion.register(
+      assetRetirement({
+        catalog: captures,
+        assets,
+        users: libraryUsers!,
+        transcripts: transcriptStore,
+        importedTranscripts,
+        scenes: sceneRecords,
+        indexes: sourceIndex,
+        alignments: alignmentRecords,
+        speakers: speakerRecords,
+        cache,
+        jobs: queue,
+        files,
+        delivery,
       }),
     );
     const status = (jobId: string) => {
@@ -1369,6 +1406,19 @@ export async function startProjectService(options: {
               data: await deletion!.delete(
                 { kind: "recording", id: operation.params.recordingId },
                 { requestId: operation.params.requestId },
+              ),
+            };
+          case "asset.delete":
+            return {
+              ok: true,
+              data: await deletion!.delete(
+                { kind: "asset", id: operation.params.assetId },
+                {
+                  requestId: operation.params.requestId,
+                  ...(operation.params.cascade === undefined
+                    ? {}
+                    : { cascade: operation.params.cascade }),
+                },
               ),
             };
           case "recording.cleanup":

@@ -21,6 +21,12 @@ export type DeletionRegistration = {
   ) =>
     | readonly { memberKind: string; memberId: string }[]
     | Promise<readonly { memberKind: string; memberId: string }[]>;
+  cascadeMembers?: (
+    subject: LibrarySubject,
+    members: readonly { memberKind: string; memberId: string }[],
+    signal: AbortSignal,
+    deleteMember: (subject: LibrarySubject) => Promise<Record<string, unknown>>,
+  ) => void | Promise<void>;
   tombstone: (subject: LibrarySubject) => boolean | Promise<boolean>;
   scope?: (
     subject: LibrarySubject,
@@ -46,7 +52,7 @@ export type DeletionRegistration = {
   clearTombstone?: (subject: LibrarySubject) => void | Promise<void>;
   markersPage?: (afterId?: string) => { subjects: LibrarySubject[]; nextAfterId: string | null };
   result?: (subject: LibrarySubject) => Record<string, unknown>;
-  freedBytes?: (subject: LibrarySubject) => number;
+  freedBytes?: (subject: LibrarySubject, cascade: boolean) => number;
 };
 
 /** One crash-resumable ordering for every library subject kind. */
@@ -84,6 +90,16 @@ export class LibraryDeletion {
     const registration = this.requireRegistration(subject.kind);
     const cascade = options.cascade ?? false;
     if (options.requestId) {
+      const stored = this.plans.request(options.requestId);
+      if (stored) {
+        if (
+          stored.subjectKind !== subject.kind ||
+          stored.subjectId !== subject.id ||
+          stored.cascade !== cascade
+        )
+          throw new CatalogError("REQUEST_CONFLICT", "Request identity names a different deletion");
+        if (stored.result) return Promise.resolve(stored.result);
+      }
       const prior = this.requests.get(options.requestId);
       if (prior) {
         if (prior.kind !== subject.kind || prior.id !== subject.id || prior.cascade !== cascade)
@@ -95,6 +111,16 @@ export class LibraryDeletion {
     const existing = this.active.get(key);
     if (existing) {
       if (options.requestId) {
+        if (!this.plans.request(options.requestId)) {
+          const pending = this.plans.requestsForSubject(subject.kind, subject.id)[0];
+          this.plans.recordRequest(
+            options.requestId,
+            subject.kind,
+            subject.id,
+            cascade,
+            pending?.freedBytes ?? registration.freedBytes?.(subject, cascade) ?? 0,
+          );
+        }
         this.requests.set(options.requestId, {
           kind: subject.kind,
           id: subject.id,
@@ -108,7 +134,7 @@ export class LibraryDeletion {
       }
       return existing;
     }
-    const result = this.remove(subject, registration, cascade).finally(() => {
+    const result = this.remove(subject, registration, cascade, options.requestId).finally(() => {
       this.active.delete(key);
       this.onUpdateProgress?.();
     });
@@ -127,39 +153,55 @@ export class LibraryDeletion {
     subject: LibrarySubject,
     registration: DeletionRegistration,
     cascade: boolean,
+    requestId?: string,
   ): Promise<Record<string, unknown>> {
     try {
-      const freedBytes = registration.freedBytes?.(subject) ?? 0;
+      const storedRequest = requestId ? this.plans.request(requestId) : null;
+      const pendingRequest = this.plans.requestsForSubject(subject.kind, subject.id)[0];
+      const freedBytes =
+        storedRequest?.freedBytes ??
+        pendingRequest?.freedBytes ??
+        registration.freedBytes?.(subject, cascade) ??
+        0;
       let plan = this.plans.get(subject.kind, subject.id);
       if (!plan) {
         const checked = registration.checkUsers?.(subject, cascade);
         const members =
           checked === undefined ? [] : checked instanceof Promise ? await checked : checked;
         if (this.options.fault) await this.boundary("check", subject, "before");
+        if (this.options.fault) await this.boundary("check", subject, "after");
         if (this.options.fault) await this.boundary("plan", subject, "before");
         plan = this.plans.create(subject.kind, subject.id, cascade, members);
+        if (requestId && !storedRequest)
+          this.plans.recordRequest(requestId, subject.kind, subject.id, cascade, freedBytes);
         if (this.options.fault) await this.boundary("plan", subject, "after");
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
-          return {
+          const result = {
             ...(registration.result?.(subject) ?? {
               [subject.kind + "Id"]: subject.id,
               deleted: true,
             }),
             freedBytes,
           };
+          this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
+          return result;
         }
         if (this.options.fault) await this.boundary("tombstone", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "tombstoned");
         if (this.options.fault) await this.boundary("tombstone", subject, "after");
         plan = { ...plan, phase: "tombstoned" };
       }
+      if (requestId && !storedRequest)
+        this.plans.recordRequest(requestId, subject.kind, subject.id, cascade, freedBytes);
       await this.resumePlan(subject, registration, plan);
-      return {
+      const result = {
         ...(registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true }),
         freedBytes,
       };
+      this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
+      return result;
     } catch (error) {
       if (registration.errorMode !== "delete-failed" && error instanceof CatalogError)
         throw new CatalogError(error.code, error.message, {
@@ -218,6 +260,13 @@ export class LibraryDeletion {
         plan = { ...plan, phase: "rows" };
       }
       if (plan.phase === "rows") {
+        if (plan.cascade && registration.cascadeMembers)
+          await registration.cascadeMembers(
+            subject,
+            this.plans.members(subject.kind, subject.id),
+            this.lifetime.signal,
+            (member) => this.delete(member, { cascade: true }),
+          );
         await registration.clearTombstone?.(subject);
         if (this.options.fault) await this.boundary("clear", subject, "before");
         if (this.options.fault) await this.boundary("clear", subject, "after");

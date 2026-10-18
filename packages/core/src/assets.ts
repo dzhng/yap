@@ -274,7 +274,12 @@ export class AssetStore {
     if (!row) return null;
     if (row.path !== path)
       throw new CatalogError("REQUEST_CONFLICT", "Import request ID already names another path");
-    return this.intent(row.importId as string);
+    const intent = this.intent(row.importId as string);
+    if (intent.assetId !== null && !this.has(intent.assetId))
+      throw new CatalogError("ASSET_DELETED", "The imported asset has been deleted", {
+        assetId: intent.assetId,
+      });
+    return intent;
   }
   intent(importId: string): ImportIntent {
     const row = this.store.catalog
@@ -297,6 +302,10 @@ export class AssetStore {
   ): Promise<Asset> {
     const intent = this.intent(importId);
     if (intent.assetId) {
+      if (!this.has(intent.assetId))
+        throw new CatalogError("ASSET_DELETED", "The imported asset has been deleted", {
+          assetId: intent.assetId,
+        });
       const asset = this.get(intent.assetId);
       if (owner) this.retain(owner, [asset.id]);
       return asset;

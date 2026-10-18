@@ -1272,7 +1272,18 @@ export class TranscriptStore implements TranscriptRecords {
 
   /** The caller has fenced this owner and stopped every transcript producer. */
   async purge(owner: TranscriptOwner, signal: AbortSignal): Promise<void> {
-    await this.reclaim(owner, () => false, signal);
+    for (;;) {
+      signal.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT generation FROM transcript_generations WHERE ownerKind=? AND ownerId=? ORDER BY generation LIMIT 1",
+        )
+        .get(...ownerIdentity(owner)) as { generation: string } | undefined;
+      if (!row) break;
+      await this.remove({ owner, generation: row.generation }, signal);
+    }
+    const parent = await this.parent(owner);
+    if (parent) await rm(parent, { recursive: true, force: true });
   }
 }
 

@@ -540,6 +540,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("asset.delete"),
+      params: z.object({ assetId: id, requestId: id, cascade: z.boolean().optional() }).strict(),
+    })
+    .strict()
+    .describe(
+      "Delete an asset and its retained evidence after checking library users. Without cascade, an asset used by a project, acquisition or derived asset refuses with IN_USE details; cascade explicitly retires those users. Replay requestId to recover the same result.",
+    ),
+  z
+    .object({
       operation: z.literal("asset.segments"),
       params: pageParams({ assetId: id, streamId: z.string().min(1) }),
     })
@@ -1722,6 +1731,7 @@ const waits: Partial<Record<OperationName, number>> = {
   "package.open": drain,
   "package.close": drain,
   "recording.delete": drain,
+  "asset.delete": drain,
   "job.cancel": drain,
   "project.delete": drain,
   "storage.usage": drain,

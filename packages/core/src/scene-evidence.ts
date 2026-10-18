@@ -777,6 +777,22 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
       await setImmediate();
     }
   }
+
+  /** Force removal for owner retirement; retained references cannot outlive their owner. */
+  async purge(owner: SceneOwner, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT sourceId,generation,policy FROM scene_evidence_generations WHERE ownerKind=? AND ownerId=? ORDER BY rowid LIMIT 1",
+        )
+        .get(...ownerIdentity(owner)) as
+        | { sourceId: string; generation: string; policy: string }
+        | undefined;
+      if (!row) return;
+      await this.remove({ ...row, owner });
+    }
+  }
 }
 
 export type SceneEvidenceRead = Pick<SceneEvidenceStore, "page">;
