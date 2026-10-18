@@ -464,9 +464,9 @@ test("source pagination and phrase matches retain exact ordinals across storage 
       partial: false,
     },
   ]);
-  expect(rows.slice(gap - 1, gap + 2).map((row) => (row.type === "word" ? row.id : "gap"))).toEqual(
-    ["w1499", "gap", "w1500"],
-  );
+  expect(
+    rows.slice(gap - 1, gap + 2).map((row) => (row.type === "word" ? row.wordId : "gap")),
+  ).toEqual(["w1499", "gap", "w1500"]);
   const first = read.search({ text: "WORD999 word0", limit: 1 });
   expect(first.entries).toEqual([
     { wordIds: ["w999", "w1000"], sourceRange: { startUs: 2997000, endUs: 3002000 } },

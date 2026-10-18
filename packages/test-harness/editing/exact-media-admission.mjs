@@ -122,7 +122,7 @@ try {
       expectedEnd,
       `${name}: discovery rounded physical endpoint`,
     );
-    const selection = { assetId: asset.id, streamId: asset.streams[0].id };
+    const selection = { assetId: asset.id, streamId: asset.streams[0].streamId };
     const segments = await call("asset.segments", { ...selection, limit: 1 });
     assert.deepEqual(segments.segments[0].endUs, expectedEnd);
     report.assets.push({ name, sha256: hash(bytes), asset, segments });
@@ -195,7 +195,7 @@ try {
   async function edit(operations, transport = "cli") {
     const result = await call(
       "edit.apply",
-      { projectId, expectedRevisionId: revision.id, requestId: randomUUID(), operations },
+      { projectId, expectedRevisionId: revision.revisionId, requestId: randomUUID(), operations },
       { transport },
     );
     revision = result.revision;
@@ -232,7 +232,7 @@ try {
   const stereo = Buffer.alloc((original.frames + 480) * 8);
   for (let f = 0; f < original.frames; f++)
     for (let c = 0; c < 2; c++) original.pcm.copy(stereo, f * 8 + c * 4, f * 4, f * 4 + 4);
-  const selected = () => ({ projectId, revisionId: revision.id });
+  const selected = () => ({ projectId, revisionId: revision.revisionId });
   const late = { startUs: 5000000, endUs: Math.ceil(projectEnd.numerator / 3) };
   await audio(
     { ...selected(), range: late },
@@ -247,7 +247,7 @@ try {
   await audio(selected(), "project-split", stereo);
   revision = await call("edit.undo", {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     requestId: randomUUID(),
   });
   assert.deepEqual(revision.document, originalDocument);
@@ -274,12 +274,12 @@ try {
     expectedEnd,
   );
   await audio(selected(), "project-replaced", stereo);
-  const revisionBeforeFailure = revision.id;
+  const revisionBeforeFailure = revision.revisionId;
   const bad = await call(
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: revision.id,
+      expectedRevisionId: revision.revisionId,
       requestId: randomUUID(),
       operations: [replace(floorEnd + 1)],
     },

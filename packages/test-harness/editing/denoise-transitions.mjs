@@ -96,11 +96,11 @@ export async function denoiseTransitions({
   });
   const projectId = made.project.projectId;
   let revision = made.revision;
-  const selection = () => ({ projectId, revisionId: revision.id });
+  const selection = () => ({ projectId, revisionId: revision.revisionId });
   async function edit(name, operations) {
     const result = await call(
       "edit.apply",
-      { projectId, expectedRevisionId: revision.id, requestId: name, operations },
+      { projectId, expectedRevisionId: revision.revisionId, requestId: name, operations },
       { transport: "mcp" },
     );
     revision = result.revision;
@@ -119,7 +119,7 @@ export async function denoiseTransitions({
       clip: {
         trackId: { label: "voice" },
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
       },
@@ -181,7 +181,7 @@ export async function denoiseTransitions({
   );
   revision = await call("edit.restore", {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     requestId: "transition-restore",
     targetRevisionId: initial.revisionId,
   });
@@ -216,7 +216,7 @@ export async function denoiseTransitions({
   await inspect(await prepare(selection()), 0, 6000000, "transition-trimmed", 1, trimmed, 2);
   revision = await call("edit.restore", {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     requestId: "transition-parent-restore",
     targetRevisionId: initial.revisionId,
   });
@@ -240,7 +240,7 @@ export async function denoiseTransitions({
       clip: {
         trackId: { label: "other" },
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
         placement: { kind: "project", range: { startUs: 1000000, endUs: 4000000 } },
       },
@@ -338,7 +338,7 @@ export async function denoiseTransitions({
   );
   revision = await call("edit.undo", {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     requestId: "transition-parent-undo",
   });
   await projectAudio(
@@ -356,14 +356,15 @@ export async function denoiseTransitions({
     2,
   );
   assert.deepEqual(
-    (await call("revision.get", { projectId, revisionId: parent.revision.id })).revision.document,
+    (await call("revision.get", { projectId, revisionId: parent.revision.revisionId })).revision
+      .document,
     parent.revision.document,
   );
   await writeFile(join(out, "transition-expected.f32"), expected);
   await writeFile(join(out, "transition-wrong-phase.f32"), wrongPhase);
   report.transitions = {
     initial,
-    parent: { projectId, revisionId: parent.revision.id },
+    parent: { projectId, revisionId: parent.revision.revisionId },
     current: selection(),
     resetAtZeroDiffers: true,
     wrongPhaseDiffers: true,

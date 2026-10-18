@@ -108,10 +108,10 @@ function rawPage(operands: AlignmentOperands, operand: keyof AlignmentOperands, 
   const end = Math.min(offset + 32768, bytes.length);
   return {
     bytesBase64: bytes.subarray(offset, end).toString("base64"),
-    offset,
+    offsetBytes: offset,
     totalBytes: bytes.length,
     sha256: alignmentDigest(bytes),
-    nextOffset: end < bytes.length ? end : null,
+    nextOffsetBytes: end < bytes.length ? end : null,
   };
 }
 /** Immutable package reads share admission, row identity and delivery budgets with the catalog. */
@@ -189,7 +189,7 @@ export function assetAlignmentOwner(
       !isDeepStrictEqual(selected.durationUs, source.durationUs) ||
       !isDeepStrictEqual(selected.expectedPCM, {
         sampleRate: source.pcm.sampleRate,
-        frames: source.pcm.frames,
+        frames: source.pcm.frameCount,
       })
     )
       throw new CatalogError("ARTIFACT_CHANGED", "Alignment source support or clock changed");

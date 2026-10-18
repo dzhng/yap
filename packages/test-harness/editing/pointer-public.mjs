@@ -47,7 +47,7 @@ try {
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: "pointer",
       operations: [
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -70,7 +70,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const selection = { projectId, revisionId: edited.revision.id };
+  const selection = { projectId, revisionId: edited.revision.revisionId };
   const pictureRequest = { ...selection, atUs: 1000000, maxLongEdge: 256 };
   const coldExportId = randomUUID();
   const coldHit = await service.arm("media.presentationEvidence");
@@ -319,7 +319,7 @@ try {
       },
       { transport: "mcp" },
     );
-    revisionId = changed.revision.id;
+    revisionId = changed.revision.revisionId;
     const rendered = await picture({ projectId, revisionId }, 1000000, "stack-" + name);
     const reference = await readFile(
       new URL(
@@ -348,7 +348,7 @@ try {
       },
     ],
   });
-  const identitySelection = { projectId, revisionId: restored.revision.id };
+  const identitySelection = { projectId, revisionId: restored.revision.revisionId };
   const dry = await picture(identitySelection, 1000000, "tap-dry", {
     target: { kind: "clip", id: clipId },
     point: { kind: "dry" },
@@ -362,7 +362,7 @@ try {
   report.checks.taps = { dry, afterPointer };
   const split = await call("edit.apply", {
     projectId,
-    expectedRevisionId: restored.revision.id,
+    expectedRevisionId: restored.revision.revisionId,
     requestId: "split-pointer",
     operations: [
       {
@@ -373,7 +373,7 @@ try {
       },
     ],
   });
-  const splitSelection = { projectId, revisionId: split.revision.id };
+  const splitSelection = { projectId, revisionId: split.revision.revisionId };
   const splitChecks = [];
   for (const atUs of [900000, 950001, 1000000, 1100000, 1500000]) {
     const original = await picture(identitySelection, atUs, "split-original-" + atUs);
@@ -385,7 +385,7 @@ try {
   const rightId = split.edit.labels.right;
   const held = await call("edit.apply", {
     projectId,
-    expectedRevisionId: split.revision.id,
+    expectedRevisionId: split.revision.revisionId,
     requestId: "hold-pointer",
     operations: [
       {
@@ -401,7 +401,7 @@ try {
   const heldChecks = [];
   for (const atUs of [1000000, 1300000, 1900000]) {
     const rendered = await picture(
-      { projectId, revisionId: held.revision.id },
+      { projectId, revisionId: held.revision.revisionId },
       atUs,
       "held-" + atUs,
     );
@@ -411,7 +411,7 @@ try {
   report.checks.held = heldChecks;
   const retimed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: held.revision.id,
+    expectedRevisionId: held.revision.revisionId,
     requestId: "retime-pointer",
     operations: [
       {
@@ -432,7 +432,7 @@ try {
   ]) {
     const original = await picture(identitySelection, sourceUs, "retime-source-" + sourceUs);
     const rendered = await picture(
-      { projectId, revisionId: retimed.revision.id },
+      { projectId, revisionId: retimed.revision.revisionId },
       atUs,
       "retimed-" + atUs,
     );
@@ -443,7 +443,7 @@ try {
   const historyBeforeRepeat = history().job;
   const repeated = await call("edit.apply", {
     projectId,
-    expectedRevisionId: retimed.revision.id,
+    expectedRevisionId: retimed.revision.revisionId,
     requestId: "repeat-pointer",
     operations: [
       {
@@ -455,7 +455,7 @@ try {
     ],
   });
   const replay = await picture(
-    { projectId, revisionId: repeated.revision.id },
+    { projectId, revisionId: repeated.revision.revisionId },
     7000000,
     "repeated",
   );
@@ -474,7 +474,7 @@ try {
     () =>
       call(
         "preview.get",
-        { projectId, revisionId: repeated.revision.id },
+        { projectId, revisionId: repeated.revision.revisionId },
         { output: join(out, "repeated-preview.mp4") },
       ),
     (v) => v.state === "ready",
@@ -525,7 +525,7 @@ try {
     const p = await call("project.create", { requestId: id, canvas });
     const changed = await call("edit.apply", {
       projectId: p.project.projectId,
-      expectedRevisionId: p.revision.id,
+      expectedRevisionId: p.revision.revisionId,
       requestId: id,
       operations: [
         { operation: "track.add", label: "track", track: { kind: "video", order: 0 } },
@@ -548,7 +548,7 @@ try {
     });
     return {
       projectId: p.project.projectId,
-      revisionId: changed.revision.id,
+      revisionId: changed.revision.revisionId,
       clipId: changed.edit.labels.clip,
     };
   }
@@ -642,7 +642,7 @@ try {
     ],
   });
   const inactiveEmpty = await picture(
-    { projectId: emptyProject.projectId, revisionId: shiftedEmpty.revision.id },
+    { projectId: emptyProject.projectId, revisionId: shiftedEmpty.revision.revisionId },
     0,
     "missing-observations-inactive",
     { target: { kind: "clip", id: emptyProject.clipId }, point: { kind: "processed" } },

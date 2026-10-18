@@ -103,7 +103,7 @@ async function fixture() {
       });
     if (control.fail)
       return {
-        pcm: { ...speakerSource.pcm, frames },
+        pcm: { ...speakerSource.pcm, frameCount: frames },
         operands: {
           nativeReceipt: nativeOutput(
             ["0.000 30.001 speaker_0"],
@@ -115,7 +115,7 @@ async function fixture() {
         failure: new CatalogError("MODEL_CONTRACT_CHANGED", "Native endpoint is outside support"),
       };
     return {
-      pcm: { ...speakerSource.pcm, frames },
+      pcm: { ...speakerSource.pcm, frameCount: frames },
       operands: nativeOutput(undefined, request.engine.modelSha256, frames),
     };
   };
@@ -344,7 +344,7 @@ test("selected-range preparation publishes an independent bounded generation", a
     await new Promise((resolve) => setTimeout(resolve, 5));
   expect(f.processing.sourceStatus(selected).state).toBe("ready");
   expect(f.processing.sourceStatus(selected).published?.evidence).toMatchObject({
-    source: { observationRange: selected.sourceRange, pcm: { frames: 160_000 } },
+    source: { observationRange: selected.sourceRange, pcm: { frameCount: 160_000 } },
     scoreCount: 125,
   });
   expect(f.requests).toHaveLength(1);

@@ -25,7 +25,11 @@ export const alignmentEvidenceSourceSchema = z.strictObject({
   durationUs: timeValueSchema,
   observationRange: selectionRangeSchema,
   text: z.string().min(1).max(8192),
-  pcm: z.strictObject({ sha256, sampleRate: z.literal(16000), frames: z.int().min(1).max(400000) }),
+  pcm: z.strictObject({
+    sha256,
+    sampleRate: z.literal(16000),
+    frameCount: z.int().min(1).max(400000),
+  }),
   decoder: z.strictObject({
     recipe: z.literal("source-selected-span-avfoundation-f32-16k-v1"),
     workerSha256: sha256,
@@ -232,7 +236,7 @@ export function alignmentOperandRows(
       "Invalid native alignment correspondence operand",
     );
   const frameCount = native.shape[0],
-    frames = source.pcm.frames;
+    frames = source.pcm.frameCount;
   if (
     native.text !== source.text ||
     report.candidate.text !== source.text ||

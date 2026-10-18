@@ -138,7 +138,7 @@ async function adoptedMedia(t, kind) {
   await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       {
@@ -146,7 +146,7 @@ async function adoptedMedia(t, kind) {
         clip: {
           trackId: { label: "video" },
           assetId: asset.assetId,
-          streamId: video.id,
+          streamId: video.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -199,7 +199,7 @@ async function adoptedMedia(t, kind) {
   const { admissions } = await call("package.status");
   assert.equal(admissions.length, 1, JSON.stringify(admissions));
   const [opening] = admissions;
-  const opened = await ready(() => call("package.status", { admissionId: opening.id }));
+  const opened = await ready(() => call("package.status", { admissionId: opening.packageId }));
   const requestId = randomUUID();
   const adopted = await ready(() =>
     call("package.adopt", { packageHandle: opened.packageHandle, requestId }),
@@ -214,7 +214,7 @@ async function adoptedMedia(t, kind) {
   const selected = {
     assetId: adoptedAssetId,
     streamId: adoptedAsset.streams.find((s) => s.kind === (kind === "frame" ? "video" : "audio"))
-      .id,
+      .streamId,
   };
   const request = {
     ...selected,
@@ -240,7 +240,7 @@ async function adoptedMedia(t, kind) {
     maxBytes: signature.length,
   });
   assert.deepEqual(Buffer.from(content.data, "base64"), signature);
-  await call("package.close", { admissionId: opening.id });
+  await call("package.close", { admissionId: opening.packageId });
   assert.deepEqual(
     await call("artifact.read", {
       token: retried.delivery.token,

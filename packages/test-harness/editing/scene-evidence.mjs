@@ -150,7 +150,7 @@ try {
   const asset = await call("asset.get", { assetId: originalHash });
   const selection = {
     assetId: originalHash,
-    streamId: asset.streams.find((s) => s.kind === "video").id,
+    streamId: asset.streams.find((s) => s.kind === "video").streamId,
   };
   assert.ok(selection.streamId);
   const barrier = await service.arm("media.sourceVisualSamples");
@@ -229,7 +229,7 @@ try {
   const edited = await call("edit.apply", {
     projectId: project.project.projectId,
     requestId: "scene-placements",
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
       ...plans.map((p) => ({
@@ -244,7 +244,7 @@ try {
       })),
     ],
   });
-  const query = { projectId: project.project.projectId, revisionId: edited.revision.id };
+  const query = { projectId: project.project.projectId, revisionId: edited.revision.revisionId };
   const projected = await pages(query);
   const actual = projected.rows
     .filter((r) => r.kind !== "cut")

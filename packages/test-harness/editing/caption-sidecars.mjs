@@ -64,7 +64,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "captions" },
       ...[
@@ -87,19 +87,19 @@ try {
     ],
   });
   const placementIds = [edited.edit.labels.second, edited.edit.labels.first];
-  const base = { projectId, revisionId: edited.revision.id, placementIds, directory: out };
+  const base = { projectId, revisionId: edited.revision.revisionId, placementIds, directory: out };
   const request = { ...base, kind: "srt", requestId: randomUUID(), leaf: "captions.srt" };
   const held = await service.arm("publication.allocate");
   const admitted = await call("export.create", request);
   const exportId = admitted.exportId;
-  assert.equal(admitted.snapshot.revisionId, edited.revision.id);
+  assert.equal(admitted.snapshot.revisionId, edited.revision.revisionId);
   assert.equal(admitted.snapshot.cueCount, 2);
   assert.ok(!("content" in admitted.snapshot) && !("cues" in admitted.snapshot));
   await held();
   await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     operations: [
       {
         operation: "text.set",
@@ -111,7 +111,7 @@ try {
   assert.equal(
     (await call("export.create", { ...request, placementIds: [...placementIds].reverse() }))
       .snapshot.revisionId,
-    edited.revision.id,
+    edited.revision.revisionId,
   );
   assert.equal(
     (await call("export.create", { ...request, leaf: "changed.srt" }, { error: true })).code,

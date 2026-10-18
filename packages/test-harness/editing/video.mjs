@@ -57,7 +57,7 @@ async function asset(file) {
     asset: compositionAsset({ id, ...p.data }),
     binding: {
       assetId: id,
-      streamId: p.data.streams.find((s) => s.kind === "video").id,
+      streamId: p.data.streams.find((s) => s.kind === "video").streamId,
       path: file,
       originUs: p.data.originUs,
     },
@@ -291,7 +291,7 @@ scenarios.push({
       {
         ...picture("second", multi, 0, 500000, 0, 500000),
         localFile: multi,
-        streamId: multiProbe.data.streams[1].id,
+        streamId: multiProbe.data.streams[1].streamId,
       },
     ],
     range: { startUs: 0, endUs: 500000 },
@@ -308,12 +308,12 @@ scenarios.push({
       {
         ...picture("stream-a", multi, 0, 150000, 600000, 750000),
         localFile: multi,
-        streamId: multiProbe.data.streams[0].id,
+        streamId: multiProbe.data.streams[0].streamId,
       },
       {
         ...picture("stream-b", multi, 0, 150000, 750000, 900000),
         localFile: multi,
-        streamId: multiProbe.data.streams[1].id,
+        streamId: multiProbe.data.streams[1].streamId,
       },
     ],
     range: { startUs: 0, endUs: 900000 },

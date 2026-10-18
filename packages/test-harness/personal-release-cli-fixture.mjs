@@ -236,7 +236,7 @@ switch (operation) {
   case "project.create":
     data = {
       project: { projectId: "fixture-project" },
-      revision: { id: "revision-0", ordinal: 0, document: { tracks: [], clips: [] } },
+      revision: { revisionId: "revision-0", ordinal: 0, document: { tracks: [], clips: [] } },
     };
     break;
   case "edit.apply": {

@@ -452,7 +452,10 @@ export class MediaExports {
           ? {
               generation: audio.published.generation,
               issues: audio.published.issues,
-              preview: audio.published.audio,
+              preview: {
+                ...audio.published.audio,
+                bytes: (audio.published.audio as any).sizeBytes ?? audio.published.audio.bytes,
+              },
             }
           : null,
       };
@@ -903,6 +906,22 @@ export class MediaExports {
       jobId: job.jobId,
       reason: intent.receipt ? null : job.reason,
       retryable: !intent.receipt && job.retryable,
+    };
+  }
+  publicStatus(exportId: string) {
+    const value = this.status(exportId) as Record<string, unknown>;
+    const receipt = value.receipt as Record<string, unknown> | null;
+    const { bytes, ...receiptWithoutBytes } = receipt ?? {};
+    return {
+      ...value,
+      ...(receipt
+        ? {
+            receipt: {
+              ...receiptWithoutBytes,
+              ...(bytes === undefined ? {} : { sizeBytes: bytes }),
+            },
+          }
+        : {}),
     };
   }
   /** Private staging remains attributed to its owner even when it lives beside an external destination. */

@@ -57,7 +57,7 @@ export async function projectArchiveContents(store, home, contents = ["generated
   });
   projects.apply(created.project.projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       ...imported.map((asset, index) => ({

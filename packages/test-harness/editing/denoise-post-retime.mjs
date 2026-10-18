@@ -116,9 +116,9 @@ export async function denoisePostRetime({
   const made = await call("project.create", { requestId: "post-retime-project", canvas });
   const projectId = made.project.projectId;
   let revision = made.revision;
-  const selection = () => ({ projectId, revisionId: revision.id });
+  const selection = () => ({ projectId, revisionId: revision.revisionId });
   async function edit(requestId, operations) {
-    const params = { projectId, expectedRevisionId: revision.id, requestId, operations };
+    const params = { projectId, expectedRevisionId: revision.revisionId, requestId, operations };
     const result = await call("edit.apply", params, { transport: "mcp" });
     record.edits.push({ params, result });
     revision = result.revision;
@@ -142,7 +142,7 @@ export async function denoisePostRetime({
       clip: {
         trackId: { label: "bed" },
         assetId: bedAsset.id,
-        streamId: bedAsset.streams[0].id,
+        streamId: bedAsset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
       },
@@ -153,7 +153,7 @@ export async function denoisePostRetime({
       clip: {
         trackId: { label: "retimed" },
         assetId: retimeAsset.id,
-        streamId: retimeAsset.streams[0].id,
+        streamId: retimeAsset.streams[0].streamId,
         source: { kind: "range", range: sourceRange },
         placement: {
           kind: "project",
@@ -337,7 +337,7 @@ export async function denoisePostRetime({
   await projectAudio(selection(), output, "post-retime-bypass", prefix, 2);
   revision = await call("edit.undo", {
     projectId,
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     requestId: "post-retime-undo",
   });
   assert.deepEqual(revision.document, reordered.revision.document);

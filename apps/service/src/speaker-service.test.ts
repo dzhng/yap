@@ -163,7 +163,10 @@ test("public retained speaker pages survive service restart without runtime byte
   expect(resumed).toEqual(second);
   expect(prepared).toMatchObject({
     ok: true,
-    data: { state: "ready", published: { output: published } },
+    data: {
+      state: "ready",
+      published: { output: { source: { pcm: { frameCount: 480000 } } } },
+    },
   });
   expect(await restarted.call("speaker.get", { ...query, view: "scores", cursor })).toMatchObject({
     ok: false,
@@ -329,12 +332,12 @@ test("project speaker rows carry caller labels for their retained generation", a
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   const edited = await f.call("edit.apply", {
     projectId: project.projectId,
     requestId: "project-labels-place",
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "sound" },
       {
@@ -350,10 +353,10 @@ test("project speaker rows carry caller labels for their retained generation", a
     ],
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
-  const editedData = edited.data as { revision: { id: string } };
+  const editedData = edited.data as { revision: { revisionId: string } };
   const query = {
     projectId: project.projectId,
-    revisionId: editedData.revision.id,
+    revisionId: editedData.revision.revisionId,
     range: { startUs: 0, endUs: 3000000 },
     channel: input.channel,
     modelId: input.modelId,
@@ -440,13 +443,13 @@ test.runIf(process.platform === "darwin")(
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
       project: { projectId: string };
-      revision: { id: string };
+      revision: { revisionId: string };
     };
     expect(
       await f.call("edit.apply", {
         projectId: project.projectId,
         requestId: "portable-place",
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "sound" },
           {
@@ -513,7 +516,7 @@ test.runIf(process.platform === "darwin")(
       path: await realpath(join(f.home, "speakers.zip")),
     });
     if (!opened.ok) throw Error(JSON.stringify(opened));
-    const admissionId = (opened.data as { id: string }).id;
+    const admissionId = (opened.data as { packageId: string }).packageId;
     expect(
       await target.call("package.open", {
         requestId: "package-open-test",

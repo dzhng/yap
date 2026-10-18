@@ -61,7 +61,7 @@ try {
     const projectId = created.project.projectId;
     const edited = await call("edit.apply", {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         { operation: "track.add", label: "track", track: { kind: "video", order: 0 } },
@@ -71,7 +71,7 @@ try {
           clip: {
             trackId: { label: "track" },
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
           },
@@ -90,7 +90,7 @@ try {
         },
       ],
     });
-    const request = { projectId, revisionId: edited.revision.id, atUs: 0 };
+    const request = { projectId, revisionId: edited.revision.revisionId, atUs: 0 };
     await poll(
       () => call("frame.get", request),
       (v) => v.state === "ready",

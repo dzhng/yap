@@ -173,19 +173,19 @@ function retainedPayload(
       clipId: clip.clipId,
       ranges: (read.value.unavailable.find((entry) => entry.clipId === clip.clipId)?.ranges ?? [])
         .map((range) => ({
-          start: Math.max(range.start, clip.sampleRange.start),
-          end: Math.min(range.end, clip.sampleRange.end),
+          startSamples: Math.max(range.start, clip.sampleRange.start),
+          endSamples: Math.min(range.end, clip.sampleRange.end),
         }))
-        .filter((range) => range.end > range.start),
+        .filter((range) => range.endSamples > range.startSamples),
     }));
   return {
     retained: {
       descriptor: 3,
       identity: read.value.identity,
-      bytes: read.value.bytes,
-      dataOffset: read.dataOffset,
-      frames: read.value.frames,
-      range: read.sampleRange,
+      sizeBytes: read.value.bytes,
+      dataOffsetBytes: read.dataOffset,
+      frameCount: read.value.frames,
+      sampleRange: { startSamples: read.sampleRange.start, endSamples: read.sampleRange.end },
       unavailable,
     },
   };

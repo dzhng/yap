@@ -386,7 +386,7 @@ test("ready source originals, evidence and authored project history survive publ
     await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),
   );
   const binding = acquisition.bindings[0]!;
-  const created = data<{ project: { projectId: string }; revision: { id: string } }>(
+  const created = data<{ project: { projectId: string }; revision: { revisionId: string } }>(
     await f.call("project.create", {
       requestId: "authored-project",
       canvas: {
@@ -398,11 +398,11 @@ test("ready source originals, evidence and authored project history survive publ
     }),
   );
   const projectId = created.project.projectId;
-  const edited = data<{ revision: { id: string } }>(
+  const edited = data<{ revision: { revisionId: string } }>(
     await f.call("edit.apply", {
       projectId,
       requestId: "authored-placement",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
         {
@@ -425,9 +425,11 @@ test("ready source originals, evidence and authored project history survive publ
     project: data(await service.call("project.get", { projectId })),
     history: data(await service.call("revision.history", { projectId })),
     initial: data(
-      await service.call("revision.get", { projectId, revisionId: created.revision.id }),
+      await service.call("revision.get", { projectId, revisionId: created.revision.revisionId }),
     ),
-    edited: data(await service.call("revision.get", { projectId, revisionId: edited.revision.id })),
+    edited: data(
+      await service.call("revision.get", { projectId, revisionId: edited.revision.revisionId }),
+    ),
     sourceCursor: data(
       await service.call("cursor.raw", {
         assetId: binding.assetId,

@@ -79,7 +79,7 @@ try {
   });
   const edited = await call("edit.apply", {
     projectId: project.project.projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "video-a", track: { kind: "video", order: 0 } },
@@ -92,7 +92,7 @@ try {
         clip: {
           trackId: { label: "video-a" },
           assetId: red.id,
-          streamId: red.streams[0].id,
+          streamId: red.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -103,7 +103,7 @@ try {
         clip: {
           trackId: { label: "video-b" },
           assetId: blue.id,
-          streamId: blue.streams[0].id,
+          streamId: blue.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -117,7 +117,7 @@ try {
         clip: {
           trackId: { label: trackLabel },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -148,7 +148,7 @@ try {
   await call("export.create", {
     exportId,
     projectId: project.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     kind: "video",
     directory: out,
     leaf: "combined.mp4",

@@ -562,7 +562,7 @@ try {
     {
       projectId,
       requestId: "capture-placements",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         { operation: "track.add", label: "a", track: { kind: "video", order: 0 } },
         { operation: "track.add", label: "b", track: { kind: "video", order: 1 } },
@@ -572,7 +572,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const revisionId = edited.revision.id;
+  const revisionId = edited.revision.revisionId;
   const cuts = authoredCuts(plans, edited.edit.labels, [
     [1000000, "later-first", "first"],
     [1000000, null, "tied"],
@@ -657,7 +657,7 @@ try {
     expectedRevisionId: revisionId,
     operations: [{ operation: "track.add", label: "later", track: { kind: "video", order: 3 } }],
   });
-  assert.notEqual(advanced.revision.id, revisionId);
+  assert.notEqual(advanced.revision.revisionId, revisionId);
   await service.stop();
   await service.start();
   assert.deepEqual(
@@ -752,7 +752,7 @@ try {
   const terminationEdit = await call("edit.apply", {
     projectId: terminationProject.project.projectId,
     requestId: "termination-placements",
-    expectedRevisionId: terminationProject.revision.id,
+    expectedRevisionId: terminationProject.revision.revisionId,
     operations: [
       { operation: "track.add", label: "a", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 1 } },
@@ -762,7 +762,7 @@ try {
   assert.ok(terminationEdit.edit.labels.opening < terminationEdit.edit.labels.ending);
   const terminationQuery = {
     projectId: terminationProject.project.projectId,
-    revisionId: terminationEdit.revision.id,
+    revisionId: terminationEdit.revision.revisionId,
   };
   const expectedTermination = [
     ...projectRows(terminationPlans, terminationEdit.edit.labels, "events"),
@@ -858,7 +858,7 @@ try {
   const crowdEdit = await call("edit.apply", {
     projectId: crowded.project.projectId,
     requestId: "many-capture-occurrences",
-    expectedRevisionId: crowded.revision.id,
+    expectedRevisionId: crowded.revision.revisionId,
     operations: crowdPlans.flatMap((plan) => [
       { operation: "track.add", label: plan.track, track: { kind: "video", order: plan.rank } },
       place(plan),
@@ -866,7 +866,7 @@ try {
   });
   const crowdQuery = {
     projectId: crowded.project.projectId,
-    revisionId: crowdEdit.revision.id,
+    revisionId: crowdEdit.revision.revisionId,
     range: { startUs: 50001, endUs: 50002 },
   };
   const readLog = async () =>

@@ -124,7 +124,7 @@ test("true-empty project publishes an empty retained generation and validates it
     durationUs: 0,
     candidateCount: 0,
     coverageCount: 0,
-    bytes: 0,
+    sizeBytes: 0,
   });
   expect(f.index.page({ identity })).toMatchObject({ entries: [], nextOrdinal: null });
   expect(() =>
@@ -222,9 +222,13 @@ async function append(
           };
     }),
   };
+  const validated = validateProjectFrameReceipt(raw, plan, file, identity.maxLongEdge);
+  const { bytes, ...publicValidated } = validated;
+  const { bytes: _rawBytes, ...rawPublic } = raw;
   const frame: ProjectIndexRecords["frame"] = {
-    ...raw,
-    ...validateProjectFrameReceipt(raw, plan, file, identity.maxLongEdge),
+    ...rawPublic,
+    ...publicValidated,
+    sizeBytes: bytes,
   };
   mutate?.(frame);
   f.index.appendCandidate(identity, candidate, frame);
@@ -651,7 +655,7 @@ test("staged project indexes validate adopted revisions before atomic publicatio
     {
       composition: (identity) =>
         projectCompositionFromRevision(
-          adoption.revisions.find((r) => r.id === identity.revisionId)!,
+          adoption.revisions.find((r) => r.revisionId === identity.revisionId)!,
           receiver.assets,
           [],
         ),

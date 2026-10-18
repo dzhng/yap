@@ -94,7 +94,7 @@ describe("associateDeliveredScenes", () => {
         if (operation === "job.get")
           return { state: "ready", published: { output: { assetId: "export-asset" } } };
         if (operation === "asset.get") return { streams: [{ id: "video", kind: "video" }] };
-        if (operation === "revision.get") return { revision: { id: "revision" } };
+        if (operation === "revision.get") return { revision: { revisionId: "revision" } };
         if (operation === "timeline.events" && params.assetId)
           return {
             state: "ready",

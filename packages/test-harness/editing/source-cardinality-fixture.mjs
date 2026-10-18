@@ -155,7 +155,7 @@ export async function prepareCardinality(home, out, call) {
     const arm = {
       cardinality,
       projectId: made.project.projectId,
-      revisionId: made.revision.id,
+      revisionId: made.revision.revisionId,
       clipIds: [],
     };
     const apply = async (operations, requestId) => {
@@ -165,7 +165,7 @@ export async function prepareCardinality(home, out, call) {
         requestId,
         operations,
       });
-      arm.revisionId = result.revision.id;
+      arm.revisionId = result.revision.revisionId;
       return result;
     };
     arm.trackId = (

@@ -17,7 +17,12 @@ import {
   type ControlMessage,
   type ControlResponse,
 } from "@yap/protocol";
-import { idempotentOperations, operationNames, readOnlyOperations } from "@yap/protocol";
+import {
+  idempotentOperations,
+  operationNames,
+  readOnlyOperations,
+  valueNamingViolations,
+} from "@yap/protocol";
 
 /** The same framed pipe and socket composition as the native host, with observable write completion. */
 export async function projectServiceControlFixture(
@@ -124,6 +129,8 @@ export async function projectServiceFixture(
         operation,
         params: wireParams,
       });
+      // Every result a test receives follows the public naming rule (slice 07b).
+      if (result.ok) expect(valueNamingViolations(result.data, operation)).toEqual([]);
       if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
         expect(result.data).not.toHaveProperty("input");
         expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));

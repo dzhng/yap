@@ -23,7 +23,12 @@ import type { RetainedRead } from "./files.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
 import { TranscriptProcessing } from "./transcript-processing.js";
 import { transcriptSearchTerms } from "./transcript-read.js";
-import type { TranscriptMetadata, TranscriptRecords } from "./transcript.js";
+import {
+  publicTranscriptMetadata,
+  publicTranscriptIssues,
+  type TranscriptMetadata,
+  type TranscriptRecords,
+} from "./transcript.js";
 import { sourceSelectionKey as selectionKey, type SourceSelection } from "./source-selection.js";
 import {
   initialTranscript,
@@ -70,7 +75,7 @@ const policy = (domain: Query["domain"]) =>
       ? "project-events-v2"
       : domain === "cursor"
         ? "project-events-v1"
-        : "project-transcript-v3";
+        : "project-transcript-v4";
 // Provisional inspection budgets; scale acceptance owns changes to these limits.
 const maximumBytes = 8 * 1024 * 1024;
 
@@ -418,8 +423,8 @@ export class ProjectEvidenceInspection {
       return {
         selection,
         transcript: status.published?.transcript ?? null,
-        issues: status.published?.issues ?? [],
         ...(speaker === undefined ? {} : { speaker }),
+        issues: publicTranscriptIssues(status.published?.issues ?? []),
         state: status.published ? "ready" : status.state,
         reason: status.published ? null : status.reason,
         retryable: status.published ? false : status.retryable,
@@ -603,10 +608,23 @@ export class ProjectEvidenceInspection {
     }
   }
 
+  private publicResult<T>(result: T): T {
+    const value = result as T & { dependencies?: unknown };
+    return {
+      ...result,
+      dependencies: Array.isArray(value.dependencies)
+        ? value.dependencies.map((dependency: any) =>
+            dependency.transcript
+              ? { ...dependency, transcript: publicTranscriptMetadata(dependency.transcript) }
+              : dependency,
+          )
+        : value.dependencies,
+    } as T;
+  }
   async get(input: ProjectEvidenceInput) {
     const result = await this.read(input);
     return {
-      ...result,
+      ...this.publicResult(result),
       page: result.page && { rows: result.page.rows, nextCursor: result.page.nextCursor },
     };
   }
@@ -614,14 +632,14 @@ export class ProjectEvidenceInspection {
     transcriptSearchTerms(input.text);
     const result = await this.read(input);
     return {
-      ...result,
+      ...this.publicResult(result),
       page: result.page && { entries: result.page.entries, nextCursor: result.page.nextCursor },
     };
   }
   async events(input: ProjectEvidenceInput) {
     const result = await this.read({ ...input, domain: "events" });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.events, nextCursor: result.page.nextCursor },
     };
@@ -629,7 +647,7 @@ export class ProjectEvidenceInspection {
   async cursor(input: ProjectEvidenceInput) {
     const result = await this.read({ ...input, domain: "cursor" });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.events, nextCursor: result.page.nextCursor },
     };
@@ -637,7 +655,7 @@ export class ProjectEvidenceInspection {
   async speakers(input: ProjectSpeakerInput) {
     const result = await this.read({ ...input, domain: "speakers", prepare: false });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.speakers, nextCursor: result.page.nextCursor },
     };

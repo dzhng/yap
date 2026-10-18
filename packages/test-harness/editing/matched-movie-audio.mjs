@@ -42,7 +42,7 @@ export async function matchedMovieAudio({ call, out, canvas, name, expected, wro
     });
     const edited = await call("edit.apply", {
       projectId: created.project.projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: name + "-place",
       operations: [
         { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -51,14 +51,14 @@ export async function matchedMovieAudio({ call, out, canvas, name, expected, wro
           clip: {
             trackId: { label: "audio" },
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: durationUs } },
             placement: { kind: "project", range: { startUs: 0, endUs: durationUs } },
           },
         },
       ],
     });
-    return { projectId: created.project.projectId, revisionId: edited.revision.id };
+    return { projectId: created.project.projectId, revisionId: edited.revision.revisionId };
   }
   async function referencePreview(selection, name, range) {
     const path = join(out, name + ".mp4");

@@ -56,7 +56,7 @@ function snapshotFixture(): ProjectSnapshot {
     project: { projectId: "donor", title: "Editable", createdAt: "now", currentRevisionId: "r0" },
     revisions: [
       {
-        id: "r0",
+        revisionId: "r0",
         projectId: "donor",
         ordinal: 0,
         createdAt: "now",
@@ -100,7 +100,12 @@ test("portable manifest validates complete history bytes, undo targets, paths an
   const validate = (value: unknown, entries = revisions) =>
     validateProjectPackage(JSON.stringify(value), entries, archiveLimits);
   expect(validate(manifest).snapshot).toEqual(snapshot);
-  const second = { ...snapshot.revisions[0]!, id: "r1", ordinal: 1, operation: "apply" as const };
+  const second = {
+    ...snapshot.revisions[0]!,
+    revisionId: "r1",
+    ordinal: 1,
+    operation: "apply" as const,
+  };
   const secondText = JSON.stringify(second);
   const two = {
     ...snapshot,

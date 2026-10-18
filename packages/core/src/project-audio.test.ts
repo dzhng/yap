@@ -98,7 +98,10 @@ async function fixture(
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("project expected");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+        };
       },
       isAvailable: (owner) => owner.kind === "project" && !projects.isDeleting(owner.projectId),
       isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
@@ -194,7 +197,7 @@ async function fixture(
   const ref = (label: string) => ({ label });
   const placed = projects.apply(created.project.projectId, {
     requestId: "clips",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "group.add", label: "outer", group: { kind: "audio", order: 0 } },
       {
@@ -255,7 +258,7 @@ test("surrounding project audio preserves the pinned revision and requested proc
   const f = await fixture();
   const input = {
     projectId: f.projectId,
-    revisionId: f.placed.revision.id,
+    revisionId: f.placed.revision.revisionId,
     range: { startUs: 500000, endUs: 999999 },
     tap: {
       target: { kind: "track" as const, id: f.placed.edit.labels.voice! },
@@ -274,7 +277,7 @@ test("surrounding project audio preserves the pinned revision and requested proc
   expect((await f.inspection.request(context.selection)).published!.audio).toMatchObject({
     revisionId: input.revisionId,
     tap: input.tap,
-    sampleRange: { start: 23968, end: 48000 },
+    sampleRange: { startSamples: 23968, endSamples: 48000 },
   });
 });
 
@@ -314,7 +317,7 @@ test("project audio taps bind only their descendants and target-owned processing
       const ready = await f.inspection.request(input);
       expect(ready.state).toBe("ready");
       expect(ready.jobId).toBe(pending.jobId);
-      expect(ready.published!.audio.sampleRange).toEqual({ start: 15, end: 47952 });
+      expect(ready.published!.audio.sampleRange).toEqual({ startSamples: 15, endSamples: 47952 });
       const request = requests.at(-1)!;
       expect(request.assets.map((asset) => asset.streamId)).toEqual(["track:1"]);
       expect([...request.window.frames()]).toEqual([]);
@@ -399,7 +402,7 @@ test("an unmeetable output normalization never blocks reads; only reads that inc
   );
   const mastered = f.projects.apply(f.projectId, {
     requestId: "master",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -420,7 +423,7 @@ test("an unmeetable output normalization never blocks reads; only reads that inc
     ],
   });
   const read = async (tap: ProcessingTap, range = { startUs: 0, endUs: 4000000 }) => {
-    const input = { projectId: f.projectId, revisionId: mastered.revision.id, range, tap };
+    const input = { projectId: f.projectId, revisionId: mastered.revision.revisionId, range, tap };
     await f.inspection.request(input);
     await f.jobs.idle();
     const status = await f.inspection.request(input);
@@ -525,7 +528,7 @@ test("audio taps reject a picture target, retiming and sub-sample output before 
   ).rejects.toThrow(expect.objectContaining({ code: "INVALID_RANGE" }));
   f.projects.apply(f.projectId, {
     requestId: "retime",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       {
         operation: "retime",
@@ -698,7 +701,7 @@ test("cancel and retry discard unpublished project WAV bytes and retire deletion
     }
     return result;
   });
-  const input = { projectId: f.projectId, revisionId: f.placed.revision.id };
+  const input = { projectId: f.projectId, revisionId: f.placed.revision.revisionId };
   const pending = await f.inspection.request(input);
   await started;
   f.jobs.cancel(pending.jobId!);
@@ -723,7 +726,7 @@ test("RNNoise metadata stays unavailable before job admission while dry inspecti
   const clipId = f.placed.edit.labels["voice-clip"]!;
   f.projects.apply(f.projectId, {
     requestId: "noise-state",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -753,13 +756,13 @@ test("parent RNNoise inside an internal audio gap refuses before renderer admiss
   const clipId = f.placed.edit.labels["voice-clip"]!;
   const split = f.projects.apply(f.projectId, {
     requestId: "gap-split",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [{ operation: "split", clipIds: [clipId], atUs: 500000, scope: "selected" }],
   });
   const right = split.edit.clipLineage[0]!.clipIds[1]!;
   f.projects.apply(f.projectId, {
     requestId: "gap-state",
-    expectedRevisionId: split.revision.id,
+    expectedRevisionId: split.revision.revisionId,
     operations: [
       {
         operation: "move",
@@ -804,7 +807,7 @@ test("a narrow parent-state plan binds mono sources outside its requested output
   }));
   const added = f.projects.apply(f.projectId, {
     requestId: "state-sources",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       {
         operation: "place",
@@ -833,7 +836,7 @@ test("a narrow parent-state plan binds mono sources outside its requested output
   });
   const plan = projectComposition(f.projects, f.assets, {
     projectId: f.projectId,
-    revisionId: added.revision.id,
+    revisionId: added.revision.revisionId,
   }).window(
     { range: { startUs: 2000000, endUs: 2500000 } },
     { implementationId: "fixture" },
@@ -858,7 +861,7 @@ test("state channel admission refuses wider and unknown probes without blocking 
     const f = await fixture(render, undefined, 1000000, channels);
     const revision = f.projects.apply(f.projectId, {
       requestId: "channel-state",
-      expectedRevisionId: f.placed.revision.id,
+      expectedRevisionId: f.placed.revision.revisionId,
       operations: [
         {
           operation: "processing.set",
@@ -884,7 +887,7 @@ test("state channel admission refuses wider and unknown probes without blocking 
     );
     const retained = projectComposition(f.projects, f.assets, {
       projectId: f.projectId,
-      revisionId: revision.revision.id,
+      revisionId: revision.revision.revisionId,
     }).window({}, { implementationId: "fixture" }, "audio", "retained");
     expect(retained.window.manifest.state!.inputs[0]!.channels ?? null).toBe(channels);
   }
@@ -1025,7 +1028,7 @@ test("stateful processing over a source gap publishes its audio with support-gap
   }));
   const placed = f.projects.apply(f.projectId, {
     requestId: "gapped",
-    expectedRevisionId: f.placed.revision.id,
+    expectedRevisionId: f.placed.revision.revisionId,
     operations: [
       {
         operation: "place",
@@ -1045,7 +1048,7 @@ test("stateful processing over a source gap publishes its audio with support-gap
       },
     ],
   });
-  const input = { projectId: f.projectId, revisionId: placed.revision.id };
+  const input = { projectId: f.projectId, revisionId: placed.revision.revisionId };
   await f.inspection.request(input);
   await f.jobs.idle();
   const status = await f.inspection.request(input);

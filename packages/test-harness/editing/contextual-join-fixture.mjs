@@ -103,13 +103,13 @@ async function makeProject(fixture, name, clips) {
   });
   const tracked = await call("edit.apply", {
     projectId: created.project.projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: `${name}-track`,
     operations: [{ operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } }],
   });
   const placed = await call("edit.apply", {
     projectId: created.project.projectId,
-    expectedRevisionId: tracked.revision.id,
+    expectedRevisionId: tracked.revision.revisionId,
     requestId: `${name}-place`,
     operations: clips.map((clip, index) => ({
       operation: "place",
@@ -127,7 +127,7 @@ async function makeProject(fixture, name, clips) {
   assert(track, "audio track must be authored");
   return {
     projectId: created.project.projectId,
-    revisionId: placed.revision.id,
+    revisionId: placed.revision.revisionId,
     trackId: track.id,
     clipIds: placed.revision.document.clips.map((value) => value.id),
   };

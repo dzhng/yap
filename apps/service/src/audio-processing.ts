@@ -67,13 +67,13 @@ export async function audioProcessingRuntime(
       "audio-processing-" + createHash("sha256").update(JSON.stringify(processors)).digest("hex"),
   };
 }
-async function validateWave(file: FileHandle, frames: number, signal: AbortSignal) {
+async function validateWave(file: FileHandle, frameCount: number, signal: AbortSignal) {
   const bytes = Number((await file.stat()).size);
   const audio = readAudioWave({
     bytes,
     read: (buffer, position) => readSync(file.fd, buffer, 0, buffer.length, position),
   });
-  if (audio.sampleRate !== 48000 || audio.channels !== 2 || audio.frames !== frames)
+  if (audio.sampleRate !== 48000 || audio.channels !== 2 || audio.frames !== frameCount)
     throw new CatalogError(
       "INVALID_RESPONSE",
       "Audio recipe changed its complete stereo 48 kHz domain count",
@@ -118,7 +118,7 @@ type Held = {
     identity: ReturnType<typeof fileIdentity>;
     bytes: number;
     dataOffset: number;
-    frames: number;
+    frameCount: number;
     range: { start: number; end: number };
     unavailable: never[];
   };
@@ -419,7 +419,7 @@ export async function withAudioProcessing<T>(
                   identity: artifact.identity,
                   bytes: artifact.bytes,
                   dataOffset: artifact.evidence.audio.dataOffset,
-                  frames,
+                  frameCount: frames,
                   range: { start: 0, end: frames },
                   unavailable: [],
                 },

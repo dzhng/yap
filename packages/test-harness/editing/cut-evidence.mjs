@@ -49,7 +49,7 @@ try {
     "import",
   );
   const asset = await call("asset.get", { assetId });
-  const streamId = asset.streams.find((s) => s.kind === "video").id;
+  const streamId = asset.streams.find((s) => s.kind === "video").streamId;
   const project = await call("project.create", {
     requestId: "cut-project",
     canvas: {
@@ -77,7 +77,7 @@ try {
   const edited = await call("edit.apply", {
     projectId: project.project.projectId,
     requestId: "cut-placements",
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "overlay", track: { kind: "video", order: 1 } },
@@ -98,7 +98,7 @@ try {
       place("silence-again", "audio", 1700000, 2500000, 0, 0, "silence"),
     ],
   });
-  const query = { projectId: project.project.projectId, revisionId: edited.revision.id };
+  const query = { projectId: project.project.projectId, revisionId: edited.revision.revisionId };
   const labels = edited.edit.labels,
     names = Object.fromEntries(Object.entries(labels).map(([k, v]) => [v, k]));
   const summarize = (rows) =>
@@ -171,7 +171,10 @@ try {
       },
     ],
   });
-  const beforeSplit = await pages({ projectId: query.projectId, revisionId: retimed.revision.id });
+  const beforeSplit = await pages({
+    projectId: query.projectId,
+    revisionId: retimed.revision.revisionId,
+  });
   assert.deepEqual(
     beforeSplit.rows
       .filter((r) => r.kind === "cut" && r.trackId === retimed.edit.labels.fractional)
@@ -184,10 +187,13 @@ try {
   const split = await call("edit.apply", {
     projectId: query.projectId,
     requestId: "cut-split",
-    expectedRevisionId: retimed.revision.id,
+    expectedRevisionId: retimed.revision.revisionId,
     operations: [{ operation: "split", clipIds: [labels.over], atUs: 333333 }],
   });
-  const afterSplit = await pages({ projectId: query.projectId, revisionId: split.revision.id });
+  const afterSplit = await pages({
+    projectId: query.projectId,
+    revisionId: split.revision.revisionId,
+  });
   assert.deepEqual(
     afterSplit.rows.filter((r) => r.kind === "cut").map((r) => [r.projectAtUs, r.trackId]),
     beforeSplit.rows.filter((r) => r.kind === "cut").map((r) => [r.projectAtUs, r.trackId]),

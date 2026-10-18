@@ -130,7 +130,7 @@ try {
   const asset = await call("asset.get", { assetId: narration.sha256 });
   const edited = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "audio-only",
     operations: [
       { operation: "track.add", label: "voice", track: { kind: "audio", order: 0 } },
@@ -138,7 +138,7 @@ try {
         operation: "place",
         clip: {
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           trackId: { label: "voice" },
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -146,7 +146,7 @@ try {
       },
     ],
   });
-  const audioSelection = { projectId, revisionId: edited.revision.id, maxLongEdge: 160 };
+  const audioSelection = { projectId, revisionId: edited.revision.revisionId, maxLongEdge: 160 };
   const frameHit = await service.arm("media.renderCompositionFrame");
   const pendingIndex = await poll(
     () => call("index.get", audioSelection),
@@ -211,7 +211,7 @@ try {
       `import ${name}`,
     );
     const asset = await call("asset.get", { assetId: fixture.sha256 });
-    media[name] = { assetId: asset.id, streamId: asset.streams[0].id };
+    media[name] = { assetId: asset.id, streamId: asset.streams[0].streamId };
     await rm(fixture.path);
   }
   const visual = await call("project.create", { requestId: "layered", canvas });
@@ -220,7 +220,7 @@ try {
     "edit.apply",
     {
       projectId: visual.project.projectId,
-      expectedRevisionId: visual.revision.id,
+      expectedRevisionId: visual.revision.revisionId,
       requestId: "held-screen-and-presenter",
       operations: [
         { operation: "track.add", label: "screen-track", track: { kind: "video", order: 0 } },
@@ -256,7 +256,7 @@ try {
   );
   const composition = await inspect({
     projectId: visual.project.projectId,
-    revisionId: placed.revision.id,
+    revisionId: placed.revision.revisionId,
     maxLongEdge: 160,
   });
   assert.deepEqual(
@@ -407,7 +407,7 @@ try {
   );
   const changed = await call("edit.apply", {
     projectId: composition.reference.projectId,
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     requestId: "hide-presenter",
     operations: [
       {
@@ -432,7 +432,7 @@ try {
   assert.equal(historical.sha256, old.sha256);
   const current = await inspect({
     projectId: composition.reference.projectId,
-    revisionId: changed.revision.id,
+    revisionId: changed.revision.revisionId,
     maxLongEdge: 160,
   });
   const newEntry = current.entries.find((entry) => entry.candidate.sampleAtUs === 2300000);

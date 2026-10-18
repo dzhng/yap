@@ -129,8 +129,8 @@ try {
     const asset = await call("asset.get", { assetId: sha256 });
     media[name] = {
       assetId: asset.id,
-      streamId: asset.streams.find((s) => s.kind === "video").id,
-      audioStreamId: asset.streams.find((s) => s.kind === "audio").id,
+      streamId: asset.streams.find((s) => s.kind === "video").streamId,
+      audioStreamId: asset.streams.find((s) => s.kind === "audio").streamId,
       sha256,
     };
   }
@@ -158,7 +158,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
       { operation: "track.add", track: { kind: "audio", order: 1 }, label: "voice" },
@@ -192,7 +192,7 @@ try {
       place("hold", "a", { kind: "hold", atUs: 750000 }, 1500000, 1800000),
     ],
   });
-  const revisionId = edited.revision.id;
+  const revisionId = edited.revision.revisionId;
   report.project = { projectId, revisionId };
   const unavailableRetime = "fixture-unavailable-retime";
   const unavailablePreview = await call(
@@ -285,9 +285,9 @@ try {
   const historical = await delivered({ projectId, revisionId, atUs: 0 }, "cli");
   assert.ok(historical.bytes.equals(firstBytes));
   const current = await delivered({ projectId, atUs: 0 }, "mcp");
-  assert.equal(current.data.revisionId, changed.revision.id);
+  assert.equal(current.data.revisionId, changed.revision.revisionId);
   assert.equal(current.data.published.output.width, 320);
-  report.checks.history = { old: revisionId, head: changed.revision.id, sameOldPng: true };
+  report.checks.history = { old: revisionId, head: changed.revision.revisionId, sameOldPng: true };
   const hit = await service.arm("media.renderCompositionFrame");
   const pending = await call("frame.get", { projectId, revisionId, atUs: 33333 });
   await hit();
@@ -327,7 +327,7 @@ try {
   });
   const retainedEdit = await call("edit.apply", {
     projectId: retained.project.projectId,
-    expectedRevisionId: retained.revision.id,
+    expectedRevisionId: retained.revision.revisionId,
     requestId: "retained-place",
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
@@ -343,7 +343,7 @@ try {
     const frame = await delivered(
       {
         projectId: retained.project.projectId,
-        revisionId: retainedEdit.revision.id,
+        revisionId: retainedEdit.revision.revisionId,
         atUs,
       },
       "cli",

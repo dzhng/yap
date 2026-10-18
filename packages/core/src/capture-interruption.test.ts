@@ -57,7 +57,10 @@ async function fixture({
     targets: {
       pin: (target) => {
         if (target.kind !== "project") throw Error("No model work expected");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+        };
       },
       isAvailable: () => true,
       isDeleting: () => false,
@@ -188,12 +191,12 @@ async function fixture({
     });
     const applied = projects.apply(created.project.projectId, {
       requestId: randomUUID(),
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations,
     });
     return {
       projectId: created.project.projectId,
-      revisionId: applied.revision.id,
+      revisionId: applied.revision.revisionId,
       labels: applied.edit.labels,
     };
   }
@@ -465,7 +468,7 @@ test("reordered, repeated and rationally retimed capture endpoints retain exact 
   ).toEqual([
     [project.labels.earlier, 500, 1000, 500],
     [project.labels.later, null, null, 1000],
-    [project.labels.later, 500, 1000, { numerator: 3001, denominator: 2 }],
+    [project.labels.later, 500, 1000, 1501],
   ]);
 });
 

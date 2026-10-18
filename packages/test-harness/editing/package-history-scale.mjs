@@ -231,7 +231,7 @@ try {
     projectId = made.project.projectId;
     const retain = (revision) =>
       expected.push({
-        id: revision.id,
+        id: revision.revisionId,
         ordinal: revision.ordinal,
         bytes: Buffer.byteLength(JSON.stringify(revision)),
         serializedSha256: hash(JSON.stringify(revision)),
@@ -249,14 +249,14 @@ try {
         clip: {
           trackId: { label: "audio" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 100000 } },
           placement: { kind: "project", range: { startUs: i * 100000, endUs: (i + 1) * 100000 } },
         },
       });
     let revision = projects.apply(projectId, {
       requestId: "place",
-      expectedRevisionId: made.revision.id,
+      expectedRevisionId: made.revision.revisionId,
       operations,
     }).revision;
     retain(revision);
@@ -264,7 +264,7 @@ try {
     for (let ordinal = 2; ordinal < 1000; ordinal++) {
       revision = projects.apply(projectId, {
         requestId: `edit-${ordinal}`,
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         operations: [
           {
             operation: "canvas.set",
@@ -279,7 +279,7 @@ try {
         operationalGuard(process.resourceUsage().maxRSS * 1024);
       }
     }
-    pinnedId = revision.id;
+    pinnedId = revision.revisionId;
     const actual = catalog.catalog
       .prepare(
         "SELECT COUNT(*) AS count,SUM(length(CAST(content AS BLOB))) AS bytes,MAX(length(CAST(content AS BLOB))) AS maximum FROM project_revisions WHERE projectId=?",
@@ -411,9 +411,9 @@ try {
       const original = expected[count];
       assert(original);
       assert.equal(revision.ordinal, count);
-      assert.notEqual(revision.id, original.id);
+      assert.notEqual(revision.revisionId, original.id);
       assert.equal(digest({ ...revision, id: original.id, projectId }), original.semanticSha256);
-      mapped.push(revision.id);
+      mapped.push(revision.revisionId);
       count++;
     }
     cursor = page.nextCursor;

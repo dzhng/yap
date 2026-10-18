@@ -57,7 +57,7 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  let revisionId = created.revision.id;
+  let revisionId = created.revision.revisionId;
   const select = () => ({ projectId, revisionId });
   async function edit(operations, transport = "cli") {
     const result = await call(
@@ -65,7 +65,7 @@ try {
       { projectId, expectedRevisionId: revisionId, requestId: randomUUID(), operations },
       { transport },
     );
-    revisionId = result.revision.id;
+    revisionId = result.revision.revisionId;
     return result;
   }
   const placed = await edit(
@@ -77,7 +77,7 @@ try {
         clip: {
           trackId: ref(kind),
           assetId: kind === "audio" ? audio.id : image.id,
-          streamId: (kind === "audio" ? audio : image).streams[0].id,
+          streamId: (kind === "audio" ? audio : image).streams[0].streamId,
           source:
             kind === "audio"
               ? { kind: "range", range: { startUs: 0, endUs: 1000000 } }
@@ -214,7 +214,7 @@ try {
       clip: {
         trackId: ref("second"),
         assetId: audio.id,
-        streamId: audio.streams[0].id,
+        streamId: audio.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
       },

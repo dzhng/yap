@@ -178,7 +178,7 @@ try {
     {
       projectId,
       requestId: "place-repeated-speech",
-      expectedRevisionId: project.revision.id,
+      expectedRevisionId: project.revision.revisionId,
       operations: [
         { operation: "track.add", label: "a", track: { kind: "audio", order: 0 } },
         { operation: "track.add", label: "b", track: { kind: "audio", order: 1 } },
@@ -193,7 +193,7 @@ try {
     },
     { transport: "mcp" },
   );
-  const revisionId = edited.revision.id;
+  const revisionId = edited.revision.revisionId;
   for (const source of sources)
     await call("transcript.transcribe", { assetId: source.sha256, streamId: source.streamId });
   const full = await poll(
@@ -458,14 +458,17 @@ try {
       place("physical-gap", 0, "more", 5360000, 7380000, 7000000),
     ],
   });
-  assert.notEqual(advanced.revision.id, revisionId);
+  assert.notEqual(advanced.revision.revisionId, revisionId);
   for (const [text, trackIds] of [
     ["Okay so", [advanced.edit.labels.more]],
     ["Okay so", [advanced.edit.labels.gapped]],
     ["Okay so", [advanced.edit.labels.blocked]],
     ["workbench First", [advanced.edit.labels.gapped]],
   ])
-    assert.deepEqual(await search({ revisionId: advanced.revision.id, text, trackIds }), []);
+    assert.deepEqual(
+      await search({ revisionId: advanced.revision.revisionId, text, trackIds }),
+      [],
+    );
   assert.deepEqual(await search({ revisionId, text: "the recorder" }), [
     match(expectedRows.slice(11, 13)),
   ]);
@@ -473,7 +476,7 @@ try {
     () =>
       call("transcript.get", {
         projectId,
-        revisionId: advanced.revision.id,
+        revisionId: advanced.revision.revisionId,
         trackIds: [advanced.edit.labels.captured],
         limit: 1000,
       }),
@@ -494,7 +497,7 @@ try {
   ]);
   assert.deepEqual(
     await search({
-      revisionId: advanced.revision.id,
+      revisionId: advanced.revision.revisionId,
       text: "the Recorder",
       trackIds: [advanced.edit.labels.captured],
     }),
@@ -503,7 +506,7 @@ try {
   assert.deepEqual(
     (
       await search({
-        revisionId: advanced.revision.id,
+        revisionId: advanced.revision.revisionId,
         text: "Recorder Workbench",
         trackIds: [advanced.edit.labels.captured],
       })
@@ -512,7 +515,7 @@ try {
   );
   const noMatchQuery = {
     projectId,
-    revisionId: advanced.revision.id,
+    revisionId: advanced.revision.revisionId,
     text: "absent phrase",
     trackIds: [advanced.edit.labels.scan],
     limit: 1,
@@ -536,7 +539,7 @@ try {
     () =>
       call("transcript.get", {
         projectId,
-        revisionId: advanced.revision.id,
+        revisionId: advanced.revision.revisionId,
         trackIds: [advanced.edit.labels.scan],
         range: { startUs: 172800000, endUs: 173000000 },
         limit: 1,
@@ -590,7 +593,7 @@ try {
     () =>
       call("transcript.get", {
         projectId,
-        revisionId: advanced.revision.id,
+        revisionId: advanced.revision.revisionId,
         range: { startUs: 6000000, endUs: 6180000 },
       }),
     (value) => value.state === "ready",
@@ -607,7 +610,7 @@ try {
     () =>
       call("transcript.get", {
         projectId,
-        revisionId: advanced.revision.id,
+        revisionId: advanced.revision.revisionId,
         range: { startUs: 7700000, endUs: 8000000 },
       }),
     (value) => value.state === "ready",
@@ -627,7 +630,10 @@ try {
   assert.equal(changed.code, "ARTIFACT_CHANGED");
   await service.stop();
   await service.start();
-  assert.equal((await call("project.get", { projectId })).currentRevisionId, advanced.revision.id);
+  assert.equal(
+    (await call("project.get", { projectId })).currentRevisionId,
+    advanced.revision.revisionId,
+  );
   const continuedRows = [...firstPage.page.rows],
     seenHistory = new Set();
   let historyCursor = savedCursor;
@@ -654,7 +660,7 @@ try {
   assert.deepEqual([...firstSearch.page.entries, ...continuedSearch], expectedMatches);
   report.checks.phrases.historicalSearchAfterRestart = true;
   const oldRevision = await call("revision.get", { projectId, revisionId });
-  assert.equal(oldRevision.revision.id, revisionId);
+  assert.equal(oldRevision.revision.revisionId, revisionId);
   assert.deepEqual(oldRevision.revision.document, edited.revision.document);
   await service.stop();
   const checkpointPath = join(home, "library/cache/derived", `${savedCursor.checkpointId}.cache`);

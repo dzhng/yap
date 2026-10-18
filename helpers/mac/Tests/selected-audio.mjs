@@ -60,7 +60,7 @@ try {
         channels,
         frames: Math.floor((8193 * sampleRate) / 44100),
       });
-      assert.equal(response.data.implementationId, "native-finite-pcm-v1");
+      assert.equal(response.data.implementationId, "native-finite-pcm-v2");
       if (name === "mono")
         assert.deepEqual(
           readFileSync(request.params.output),

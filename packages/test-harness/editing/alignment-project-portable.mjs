@@ -59,7 +59,7 @@ try {
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
       {
@@ -67,14 +67,17 @@ try {
         clip: {
           trackId: { label: "sound" },
           assetId: asset.id,
-          streamId: asset.streams.find((s) => s.kind === "audio").id,
+          streamId: asset.streams.find((s) => s.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 951000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 951000 } },
         },
       },
     ],
   });
-  const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+  const selection = {
+    projectId: created.project.projectId,
+    revisionId: edited.revision.revisionId,
+  };
   const prepared = await poll(
     () => call("audio.prepare", selection),
     (j) => j.state === "ready",

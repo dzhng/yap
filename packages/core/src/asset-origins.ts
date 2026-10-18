@@ -220,7 +220,9 @@ export const audioRenditionSchema = z.strictObject({
   sampleRate: z.int().min(1).max(192000),
   channels: z.union([z.literal(1), z.literal(2)]),
 });
-export const audioDimensionsSchema = audioRenditionSchema.extend({ frames: integer.positive() });
+export const audioDimensionsSchema = audioRenditionSchema.extend({
+  frames: integer.positive(),
+});
 export const extractionOriginSchema = z.strictObject({
   kind: z.literal("extraction"),
   selection: z.discriminatedUnion("kind", [

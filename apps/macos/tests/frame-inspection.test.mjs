@@ -54,7 +54,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const binding = acquisition.bindings.find((value) => value.sourceRoles.includes("video"));
   assert.ok(binding);
   const asset = await call("asset.get", { assetId: binding.assetId });
-  const video = asset.streams.find((value) => value.id === binding.streamId);
+  const video = asset.streams.find((value) => value.streamId === binding.streamId);
   assert.equal(video.kind, "video");
   assert.deepEqual((await call("project.list", {})).projects, []);
   const created = await call("project.create", {
@@ -69,7 +69,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const projectId = created.project.projectId;
   const authored = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -90,7 +90,12 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const clipId = authored.edit.labels.clip,
     trackId = authored.edit.labels.video;
   // Keep a full-size reference so the crop oracle compares preceding-image pixels.
-  const params = { projectId, revisionId: authored.revision.id, atUs: 400000, maxLongEdge: 8192 };
+  const params = {
+    projectId,
+    revisionId: authored.revision.revisionId,
+    atUs: 400000,
+    maxLongEdge: 8192,
+  };
   const ready = await waitFor(async () => {
     const result = await call("frame.get", params);
     if (result.state === "failed" || result.state === "unavailable")
@@ -154,7 +159,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const crop = { x: 20, y: 30, width: 200, height: 100 };
   const cropEdit = await call("edit.apply", {
     projectId,
-    expectedRevisionId: authored.revision.id,
+    expectedRevisionId: authored.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "canvas.set", canvas: { width: 200, height: 100 } },
@@ -177,7 +182,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const cropped = await waitFor(async () => {
     const result = await call("frame.get", {
       projectId,
-      revisionId: cropEdit.revision.id,
+      revisionId: cropEdit.revision.revisionId,
       atUs: 400000,
       maxLongEdge: 8192,
     });
@@ -229,7 +234,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
 
   const revision = await call("edit.apply", {
     projectId,
-    expectedRevisionId: cropEdit.revision.id,
+    expectedRevisionId: cropEdit.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "canvas.set", canvas: { width: video.width, height: video.height } },
@@ -245,13 +250,13 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const edited = await waitFor(async () => {
     const result = await call("frame.get", {
       projectId,
-      revisionId: revision.revision.id,
+      revisionId: revision.revision.revisionId,
       atUs: 0,
     });
     if (["failed", "unavailable"].includes(result.state)) throw new Error(JSON.stringify(result));
     return result.state === "ready" && result;
   }, 20000);
-  assert.equal(edited.revisionId, revision.revision.id);
+  assert.equal(edited.revisionId, revision.revision.revisionId);
   assert.equal(edited.published.output.pictures[0].requestedSourceUs, 200000);
   assert.ok(
     edited.published.output.pictures[0].actualSourceUs >= 0 &&

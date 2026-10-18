@@ -122,7 +122,7 @@ try {
       assert.deepEqual(newest.revisions, [appended.revision]);
       assert.equal(newest.nextCursor, null);
       trial.pinnedRevisionCount = count;
-      trial.appendedRevisionId = appended.revision.id;
+      trial.appendedRevisionId = appended.revision.revisionId;
       await service.stop();
       await service.start();
       trial.queryPid = service.child.pid;

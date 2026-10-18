@@ -97,7 +97,7 @@ export function controlledSpeech(
           source: range,
           confidence: 0.9,
           startSeconds: (range.startUs - Number(source.startUs)) / 1e6,
-          endSeconds: (range.endUs - Number(source.startUs)) / 1e6,
+          endUs: range.endUs,
         }));
       return {
         ordinal,

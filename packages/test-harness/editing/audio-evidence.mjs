@@ -320,7 +320,7 @@ async function unitRateJourney() {
   const placed = await call("edit.apply", {
     projectId,
     requestId: "route",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "group.add", label: "outer", group: { kind: "audio", order: 0 } },
       {
@@ -355,7 +355,7 @@ async function unitRateJourney() {
       })),
     ],
   });
-  const revisionId = placed.revision.id;
+  const revisionId = placed.revision.revisionId;
   report.project = { projectId, revisionId };
   report.checks.taps = [];
   for (const [index, [kind, label, factor]] of scopes.entries())
@@ -436,7 +436,7 @@ async function unitRateJourney() {
     ],
   });
   const headJson = await delivered("waveform.get", { projectId, range, bucketFrames: 48 });
-  assert.equal(headJson.metadata.revisionId, changed.revision.id);
+  assert.equal(headJson.metadata.revisionId, changed.revision.revisionId);
   verifyBuckets(headJson.document, 256, range);
   const headPng = await delivered("waveform.get", {
     projectId,

@@ -86,7 +86,10 @@ async function fixture(render = renderer) {
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+        };
       },
       isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.projectId),
       isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
@@ -144,7 +147,7 @@ async function fixture(render = renderer) {
   const projectId = created.project.projectId;
   projects.apply(projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "track" },
       {
@@ -294,7 +297,7 @@ test.each(["complete", "missing", "reordered", "wrong-source"] as const)(
     });
     f.projects.apply(f.projectId, {
       requestId: "second-layer",
-      expectedRevisionId: f.projects.revision(f.projectId).id,
+      expectedRevisionId: f.projects.revision(f.projectId).revisionId,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 1 }, label: "second" },
         {
@@ -382,7 +385,7 @@ test("project frame receipts preserve rational source requests with integer labe
   const revision = f.projects.revision(f.projectId);
   f.projects.apply(f.projectId, {
     requestId: "cfr",
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { fps: { numerator: 30, denominator: 1 } } }],
   });
   const request = { projectId: f.projectId, atUs: 999999 };
@@ -493,7 +496,7 @@ async function fallbackFixture(fallbacks: (clipId: string) => unknown[], fonts?:
   }));
   const placed = f.projects.apply(f.projectId, {
     requestId: "caption",
-    expectedRevisionId: f.projects.revision(f.projectId).id,
+    expectedRevisionId: f.projects.revision(f.projectId).revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 1 }, label: "captions" },
       {

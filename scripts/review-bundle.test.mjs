@@ -13,7 +13,7 @@ function fixture(cuts = {}) {
       return {
         projectId: "p",
         revision: {
-          id,
+          revisionId: id,
           document: { clips: id === "old" ? [{ id: "whole" }] : [{ id: "left" }, { id: "right" }] },
         },
       };

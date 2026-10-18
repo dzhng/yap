@@ -127,7 +127,7 @@ try {
       },
     });
     const projectId = project.project.projectId;
-    let revisionId = project.revision.id;
+    let revisionId = project.revision.revisionId;
     const edit = async (operations) => {
       const result = await call("edit.apply", {
         projectId,
@@ -135,7 +135,7 @@ try {
         requestId: randomUUID(),
         operations,
       });
-      revisionId = result.revision.id;
+      revisionId = result.revision.revisionId;
       return result;
     };
     await edit([
@@ -146,7 +146,7 @@ try {
         clip: {
           trackId: { label: "v" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
         },

@@ -82,14 +82,14 @@ export async function maskedProject({ home, out, call }) {
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
     requestId: "masked-clips",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations,
   });
   const results = [];
   for (let index = 0; index < 3; index++) {
     const params = {
       projectId: created.project.projectId,
-      revisionId: edited.revision.id,
+      revisionId: edited.revision.revisionId,
       tap: {
         target: { kind: "clip", id: edited.edit.labels[`clip-${index}`] },
         point: { kind: "processed" },

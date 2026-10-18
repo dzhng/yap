@@ -7,7 +7,7 @@ test("join repair applies one explicit edit and rechecks the changed revision", 
   const invoke = async (operation: string, params: Record<string, unknown>) => {
     calls.push({ operation, params });
     if (operation === "edit.apply")
-      return { revision: { id: "r2" }, edits: [{ operation: "split" }] };
+      return { revision: { revisionId: "r2" }, edits: [{ operation: "split" }] };
     if (operation === "join.verify") return { revisionId: "r2", phoneticCompleteness: "unknown" };
     throw new Error(`Unexpected operation ${operation}`);
   };
@@ -60,7 +60,7 @@ test("join repair refuses a repair that does not advance the pinned revision", a
           thresholdRMS: 0,
         },
       },
-      async () => ({ revision: { id: "r1" } }),
+      async () => ({ revision: { revisionId: "r1" } }),
     ),
   ).rejects.toMatchObject({ code: "ARTIFACT_CHANGED" });
 });
@@ -86,7 +86,7 @@ test("join repair can prepare the changed tap with a bounded status poll", async
     },
     async (operation: string, params: Record<string, unknown>) => {
       calls.push(operation);
-      if (operation === "edit.apply") return { revision: { id: "r2" } };
+      if (operation === "edit.apply") return { revision: { revisionId: "r2" } };
       if (operation === "audio.prepare") {
         preparationReads++;
         return preparationReads === 1

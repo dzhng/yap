@@ -299,7 +299,7 @@ try {
   const changingSelected = await inspect(
     {
       assetId: changingAsset.id,
-      streamId: changingAsset.streams.find((s) => s.kind === "video").id,
+      streamId: changingAsset.streams.find((s) => s.kind === "video").streamId,
     },
     "native-temporal-pictures",
   );
@@ -531,7 +531,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: "index-place",
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
       {
@@ -548,13 +548,13 @@ try {
   const undone = await call("edit.undo", {
     projectId,
     requestId: "index-undo",
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
   });
   await call("edit.restore", {
     projectId,
     requestId: "index-restore",
     expectedRevisionId: undone.id,
-    targetRevisionId: edited.revision.id,
+    targetRevisionId: edited.revision.revisionId,
   });
   const history = await call("revision.history", { projectId, limit: 1 });
   assert.ok(history);

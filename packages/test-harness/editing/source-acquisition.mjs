@@ -368,7 +368,7 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  let head = created.revision.id;
+  let head = created.revision.revisionId;
   const media = (binding, acquisitionId) => ({
     assetId: binding.assetId,
     streamId: binding.streamId,
@@ -397,7 +397,7 @@ try {
     expectedRevisionId: head,
     operations,
   });
-  head = placed.revision.id;
+  head = placed.revision.revisionId;
   const revisionA = head;
   const render = async (name, revisionId) => {
     const file = join(out, `${name}.mp4`);
@@ -426,7 +426,7 @@ try {
         replacement(voice, "voice", acquisitionId),
       ],
     });
-    head = result.revision.id;
+    head = result.revision.revisionId;
     return result;
   };
   const replacedB = await replace("select-context-b", contextB.id);
@@ -480,8 +480,8 @@ try {
   report.checks.project = {
     projectId,
     revisionA,
-    revisionB: replacedB.revision.id,
-    physicalRevision: physical.revision.id,
+    revisionB: replacedB.revision.revisionId,
+    physicalRevision: physical.revision.revisionId,
     undoRevision: head,
     commonSourceClockRange: { startUs: sourceStartUs, endUs: sourceStartUs + durationUs },
     decoded: renderedA.decoded,

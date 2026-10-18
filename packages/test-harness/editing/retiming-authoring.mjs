@@ -99,7 +99,12 @@ try {
     const edit = async (id, operations, transport = "cli") => {
       const result = await call(
         "edit.apply",
-        { projectId, expectedRevisionId: revision.id, requestId: name + "/" + id, operations },
+        {
+          projectId,
+          expectedRevisionId: revision.revisionId,
+          requestId: name + "/" + id,
+          operations,
+        },
         { transport },
       );
       revision = result.revision;
@@ -172,7 +177,7 @@ try {
       } else if (values["public-audio"]) {
         const selection = {
           projectId,
-          revisionId: variant === "full" ? base.id : revision.id,
+          revisionId: variant === "full" ? base.id : revision.revisionId,
           range: window.manifest.range,
         };
         plans[variant].receipt = await poll(

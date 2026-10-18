@@ -72,7 +72,7 @@ try {
     "source",
   );
   const asset = await call("asset.get", { assetId: importJob.published.output.assetId });
-  const streamId = asset.streams.find((stream) => stream.kind === "audio").id;
+  const streamId = asset.streams.find((stream) => stream.kind === "audio").streamId;
   const sourceSelection = { assetId: asset.assetId, streamId };
   const sourceScope = {
     ...sourceSelection,
@@ -95,7 +95,7 @@ try {
   });
   const edited = await call("edit.apply", {
     projectId: made.project.projectId,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: "plant-trend-cut-landmark",
     operations: [
       { operation: "track.add", label: "dialogue", track: { kind: "audio", order: 0 } },
@@ -110,7 +110,7 @@ try {
       },
     ],
   });
-  const project = { projectId: made.project.projectId, revisionId: edited.revision.id };
+  const project = { projectId: made.project.projectId, revisionId: edited.revision.revisionId };
   const projectionInput = {
     ...project,
     sourceGenerations: [{ ...sourceSelection, generation: sourceGeneration }],
@@ -165,7 +165,7 @@ try {
         operation: "place",
         clip: {
           assetId: markerAsset.id,
-          streamId: markerAsset.streams[0].id,
+          streamId: markerAsset.streams[0].streamId,
           trackId: { label: "landmark" },
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 7680001, endUs: 8680001 } },
@@ -173,7 +173,7 @@ try {
       },
     ],
   });
-  project.revisionId = marked.revision.id;
+  project.revisionId = marked.revision.revisionId;
   report.project = project;
   const selected = {
     ...project,

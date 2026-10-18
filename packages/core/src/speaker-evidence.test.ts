@@ -117,13 +117,13 @@ test("publishes a bounded selected range with its matching score extent", async 
   const source = {
     ...speakerSource,
     observationRange: { startUs: 0, endUs: 10_000_000 },
-    pcm: { ...speakerSource.pcm, frames: 160_000 },
+    pcm: { ...speakerSource.pcm, frameCount: 160_000 },
   };
   const raw = nativeOutput(["0.000 1.000 speaker_0"], speakerSource.engine.modelSha256, 160_000);
   const staged = f.store.stage(f.identity, source, raw);
   f.catalog.transaction(() => staged.publish());
   expect(f.store.metadata(f.identity)).toMatchObject({
-    source: { observationRange: source.observationRange, pcm: { frames: 160_000 } },
+    source: { observationRange: source.observationRange, pcm: { frameCount: 160_000 } },
     scoreCount: 125,
     axes: [1, 125, 4],
   });

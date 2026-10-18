@@ -175,7 +175,7 @@ try {
     "edit.apply",
     {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -220,7 +220,7 @@ try {
   assert.deepEqual(text.placement, { kind: "content", clipId: parent.id, sourceRange: range });
   const moved = await call("edit.apply", {
     projectId,
-    expectedRevisionId: edited.revision.id,
+    expectedRevisionId: edited.revision.revisionId,
     requestId: randomUUID(),
     operations: [{ operation: "move", clipIds: [parent.id], atUs: 1000000, ripple: "none" }],
   });
@@ -230,7 +230,7 @@ try {
   );
   report.literalAnchor = {
     projectId,
-    revisionId: moved.revision.id,
+    revisionId: moved.revision.revisionId,
     clipId: parent.id,
     textClipId: text.id,
     sourceRange: range,

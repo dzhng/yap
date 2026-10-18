@@ -86,7 +86,7 @@ try {
     "source admission",
   );
   const asset = await call("asset.get", { assetId: hash(await readFile(source)) });
-  const streamId = asset.streams.find((v) => v.kind === "audio").id;
+  const streamId = asset.streams.find((v) => v.kind === "audio").streamId;
   const created = await call("project.create", {
     requestId: "gain-project",
     title: "Gain curve journey",
@@ -98,7 +98,7 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  let revisionId = created.revision.id;
+  let revisionId = created.revision.revisionId;
   async function edit(operations) {
     const result = await call("edit.apply", {
       projectId,
@@ -106,7 +106,7 @@ try {
       requestId: `gain-edit-${sequence++}`,
       operations,
     });
-    revisionId = result.revision.id;
+    revisionId = result.revision.revisionId;
     return result;
   }
   const placed = await edit([

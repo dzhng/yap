@@ -59,7 +59,7 @@ async function edit(requestId, operations, transport = "cli") {
     { projectId, expectedRevisionId: revisionId, requestId, operations },
     { transport },
   );
-  revisionId = result.revision.id;
+  revisionId = result.revision.revisionId;
   return result;
 }
 async function audio(name, selection = { projectId, revisionId }) {
@@ -103,7 +103,7 @@ try {
     },
   });
   projectId = made.project.projectId;
-  revisionId = made.revision.id;
+  revisionId = made.revision.revisionId;
   const placed = await edit("place", [
     { operation: "track.add", label: "narration", track: { kind: "audio", order: 0 } },
     {
@@ -111,7 +111,7 @@ try {
       clip: {
         trackId: { label: "narration" },
         assetId: asset.id,
-        streamId: asset.streams[0].id,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
         pitch: "preserve",
@@ -154,7 +154,7 @@ try {
   };
   const selection = {
     assetId: asset.id,
-    streamId: asset.streams[0].id,
+    streamId: asset.streams[0].streamId,
     range: { startUs: 0, endUs: 250000 },
     rendition: { sampleRate: rate, channels: 2 },
   };
@@ -337,7 +337,7 @@ try {
     assert.deepEqual(
       await audio("noise-prepared", {
         assetId: preparedAsset.id,
-        streamId: preparedAsset.streams.find((v) => v.kind === "audio").id,
+        streamId: preparedAsset.streams.find((v) => v.kind === "audio").streamId,
       }),
       wet,
     );
@@ -394,7 +394,7 @@ try {
       ).id;
     assert.deepEqual(await audio("undo-noise"), silent);
     assert.deepEqual(
-      await audio("source-after-noise", { assetId: asset.id, streamId: asset.streams[0].id }),
+      await audio("source-after-noise", { assetId: asset.id, streamId: asset.streams[0].streamId }),
       sourcePCM,
     );
     Object.assign(report.checks.rnnoise, {

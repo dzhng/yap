@@ -50,7 +50,7 @@ async function edit(selection, operations, options = {}) {
   );
 }
 function selected(projectId, result) {
-  return { projectId, revisionId: result.revision?.id ?? result.id };
+  return { projectId, revisionId: result.revision?.revisionId ?? result.id };
 }
 async function project(source, steps = pointerSteps, sourceRange = range) {
   const initial = await call("project.create", {
@@ -437,7 +437,7 @@ try {
       "edit.undo",
       {
         projectId: historySelection.projectId,
-        expectedRevisionId: applied.revision.id,
+        expectedRevisionId: applied.revision.revisionId,
         requestId: randomUUID(),
       },
       { transport: "mcp" },
@@ -463,7 +463,7 @@ try {
     const restored = await call("edit.restore", {
       projectId: historySelection.projectId,
       expectedRevisionId: undone.id,
-      targetRevisionId: applied.revision.id,
+      targetRevisionId: applied.revision.revisionId,
       requestId: randomUUID(),
     });
     assert.deepEqual(restored.document, applied.revision.document);

@@ -21,7 +21,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
   const speech = await admit(join(root, "fixtures/narrated-workbench/narration.mov"));
   const source = {
     assetId: speech.id,
-    streamId: speech.streams.find((stream) => stream.kind === "audio").id,
+    streamId: speech.streams.find((stream) => stream.kind === "audio").streamId,
   };
   await api("transcript.transcribe", source);
   const transcript = await poll(
@@ -48,7 +48,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
     },
   });
   const projectId = created.project.projectId;
-  let revisionId = created.revision.id;
+  let revisionId = created.revision.revisionId;
   const selection = () => ({ projectId, revisionId });
   async function edit(operations) {
     const result = await api("edit.apply", {
@@ -57,7 +57,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
       requestId: randomUUID(),
       operations,
     });
-    revisionId = result.revision.id;
+    revisionId = result.revision.revisionId;
     return result;
   }
   const placed = await edit([
@@ -111,7 +111,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
   });
   const seedRequest = { projectId, expectedRevisionId: revisionId, requestId: randomUUID(), cues };
   const seeded = await api("text.seed", seedRequest, { transport: "mcp" });
-  revisionId = seeded.revision.id;
+  revisionId = seeded.revision.revisionId;
   assert.deepEqual(await api("text.seed", seedRequest), seeded);
   const literal = selected.map((row) => row.text).join(" ");
   assert.deepEqual(

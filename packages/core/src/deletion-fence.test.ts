@@ -41,7 +41,7 @@ async function fixture() {
   const project = projects.create({ requestId: "create", canvas });
   projects.apply(project.project.projectId, {
     requestId: "place",
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
       {
@@ -74,7 +74,7 @@ test("revision publication refuses a tombstoned asset and succeeds after clearin
     expect(() =>
       f.projects.apply(f.projectId, {
         requestId: "late",
-        expectedRevisionId: current.id,
+        expectedRevisionId: current.revisionId,
         operations: [{ operation: "canvas.set", canvas: { width: 161 } }],
       }),
     ).toThrowError(expect.objectContaining({ code: "DELETE_IN_PROGRESS" }));
@@ -82,7 +82,7 @@ test("revision publication refuses a tombstoned asset and succeeds after clearin
     expect(
       f.projects.apply(f.projectId, {
         requestId: "late-2",
-        expectedRevisionId: current.id,
+        expectedRevisionId: current.revisionId,
         operations: [{ operation: "canvas.set", canvas: { width: 161 } }],
       }).revision,
     ).toBeTruthy();

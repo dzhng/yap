@@ -70,7 +70,7 @@ try {
           clip: {
             trackId: start === 0 ? { label: "audio" } : revision.document.tracks[0].id,
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: 720000 } },
             placement: { kind: "project", range: { startUs: i * 720000, endUs: (i + 1) * 720000 } },
           },
@@ -86,7 +86,7 @@ try {
           "edit.apply",
           {
             projectId: made.project.projectId,
-            expectedRevisionId: revision.id,
+            expectedRevisionId: revision.revisionId,
             requestId: "place-" + start,
             operations,
           },
@@ -98,7 +98,7 @@ try {
     const barrier = count === 1 ? await service.arm("media.mixCompositionAudio") : null;
     const requested = await service.call("audio.prepare", {
       projectId: made.project.projectId,
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
     });
     if (barrier) await barrier();
     const canceled = await service.call(
@@ -112,7 +112,7 @@ try {
       count,
       setupMs,
       projectId: made.project.projectId,
-      revisionId: revision.id,
+      revisionId: revision.revisionId,
       jobId: requested.jobId,
       canceled,
     });

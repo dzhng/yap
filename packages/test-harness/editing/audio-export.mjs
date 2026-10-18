@@ -157,7 +157,10 @@ try {
     "import",
   );
   const asset = await call("asset.get", { assetId: loaded.published.output.assetId });
-  const source = { assetId: asset.id, streamId: asset.streams.find((v) => v.kind === "audio").id };
+  const source = {
+    assetId: asset.id,
+    streamId: asset.streams.find((v) => v.kind === "audio").streamId,
+  };
   const extracted = await poll(
     () =>
       call(
@@ -179,7 +182,7 @@ try {
     },
   });
   projectId = made.project.projectId;
-  head = made.revision.id;
+  head = made.revision.revisionId;
   const placed = await call("edit.apply", {
     projectId,
     expectedRevisionId: head,
@@ -188,8 +191,8 @@ try {
       { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "sound", track: { kind: "audio", order: 1 } },
       ...[
-        ["picture", asset, asset.streams.find((v) => v.kind === "video").id],
-        ["sound", audio, audio.streams[0].id],
+        ["picture", asset, asset.streams.find((v) => v.kind === "video").streamId],
+        ["sound", audio, audio.streams[0].streamId],
       ].map(([track, a, streamId]) => ({
         operation: "place",
         label: track + "-clip",
@@ -215,7 +218,7 @@ try {
       },
     ],
   });
-  head = placed.revision.id;
+  head = placed.revision.revisionId;
   const split = await call(
     "edit.apply",
     {
@@ -234,7 +237,7 @@ try {
     },
     { transport: "mcp" },
   );
-  head = split.revision.id;
+  head = split.revision.revisionId;
   const trimmed = await call("edit.apply", {
     projectId,
     expectedRevisionId: head,
@@ -249,7 +252,7 @@ try {
       },
     ],
   });
-  head = trimmed.revision.id;
+  head = trimmed.revision.revisionId;
   const selection = { projectId, revisionId: head },
     before = await call("revision.get", selection);
   const baseline = await readyAudio(selection, "processed");
@@ -298,7 +301,7 @@ try {
           },
         ],
       });
-      head = later.revision.id;
+      head = later.revision.revisionId;
     },
     armFault,
     crashService: async () => {
@@ -331,7 +334,7 @@ try {
     },
     { transport: "mcp" },
   );
-  head = removed.revision.id;
+  head = removed.revision.revisionId;
   const audioOnly = await exported({ projectId, revisionId: head }, "without-video", {}, "mcp");
   assert.deepEqual(wave(await readFile(withVideo.status.output)).data, currentExpected);
   assert.deepEqual(

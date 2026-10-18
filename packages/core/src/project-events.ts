@@ -2,6 +2,7 @@ import {
   compare,
   fromTime,
   toTime,
+  round,
   floor,
   ceil,
   type TimeValue,
@@ -116,7 +117,7 @@ export function mergeEvents(
           : compare(mapped.project, fromTime(plan.query.range.endUs)) >= 0)
       )
         continue;
-      const projectAtUs = toTime(mapped.project);
+      const projectAtUs = round(mapped.project);
       return {
         key: {
           projectStartUs: projectAtUs,

@@ -52,7 +52,7 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
             modelSha256: request.engine.modelSha256,
             pcm: pcmPath,
             pcmSha256: pcm.sha256,
-            frames: pcm.frames,
+            frameCount: pcm.frames,
             sampleRate: pcm.sampleRate,
             text: request.selected.text,
             output,
@@ -66,7 +66,7 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
         };
         if (!result.ok)
           return {
-            pcm,
+            pcm: { ...pcm, frameCount: pcm.frames },
             operands,
             failure: new CatalogError(
               result.error.code,
@@ -79,11 +79,11 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
           operands.correspondence = JSON.stringify(
             nativeResult(await execute("speech.correspond", input, { signal, timeoutMs: 10000 })),
           );
-          return { pcm, operands };
+          return { pcm: { ...pcm, frameCount: pcm.frames }, operands };
         } catch (error) {
           signal.throwIfAborted();
           return {
-            pcm,
+            pcm: { ...pcm, frameCount: pcm.frames },
             operands,
             failure:
               error instanceof CatalogError

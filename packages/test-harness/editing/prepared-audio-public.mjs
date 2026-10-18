@@ -112,7 +112,7 @@ try {
   const projectId = made.project.projectId;
   const placed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -122,7 +122,7 @@ try {
         clip: {
           trackId: { label: "audio" },
           assetId: sourceAsset.id,
-          streamId: sourceAsset.streams[0].id,
+          streamId: sourceAsset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
           pitch: "preserve",
@@ -135,7 +135,7 @@ try {
         "edit.apply",
         {
           projectId,
-          expectedRevisionId: placed.revision.id,
+          expectedRevisionId: placed.revision.revisionId,
           requestId: "stretch",
           operations: [
             {
@@ -151,7 +151,7 @@ try {
         { transport: "mcp" },
       )
     : placed;
-  const original = { projectId, revisionId: authored.revision.id };
+  const original = { projectId, revisionId: authored.revision.revisionId };
   if (retime) {
     const baseline = await poll(
       () => call("audio.get", original, { transport: "mcp" }),
@@ -198,7 +198,7 @@ try {
       },
     ],
   });
-  const selection = { projectId, revisionId: gained.revision.id };
+  const selection = { projectId, revisionId: gained.revision.revisionId };
   const blocked = await service.arm("media.mixCompositionAudio");
   const pending = await call("audio.prepare", selection);
   await blocked();
@@ -234,7 +234,10 @@ try {
   assert.notEqual(second.published.output.assetId, first.published.output.assetId);
   await inspect(second, 0.5, "gain");
   assert.deepEqual(await call("revision.get", selection), { projectId, revision: gained.revision });
-  assert.equal((await call("project.get", { projectId })).currentRevisionId, later.revision.id);
+  assert.equal(
+    (await call("project.get", { projectId })).currentRevisionId,
+    later.revision.revisionId,
+  );
   assert.deepEqual(await prepare(original), first);
   await service.stop();
   await service.start();
@@ -256,7 +259,7 @@ try {
         },
       ],
     });
-    const prepared = await prepare({ projectId, revisionId: shortened.revision.id });
+    const prepared = await prepare({ projectId, revisionId: shortened.revision.revisionId });
     assert.equal(prepared.published.output.frames, 24000);
     assert.deepEqual(prepared.published.output.sampleRange, { start: 0, end: 24000 });
     assert.equal(shortened.revision.document.clips[0].pitch, "preserve");

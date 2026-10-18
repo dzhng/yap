@@ -77,7 +77,7 @@ async function picture(selection, name) {
 }
 async function project(canvas) {
   const created = await call("project.create", { requestId: randomUUID(), canvas });
-  let revisionId = created.revision.id;
+  let revisionId = created.revision.revisionId;
   const projectId = created.project.projectId;
   return {
     selection: () => ({ projectId, revisionId }),
@@ -88,7 +88,7 @@ async function project(canvas) {
         requestId: randomUUID(),
         operations,
       });
-      revisionId = result.revision.id;
+      revisionId = result.revision.revisionId;
       return result;
     },
   };
@@ -143,7 +143,7 @@ try {
           clip: {
             trackId: ref("control"),
             assetId: expected.id,
-            streamId: expected.streams[0].id,
+            streamId: expected.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
           },
@@ -414,7 +414,7 @@ try {
     const restored = await call("edit.restore", {
       projectId: p.selection().projectId,
       expectedRevisionId: p.selection().revisionId,
-      targetRevisionId: authored.revision.id,
+      targetRevisionId: authored.revision.revisionId,
       requestId: randomUUID(),
     });
     const retimed = await call("edit.apply", {
@@ -430,7 +430,10 @@ try {
         },
       ],
     });
-    const selection = { projectId: p.selection().projectId, revisionId: retimed.revision.id };
+    const selection = {
+      projectId: p.selection().projectId,
+      revisionId: retimed.revision.revisionId,
+    };
     for (const [atUs, expected] of [
       [250000, 2],
       [500000, 3],
@@ -462,7 +465,7 @@ try {
       [2750000, 0],
     ]) {
       const result = await picture(
-        { projectId: selection.projectId, revisionId: repeated.revision.id, atUs },
+        { projectId: selection.projectId, revisionId: repeated.revision.revisionId, atUs },
         "repeated-" + atUs,
       );
       assert.equal(
@@ -472,7 +475,7 @@ try {
     }
     const trimmed = await call("edit.apply", {
       projectId: selection.projectId,
-      expectedRevisionId: repeated.revision.id,
+      expectedRevisionId: repeated.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         {
@@ -484,7 +487,7 @@ try {
       ],
     });
     const trimPicture = await picture(
-      { projectId: selection.projectId, revisionId: trimmed.revision.id, atUs: 2500000 },
+      { projectId: selection.projectId, revisionId: trimmed.revision.revisionId, atUs: 2500000 },
       "trimmed-attachment",
     );
     assert.equal(
@@ -613,16 +616,16 @@ try {
     );
     const adopted = {
       project: await call("project.get", { projectId: adoption.published.output.projectId }),
-      revision: { id: adoption.published.output.revisionId },
+      revision: { revisionId: adoption.published.output.revisionId },
     };
     const adoptedCurrent = await picture(
-      { projectId: adopted.project.projectId, revisionId: adopted.revision.id, atUs: 0 },
+      { projectId: adopted.project.projectId, revisionId: adopted.revision.revisionId, atUs: 0 },
       "adopted-distinct-asset",
     );
     assert.deepEqual(adoptedCurrent.bytes, distinct.bytes);
     const undo = await call("edit.undo", {
       projectId: adopted.project.projectId,
-      expectedRevisionId: adopted.revision.id,
+      expectedRevisionId: adopted.revision.revisionId,
       requestId: randomUUID(),
     });
     const adoptedHistory = await picture(
@@ -784,7 +787,7 @@ try {
         clip: {
           trackId: ref("opaque"),
           assetId: opaque.id,
-          streamId: opaque.streams[0].id,
+          streamId: opaque.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },

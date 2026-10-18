@@ -280,7 +280,7 @@ try {
   await service.call("edit.apply", {
     projectId,
     requestId: "camera-placement",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
       {

@@ -200,7 +200,7 @@ try {
     const request = JSON.parse(
       await readFile(join(out, "native", `speech-${index}-request.json`), "utf8"),
     );
-    assert.equal(request.track.streamId, streams[index].id);
+    assert.equal(request.track.streamId, streams[index].streamId);
     assert.equal(request.track.sourceOffsetUs, -asset.originUs);
     assert.equal(request.track.role, undefined);
   }
@@ -381,13 +381,13 @@ try {
     },
     { transport: "mcp" },
   );
-  assert.notEqual(advanced.revision.id, report.project.revisionId);
+  assert.notEqual(advanced.revision.revisionId, report.project.revisionId);
   assert.notDeepEqual(advanced.revision.document, report.project.document);
   assert.equal(
     (await call("project.get", { projectId: report.project.projectId })).currentRevisionId,
-    advanced.revision.id,
+    advanced.revision.revisionId,
   );
-  report.project.newHeadRevisionId = advanced.revision.id;
+  report.project.newHeadRevisionId = advanced.revision.revisionId;
   await save("project.json", report.project);
   await service.stop();
   await service.start();
@@ -406,7 +406,7 @@ try {
     { projectId: report.project.projectId, revisionId: report.project.revisionId },
     { transport: "mcp" },
   );
-  assert.equal(historical.revision.id, report.project.revisionId);
+  assert.equal(historical.revision.revisionId, report.project.revisionId);
   assert.deepEqual(historical.revision.document, report.project.document);
   assert.deepEqual(
     historical.revision.document.clips.map((c) => c.acquisitionId ?? null),

@@ -202,7 +202,7 @@ try {
   let first = await call("edit.apply", {
     projectId,
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
       {
@@ -210,7 +210,7 @@ try {
         clip: {
           trackId: { label: "audio" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: clipUs } },
           placement: { kind: "project", range: { startUs: 0, endUs: clipUs } },
         },
@@ -222,7 +222,7 @@ try {
     first = await call("edit.apply", {
       projectId,
       requestId: `place-${start}`,
-      expectedRevisionId: first.revision.id,
+      expectedRevisionId: first.revision.revisionId,
       operations: Array.from({ length: Math.min(1000, occurrences - start) }, (_, offset) => {
         const range = { startUs: (start + offset) * clipUs, endUs: (start + offset + 1) * clipUs };
         return {
@@ -230,7 +230,7 @@ try {
           clip: {
             trackId,
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: { kind: "range", range },
             placement: { kind: "project", range },
           },
@@ -241,7 +241,7 @@ try {
   const latest = await call("edit.apply", {
     projectId,
     requestId: "gain",
-    expectedRevisionId: first.revision.id,
+    expectedRevisionId: first.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -258,13 +258,13 @@ try {
   const values = await owner(donor, true, async ({ prepared, jobs, projects }) => {
     const values = [];
     for (const [i, revision] of originals.entries()) {
-      await prepared.request({ projectId, revisionId: revision.id });
+      await prepared.request({ projectId, revisionId: revision.revisionId });
       await jobs.idle();
-      const status = await prepared.request({ projectId, revisionId: revision.id });
+      const status = await prepared.request({ projectId, revisionId: revision.revisionId });
       assert.equal(status.state, "ready");
       const value = JSON.parse(status.published.result);
       assert.deepEqual(samples(prepared, value.resourceId), expected[i]);
-      assert.deepEqual(projects.revision(projectId, revision.id), revision);
+      assert.deepEqual(projects.revision(projectId, revision.revisionId), revision);
       values.push({ value, portable: prepared.portable(value.resourceId) });
     }
     return values;
@@ -273,7 +273,7 @@ try {
   const learned = await call("edit.apply", {
     projectId,
     requestId: "learned",
-    expectedRevisionId: latest.revision.id,
+    expectedRevisionId: latest.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -282,7 +282,7 @@ try {
       },
     ],
   });
-  const selection = { projectId, revisionId: learned.revision.id };
+  const selection = { projectId, revisionId: learned.revision.revisionId };
   const publication = await poll(
     () => call("audio.prepare", selection),
     (value) => value.state === "ready",
@@ -297,7 +297,7 @@ try {
         "audio.get",
         {
           assetId: learnedAsset.id,
-          streamId: learnedAsset.streams[0].id,
+          streamId: learnedAsset.streams[0].streamId,
           range: { startUs: 0, endUs: 1000000 },
         },
         learnedPath,
@@ -318,7 +318,7 @@ try {
   await close();
   values.push(
     await owner(donor, false, async ({ prepared, projects }) => {
-      assert.deepEqual(projects.revision(projectId, learned.revision.id), learned.revision);
+      assert.deepEqual(projects.revision(projectId, learned.revision.revisionId), learned.revision);
       const portable = prepared.portable(publication.published.output.resourceId);
       assert(
         JSON.parse(portable.publication.input).requirements.some((r) =>
@@ -409,7 +409,7 @@ try {
   });
   const changedSelection = {
     projectId: adopted.published.output.projectId,
-    revisionId: changed.revision.id,
+    revisionId: changed.revision.revisionId,
   };
   for (const operation of ["audio.prepare", "audio.get"]) {
     const failure = await call(
@@ -430,7 +430,7 @@ try {
   }
   const undone = await call("edit.undo", {
     projectId: adopted.published.output.projectId,
-    expectedRevisionId: changed.revision.id,
+    expectedRevisionId: changed.revision.revisionId,
     requestId: "undo-changed-learned",
   });
   const restored = await call("audio.prepare", {
@@ -489,7 +489,7 @@ try {
           "audio.get",
           {
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             range: { startUs: 750000, endUs: 1000000 },
           },
           output,

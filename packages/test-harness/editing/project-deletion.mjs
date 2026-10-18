@@ -81,7 +81,7 @@ try {
   const edit = {
     projectId,
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "voice" },
       {
@@ -97,7 +97,7 @@ try {
     ],
   };
   const placed = await call("edit.apply", edit);
-  assert.ok(service.assets.references(asset.id).some((r) => r.id === placed.revision.id));
+  assert.ok(service.assets.references(asset.id).some((r) => r.id === placed.revision.revisionId));
   await connectMcp();
   const expected = { projectId, deleted: true };
   const deleted = await mcp.callTool({ name: "project.delete", arguments: { projectId } });
@@ -108,7 +108,7 @@ try {
   assert.equal((await call("project.get", { projectId }, false)).code, "NOT_FOUND");
   assert.equal((await call("edit.apply", edit, false)).code, "NOT_FOUND");
   assert.equal(
-    (await call("revision.get", { projectId, revisionId: placed.revision.id }, false)).code,
+    (await call("revision.get", { projectId, revisionId: placed.revision.revisionId }, false)).code,
     "NOT_FOUND",
   );
   assert.deepEqual((await call("project.list", {})).projects, []);

@@ -92,13 +92,13 @@ async function project(name, source, recorded, missing) {
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations,
   });
   return {
     name,
     projectId: created.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     canvas,
     duration,
     source,

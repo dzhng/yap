@@ -76,8 +76,8 @@ try {
     "asset.segments",
     {
       assetId: values.asset,
-      streamId: expected.streams[0].id,
-      cursor: { assetId: "wrong", streamId: expected.streams[0].id, afterOrdinal: 0 },
+      streamId: expected.streams[0].streamId,
+      cursor: { assetId: "wrong", streamId: expected.streams[0].streamId, afterOrdinal: 0 },
     },
     { error: true },
   );

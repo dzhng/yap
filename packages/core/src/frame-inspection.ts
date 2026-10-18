@@ -77,6 +77,12 @@ const pictureDeliverySchema = z.object({
     .positive()
     .max(32 * 1024 * 1024),
 });
+const publicPictureDeliverySchema = pictureDeliverySchema.omit({ bytes: true }).extend({
+  sizeBytes: z
+    .int()
+    .positive()
+    .max(32 * 1024 * 1024),
+});
 const textLayoutSchema = z
   .object({
     font: fontReferenceSchema,
@@ -193,6 +199,15 @@ const nativeProjectReceiptSchema = pictureDeliverySchema.extend({
 const projectReceiptSchema = nativeProjectReceiptSchema.extend({
   frame: z.strictObject(compiledFrameSchema.shape).omit({ visual: true }),
 });
+const publicProjectReceiptSchema = publicPictureDeliverySchema.extend({
+  profile: z.literal("h264-rec709"),
+  frame: z.strictObject(compiledFrameSchema.shape).omit({ visual: true }),
+  decodedSamples: time,
+  readerOpens: time,
+  decodedImages: time,
+  pictures: nativeProjectReceiptSchema.shape.pictures,
+  textFallbacks: textFallbacksSchema.optional(),
+});
 export const projectPictureOptionsSchema = z.strictObject({
   maxLongEdge: z.int().min(1).max(8192),
   tap: processingTapSchema,
@@ -205,7 +220,7 @@ const optionsSchema = z.strictObject({
   cursorTrailUs: z.int().min(0).max(10_000_000).optional(),
   ...projectPictureOptionsSchema.shape,
 });
-export const retainedProjectFrameSchema = projectReceiptSchema
+export const retainedProjectFrameSchema = publicProjectReceiptSchema
   .extend({
     ...optionsSchema.shape,
     projectId: z.string().min(1),
@@ -409,7 +424,16 @@ export function validateFaceObservations(
     );
 }
 
-export const retainedSourceFrameSchema = sourceReceiptSchema
+const publicSourceReceiptSchema = publicPictureDeliverySchema.extend({
+  decodedSamples: time,
+  readerOpens: time,
+  assetId: z.string().min(1),
+  streamId: z.string().min(1),
+  requestedSourceUs: time,
+  actualSourceUs: z.int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  sample: sourceReceiptSchema.shape.sample,
+});
+export const retainedSourceFrameSchema = publicSourceReceiptSchema
   .extend({
     ...sourceSelectionSchema.shape,
     atUs: time,
@@ -663,7 +687,8 @@ export class MediaFrameInspection {
           "INVALID_RESPONSE",
           "Published picture size differs from its receipt",
         );
-      return JSON.stringify({ ...value, cacheId: output.id });
+      const { bytes, ...publicValue } = value;
+      return JSON.stringify({ ...publicValue, sizeBytes: bytes, cacheId: output.id });
     } catch (error) {
       this.owners.cache.remove(output.id);
       throw error;
@@ -1059,16 +1084,18 @@ export function validateRetainedProjectFrameReceipt(
   output: string,
   maxLongEdge: number,
 ): PictureReceipt {
-  const parsed = projectReceiptSchema.safeParse(receipt);
+  const parsed = publicProjectReceiptSchema.safeParse(receipt);
   if (!parsed.success) throw new CatalogError("INVALID_RESPONSE", "Malformed picture receipt");
+  const { sizeBytes, ...publicValue } = parsed.data;
+  const value = { ...publicValue, bytes: sizeBytes } as PictureReceipt;
   checkPictureReceipt(
-    parsed.data,
+    value,
     inspectedFrame(plan.window.frames().next().value!, plan),
     plan,
     output,
     maxLongEdge,
   );
-  return parsed.data;
+  return value;
 }
 function checkPictureReceipt(
   value: PictureReceipt,

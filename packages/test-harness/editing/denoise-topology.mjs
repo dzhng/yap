@@ -160,7 +160,12 @@ try {
   const projectId = made.project.projectId;
   let revision = made.revision;
   async function apply(operations, name) {
-    const params = { projectId, expectedRevisionId: revision.id, requestId: name, operations };
+    const params = {
+      projectId,
+      expectedRevisionId: revision.revisionId,
+      requestId: name,
+      operations,
+    };
     await writeFile(join(out, `${name}-request.json`), JSON.stringify(params));
     const at = performance.now(),
       result = await call("edit.apply", params);
@@ -178,7 +183,7 @@ try {
         clip: {
           trackId: topology.edit.labels[`t${clip.lane}`],
           assetId: assets[0].id,
-          streamId: assets[0].streams[0].id,
+          streamId: assets[0].streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: clip.endUs - clip.startUs } },
           placement: { kind: "project", range: { startUs: clip.startUs, endUs: clip.endUs } },
         },
@@ -193,7 +198,7 @@ try {
           clip: {
             trackId: topology.edit.labels[`t${lane}`],
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             source: {
               kind: "range",
               range: { startUs: sourceStartUs, endUs: sourceStartUs + 500000 },
@@ -210,7 +215,7 @@ try {
       placement.slice(first, first + 500),
       first === 0 ? "place-first" : first === 500 && !long ? "place-last" : `place-${first}`,
     );
-  const drySelection = { projectId, revisionId: revision.id };
+  const drySelection = { projectId, revisionId: revision.revisionId };
   let independent, expected;
   if (long) {
     phase = "independent dry";
@@ -269,7 +274,7 @@ try {
     ],
     "learned",
   );
-  const selection = { projectId, revisionId: revision.id };
+  const selection = { projectId, revisionId: revision.revisionId };
   report.selection = selection;
   const query = { ...selection, range: { startUs: 0, endUs: seconds * 1e6 }, limit: 250 };
   async function rows250() {
@@ -355,7 +360,7 @@ try {
   await service.start();
   const lateStartUs = long ? (seconds - 1) * 1e6 : 7750000;
   const late = {
-    ...(long ? selection : { assetId: retained.id, streamId: retained.streams[0].id }),
+    ...(long ? selection : { assetId: retained.id, streamId: retained.streams[0].streamId }),
     range: { startUs: lateStartUs, endUs: seconds * 1e6 },
   };
   const lateResult = await audio(late, "retained-late");

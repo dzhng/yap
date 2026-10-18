@@ -111,7 +111,7 @@ try {
   });
   const selection = {
     projectId: project.project.projectId,
-    expectedRevisionId: project.revision.id,
+    expectedRevisionId: project.revision.revisionId,
   };
   const refused = await call(
     "edit.apply",

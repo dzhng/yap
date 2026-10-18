@@ -120,7 +120,10 @@ export async function verifyNarrationMusic({
         },
       ],
     });
-    const mixedSelection = { projectId: selection.projectId, revisionId: added.revision.id };
+    const mixedSelection = {
+      projectId: selection.projectId,
+      revisionId: added.revision.revisionId,
+    };
     for (const clip of document.clips)
       assert.deepEqual(
         added.revision.document.clips.find((c) => c.id === clip.id),
@@ -159,7 +162,10 @@ export async function verifyNarrationMusic({
           },
         ],
       });
-      const changedSelection = { projectId: selection.projectId, revisionId: changed.revision.id };
+      const changedSelection = {
+        projectId: selection.projectId,
+        revisionId: changed.revision.revisionId,
+      };
       const negative = await delivered(changedSelection, `music-${name}`);
       equal(negative, expected(level));
       assert.throws(() => equal(negative, target), assert.AssertionError);
@@ -171,7 +177,7 @@ export async function verifyNarrationMusic({
       });
       const undone = await request("edit.undo", {
         projectId: selection.projectId,
-        expectedRevisionId: changed.revision.id,
+        expectedRevisionId: changed.revision.revisionId,
         requestId: `undo-${name}`,
       });
       assert.deepEqual(undone.document, added.revision.document);

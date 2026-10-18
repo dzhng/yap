@@ -115,7 +115,7 @@ async function fixture(t, wrap = (worker) => worker) {
   let edited = await good("edit.apply", {
     projectId,
     requestId: "first-text",
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "captions" },
       {
@@ -145,7 +145,7 @@ async function fixture(t, wrap = (worker) => worker) {
       const requestId = randomUUID();
       const request = {
         projectId,
-        revisionId: edited.revision.id,
+        revisionId: edited.revision.revisionId,
         placementIds: [placementId],
         kind: "srt",
         directory: output,
@@ -159,7 +159,7 @@ async function fixture(t, wrap = (worker) => worker) {
       edited = await good("edit.apply", {
         projectId,
         requestId: randomUUID(),
-        expectedRevisionId: edited.revision.id,
+        expectedRevisionId: edited.revision.revisionId,
         operations: [{ operation: "text.set", clipId: placementId, source: textSource(text) }],
       });
       return edited;
@@ -574,7 +574,7 @@ async function silentProject(f, requestId) {
   const silent = await f.good("edit.apply", {
     projectId: created.project.projectId,
     requestId: `${requestId}-silence`,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
       {
@@ -587,7 +587,7 @@ async function silentProject(f, requestId) {
       },
     ],
   });
-  return { projectId: created.project.projectId, revisionId: silent.revision.id };
+  return { projectId: created.project.projectId, revisionId: silent.revision.revisionId };
 }
 
 test("job.retry on a failed export also retries the export's own failed audio render", async (t) => {

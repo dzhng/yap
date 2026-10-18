@@ -39,14 +39,14 @@ test("duplicates the selected document into a one-revision project", async () =>
   const source = projects.create({ requestId: "source-create", title: "Demo", canvas });
   const edited = projects.apply(source.project.projectId, {
     requestId: "source-edit",
-    expectedRevisionId: source.revision.id,
+    expectedRevisionId: source.revision.revisionId,
     operations: [{ operation: "canvas.set", canvas: { ...canvas, width: 320 } }],
   });
 
   const copy = projects.duplicate({
     requestId: "duplicate",
     projectId: source.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
   });
 
   expect(copy.project.title).toBe("Demo copy");
@@ -134,7 +134,7 @@ test("duplicate retains only the assets in the copied document", async () => {
   const source = projects.create({ requestId: "source-create", canvas });
   const placed = projects.apply(source.project.projectId, {
     requestId: "place",
-    expectedRevisionId: source.revision.id,
+    expectedRevisionId: source.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
       {
@@ -152,7 +152,7 @@ test("duplicate retains only the assets in the copied document", async () => {
   });
   const withBoth = projects.apply(source.project.projectId, {
     requestId: "place-second",
-    expectedRevisionId: placed.revision.id,
+    expectedRevisionId: placed.revision.revisionId,
     operations: [
       {
         operation: "place",
@@ -168,13 +168,13 @@ test("duplicate retains only the assets in the copied document", async () => {
   });
   const current = projects.apply(source.project.projectId, {
     requestId: "remove-first",
-    expectedRevisionId: withBoth.revision.id,
+    expectedRevisionId: withBoth.revision.revisionId,
     operations: [{ operation: "remove", clipIds: [placed.edit.labels.first!], ripple: "none" }],
   });
   const copy = projects.duplicate({
     requestId: "duplicate-users",
     projectId: source.project.projectId,
-    revisionId: current.revision.id,
+    revisionId: current.revision.revisionId,
   });
   const files = {
     asset: (id: string) => [assets.path(id)],
@@ -240,7 +240,7 @@ test("duplicate rolls back every catalog and reference write after an injected f
   const source = projects.create({ requestId: "source-create", canvas });
   projects.apply(source.project.projectId, {
     requestId: "source-place",
-    expectedRevisionId: source.revision.id,
+    expectedRevisionId: source.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
       {

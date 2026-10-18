@@ -184,7 +184,7 @@ async function inspector(home, source, service) {
   const projectId = initial.project.projectId;
   let authored = await call("edit.apply", {
     projectId,
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -208,11 +208,11 @@ async function inspector(home, source, service) {
   const edit = async (operations) => {
     authored = await call("edit.apply", {
       projectId,
-      expectedRevisionId: authored.revision.id,
+      expectedRevisionId: authored.revision.revisionId,
       requestId: randomUUID(),
       operations,
     });
-    return authored.revision.id;
+    return authored.revision.revisionId;
   };
   async function request(options = {}) {
     const { clean = false, trailUs = 2_000_000, revisionId, atUs = 2_000_000 } = options;

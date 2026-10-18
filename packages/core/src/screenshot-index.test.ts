@@ -217,7 +217,7 @@ test("retained evidence survives derived cache eviction and owner-directed recla
     (id) => id.generation === f.identity.generation,
   );
   expect(existsSync(stray)).toBe(false);
-  expect(f.index.page({ identity: f.identity }).entries[0]?.frame.bytes).toBe(png.length);
+  expect(f.index.page({ identity: f.identity }).entries[0]?.frame.sizeBytes).toBe(png.length);
 });
 test.for([false, true])(
   "replaced, symlinked and hard-linked images are refused (remounted: %s)",
@@ -305,7 +305,7 @@ test("a substituted FIFO is rejected without blocking file validation", async ()
      s=>selectSource(assets,acquisitions,s),new SceneEvidenceStore(catalog,assetSceneOwner(assets,acquisitions)),null)).openRead(${JSON.stringify(f.identity)},0);
    process.exitCode=1;
  } catch(error) {
-   console.log(JSON.stringify({code:error.code,message:error.message}));
+   process.stdout.write(JSON.stringify({code:error.code,message:error.message}));
  } finally {catalog.close();}
  `,
     ],

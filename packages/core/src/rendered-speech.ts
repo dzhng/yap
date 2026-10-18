@@ -1,9 +1,15 @@
-import { add, fromTime, rational, toTime } from "@yap/composition";
+import { add, fromTime, rational, round, toTime } from "@yap/composition";
 import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
 import type { Catalog } from "./catalog.js";
 import type { ProjectStore } from "./projects.js";
-import type { AudioExtraction, AudioExtractionInput, ExtractedAudio } from "./audio-extraction.js";
+import {
+  parseExtractedAudio,
+  publicExtraction,
+  type AudioExtraction,
+  type AudioExtractionInput,
+  type ExtractedAudio,
+} from "./audio-extraction.js";
 import { CatalogError, dependencyRefusal } from "./catalog.js";
 import type {
   ArtifactStatus,
@@ -16,6 +22,8 @@ import type {
 import { ResourceReferences, resourceKinds } from "./references.js";
 import {
   transcriptGenerationResource,
+  publicTranscriptMetadata,
+  parsePublicTranscriptMetadata,
   type TranscriptMetadata,
   type TranscriptStore,
 } from "./transcript.js";
@@ -36,6 +44,24 @@ type RenderedSpeechEvidence = {
   pcm: ExtractedAudio;
   transcript: TranscriptMetadata;
 };
+function publicSpeech(value: RenderedSpeechEvidence) {
+  const output = {
+    ...value,
+    pcm: publicExtraction(value.pcm),
+    transcript: publicTranscriptMetadata(value.transcript),
+  };
+  return JSON.parse(
+    JSON.stringify(output, (_, child) => (typeof child === "bigint" ? Number(child) : child)),
+  );
+}
+function parsePublicSpeech(value: unknown): RenderedSpeechEvidence {
+  const record = value as Record<string, any>;
+  return {
+    ...record,
+    pcm: parseExtractedAudio(record.pcm),
+    transcript: parsePublicTranscriptMetadata(record.transcript),
+  } as RenderedSpeechEvidence;
+}
 export type RenderedSpeechRead = {
   projectId: string;
   revisionId: string;
@@ -70,7 +96,7 @@ export class RenderedSpeech {
       tap: input.tap,
       rendition: input.rendition,
     };
-    return {
+    const result = {
       target: {
         kind: "project" as const,
         projectId: request.projectId,
@@ -79,6 +105,9 @@ export class RenderedSpeech {
       artifact,
       input: JSON.stringify({ request, execution: this.owners.transcripts.recognitionExecution() }),
     };
+    return JSON.parse(
+      JSON.stringify(result, (_, child) => (typeof child === "bigint" ? Number(child) : child)),
+    );
   }
   /**
    * The pinned project bounds the range: clamped with range-clamped, or refused with no overlap.
@@ -99,7 +128,7 @@ export class RenderedSpeech {
         ? {
             generation: status.published.generation,
             issues: status.published.issues,
-            speech: JSON.parse(status.published.result) as RenderedSpeechEvidence,
+            speech: publicSpeech(parsePublicSpeech(JSON.parse(status.published.result))),
           }
         : null,
       issues: admitted.issues,
@@ -162,7 +191,7 @@ export class RenderedSpeech {
     );
   }
   private pcm(status: ArtifactStatus) {
-    const pcm = JSON.parse(status.published!.result) as ExtractedAudio;
+    const pcm = parseExtractedAudio(JSON.parse(status.published!.result));
     if (pcm.origin.selection.kind !== "project")
       throw new CatalogError(
         "INVALID_EVIDENCE",
@@ -237,7 +266,7 @@ export class RenderedSpeech {
     };
     let published = false;
     return {
-      result: JSON.stringify(speech),
+      result: JSON.stringify(publicSpeech(speech)),
       issues,
       publish: () => {
         this.references.retain("transcript-generation", { kind: "job", id: job.jobId }, [
@@ -270,7 +299,7 @@ export class RenderedSpeech {
         "INVALID_PARAMS",
         "Rendered recognition continuation belongs to another generation",
       );
-    const speech = JSON.parse(retained.result) as RenderedSpeechEvidence;
+    const speech = parsePublicSpeech(JSON.parse(retained.result));
     const origin = speech.pcm.origin;
     if (origin.selection.kind !== "project")
       throw new CatalogError("INVALID_EVIDENCE", "Rendered PCM origin is not a project");
@@ -289,16 +318,20 @@ export class RenderedSpeech {
       kind: "rendered-speech" as const,
       state: "ready" as const,
       issues: this.owners.jobs.issues(retained),
-      pcm: speech.pcm,
-      transcript: speech.transcript,
+      pcm: publicExtraction(speech.pcm),
+      transcript: publicTranscriptMetadata(speech.transcript),
       page: {
-        rows: page.rows.map((row) => ({
-          ...row,
-          projectRange: {
-            startUs: toTime(add(start, fromTime(row.sourceRange.startUs))),
-            endUs: toTime(add(start, fromTime(row.sourceRange.endUs))),
-          },
-        })),
+        rows: page.rows.map((row) => {
+          const { issues, ...rest } = row as typeof row & { issues?: unknown };
+          return {
+            ...rest,
+            ...(issues === undefined ? {} : { issues }),
+            projectRange: {
+              startUs: round(add(start, fromTime(row.sourceRange.startUs))),
+              endUs: round(add(start, fromTime(row.sourceRange.endUs))),
+            },
+          };
+        }),
         nextCursor: page.nextCursor
           ? { generation: input.generation, sourceCursor: page.nextCursor }
           : null,

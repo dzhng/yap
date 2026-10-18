@@ -46,7 +46,7 @@ export async function generatedVideoProject(home, path, { width, height, duratio
     });
     const authored = projects.apply(created.project.projectId, {
       requestId: "native-media-video",
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
         {
@@ -64,7 +64,7 @@ export async function generatedVideoProject(home, path, { width, height, duratio
     });
     return {
       projectId: created.project.projectId,
-      revisionId: authored.revision.id,
+      revisionId: authored.revision.revisionId,
       clipId: authored.edit.labels.clip,
       trackId: authored.edit.labels.video,
     };

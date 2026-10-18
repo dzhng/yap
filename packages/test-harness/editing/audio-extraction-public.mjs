@@ -64,7 +64,7 @@ async function project(asset, name, { offsetUs = 0, durationUs = 1000000 } = {})
   const projectId = made.project.projectId;
   const placed = await call("edit.apply", {
     projectId,
-    expectedRevisionId: made.revision.id,
+    expectedRevisionId: made.revision.revisionId,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -73,7 +73,7 @@ async function project(asset, name, { offsetUs = 0, durationUs = 1000000 } = {})
         clip: {
           trackId: { label: "audio" },
           assetId: asset.id,
-          streamId: asset.streams[0].id,
+          streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: durationUs } },
           placement: {
             kind: "project",
@@ -84,7 +84,7 @@ async function project(asset, name, { offsetUs = 0, durationUs = 1000000 } = {})
       },
     ],
   });
-  return { projectId, revisionId: placed.revision.id };
+  return { projectId, revisionId: placed.revision.revisionId };
 }
 async function imported(path, requestId) {
   const requested = await call("asset.import", { path, requestId });
@@ -113,13 +113,13 @@ try {
   const asset = await imported(reference, "reference");
   const selected = {
     assetId: asset.id,
-    streamId: asset.streams[0].id,
+    streamId: asset.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
   const retained = await extract(selected);
   assert.equal(retained.assetId, hash(bytes));
-  assert.equal(retained.frames, 120000);
-  assert.equal(retained.origin.conversion.implementationId, "verified-wav-copy-v1");
+  assert.equal(retained.frameCount, 120000);
+  assert.equal(retained.origin.conversion.implementationId, "verified-wav-copy-v2");
   const origins = await call("asset.origins", { assetId: retained.assetId });
   assert(
     origins.origins.some((origin) => JSON.stringify(origin) === JSON.stringify(retained.origin)),
@@ -143,15 +143,15 @@ try {
   const oddAsset = await imported(oddPath, "odd");
   const odd = await extract({
     assetId: oddAsset.id,
-    streamId: oddAsset.streams[0].id,
+    streamId: oddAsset.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   });
   assert.equal(
-    odd.origin.input.frames,
+    odd.origin.input.frameCount,
     17,
     "An implicit whole WAV selection must not round away its final native frame",
   );
-  assert.equal(odd.frames, 9);
+  assert.equal(odd.frameCount, 9);
   const oddRequest = {
     source: oddPath,
     output: join(out, "odd-expected.wav"),
@@ -197,14 +197,14 @@ try {
     preexisting.fileName,
   );
   report.checks.convertedDifferentExtensionDedup = true;
-  assert.equal(rawExcerpt.frames, 110250);
+  assert.equal(rawExcerpt.frameCount, 110250);
   await compareSelection(raw, rawExcerpt, "raw-converted");
   const stereoPath = join(home, "stereo.wav");
   await writeSourceWave(stereoPath, { source: 0, seconds: 1 });
   const stereo = await imported(stereoPath, "stereo");
   const stereoInput = {
     assetId: stereo.id,
-    streamId: stereo.streams[0].id,
+    streamId: stereo.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
   const stereoExcerpt = await extract(stereoInput);
@@ -214,11 +214,11 @@ try {
   const aiff = await imported(aiffPath, "integer-aiff");
   const aiffInput = {
     assetId: aiff.id,
-    streamId: aiff.streams[0].id,
+    streamId: aiff.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
   const decodedExcerpt = await extract(aiffInput);
-  assert.equal(decodedExcerpt.origin.selectionImplementationId, "native-source-audio-v4");
+  assert.equal(decodedExcerpt.origin.selectionImplementationId, "native-source-audio-v6");
   await compareSelection(aiffInput, decodedExcerpt, "integer-decoded");
   report.checks.nonFloatContainerSelection = true;
   const first = await project(stereo, "first");
@@ -243,7 +243,7 @@ try {
     ],
   });
   assert.deepEqual(await extract(input), original);
-  const currentInput = { ...input, revisionId: changed.revision.id };
+  const currentInput = { ...input, revisionId: changed.revision.revisionId };
   const current = await extract(currentInput);
   assert.notEqual(current.assetId, original.assetId);
   assert.notEqual(

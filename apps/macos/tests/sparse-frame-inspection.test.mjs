@@ -332,7 +332,7 @@ test("sparse source pictures preserve containing-sample timing, full resolution 
       catalog,
       library,
       ownerCheck,
-      cache.bytes - boundary.published.output.bytes,
+      cache.bytes - boundary.published.output.sizeBytes,
     );
     await constrained.reconcile();
     assert.equal(constrained.acquire(boundary.published.output.cacheId), null);

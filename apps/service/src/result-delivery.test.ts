@@ -222,7 +222,7 @@ test("lost result publication releases capacity without rolling back or repeatin
     operation: "edit.apply",
     params: {
       projectId: made.project.projectId,
-      expectedRevisionId: made.revision.id,
+      expectedRevisionId: made.revision.revisionId,
       requestId: "one-edit",
       operations: [{ operation: "track.add", track: { kind: "video", order: 0 } }],
     },

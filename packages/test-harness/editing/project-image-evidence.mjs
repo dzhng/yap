@@ -29,7 +29,7 @@ async function importImage(name) {
     "import image",
   );
   const asset = await call("asset.get", { assetId: hash(bytes) });
-  return { assetId: asset.id, streamId: asset.streams[0].id };
+  return { assetId: asset.id, streamId: asset.streams[0].streamId };
 }
 async function picture(selection, name) {
   const ready = await poll(
@@ -77,7 +77,7 @@ try {
   const edit = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "base", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "overlay", track: { kind: "video", order: 1 } },
@@ -111,7 +111,7 @@ try {
       },
     ],
   });
-  const selection = { projectId, revisionId: edit.revision.id };
+  const selection = { projectId, revisionId: edit.revision.revisionId };
   for (const atUs of [
     0, 299999, 300000, 599999, 600000, 1199999, 1200000, 1399999, 1400000, 1999999,
   ])
@@ -254,7 +254,7 @@ try {
   const changed = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: edit.revision.id,
+    expectedRevisionId: edit.revision.revisionId,
     operations: [{ operation: "processing.set", target: { kind: "clip", id: card }, steps: stack }],
   });
   const processed = await picture({ projectId, atUs: 400000 }, "processed-order-a");
@@ -270,7 +270,7 @@ try {
   const reversed = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: changed.revision.id,
+    expectedRevisionId: changed.revision.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -342,8 +342,8 @@ try {
     externalExportRetained: true,
   };
   report.checks.processing = {
-    firstRevision: changed.revision.id,
-    reversedRevision: reversed.revision.id,
+    firstRevision: changed.revision.revisionId,
+    reversedRevision: reversed.revision.revisionId,
     orderedPixelsDiffer: true,
     dryUnchanged: true,
   };
@@ -376,7 +376,7 @@ try {
   const mixedEdit = await call("edit.apply", {
     projectId: mixedId,
     requestId: randomUUID(),
-    expectedRevisionId: mixed.revision.id,
+    expectedRevisionId: mixed.revision.revisionId,
     operations: [
       { operation: "track.add", label: "video-track", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "image-track", track: { kind: "video", order: 1 } },

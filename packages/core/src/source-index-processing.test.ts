@@ -103,7 +103,7 @@ async function assertSourceIndex(
     durationUs: 1200000,
     candidateCount: 4,
     coverageCount: 7,
-    bytes: 4 * png.length,
+    sizeBytes: 4 * png.length,
   });
   expect(
     result.page!.entries.map(({ candidate, frame }) => [

@@ -249,7 +249,7 @@ try {
   const edited = await call("edit.apply", {
     projectId,
     requestId: "place",
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
       {

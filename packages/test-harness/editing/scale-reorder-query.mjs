@@ -53,7 +53,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
             clipId: clip.clipId,
             kind: "range",
             assetId: asset.id,
-            streamId: asset.streams[0].id,
+            streamId: asset.streams[0].streamId,
             sourceAtUs,
             rate: 1,
           });
@@ -116,7 +116,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
       ],
       "reorder",
     );
-    const after = await query(moved.revision.id);
+    const after = await query(moved.revision.revisionId);
     await save("reorder-after.json", { expected: afterExpected, actual: after });
     assert.deepEqual(after.rows, afterExpected);
     const old = await query(selection.revisionId);
@@ -135,14 +135,14 @@ export async function reorderQuery({ service, save, result, apply, selection, au
     const samples = [];
     for (let n = 0; n < 20; n++) {
       const started = performance.now();
-      const repeated = await query(moved.revision.id);
+      const repeated = await query(moved.revision.revisionId);
       samples.push(performance.now() - started);
       assert.deepEqual(repeated.rows, afterExpected);
     }
     const p95Ms = [...samples].sort((a, b) => a - b)[18];
     const undone = await service.call("edit.undo", {
       projectId: selection.projectId,
-      expectedRevisionId: moved.revision.id,
+      expectedRevisionId: moved.revision.revisionId,
       requestId: "reorder-undo",
     });
     const restored = await query(undone.id);
@@ -159,7 +159,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
     result.reorder = {
       range,
       before: selection.revisionId,
-      after: moved.revision.id,
+      after: moved.revision.revisionId,
       undo: undone.id,
       clips: [left, right],
       staleRevisionControlRejected: true,

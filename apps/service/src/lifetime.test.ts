@@ -389,7 +389,7 @@ it("validates project composition requests at the canonical wire boundary", asyn
     await writeFile(output, JSON.stringify({ pid: service.pid, project, responses }, null, 2));
   expect(responses.project).toMatchObject({
     ok: true,
-    data: { projectId: project.projectId, revision: { id: project.currentRevisionId } },
+    data: { projectId: project.projectId, revision: { revisionId: project.currentRevisionId } },
   });
   expect(responses.recording).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(responses.package).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });

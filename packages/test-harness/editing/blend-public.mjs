@@ -123,11 +123,11 @@ try {
     ];
     const edited = await call("edit.apply", {
       projectId,
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       requestId: `author-${item.scenario}`,
       operations,
     });
-    const revisionId = edited.revision.id;
+    const revisionId = edited.revision.revisionId;
     const target = { kind: "track", id: edited.edit.labels.above };
     const retained = await call(
       "processing.get",

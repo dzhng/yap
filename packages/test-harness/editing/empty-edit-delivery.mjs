@@ -101,7 +101,7 @@ try {
   });
   const edited = await call("edit.apply", {
     projectId: created.project.projectId,
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     requestId: "physical-empty-edit-placement",
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -119,7 +119,7 @@ try {
   });
   const project = {
     projectId: created.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     maxLongEdge: 64,
   };
   const frames = {};
@@ -148,7 +148,7 @@ try {
   await call("export.create", {
     exportId,
     projectId: created.project.projectId,
-    revisionId: edited.revision.id,
+    revisionId: edited.revision.revisionId,
     kind: "video",
     directory: exportDirectory,
     leaf: "physical-gap.mp4",

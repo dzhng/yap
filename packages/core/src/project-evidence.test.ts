@@ -211,7 +211,7 @@ async function fixture({
         if (target.kind === "project")
           return {
             ...target,
-            revisionId: projects.revision(target.projectId, target.revisionId).id,
+            revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
           };
         throw new Error("Wrong job owner");
       },
@@ -497,10 +497,10 @@ async function fixture({
     });
     const revision = projects.apply(created.project.projectId, {
       requestId: randomUUID(),
-      expectedRevisionId: created.revision.id,
+      expectedRevisionId: created.revision.revisionId,
       operations,
     }).revision;
-    return { projectId: created.project.projectId, revisionId: revision.id };
+    return { projectId: created.project.projectId, revisionId: revision.revisionId };
   }
   async function ready(input: Parameters<ProjectEvidenceInspection["request"]>[0]) {
     for (let n = 0; n < 8; n++) {
@@ -1629,7 +1629,7 @@ test("capture source and project reads preserve raw clocks, exact retimes and mi
     sourceAtUs: 250,
     captureAtUs: 750,
     sourceSequence: 2,
-    projectAtUs: { numerator: 1501, denominator: 4 },
+    projectAtUs: 375,
     observation: { elapsedPauseUs: 77 },
   });
   const second = await f.evidence.events({ ...input, limit: 500, cursor: result.page!.nextCursor });
@@ -1963,11 +1963,9 @@ test("source scene readiness is independent of capture context and exact scene c
     clip(f.asset.id, "again", "v", 3000000, 4000000, 0, 1000000, "video"),
   ]);
   const one = await eventPages(f, { ...input, limit: 1 });
-  expect(one.rows.filter((r) => r.kind === "scene").map((r) => r.projectAtUs)).toEqual(
-    [2999994, 5999994, 8999994, 11999994, 15999998, 16999998, 17999998, 18999998].map(
-      (numerator) => ({ numerator, denominator: 5 }),
-    ),
-  );
+  expect(one.rows.filter((r) => r.kind === "scene").map((r) => r.projectAtUs)).toEqual([
+    599999, 1199999, 1799999, 2399999, 3200000, 3400000, 3600000, 3800000,
+  ]);
   expect(one.rows.filter((r) => r.kind === "cut").map((r) => r.projectAtUs)).toEqual([3000000]);
   expect((await eventPages(f, { ...input, limit: 500 })).rows).toEqual(one.rows);
   expect(new Set(one.rows.filter((r) => r.kind !== "cut").map((r) => r.clipId)).size).toBe(2);
@@ -1985,7 +1983,7 @@ test("source scene readiness is independent of capture context and exact scene c
     (
       await eventPages(f, { ...input, range: { startUs: 200000, endUs: 600000 }, limit: 1 })
     ).rows.map((r) => r.projectAtUs),
-  ).toEqual([{ numerator: 2999994, denominator: 5 }]);
+  ).toEqual([599999]);
 });
 test("mixed capture and scene source pagination preserves exact ordering and pins generation", async () => {
   const f = await fixture({ durationUs: 1000000, originUs: 0, scenes: true });

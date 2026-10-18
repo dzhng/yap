@@ -655,7 +655,7 @@ export class ProjectPackages {
       undefined,
       snapshot.project.currentRevisionId === this.owners.projects.get(projectId).currentRevisionId
         ? undefined
-        : snapshot.revisions.map((revision) => revision.id),
+        : snapshot.revisions.map((revision) => revision.revisionId),
     )) {
       const resource: Extract<PortableDependency, { kind: "project-index-generation" }> = {
         kind: "project-index-generation",
@@ -1158,7 +1158,12 @@ export class ProjectPackages {
                 portableIndexRecords<SourceIndexRecords>(
                   context.files,
                   resource,
-                  (value) => portableSourceIndexRecordSchema.parse(value),
+                  (value) => {
+                    const parsed = portableSourceIndexRecordSchema.parse(value);
+                    return parsed.kind === "coverage"
+                      ? parsed
+                      : { ...parsed, frame: { ...parsed.frame, bytes: parsed.frame.sizeBytes } };
+                  },
                   signal,
                 ),
                 signal,
@@ -1178,7 +1183,7 @@ export class ProjectPackages {
               projectId: adoption.project.projectId,
               revisionId,
             };
-            const revision = adoption.revisions.find((value) => value.id === revisionId)!;
+            const revision = adoption.revisions.find((value) => value.revisionId === revisionId)!;
             const validation = projectIndexDomain(
               {
                 composition: () =>
@@ -1225,7 +1230,12 @@ export class ProjectPackages {
                     );
                   return {
                     ...parsed,
-                    frame: { ...parsed.frame, projectId: metadata.projectId, revisionId },
+                    frame: {
+                      ...parsed.frame,
+                      bytes: parsed.frame.sizeBytes,
+                      projectId: metadata.projectId,
+                      revisionId,
+                    },
                   };
                 },
                 signal,
@@ -1240,7 +1250,7 @@ export class ProjectPackages {
           for (const resource of manifest.resources) {
             if (resource.kind !== "prepared-audio") continue;
             const revisionId = adoption.revisionIds[resource.revisionId]!;
-            const revision = adoption.revisions.find((value) => value.id === revisionId)!;
+            const revision = adoption.revisions.find((value) => value.revisionId === revisionId)!;
             preparedAudio.push(
               await this.owners.preparedAudio.stagePortable(
                 omit(resource, "kind"),
@@ -1317,7 +1327,7 @@ export class ProjectPackages {
           }
           return JSON.stringify({
             projectId: result.project.projectId,
-            revisionId: result.revision.id,
+            revisionId: result.revision.revisionId,
           });
         } finally {
           await Promise.all(speakers.map(({ stage }) => stage.close()));

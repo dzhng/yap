@@ -100,13 +100,13 @@ test.runIf(process.platform === "darwin")(
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
       project: { projectId: string };
-      revision: { id: string };
+      revision: { revisionId: string };
     };
     expect(
       await f.call("edit.apply", {
         projectId: project.projectId,
         requestId: "place",
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         operations: [
           { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
           {
@@ -125,7 +125,7 @@ test.runIf(process.platform === "darwin")(
     expect(
       await f.call("alignment.get", {
         projectId: project.projectId,
-        revisionId: revision.id,
+        revisionId: revision.revisionId,
         preparedResourceId: "prepared-project-tap",
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
         assetId,
@@ -176,7 +176,7 @@ test.runIf(process.platform === "darwin")(
       path: await realpath(join(f.home, "alignment.zip")),
     });
     if (!opened.ok) throw Error(JSON.stringify(opened));
-    const admissionId = (opened.data as { id: string }).id,
+    const admissionId = (opened.data as { packageId: string }).packageId,
       packageHandle = (await wait(target, "package.status", { admissionId }, "ready"))
         .packageHandle;
     const packaged = await target.call("alignment.get", { ...query, packageHandle });
@@ -302,12 +302,12 @@ test("a project alignment range past the revision is admitted clamped; one wholl
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
     project: { projectId: string };
-    revision: { id: string };
+    revision: { revisionId: string };
   };
   const placed = await f.call("edit.apply", {
     projectId: project.projectId,
     requestId: "place",
-    expectedRevisionId: revision.id,
+    expectedRevisionId: revision.revisionId,
     operations: [
       { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
       {

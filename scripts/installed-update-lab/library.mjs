@@ -52,7 +52,7 @@ export async function populateLibrary(home, source, call) {
   const authored = await data("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.id,
+    expectedRevisionId: created.revision.revisionId,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       {
@@ -73,7 +73,7 @@ export async function populateLibrary(home, source, call) {
   const exportId = randomUUID();
   await data("export.create", {
     projectId,
-    revisionId: authored.revision.id,
+    revisionId: authored.revision.revisionId,
     requestId: exportId,
     kind: "processed-package",
     directory: destination,
@@ -92,7 +92,7 @@ export async function populateLibrary(home, source, call) {
     acquisitionId: acquisition.id,
     assetId: binding.assetId,
     projectId,
-    revisionId: authored.revision.id,
+    revisionId: authored.revision.revisionId,
     jobId: job.jobId,
     exportId,
     originalPath: join(source.donor, "video.mov"),

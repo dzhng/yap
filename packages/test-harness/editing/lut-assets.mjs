@@ -95,7 +95,7 @@ try {
     },
   });
   const projectId = project.project.projectId;
-  let revisionId = project.revision.id;
+  let revisionId = project.revision.revisionId;
   const edit = async (operations) => {
     const v = await call("edit.apply", {
       projectId,
@@ -103,7 +103,7 @@ try {
       requestId: randomUUID(),
       operations,
     });
-    revisionId = v.revision.id;
+    revisionId = v.revision.revisionId;
     return v;
   };
   const placed = await edit([
@@ -114,7 +114,7 @@ try {
       clip: {
         trackId: { label: "v" },
         assetId: shot.id,
-        streamId: shot.streams[0].id,
+        streamId: shot.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
       },
@@ -240,7 +240,7 @@ try {
   });
   const referencePlaced = await call("edit.apply", {
     projectId: referenceProject.project.projectId,
-    expectedRevisionId: referenceProject.revision.id,
+    expectedRevisionId: referenceProject.revision.revisionId,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -249,7 +249,7 @@ try {
         clip: {
           trackId: { label: "v" },
           assetId: referenceAsset.id,
-          streamId: referenceAsset.streams[0].id,
+          streamId: referenceAsset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
         },
@@ -259,7 +259,7 @@ try {
   const referenceExportId = randomUUID();
   await call("export.create", {
     projectId: referenceProject.project.projectId,
-    revisionId: referencePlaced.revision.id,
+    revisionId: referencePlaced.revision.revisionId,
     requestId: referenceExportId,
     kind: "video",
     directory: out,

@@ -97,7 +97,7 @@ export async function materializeSourceIndex(
         { dependency },
         status.retryable,
       );
-    const frame = status.published.frame;
+    const frame = status.published.frame as SourceFrameArtifact;
     if (frame.implementationId !== identity.implementationId)
       throw new CatalogError("ARTIFACT_CHANGED", "Pinned picture renderer changed");
     await retainIndexFrame(
@@ -114,7 +114,10 @@ export async function materializeSourceIndex(
             support: request.support,
             reasons: request.reasons,
           },
-          retained,
+          {
+            ...(retained as any),
+            sizeBytes: (retained as any).sizeBytes ?? (retained as any).bytes,
+          },
         );
       },
     );

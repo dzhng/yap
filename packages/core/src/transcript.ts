@@ -30,7 +30,7 @@ import type { SpeechEnginePins, SpeechModelRequest } from "./models.js";
 import type { TimeRange } from "./presentation-time.js";
 import { wordKind, wordKindPolicy, type WordKind } from "./word-kind.js";
 
-export const transcriptPolicy = "transcript-v4";
+export const transcriptPolicy = "transcript-v5";
 
 const speechWindowRecipe = "source-windows-20s-context4s-guard1s-v3";
 /** Retained and replayed execution keeps whatever recipe produced it; it is never relabelled. */
@@ -188,7 +188,12 @@ export function transcriptGenerationResource(
   return JSON.stringify([...ownerIdentity(identity.owner), identity.generation]);
 }
 export function portableTranscript(metadata: TranscriptMetadata): PortableTranscript {
-  return portableTranscriptSchema.parse({ ...metadata, track: omit(metadata.track, "source") });
+  const value = metadata as TranscriptMetadata & { raw: { sizeBytes?: number; bytes?: number } };
+  const raw =
+    value.raw.sizeBytes !== undefined
+      ? { bytes: value.raw.sizeBytes, sha256: value.raw.sha256 }
+      : value.raw;
+  return portableTranscriptSchema.parse({ ...value, raw, track: omit(value.track, "source") });
 }
 export type TranscriptOwner = Extract<JobOwner, { kind: "recording" | "asset" }>;
 export type TranscriptIdentity = Readonly<{
@@ -222,6 +227,43 @@ export type TranscriptMetadata = TranscriptIdentity &
     source: TranscriptSource;
     track: Pick<SpeechTranscriptionRequest["track"], "source" | "streamId" | "sourceOffsetUs">;
   };
+/** Retained public metadata uses unit-bearing byte names; catalog rows stay internal. */
+export function publicTranscriptMetadata(value: TranscriptMetadata) {
+  return { ...value, raw: { sizeBytes: value.raw.bytes, sha256: value.raw.sha256 } };
+}
+export function parsePublicTranscriptMetadata(value: unknown): TranscriptMetadata {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Transcript metadata is unavailable");
+  const record = value as Record<string, any>;
+  if (!record.raw || "bytes" in record.raw || !Number.isSafeInteger(record.raw.sizeBytes))
+    throw new CatalogError("ARTIFACT_CHANGED", "Transcript metadata uses an obsolete shape");
+  return {
+    ...record,
+    raw: { bytes: record.raw.sizeBytes, sha256: record.raw.sha256 },
+  } as TranscriptMetadata;
+}
+export function publicTranscriptIssues(value: readonly Issue[]) {
+  return value.map((issue) => {
+    const evidence = issue.evidence;
+    if (
+      !evidence ||
+      typeof evidence !== "object" ||
+      typeof (evidence as any).endSeconds !== "number"
+    )
+      return issue;
+    const { endSeconds, startSeconds, ...rest } = evidence as Record<string, unknown>;
+    return {
+      ...issue,
+      evidence: {
+        ...rest,
+        ...(typeof startSeconds === "number"
+          ? { startUs: Math.round(startSeconds * 1_000_000) }
+          : { startSeconds }),
+        endUs: Math.round((endSeconds as number) * 1_000_000),
+      },
+    } as Issue;
+  });
+}
 export type RecordingTranscriptIdentity = Readonly<{
   recordingId: string;
   sourceId: string;

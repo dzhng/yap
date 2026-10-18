@@ -115,12 +115,15 @@ try {
       }
       let generation;
       if (transcript) {
-        await call("transcript.transcribe", { assetId: asset.id, streamId: asset.streams[0].id });
+        await call("transcript.transcribe", {
+          assetId: asset.id,
+          streamId: asset.streams[0].streamId,
+        });
         const sourceWords = await poll(
           () =>
             call("transcript.get", {
               assetId: asset.id,
-              streamId: asset.streams[0].id,
+              streamId: asset.streams[0].streamId,
               limit: 1000,
             }),
           (x) => x.state === "ready",
@@ -146,7 +149,7 @@ try {
         },
       });
       const projectId = made.project.projectId;
-      let revisionId = made.revision.id;
+      let revisionId = made.revision.revisionId;
       const apply = async (operations, requestId) => {
         const result = await call("edit.apply", {
           projectId,
@@ -154,7 +157,7 @@ try {
           requestId,
           operations,
         });
-        revisionId = result.revision.id;
+        revisionId = result.revision.revisionId;
         return result;
       };
       const track = (
@@ -183,7 +186,7 @@ try {
             ...(transcript || capture ? { label: clipLabel(first + offset) } : {}),
             clip: {
               trackId: track,
-              ...(events?.selection ?? { assetId: asset.id, streamId: asset.streams[0].id }),
+              ...(events?.selection ?? { assetId: asset.id, streamId: asset.streams[0].streamId }),
               source: {
                 kind: "range",
                 range: transcript
@@ -317,7 +320,7 @@ try {
               partial: false,
               clipId: clipIds[index],
               assetId: asset.id,
-              streamId: asset.streams[0].id,
+              streamId: asset.streams[0].streamId,
               trackId: track,
               trackRank: 0,
               generation,

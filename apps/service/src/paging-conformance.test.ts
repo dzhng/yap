@@ -87,7 +87,7 @@ async function importAsset(f: Service, requestId: string, path = f.path) {
   return (await f.job(imported.jobId, "ready")).published!.output.assetId;
 }
 async function createProject(f: Service, requestId: string) {
-  return data<{ project: { projectId: string }; revision: { id: string } }>(
+  return data<{ project: { projectId: string }; revision: { revisionId: string } }>(
     await f.call("project.create", { requestId, canvas }),
   );
 }
@@ -220,9 +220,9 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
   "revision.history": async () => {
     const f = await service();
     const projects = [await createProject(f, "history"), await createProject(f, "other")];
-    let revisionId = projects[0]!.revision.id;
+    let revisionId = projects[0]!.revision.revisionId;
     for (const width of [32, 48, 64]) {
-      const edited = data<{ revision: { id: string } }>(
+      const edited = data<{ revision: { revisionId: string } }>(
         await f.call("edit.apply", {
           projectId: projects[0]!.project.projectId,
           requestId: `resize-${width}`,
@@ -230,13 +230,13 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
           operations: [{ operation: "canvas.set", canvas: { ...canvas, width } }],
         }),
       );
-      revisionId = edited.revision.id;
+      revisionId = edited.revision.revisionId;
     }
     return {
       call: f.call,
       params: { projectId: projects[0]!.project.projectId },
       plural: "revisions",
-      ids: (value) => (value as { id: string }).id,
+      ids: (value) => (value as { revisionId: string }).revisionId,
       otherFilters: [{ projectId: projects[1]!.project.projectId }],
     };
   },
@@ -269,7 +269,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
         await f.call("edit.apply", {
           projectId: project.projectId,
           requestId: `${name}-place`,
-          expectedRevisionId: revision.id,
+          expectedRevisionId: revision.revisionId,
           operations: [
             { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
             {
@@ -497,10 +497,10 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       },
     }));
     const { project, revision } = await createProject(f, "events");
-    const placed = data<{ revision: { id: string } }>(
+    const placed = data<{ revision: { revisionId: string } }>(
       await f.call("edit.apply", {
         projectId: project.projectId,
-        expectedRevisionId: revision.id,
+        expectedRevisionId: revision.revisionId,
         requestId: "events-place",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -520,7 +520,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
     );
     const params = {
       projectId: project.projectId,
-      revisionId: placed.revision.id,
+      revisionId: placed.revision.revisionId,
       range: { startUs: 0, endUs: 1_000_000 },
     };
     await ready(f, "timeline.events", params);

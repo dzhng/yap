@@ -240,8 +240,8 @@ export async function captureKeyframeAppearance({
           },
         ],
       });
-      head = edited.revision.id;
-      const selection = { projectId, revisionId: edited.revision.id },
+      head = edited.revision.revisionId;
+      const selection = { projectId, revisionId: edited.revision.revisionId },
         pictures = [];
       for (let i = 0; i < 8; i++) {
         const path = join(directory, `${name}-reference-${i}.png`);

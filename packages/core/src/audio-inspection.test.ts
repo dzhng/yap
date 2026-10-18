@@ -281,7 +281,7 @@ test("cancellation fences late renderer output and only explicit retry admits an
   const ready = await f.inspection.request(input);
   expect(ready.state, JSON.stringify(ready)).toBe("ready");
   expect(calls).toBe(2);
-  expect(ready.published!.audio.sampleRange).toEqual({ start: 3, end: 9599 });
+  expect(ready.published!.audio.sampleRange).toEqual({ startSamples: 3, endSamples: 9599 });
   expect(ready.published!.audio.unavailable).toEqual([{ startUs: 71, endUs: 100000 }]);
 });
 
@@ -366,7 +366,7 @@ test("a partly overlapping audio range is clamped to the source with range-clamp
     await f.inspection.request({ ...f.selection, range: { startUs: 500000, endUs: 1000001 } }),
   ).toMatchObject({
     state: "ready",
-    published: { audio: { range: { startUs: 500000, endUs: 1000000 } } },
+    published: { audio: { sourceRange: { startUs: 500000, endUs: 1000000 } } },
     issues: [{ code: "range-clamped" }],
   });
   expect(
@@ -602,7 +602,7 @@ test("audio context keeps source selection and expands to exact sample boundarie
     assetId: f.asset.id,
     streamId: "a",
     acquisitionId: "mask",
-    sampleRange: { start: 15967, end: 25632 },
+    sampleRange: { startSamples: 15967, endSamples: 25632 },
     unavailable: [],
   });
   expect(pending.jobId).toBeTruthy();
@@ -744,7 +744,7 @@ test("default full-source overview handles longer tracks and persisted waveform 
   const ready = await f.waveform.request(f.selection);
   expect(ready.state).toBe("ready");
   expect(ready.published!.artifact.bucketCount).toBeLessThanOrEqual(1025);
-  expect(ready.published!.artifact.range.endUs).toBe(120000000);
+  expect((ready.published!.artifact as any).sourceRange.endUs).toBe(120000000);
   const { waveform } = await f.restart();
   expect((await waveform.request(f.selection)).published).toEqual(ready.published);
   const artifact = ready.published!.artifact;
@@ -832,8 +832,8 @@ test("exact admitted endpoints drive full and late audio while explicit integer 
   const requested = await f.inspection.request(f.selection);
   await f.jobs.idle();
   expect((await f.inspection.request(f.selection)).published?.audio).toMatchObject({
-    range: { startUs: 100000, endUs },
-    frames: 241678,
+    sourceRange: { startUs: 100000, endUs },
+    frameCount: 241678,
     unavailable: [],
   });
   expect(f.jobs.job(requested.jobId!).state).toBe("ready");
@@ -886,8 +886,8 @@ test("loudness retains selected PCM provenance and refuses integrated unavailabl
     domain: "source",
     assetId: f.asset.id,
     streamId: "a",
-    range: input.range,
-    sampleRange: { start: 4800, end: 288000 },
+    sourceRange: input.range,
+    sampleRange: { startSamples: 4800, endSamples: 288000 },
     unavailable: [],
     analysis: {
       kind: "loudness",

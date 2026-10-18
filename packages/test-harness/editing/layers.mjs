@@ -74,7 +74,7 @@ async function imported(fixture) {
     "layer import",
   );
   const asset = await call("asset.get", { assetId: fixture.sha256 });
-  return { assetId: asset.id, streamId: asset.streams[0].id };
+  return { assetId: asset.id, streamId: asset.streams[0].streamId };
 }
 async function createProject(canvas, media, suffix, scenario) {
   const processing = Object.entries(scenario.stacks)
@@ -98,7 +98,7 @@ async function createProject(canvas, media, suffix, scenario) {
   const edit = await call("edit.apply", {
     projectId,
     requestId: `${suffix}-placements`,
-    expectedRevisionId: initial.revision.id,
+    expectedRevisionId: initial.revision.revisionId,
     operations: [
       { operation: "group.add", label: "outer", group: { kind: "video", order: 0 } },
       {
@@ -123,7 +123,7 @@ async function createProject(canvas, media, suffix, scenario) {
       ...processing,
     ],
   });
-  return { projectId, revisionId: edit.revision.id, labels: edit.edit.labels };
+  return { projectId, revisionId: edit.revision.revisionId, labels: edit.edit.labels };
 }
 async function deliveryBytes(delivery) {
   const chunks = [];
@@ -459,7 +459,7 @@ try {
       `split-original-${atUs}`,
     );
     const divided = await delivered(
-      { projectId: edited.projectId, revisionId: split.revision.id, atUs },
+      { projectId: edited.projectId, revisionId: split.revision.revisionId, atUs },
       `split-divided-${atUs}`,
     );
     assert.equal(
@@ -472,7 +472,7 @@ try {
   }
   report.checks.processedSplit = { splitAtUs, frames: splitFrames };
   const splitMovie = join(out, "processed-split.mp4");
-  const splitSelection = { projectId: edited.projectId, revisionId: split.revision.id };
+  const splitSelection = { projectId: edited.projectId, revisionId: split.revision.revisionId };
   await poll(
     () => call("preview.get", splitSelection, { output: splitMovie }),
     (v) => v.state === "ready",
@@ -499,7 +499,7 @@ try {
   );
   const independent = await call("edit.apply", {
     projectId: edited.projectId,
-    expectedRevisionId: split.revision.id,
+    expectedRevisionId: split.revision.revisionId,
     requestId: "reset-right-presenter-processing",
     operations: [
       {
@@ -513,7 +513,7 @@ try {
   for (const atUs of [100000, 600000]) {
     const before = await delivered({ ...splitSelection, atUs }, `independent-before-${atUs}`);
     const after = await delivered(
-      { projectId: edited.projectId, revisionId: independent.revision.id, atUs },
+      { projectId: edited.projectId, revisionId: independent.revision.revisionId, atUs },
       `independent-after-${atUs}`,
     );
     const beforeBytes = await readFile(before.file),
@@ -541,7 +541,7 @@ try {
   report.checks.independentSplitProcessing = resetFrames;
   const duplicate = await call("edit.apply", {
     projectId: edited.projectId,
-    expectedRevisionId: independent.revision.id,
+    expectedRevisionId: independent.revision.revisionId,
     requestId: "duplicate-processed-left",
     operations: [
       {
@@ -557,7 +557,7 @@ try {
     const original = await delivered(
       {
         projectId: edited.projectId,
-        revisionId: independent.revision.id,
+        revisionId: independent.revision.revisionId,
         atUs: sourceUs,
         tap: {
           target: { kind: "clip", id: edited.labels.presenter },
@@ -569,7 +569,7 @@ try {
     const copy = await delivered(
       {
         projectId: edited.projectId,
-        revisionId: duplicate.revision.id,
+        revisionId: duplicate.revision.revisionId,
         atUs: sourceUs + 1200000,
         tap: {
           target: { kind: "clip", id: duplicate.edit.labels.copy },
@@ -595,7 +595,7 @@ try {
     "edit.apply",
     {
       projectId: edited.projectId,
-      expectedRevisionId: duplicate.revision.id,
+      expectedRevisionId: duplicate.revision.revisionId,
       requestId: "move-processed-copy",
       operations: [
         { operation: "move", clipIds: [duplicate.edit.labels.copy], atUs: 2000000, ripple: "none" },
@@ -608,7 +608,7 @@ try {
     const picture = await delivered(
       {
         projectId: edited.projectId,
-        revisionId: moved.revision.id,
+        revisionId: moved.revision.revisionId,
         atUs: reference.sourceUs + 2000000,
         tap: {
           target: { kind: "clip", id: duplicate.edit.labels.copy },
@@ -631,7 +631,7 @@ try {
   report.checks.processedMove = movedFrames;
   const trimmed = await call("edit.apply", {
     projectId: edited.projectId,
-    expectedRevisionId: moved.revision.id,
+    expectedRevisionId: moved.revision.revisionId,
     requestId: "trim-processed-copy",
     operations: [
       {
@@ -648,7 +648,7 @@ try {
     const picture = await delivered(
       {
         projectId: edited.projectId,
-        revisionId: trimmed.revision.id,
+        revisionId: trimmed.revision.revisionId,
         atUs: sourceUs + 2000000,
         tap: {
           target: { kind: "clip", id: duplicate.edit.labels.copy },
@@ -672,7 +672,7 @@ try {
     const picture = await delivered(
       {
         projectId: edited.projectId,
-        revisionId: trimmed.revision.id,
+        revisionId: trimmed.revision.revisionId,
         atUs,
         tap: {
           target: { kind: "clip", id: duplicate.edit.labels.copy },
@@ -694,7 +694,7 @@ try {
   const protectedOriginal = await delivered(
     {
       projectId: edited.projectId,
-      revisionId: trimmed.revision.id,
+      revisionId: trimmed.revision.revisionId,
       atUs: 100000,
       tap: { target: { kind: "clip", id: edited.labels.presenter }, point: { kind: "processed" } },
     },
@@ -733,7 +733,7 @@ try {
   assert.equal(hash(await readFile(historical.file)), first.frames[0].sha256);
   const current = await delivered({ projectId: old.projectId, atUs: 450001 }, "current");
   assert.notEqual(hash(await readFile(current.file)), first.frames[0].sha256);
-  assert.equal(current.receipt.revisionId, changed.revision.id);
+  assert.equal(current.receipt.revisionId, changed.revision.revisionId);
   const currentRgba = current.file + ".rgba";
   await run(fixtures.pixelTool, [current.file, currentRgba]);
   const currentExpected = expectedRgba(

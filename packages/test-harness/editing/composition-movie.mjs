@@ -142,7 +142,7 @@ try {
     });
     bindings.push({
       assetId: id,
-      streamId: probe.streams.find((s) => s.kind === kind).id,
+      streamId: probe.streams.find((s) => s.kind === kind).streamId,
       path,
       originUs: probe.originUs,
     });

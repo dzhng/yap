@@ -29,7 +29,7 @@ test("published helper examples retain returned revision and continuation identi
       ok: true,
       data: {
         projectId: "opaque-project-719",
-        revision: { id: "opaque-revision-531", document: {} },
+        revision: { revisionId: "opaque-revision-531", document: {} },
       },
     };
     await writeFile(join(scratch, "revision.json"), JSON.stringify(revision));
@@ -80,7 +80,7 @@ console.log(JSON.stringify({ok:true,data}));
     assert.equal(timeline.manifest.waveform.state, "failed");
     assert.equal(timeline.manifest.waveform.reason, "controlled_decoder_failure");
     const review = helper("review-bundle", run(examples["review-request"], scratch));
-    assert.equal(review.revisions[0].revisionId, revision.data.revision.id);
+    assert.equal(review.revisions[0].revisionId, revision.data.revision.revisionId);
     assert.equal(review.revisions[0].wholeRevisionExtentVerified, false);
     assert.equal(review.revisions[0].windows[0].inspection.manifest.waveform.state, "failed");
   } finally {
