@@ -38,7 +38,7 @@ try {
   );
   const executable = compileControlsCheck(
     scratch,
-    ["LibraryView"],
+    ["LibraryView", "OverlayScrollView"],
     readFileSync(new URL("./fixtures/library-view.swift", import.meta.url), "utf8"),
   );
   execFileSync(executable, [output, label], { timeout: 20_000, stdio: "inherit" });

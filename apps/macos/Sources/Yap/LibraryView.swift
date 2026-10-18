@@ -12,7 +12,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
     private(set) var tab: Tab = .recordings
     private var filter = ""
     private var scrollPositions: [Tab: NSPoint] = [:]
-    let scrollView = NSScrollView()
+    let scrollView = OverlayScrollView()
     private let document = LibraryDocument()
     private var controls: [String: NSControl] = [:]
     private var actions: [ObjectIdentifier: ControlsAction] = [:]
@@ -30,7 +30,6 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         updateSurfaceColors()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay
         scrollView.documentView = document
         addSubview(scrollView)
         filterField.placeholderString = "Filter this page"

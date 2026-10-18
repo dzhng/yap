@@ -157,6 +157,8 @@ private final class PrimaryCameraCaptureInput: CaptureInputSession {
         try await acquisition.start(operations, checkInterruption: checkInterruption)
     }
     func startCursorSampling(writer: CaptureWriter) {}
+    /// A camera take records no screen, so no window of this app's can enter it.
+    func excludeOwnWindows() async -> Bool { true }
     func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         guard !observing else { return }; observing = true
         camera.observeDeviceLoss(onFailure: onFailure)
@@ -336,6 +338,8 @@ package final class CameraCaptureInput: CaptureInputSession, CompanionCameraSwit
     package func startCursorSampling(writer: CaptureWriter) {
         if measurement.samplesCursor { primary.startCursorSampling(writer: writer) }
     }
+    /// The camera records no screen; what the screen take records decides.
+    package func excludeOwnWindows() async -> Bool { await primary.excludeOwnWindows() }
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         guard !observing else { return }
         observing = true

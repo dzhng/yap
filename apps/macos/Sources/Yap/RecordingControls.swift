@@ -82,7 +82,10 @@ final class RecordingControls: NSObject {
         preview: { [weak self] in self?.preview.open($0) },
         export: { [weak self] in self?.exports.export($0, kind: $1) })
     private lazy var overlay = RecordingOverlayPanel(
-        preferences: preferences, perform: { [weak self] action in self?.perform(action) })
+        preferences: preferences, perform: { [weak self] action in self?.perform(action) },
+        excludeFromTake: { [weak self] in await self?.excludeOwnWindowsFromTake() ?? false })
+    /// Asks the capture session to leave this app's windows out of the running take.
+    var excludeOwnWindowsFromTake: @MainActor () async -> Bool = { false }
     private let recordingPreview = PreviewWindow()
     private lazy var countdown = StartCountdown(shortcuts: shortcuts)
     private lazy var settings = SettingsWindow(
@@ -731,6 +734,8 @@ final class RecordingControls: NSObject {
         // A camera that is off forgets its last picture, so turning it on again never shows it.
         if !camera.recording { cameraPreviewImage = nil }
         overlay.updateCamera(camera, previewShown: preferences.showCameraPreview)
+        overlay.updateGlass(preferences.controlsGlass)
+        overlay.updateCaptureVisibility(preferences.showControlsInScreenshots)
         overlay.updatePreview(cameraPreviewImage)
         settings.update(state, shortcuts: shortcuts)
         showStatusItem()
