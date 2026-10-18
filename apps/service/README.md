@@ -88,6 +88,11 @@ Capture admission and donor retirement share one [source coordinator](src/captur
 A ready acquisition owns its media independently of its recording donor. Deletion
 joins borrowers and unfinished native work before donor removal; a mutable path
 or alias cannot replace the frozen authority already admitted.
+A recording deletion checks project users before fencing the take. It refuses with
+`IN_USE` details when a capture-origin copy is retained by a project; `cascade: true`
+retires those projects, the capture copies, their assets and evidence, and the donor
+directory as one durable deletion plan. An import made from inside the donor folder
+is an independent acquisition and survives the recording deletion.
 An idle device report proves closure only when it carries no take or source
 identity. Contradictory or pending native evidence keeps deletion fenced and
 source bytes retained rather than interpreting a shutdown request as completion.

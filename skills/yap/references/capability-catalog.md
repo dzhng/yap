@@ -41,6 +41,11 @@ source identities, and reclaim only verified working files. `storage.usage` also
 reports `modelBytes` for every regular file under the model directory, including
 model cache and staging files.
 
+`recording.delete` accepts `recordingId`, `requestId` and optional `cascade`. It
+retires capture-origin copies with the recording. A project-held copy returns
+`IN_USE` with the shared usage details; `cascade: true` also retires those projects.
+Imports made from inside a recording folder are separate acquisitions and survive.
+
 ## Packages and jobs
 
 `package.open`, `package.status`, `package.adopt`, `package.close` manage

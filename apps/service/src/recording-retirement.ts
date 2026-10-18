@@ -5,6 +5,9 @@ import type { CaptureService } from "./capture.js";
 import type { DerivativeDelivery } from "./delivery.js";
 import type { ManagedFiles } from "./managed-files.js";
 import type { DeletionRegistration, LibrarySubject } from "./library-deletion.js";
+import type { LibraryUsers } from "@yap/core/library-users";
+import { CatalogError } from "@yap/core/catalog";
+import { hasUsers } from "./asset-retirement.js";
 
 export type RecordingRetirementOwners = {
   store: CaptureStore;
@@ -13,13 +16,29 @@ export type RecordingRetirementOwners = {
   delivery: DerivativeDelivery;
   files: Pick<ManagedFiles, "removeRecordingDirectory">;
   sources: CaptureSources;
-  freedBytes?: (id: string) => number;
+  users: Pick<LibraryUsers, "usersOf">;
+  freedBytes?: (id: string, cascade: boolean) => number;
 };
 
 export function recordingRetirement(owners: RecordingRetirementOwners): DeletionRegistration {
   return {
     kind: "recording",
     errorMode: "preserve-catalog",
+    checkUsers: (subject, cascade) => {
+      const result = owners.users.usersOf({ kind: "recording", id: subject.id });
+      if (!cascade && hasUsers(result, { excludeAcquisitions: true }))
+        throw new CatalogError("IN_USE", "Recording is still used by the library", {
+          recordingId: subject.id,
+          ...result,
+        });
+      return [
+        ...result.usedBy.map((project) => ({ memberKind: "project", memberId: project.projectId })),
+        ...result.acquisitions.map((acquisition) => ({
+          memberKind: "acquisition",
+          memberId: acquisition.acquisitionId,
+        })),
+      ];
+    },
     tombstone: (subject) => {
       const recording = owners.store.markDeleting(subject.id);
       if (recording) owners.delivery.revoke({ kind: "recording", id: subject.id });
@@ -47,6 +66,13 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       owners.store.finishDeletion(subject.id);
       return true;
     },
+    cascadeMembers: async (_subject, members, signal, deleteMember) => {
+      for (const member of members) {
+        signal.throwIfAborted();
+        await deleteMember({ kind: member.memberKind, id: member.memberId });
+      }
+    },
+    cascadeMembersWithoutCascade: true,
     markersPage: (afterId = "") => {
       const page = owners.store.deletionsPage(afterId);
       return {
@@ -61,6 +87,6 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       };
     },
     result: (subject) => ({ recordingId: subject.id, deleted: true }),
-    freedBytes: (subject) => owners.freedBytes?.(subject.id) ?? 0,
+    freedBytes: (subject, cascade) => owners.freedBytes?.(subject.id, cascade) ?? 0,
   };
 }

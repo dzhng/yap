@@ -1223,7 +1223,8 @@
       "category": "destructive",
       "retryable": false,
       "files": {
-        "apps/service/src/asset-retirement.ts": 1
+        "apps/service/src/asset-retirement.ts": 1,
+        "apps/service/src/recording-retirement.ts": 1
       }
     },
     "IO_ERROR": {

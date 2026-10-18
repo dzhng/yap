@@ -136,6 +136,15 @@ test("recording source admission stays fenced between file and row phases", asyn
       delivery,
       files: { removeRecordingDirectory: async () => {} },
       sources,
+      users: {
+        usersOf: () => ({
+          usedBy: [],
+          acquisitions: [],
+          derivedAssets: [],
+          freesBytes: 0,
+          cascadeFreesBytes: 0,
+        }),
+      },
     }),
   );
   await deletion.delete({ kind: "recording", id: "one" });

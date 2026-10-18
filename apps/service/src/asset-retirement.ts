@@ -45,9 +45,14 @@ function membersFor(result: LibraryUsersResult): Member[] {
   ];
 }
 
-function hasUsers(result: LibraryUsersResult): boolean {
+export function hasUsers(
+  result: LibraryUsersResult,
+  options: { excludeAcquisitions?: boolean } = {},
+): boolean {
   return (
-    result.usedBy.length > 0 || result.acquisitions.length > 0 || result.derivedAssets.length > 0
+    result.usedBy.length > 0 ||
+    (!options.excludeAcquisitions && result.acquisitions.length > 0) ||
+    result.derivedAssets.length > 0
   );
 }
 
