@@ -18,7 +18,8 @@ import {
  * A take of a whole display must not record the recorder. This records the display twice, with the
  * floating controls left in a different place each time, and reads the frames back: if those
  * controls were in the take, the part of the picture each one covered would differ completely
- * between the two. Every take here is a few seconds long and lives in a scratch home the harness
+ * between the two. It runs once as shipped, with no capture seeing the controls, and once with
+ * screenshots allowed to see them, which must not let them into the take. Every take here is a few seconds long and lives in a scratch home the harness
  * deletes; nothing is activated and nothing is clicked.
  */
 const seconds = 2.5;
@@ -40,13 +41,14 @@ async function succeeds(home, operation, params) {
 }
 
 /** One take of a whole display, with this app's own floating controls on screen throughout. */
-async function displayTake(origin) {
+async function displayTake(origin, inScreenshots) {
   const home = temporary("/tmp/scr-exclusion-");
   const domain = join(home, "scratch-preferences");
   setDefault(domain, "showSettingsAtLaunch", "-bool", "NO");
   // The count is off so the take starts at once, and the controls go where this take wants them.
   setDefault(domain, "countdownBeforeRecording", "-bool", "NO");
   setDefault(domain, "overlayOrigin", "-string", origin);
+  setDefault(domain, "showControlsInScreenshots", "-bool", inScreenshots ? "YES" : "NO");
   const { instance } = await launchReady(home, { YAP_DEFAULTS: domain });
   const sources = await succeeds(home, "capture.sources");
   const display = sources.displays[0];
@@ -64,6 +66,8 @@ async function displayTake(origin) {
     display.id,
     "The controls have to be on the display this take records, or this proves nothing",
   );
+  // Controls other captures may see have to be on screen that way for the frame this reads.
+  if (inScreenshots) await instance.waitFor(/recording overlay visible to captures/);
   await delay(seconds * 1000);
   await finishCapture((op, params) => succeeds(home, op, params), started.recordingId);
   instance.kill("SIGTERM");
@@ -75,7 +79,7 @@ async function displayTake(origin) {
   };
 }
 
-/** One decoded frame from the middle of a take, as plain RGB. */
+/** One decoded frame from near the end of a take, as plain RGB. */
 function frame(video) {
   const size = execFileSync(
     "ffprobe",
@@ -100,8 +104,8 @@ function frame(video) {
     [
       "-v",
       "error",
-      "-ss",
-      String(seconds / 2),
+      "-sseof",
+      "-0.5",
       "-i",
       video,
       "-frames:v",
@@ -135,13 +139,15 @@ function difference(first, second, rect) {
   return counted === 0 ? 0 : total / counted;
 }
 
-test(
-  "a display take leaves out this app's own floating controls",
+for (const inScreenshots of [false, true]) test(
+  inScreenshots
+    ? "a display take leaves out the floating controls that screenshots may see"
+    : "a display take leaves out this app's own floating controls",
   { timeout: 180_000 },
   async (t) => {
     requireScreenPermission();
     const takes = [];
-    for (const origin of origins) takes.push(await displayTake(origin));
+    for (const origin of origins) takes.push(await displayTake(origin, inScreenshots));
     const frames = takes.map((take) => frame(take.video));
     assert.equal(frames[0].width, frames[1].width);
     assert.equal(frames[0].height, frames[1].height);

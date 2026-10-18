@@ -67,6 +67,9 @@ final class CaptureController {
         }
     }
 
+    /// Leaves this app's own windows out of the running take; true once the take is known to.
+    func excludeOwnWindows() async -> Bool { await capture.excludeOwnWindows() }
+
     func attach(to host: ServiceHost) {
         self.host = host
     }

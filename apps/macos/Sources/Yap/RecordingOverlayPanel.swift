@@ -13,6 +13,10 @@ import SwiftUI
  A take that records a camera also carries its live picture above the row. Minimizing the picture
  hides it without stopping the camera; the camera button in the row turns a reserved camera on or
  off, and a camera that is off has no picture at all.
+
+ The controls never appear in the take they run. By default no capture sees them at all; a person
+ may let screenshots and screen sharing see them, and then they are shown to captures only once the
+ running take has confirmed it leaves this app's windows out.
  */
 @MainActor
 final class RecordingOverlayPanel {
@@ -26,10 +30,18 @@ final class RecordingOverlayPanel {
     private var panel: OverlayPanel?
     private var moved: NSObjectProtocol?
     private var changes: AnyCancellable?
+    /// Asks the running take to leave this app's windows out of what it records, and answers
+    /// whether it now does.
+    private let excludeFromTake: @MainActor () async -> Bool
+    /// Whether screenshots and screen sharing may see the controls.
+    private var visibleToCaptures = false
+    private var excluding: Task<Void, Never>?
 
-    init(preferences: Preferences, perform: @escaping (ControlsAction) -> Void) {
+    init(preferences: Preferences, perform: @escaping (ControlsAction) -> Void,
+         excludeFromTake: @escaping @MainActor () async -> Bool) {
         self.preferences = preferences
         self.perform = perform
+        self.excludeFromTake = excludeFromTake
     }
 
     /// What the controls state says these controls are: on screen saying this, or not on screen.
@@ -46,6 +58,34 @@ final class RecordingOverlayPanel {
     }
 
     func updatePreview(_ image: NSImage?) { model.preview = image }
+
+    /// Settings' choice of glass, which a running take picks up as soon as it changes.
+    func updateGlass(_ glass: ControlsGlass) {
+        if model.glass != glass { model.glass = glass }
+    }
+
+    /// Settings' choice of whether screenshots and screen sharing see the controls. Hiding them
+    /// takes effect at once; showing them waits for the take to confirm it leaves them out, and a
+    /// take that cannot is asked again at the next update.
+    func updateCaptureVisibility(_ visible: Bool) {
+        visibleToCaptures = visible
+        guard let panel else { return }
+        guard visible else {
+            excluding?.cancel()
+            excluding = nil
+            panel.sharingType = .none
+            return
+        }
+        guard panel.sharingType == .none, excluding == nil else { return }
+        excluding = Task { [weak self, weak panel] in
+            let excluded = await self?.excludeFromTake() ?? false
+            guard let self, !Task.isCancelled else { return }
+            self.excluding = nil
+            guard excluded, self.visibleToCaptures, let panel, self.panel === panel else { return }
+            panel.sharingType = .readOnly
+            diagnostic("recording overlay visible to captures")
+        }
+    }
 
     private func show() {
         guard panel == nil else { return }
@@ -79,6 +119,7 @@ final class RecordingOverlayPanel {
         }
         panel.present()
         describe(panel)
+        updateCaptureVisibility(visibleToCaptures)
     }
 
     private func fit() {
@@ -96,6 +137,8 @@ final class RecordingOverlayPanel {
         if let moved { NotificationCenter.default.removeObserver(moved) }
         moved = nil
         changes = nil
+        excluding?.cancel()
+        excluding = nil
         self.panel = nil
         panel.close()
     }
@@ -136,6 +179,7 @@ final class RecordingOverlayModel: ObservableObject {
     }
     /// Whether that picture is shown or minimized; the camera records either way.
     @Published var previewShown = true
+    @Published var glass = ControlsGlass.clear
     /// The camera's latest picture. A camera that is off has none, so no held picture is shown
     /// and turning it back on waits for a new one.
     @Published var preview: NSImage? {
@@ -196,6 +240,10 @@ struct RecordingOverlayView: View {
     }
 
     private var controls: some View {
+        Glass(kind: model.glass, content: row)
+    }
+
+    private var row: some View {
         HStack(spacing: 10) {
             Image(systemName: model.presentation.symbol)
                 .font(.system(size: 13, weight: .medium))
@@ -237,8 +285,6 @@ struct RecordingOverlayView: View {
         .padding(.leading, 16)
         .padding(.trailing, 6)
         .padding(.vertical, 5)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
     }
 
     /// The camera's state twice over, so neither colour nor a thin slash has to carry it alone: on
@@ -282,6 +328,85 @@ struct RecordingOverlayView: View {
         .clipShape(Circle())
         .help(name)
         .accessibilityLabel(name)
+    }
+}
+
+/// The system's Liquid Glass behind the controls: frosted, light or dark, or in its clearest form.
+/// Frosted glass normally follows what is behind it, turning light over a light page; light and
+/// dark hold their appearance wherever the controls are, and it reaches the controls inside the
+/// glass, so their marks are dark on light glass and light on dark glass. Clear has no frosting,
+/// just the rim and the bend at the edge, so whatever is behind the controls shows through. The
+/// public styles stop at a frosted clear and always follow the backdrop, so the clearer material
+/// and the held appearance are chosen through the glass's private settings; if a later macOS drops
+/// them, the controls keep the public glass. The controls sit inside the glass, which keeps their
+/// marks legible over a light page as well as a dark one.
+private struct Glass<Content: View>: NSViewRepresentable {
+    /// The see-through lens AppKit draws for bubbles: a bright rim and refraction at the edge.
+    private static var clearVariant: Int { 11 }
+    /// Glass that keeps its own appearance instead of following its backdrop's.
+    private static var heldAppearance: Int { 1 }
+    let kind: ControlsGlass
+    let content: Content
+
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let glass = CapsuleGlass()
+        glass.followingAppearance = glass.privateValue("_adaptiveAppearance")
+        apply(kind, to: glass)
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = [.intrinsicContentSize]
+        glass.contentView = host
+        return glass
+    }
+
+    func updateNSView(_ glass: NSGlassEffectView, context: Context) {
+        if let glass = glass as? CapsuleGlass, glass.kind != kind { apply(kind, to: glass) }
+        (glass.contentView as? NSHostingView<Content>)?.rootView = content
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView glass: NSGlassEffectView, context: Context) -> CGSize? {
+        glass.contentView?.fittingSize
+    }
+
+    /// Choosing a public style resets the variant, so clear sets its lens after the style.
+    private func apply(_ kind: ControlsGlass, to glass: CapsuleGlass) {
+        glass.kind = kind
+        switch kind {
+        case .light, .dark:
+            glass.style = .regular
+            glass.appearance = NSAppearance(named: kind == .light ? .aqua : .darkAqua)
+            glass.setPrivate("set_adaptiveAppearance:", Self.heldAppearance)
+        case .clear:
+            glass.style = .clear
+            glass.appearance = nil
+            if let following = glass.followingAppearance { glass.setPrivate("set_adaptiveAppearance:", following) }
+            glass.setPrivate("set_variant:", Self.clearVariant)
+        }
+    }
+
+    /// Round ends at whatever height the row lays itself out to.
+    private final class CapsuleGlass: NSGlassEffectView {
+        var kind: ControlsGlass?
+        /// The appearance setting the glass starts with, which follows its backdrop.
+        var followingAppearance: Int?
+
+        func setPrivate(_ name: String, _ value: Int) {
+            let select = NSSelectorFromString(name)
+            guard responds(to: select) else { return }
+            typealias Setter = @convention(c) (AnyObject, Selector, Int) -> Void
+            unsafeBitCast(method(for: select), to: Setter.self)(self, select, value)
+        }
+
+        func privateValue(_ name: String) -> Int? {
+            let select = NSSelectorFromString(name)
+            guard responds(to: select) else { return nil }
+            typealias Getter = @convention(c) (AnyObject, Selector) -> Int
+            return unsafeBitCast(method(for: select), to: Getter.self)(self, select)
+        }
+
+        override func layout() {
+            super.layout()
+            cornerRadius = bounds.height / 2
+        }
     }
 }
 

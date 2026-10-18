@@ -11,6 +11,14 @@ public struct RecordingDefaults: Equatable, Sendable {
     public var systemAudio: Bool
 }
 
+/// How the floating recording controls are drawn: the system's frosted Liquid Glass, light or
+/// dark, or its clear lens that lets what is behind them show through.
+public enum ControlsGlass: String, CaseIterable, Sendable {
+    case light
+    case dark
+    case clear
+}
+
 /**
  This app's own preferences, in one defaults domain. Capture state, permissions and login-item
  registration are read from where they live and never copied here.
@@ -27,6 +35,8 @@ public struct Preferences {
         static let settingsFrame = "settingsFrame"
         static let overlayOrigin = "overlayOrigin"
         static let showCameraPreview = "showCameraPreview"
+        static let controlsGlass = "controlsGlass"
+        static let showControlsInScreenshots = "showControlsInScreenshots"
         static let countdownBeforeRecording = "countdownBeforeRecording"
         static let microphone = "recording.microphone"
         static let microphoneDeviceId = "recording.microphoneDeviceId"
@@ -62,6 +72,19 @@ public struct Preferences {
     public var showCameraPreview: Bool {
         get { defaults.object(forKey: Key.showCameraPreview) as? Bool ?? true }
         nonmutating set { defaults.set(newValue, forKey: Key.showCameraPreview) }
+    }
+
+    /// Clear by default: the floating controls let what is behind them show through.
+    public var controlsGlass: ControlsGlass {
+        get { defaults.string(forKey: Key.controlsGlass).flatMap(ControlsGlass.init(rawValue:)) ?? .clear }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Key.controlsGlass) }
+    }
+
+    /// Off by default: no capture sees the floating controls. On, screenshots and screen sharing
+    /// see them; this app's own recordings leave them out either way.
+    public var showControlsInScreenshots: Bool {
+        get { defaults.bool(forKey: Key.showControlsInScreenshots) }
+        nonmutating set { defaults.set(newValue, forKey: Key.showControlsInScreenshots) }
     }
 
     /// Countdown defaults on so people have time to return to their content before capture starts.

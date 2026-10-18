@@ -48,9 +48,13 @@ package protocol CaptureInputSession: AnyObject {
     func stop() async -> CaptureFailure?
     func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure
     func discardMedia() async
+    /// Leaves this application's windows out of what the running take records from now on, and
+    /// answers whether the take is known to leave them out. An input that cannot say answers no.
+    func excludeOwnWindows() async -> Bool
 }
 
 extension CaptureInputSession {
+    package func excludeOwnWindows() async -> Bool { false }
     package var companionCamera: (any CompanionCameraSwitch)? { nil }
     package func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure { CaptureInputClosure() }
     package func discardMedia() async {}
@@ -65,14 +69,18 @@ package final class ScreenCaptureInput: CaptureInputSession {
     private let request: CaptureRequest
     private let content: SCShareableContent
     private let filter: SCContentFilter
+    /// The display a display or region take records; a window take records only its window.
+    private let display: SCDisplay?
+    private var video: SCStream?
     private let crop: CGRect?
     private let microphone: AVCaptureDevice?
     private let acquisition = CaptureStreamInputs()
     private var delegate: CaptureStreamDelegate?
     private var microphoneObserver: NSObjectProtocol?
 
-    private init(request: CaptureRequest, content: SCShareableContent, filter: SCContentFilter,
+    private init(request: CaptureRequest, content: SCShareableContent, filter: SCContentFilter, display: SCDisplay?,
         crop: CGRect?, microphone: AVCaptureDevice?, width: Int, height: Int, requestedSourceRect: CGRect?) {
+        self.display = display
         self.request = request
         self.content = content
         self.filter = filter
@@ -118,6 +126,7 @@ package final class ScreenCaptureInput: CaptureInputSession {
         let content = try await SCShareableContent.excludingDesktopWindows(
             false, onScreenWindowsOnly: true)
         let filter: SCContentFilter
+        var recordedDisplay: SCDisplay?
         var crop: CGRect?
         // Where the request fixed its content onscreen, in global display points. A window has no
         // such rect: only the stream reports where the window is while it is being captured.
@@ -140,6 +149,7 @@ package final class ScreenCaptureInput: CaptureInputSession {
                 throw CaptureFailure("SOURCE_UNAVAILABLE", "The selected display is unavailable.")
             }
             filter = CaptureExclusion.displayFilter(display, in: content)
+            recordedDisplay = display
             requestedSourceRect = CGDisplayBounds(display.displayID)
             if request.source.kind == "region" {
                 guard let region = request.source.region else {
@@ -174,7 +184,7 @@ package final class ScreenCaptureInput: CaptureInputSession {
         let scale = min(1, 4096 / max(pixels.width, pixels.height))
         let width = max(2, Int(pixels.width * scale) / 2 * 2)
         let height = max(2, Int(pixels.height * scale) / 2 * 2)
-        return ScreenCaptureInput(request: request, content: content, filter: filter,
+        return ScreenCaptureInput(request: request, content: content, filter: filter, display: recordedDisplay,
             crop: crop, microphone: microphone, width: width, height: height,
             requestedSourceRect: requestedSourceRect)
     }
@@ -202,6 +212,7 @@ package final class ScreenCaptureInput: CaptureInputSession {
         config.captureMicrophone = request.microphone
         config.microphoneCaptureDeviceID = microphone?.uniqueID
         let video = SCStream(filter: filter, configuration: config, delegate: delegate)
+        self.video = video
         try video.addStreamOutput(output, type: .screen, sampleHandlerQueue: writer.queue)
         if request.microphone {
             try video.addStreamOutput(output, type: .microphone, sampleHandlerQueue: writer.queue)
@@ -222,6 +233,22 @@ package final class ScreenCaptureInput: CaptureInputSession {
     }
 
     package func startCursorSampling(writer: CaptureWriter) { writer.startCursorSampling() }
+
+    /// A window take records only the window it chose, so nothing else of this app's can enter it.
+    /// A display or region take reads what is on screen now and records the display without this
+    /// app, which is listed once any window of its own is on screen.
+    package func excludeOwnWindows() async -> Bool {
+        guard let display else { return true }
+        guard let video else { return false }
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let filter = CaptureExclusion.ownExcludingFilter(display, in: content) else { return false }
+            try await video.updateContentFilter(filter)
+            return true
+        } catch {
+            return false
+        }
+    }
 
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         if let microphone {

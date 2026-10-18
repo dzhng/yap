@@ -18,6 +18,9 @@ are ready before the first content click.
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
 controls share that one preference.
+No capture sees the floating controls by default. Settings can let screenshots and
+screen sharing see them; they become visible to captures only after the running take
+confirms it leaves this app's windows out, so they never enter Yap's own recording.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
 turned on and off during the take; the menu's switch only decides how it starts. The menu's
 switch and the floating controls' camera button send one action, which during a take is the

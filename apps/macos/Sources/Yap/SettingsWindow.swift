@@ -84,6 +84,12 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         if model.showCameraPreview != preferences.showCameraPreview {
             model.showCameraPreview = preferences.showCameraPreview
         }
+        if model.controlsGlass != preferences.controlsGlass {
+            model.controlsGlass = preferences.controlsGlass
+        }
+        if model.showControlsInScreenshots != preferences.showControlsInScreenshots {
+            model.showControlsInScreenshots = preferences.showControlsInScreenshots
+        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -158,6 +164,12 @@ final class SettingsModel: ObservableObject {
     @Published var showCameraPreview: Bool {
         didSet { preferences.showCameraPreview = showCameraPreview }
     }
+    @Published var controlsGlass: ControlsGlass {
+        didSet { preferences.controlsGlass = controlsGlass }
+    }
+    @Published var showControlsInScreenshots: Bool {
+        didSet { preferences.showControlsInScreenshots = showControlsInScreenshots }
+    }
     @Published var setUpAgents: Bool {
         didSet {
             guard setUpAgents != oldValue else { return }
@@ -185,6 +197,8 @@ final class SettingsModel: ObservableObject {
         showAtLaunch = preferences.showSettingsAtLaunch
         countdownBeforeRecording = preferences.countdownBeforeRecording
         showCameraPreview = preferences.showCameraPreview
+        controlsGlass = preferences.controlsGlass
+        showControlsInScreenshots = preferences.showControlsInScreenshots
         setUpAgents = preferences.setUpAgents
         agentSummary = agentSetup.summary()
     }
@@ -337,6 +351,23 @@ struct SettingsView: View {
             }
             detailRow("Show Camera Preview", "Shows the camera picture above the floating recording controls.") {
                 Toggle("", isOn: $model.showCameraPreview).labelsHidden()
+            }
+            // How the controls look is no part of a take, so it stays editable while one runs.
+            detailRow("Controls Glass", "Frosted glass keeps the floating controls easy to read; clear lets what is behind them show through.") {
+                Picker("", selection: $model.controlsGlass) {
+                    Text("Light").tag(ControlsGlass.light)
+                    Text("Dark").tag(ControlsGlass.dark)
+                    Text("Clear").tag(ControlsGlass.clear)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
+            detailRow(
+                "Show Controls in Screenshots",
+                "Lets screenshots and screen sharing see the floating controls. Yap's own recordings always leave them out."
+            ) {
+                Toggle("", isOn: $model.showControlsInScreenshots).labelsHidden()
             }
         } header: {
             Text("Recording")

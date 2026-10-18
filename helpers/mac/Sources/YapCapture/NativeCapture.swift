@@ -235,6 +235,14 @@ public final class NativeCapture {
         reservedCamera.map { ($0.deviceId, $0.isOn) }
     }
 
+    /// Leaves this application's own windows out of the running take from now on. True once the
+    /// take is known to leave them out, which is what lets a window of this app be shown to other
+    /// captures while it records.
+    public func excludeOwnWindows() async -> Bool {
+        guard let input, sink != nil, failure == nil, state == .recording || state == .paused else { return false }
+        return await input.excludeOwnWindows()
+    }
+
     /// Turns the running take's reserved companion camera on or off. Valid while the take is
     /// recording or paused; any refusal while turning on leaves the camera off and the take recording.
     public func setCamera(on: Bool) async throws {
