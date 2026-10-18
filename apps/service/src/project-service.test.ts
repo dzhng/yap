@@ -13,7 +13,17 @@ import { ProjectStore } from "@yap/core/projects";
 import { TranscriptStore } from "@yap/core/transcript";
 import { assetTranscriptOwner } from "@yap/core/transcript-processing";
 import { ResourceReferences } from "@yap/core/references";
-import { mkdtemp, writeFile, rm, readdir, readFile, mkdir, stat, realpath } from "node:fs/promises";
+import {
+  mkdtemp,
+  writeFile,
+  rm,
+  readdir,
+  readFile,
+  mkdir,
+  stat,
+  realpath,
+  chmod,
+} from "node:fs/promises";
 import { fork } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
@@ -21,6 +31,7 @@ import { join, dirname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, test, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { fstatSync } from "node:fs";
 import { AssetStore } from "@yap/core/assets";
 import { Catalog, catalogFormat } from "@yap/core/catalog";
 import { callLocal } from "@yap/client";
@@ -153,6 +164,121 @@ test("asset.list rows expose assetId and sizeBytes without legacy id or bytes", 
     expect(row).not.toHaveProperty("id");
     expect(row).not.toHaveProperty("bytes");
   }
+});
+
+test("media.list exposes imported titles and measured fields", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const imported = await f.call("asset.import", { requestId: "media-list-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const listed = await f.call("media.list", { limit: 10 });
+  expect(listed).toMatchObject({ ok: true, data: { media: expect.any(Array), nextCursor: null } });
+  if (!listed.ok) return;
+  const media = (listed.data as { media: Record<string, unknown>[] }).media;
+  expect(media).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "imported",
+        title: "source.png",
+        durationUs: 0,
+        sizeBytes: 11,
+      }),
+    ]),
+  );
+  expect(media.every((row) => !("id" in row) && !("bytes" in row))).toBe(true);
+});
+
+test("media.list sizeBytes uses the same measured bytes as deletion", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.recordingDirectory") {
+      const info = fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "storage.removeRecordingDirectory")
+      return { ok: true, data: { removed: true } };
+    if (operation === "media.probe")
+      return {
+        ok: true,
+        data: {
+          originUs: 0,
+          streams: [
+            { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+          ],
+        },
+      };
+    return { ok: true, data: {} };
+  });
+  const imported = await f.call("asset.import", { requestId: "media-size-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  await chmod(f.service.assets.path(assetId), 0o600);
+  await writeFile(f.service.assets.path(assetId), "asset bytes changed on disk");
+
+  const recording = f.service.captures.allocate({
+    requestId: "media-size-recording",
+    arguments: "{}",
+  }).recording;
+  f.service.captures.ingestLifecycle(recording.recordingId, {
+    sourceId: recording.sourceId,
+    sequence: 1,
+    state: "recording",
+  });
+  f.service.captures.ingestLifecycle(recording.recordingId, {
+    sourceId: recording.sourceId,
+    sequence: 2,
+    state: "finalizing",
+  });
+  f.service.captures.ingestLifecycle(recording.recordingId, {
+    sourceId: recording.sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: 1,
+  });
+  const recordingPath = join(f.home, "library", "recordings", recording.recordingId, "source");
+  await mkdir(recordingPath, { recursive: true, mode: 0o700 });
+  await writeFile(join(recordingPath, "measured.bin"), "recording bytes on disk");
+
+  const assetMeasured = f.service.libraryUsers!.usersOf({ kind: "asset", id: assetId }).freesBytes;
+  const recordingMeasured = f.service.libraryUsers!.usersOf({
+    kind: "recording",
+    id: recording.recordingId,
+  }).freesBytes;
+  const listed = await f.call("media.list", { limit: 100 });
+  if (!listed.ok) throw new Error(JSON.stringify(listed));
+  const media = (
+    listed.data as {
+      media: { kind: string; assetId?: string; recordingId?: string; sizeBytes: number }[];
+    }
+  ).media;
+  expect(media.find((row) => row.assetId === assetId)?.sizeBytes).toBe(assetMeasured);
+  expect(media.find((row) => row.recordingId === recording.recordingId)?.sizeBytes).toBe(
+    recordingMeasured,
+  );
+
+  const assetDeleted = await f.call("asset.delete", {
+    requestId: "media-size-delete-asset",
+    assetId,
+  });
+  expect(assetDeleted).toMatchObject({ ok: true, data: { freedBytes: assetMeasured } });
+  const recordingDeleted = await f.call("recording.delete", {
+    requestId: "media-size-delete-recording",
+    recordingId: recording.recordingId,
+  });
+  if (!recordingDeleted.ok) throw new Error(JSON.stringify(recordingDeleted));
+  expect(recordingDeleted).toMatchObject({ ok: true, data: { freedBytes: recordingMeasured } });
 });
 
 test("export.create replays by requestId and refuses a conflicting request", async () => {

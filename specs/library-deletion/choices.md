@@ -262,7 +262,7 @@ through that field.
 
 The operation classification is explicit and exhaustive. `readOnlyOperations` is:
 
-`project.get`, `project.list`, `inspect.open`, `caption.propose`, `layout.diagnostics`, `processing.get`, `output.capabilities`, `processing.capabilities`, `acquisition.get`, `asset.get`, `asset.segments`, `asset.origins`, `asset.list`, `job.get`, `export.list`, `export.status`, `package.status`, `storage.usage`, `index.get`, `face.trajectory.get`, `index.coverage`, `index.frame`, `index.frames`, `correspondence.get`, `alignment.get`, `speaker.continuity.get`, `speaker.get`, `join.verify`, `transcript.render.get`, `transcript.get`, `transcript.disfluency.get`, `transcript.search`, `preset.list`, `preset.get`, `model.list`, `model.status`, `preview.get`, `audio.get`, `frame.get`, `waveform.get`, `spectrogram.get`, `audio.pause.get`, `artifact.read`, `timeline.events`, `cursor.raw`, `login.status`, `update.status`, `skill.status`, `cli.status`, `service.health`, `service.tools`, `capture.sources`, `capture.status`, `recording.list`, `recording.get`, `revision.get`, and `revision.history`.
+`project.get`, `project.list`, `inspect.open`, `caption.propose`, `layout.diagnostics`, `processing.get`, `output.capabilities`, `processing.capabilities`, `acquisition.get`, `asset.get`, `asset.segments`, `asset.origins`, `asset.list`, `job.get`, `export.list`, `export.status`, `package.status`, `storage.usage`, `index.get`, `face.trajectory.get`, `index.coverage`, `index.frame`, `index.frames`, `correspondence.get`, `alignment.get`, `speaker.continuity.get`, `speaker.get`, `join.verify`, `transcript.render.get`, `transcript.get`, `transcript.disfluency.get`, `transcript.search`, `preset.list`, `preset.get`, `model.list`, `model.status`, `preview.get`, `audio.get`, `frame.get`, `waveform.get`, `spectrogram.get`, `audio.pause.get`, `artifact.read`, `timeline.events`, `cursor.raw`, `login.status`, `update.status`, `skill.status`, `cli.status`, `service.health`, `service.tools`, `capture.sources`, `capture.status`, `recording.list`, `media.list`, `recording.get`, `revision.get`, and `revision.history`.
 
 `idempotentOperations` is:
 
@@ -331,3 +331,8 @@ Evidence and publication generations remain strings under the single public fiel
 - **`Models` always owns a catalog connection** (sound). The constructor requires the
   shared `Catalog`; model removal cannot silently run without durable request receipts
   or a persistent preparation fence.
+
+## Slice 12: media.list
+
+- **The merged tie-break is `kind:identity` ascending after `createdAt` descending** (sound). `kind` keeps recordings and imports in one deterministic order, and the stable identity suffix makes equal timestamps and cross-kind boundaries cursor-safe.
+- **Media byte measurements use the deletion owner** (sound). `MediaListing` receives the service's `LibraryUsers.usersOf(subject).freesBytes` callback and invokes it only for rows on the returned page. This is the same path inventory used by asset and recording deletion; stored publication and asset metadata byte fields are not size owners. `durationUs` remains measured from the retained capture record for recordings and stream timing metadata for imports; titles remain the capture timestamp and import provenance basename.

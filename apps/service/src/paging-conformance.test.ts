@@ -253,6 +253,21 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       expectedOrder: [unfinished, failed, complete].map((take) => take.recordingId),
     };
   },
+  "media.list": async () => {
+    const home = await mkdtemp(join(tmpdir(), "paging-media-"));
+    cleanups.push(() => rm(home, { recursive: true, force: true }));
+    await seedRecordingStates(home);
+    const f = await service(undefined, {}, home);
+    return {
+      call: f.call,
+      params: {},
+      plural: "media",
+      ids: (value) => {
+        const row = value as { kind: string; recordingId?: string; assetId?: string };
+        return `${row.kind}:${row.recordingId ?? row.assetId}`;
+      },
+    };
+  },
   "export.list": async () => {
     // Admission identifies the destination directory and finds no file to replace.
     const f = await service(async (operation, params, options) => {

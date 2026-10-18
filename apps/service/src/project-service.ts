@@ -75,6 +75,7 @@ import { ProjectStore } from "@yap/core/projects";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
+import { MediaListing } from "@yap/core/media-listing";
 import { CatalogError, dependencyRefusal } from "@yap/core/catalog";
 import { DeletionPlans } from "@yap/core/deletion-plans";
 import { LibraryUsers } from "@yap/core/library-users";
@@ -1032,6 +1033,11 @@ export async function startProjectService(options: {
         ...cache.ownedPaths({ kind: "project", projectId: id }),
       ],
     });
+    const mediaListing = new MediaListing(
+      catalog,
+      plans,
+      (subject) => libraryUsers!.usersOf(subject).freesBytes,
+    );
     indexes = new IndexProcessing({
       jobs: queue,
       project: {
@@ -1496,6 +1502,16 @@ export async function startProjectService(options: {
               data: { ...page, recordings: page.recordings.map(describeCapture) },
             };
           }
+          case "media.list":
+            return {
+              ok: true,
+              data: mediaListing.list({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
+            };
           case "index.get": {
             const params = operation.params;
             const normalized =

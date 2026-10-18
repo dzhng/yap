@@ -144,6 +144,10 @@
       "types": "./dist/assets.d.ts",
       "default": "./dist/assets.js"
     },
+    "./media-listing": {
+      "types": "./dist/media-listing.d.ts",
+      "default": "./dist/media-listing.js"
+    },
     "./hdr-conversion-facts": {
       "types": "./dist/hdr-conversion-facts.d.ts",
       "default": "./dist/hdr-conversion-facts.js"

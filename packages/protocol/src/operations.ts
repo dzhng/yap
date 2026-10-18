@@ -1555,6 +1555,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("media.list"),
+      params: pageParams(),
+    })
+    .strict()
+    .describe(
+      "Page through recordings and imported originals newest first with one opaque cursor. Capture copies, generated or derived assets, tombstoned items and canceled takes are excluded.",
+    ),
+  z
+    .object({
       operation: z.literal("recording.list"),
       params: pageParams(),
     })
@@ -1665,6 +1674,7 @@ export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationN
   "capture.sources",
   "capture.status",
   "recording.list",
+  "media.list",
   "recording.get",
   "revision.get",
   "revision.history",

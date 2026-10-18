@@ -937,6 +937,7 @@
         "packages/core/src/frame-inspection.ts": 3,
         "packages/core/src/index-processing.ts": 2,
         "packages/core/src/index-read.ts": 2,
+        "packages/core/src/media-listing.ts": 2,
         "packages/core/src/models.ts": 2,
         "packages/core/src/page-cursor.ts": 2,
         "packages/core/src/prepared-audio.ts": 1,

@@ -329,6 +329,28 @@ it("operation help returns its canonical schema and refuses unknown names", () =
   expect(JSON.parse(unknown.stdout).error.code).toBe("UNKNOWN_OPERATION");
 });
 
+it("CLI and MCP return the same media list", async () => {
+  const { socket, recordingId } = await serviceFixture();
+  const client = new Client({ name: "media-listing-test", version: "1" });
+  cleanup.push(() => client.close());
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [entry, "mcp", "--socket", socket],
+      stderr: "pipe",
+    }),
+  );
+  const listed = cli(socket, "media.list", { limit: 1 });
+  expect(listed.exitCode).toBe(0);
+  expect(listed.result.data).toMatchObject({
+    media: [{ kind: "recording", recordingId }],
+    nextCursor: null,
+  });
+  const mcpList = await client.callTool({ name: "media.list", arguments: { limit: 1 } });
+  expect(mcpList.isError).toBe(false);
+  expect(mcpList.structuredContent).toMatchObject({ ok: true, data: listed.result.data });
+});
+
 it("CLI and MCP return the same recording list", async () => {
   const { socket, recordingId } = await serviceFixture();
   const client = new Client({ name: "listing-test", version: "1" });

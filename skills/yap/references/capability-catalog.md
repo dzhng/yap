@@ -35,7 +35,7 @@ an empty history; it is distinct from the clip-level `duplicate` edit operation.
 
 `acquisition.import`, `acquisition.get`, `asset.import`, `asset.convert`,
 `asset.get`, `asset.delete`, `asset.segments`, `asset.origins`, `asset.list`, `recording.get`,
-`recording.list`, `recording.delete`,
+`recording.list`, `media.list`, `recording.delete`,
 `recording.cleanup`, and `storage.usage` discover admitted media, retain
 source identities, and reclaim only verified working files. `storage.usage` also
 reports `modelBytes` for every regular file under the model directory, including
