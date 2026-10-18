@@ -45,6 +45,22 @@ model/runtime files; it does not run transcription, alignment, speaker analysis 
 voice generation. If the error does not include the details needed for that
 question, report the exact error instead of guessing or downloading.
 
+## Removing media and reclaiming space
+
+1. Delete what the user named with `asset.delete`, `recording.delete`,
+   `project.delete` or `model.remove`.
+2. An `IN_USE` refusal lists the projects using the item and the bytes each
+   choice frees. Report those users and byte totals to the user. Use
+   `cascade: true` or delete a project only when the user asked for it.
+3. To free a clip that only a project's history holds:
+   - use `edit.apply` to remove the clip;
+   - use `project.duplicate` at the head revision;
+   - check the copy with a preview or `revision.get`;
+   - use `project.delete` on the original;
+   - use `asset.delete` on the clip.
+4. Package adoption can bring a deleted item back. Original files and committed
+   exports are never touched.
+
 ## Installation
 
 On first use, check `command -v yap`; if it is missing, try `~/.local/bin/yap`

@@ -363,3 +363,8 @@ Evidence and publication generations remain strings under the single public fiel
 - **The users list is an accessory text view with a hanging indent** (sound). Plain informative text wrapped a long project line back under its bullet (both reviewers flagged it); the count is kept with its project by non-breaking spaces.
 - **Destructive button contrast is unverified live** (known). The harness renders the alert in an inactive offscreen window, where AppKit draws the destructive button pale; in the app it is a sheet on the active Library window.
 - **Review** (non-blocking). Mock comparison: accept with the list-wrap fix, done. Shots: [assets/14-delete-dialog](assets/14-delete-dialog/).
+
+## Slice 15: skill recipe and evals
+
+- **Eval prompts state the user's goal, not the steps** (sound). The first draft spelled out the free-a-clip recipe and the "don't cascade" rule in the prompts, which tests prompt-following, not the skill; the bars still require the recipe order and no unasked cascade.
+- **Model trials use a local CLI bundle** (sound). No release carries the new operations yet, so the two cases run with `node evals/run.mjs --cli <bundle>` built from this branch; contracts-only checks pass offline.
