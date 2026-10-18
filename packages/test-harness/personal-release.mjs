@@ -215,8 +215,12 @@ const main = async () => {
     call("asset.get", { assetId: videoBinding.assetId }),
     call("asset.get", { assetId: narrationBinding.assetId }),
   ];
-  const videoStream = videoAsset.streams.find((stream) => stream.id === videoBinding.streamId);
-  const audioStream = audioAsset.streams.find((stream) => stream.id === narrationBinding.streamId);
+  const videoStream = videoAsset.streams.find(
+    (stream) => stream.streamId === videoBinding.streamId,
+  );
+  const audioStream = audioAsset.streams.find(
+    (stream) => stream.streamId === narrationBinding.streamId,
+  );
   if (videoStream?.kind !== "video" || audioStream?.kind !== "audio")
     throw new Error("Selected capture bindings do not resolve to a video and audio stream");
   if (!videoBinding.available.length || !narrationBinding.available.length)
@@ -559,7 +563,7 @@ const main = async () => {
     };
     const beforeCut = await media(
       "audio.get",
-      { ...narrationSelection, range: sourceBounds },
+      { ...narrationSelection, sourceRange: sourceBounds },
       join(out, `before-cut-${index}.wav`),
     );
     const removedBeforeUs = plannedProjectRanges
@@ -593,15 +597,15 @@ const main = async () => {
   });
   step("undo", {
     historyEntries: (history.entries ?? history.revisions ?? []).length,
-    now: undone.id,
+    now: undone.revisionId,
   });
   const restored = call("edit.restore", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: undone.id,
+    expectedRevisionId: undone.revisionId,
     targetRevisionId: revisionId,
   });
-  revisionId = restored.id;
+  revisionId = restored.revisionId;
   step("restore", { now: revisionId });
 
   const preview = await media(
@@ -645,12 +649,12 @@ const main = async () => {
   // Opening a package refuses symlinked path components, and /tmp is one.
   const moved = join(realpathSync(mkdtempSync("/tmp/yap-moved-")), "relocated.zip");
   renameSync(exports["processed-package"].output, moved);
-  const admission = call("package.open", { path: moved });
+  const admission = call("package.open", { requestId: randomUUID(), path: moved });
   // Whatever happens from here, the service must not be left holding this package open with its
   // extracted copy on disk: it is the person's own service, not one a run can walk away from.
   const closeAdmission = () => {
     try {
-      call("package.close", { admissionId: admission.id }, { allowFailure: true });
+      call("package.close", { admissionId: admission.packageId }, { allowFailure: true });
     } catch {
       // Already closed, or the service is gone with it.
     }
@@ -659,7 +663,7 @@ const main = async () => {
   try {
     const opened = await ready(
       "package.status",
-      { admissionId: admission.id },
+      { admissionId: admission.packageId },
       "package open",
       300_000,
     );

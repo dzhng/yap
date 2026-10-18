@@ -38,7 +38,8 @@ export async function replaySceneDelivery(reportPath) {
     "none",
     "scene inspection made an editorial decision",
   );
-  assert.equal(report.result?.export?.state, "ready", "export is not committed");
+  // Frozen corpus format: this report predates the WorkState rename to ready.
+  assert.equal(report.result?.export?.state, "committed", "export is not committed");
   assert.equal(report.result?.export?.immutable, true, "export is not immutable");
   const deliveredRows = report.result?.delivered?.events?.rows;
   assert.ok(Array.isArray(deliveredRows), "delivered scene rows are missing");

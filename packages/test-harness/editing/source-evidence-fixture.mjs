@@ -39,8 +39,8 @@ export async function poll(read, done, label) {
 
 const deliveryChunk = z.object({
   data: z.string(),
-  offset: z.int().nonnegative(),
-  nextOffset: z.int().nonnegative(),
+  offsetBytes: z.int().nonnegative(),
+  nextOffsetBytes: z.int().nonnegative(),
   eof: z.boolean(),
 });
 
@@ -52,13 +52,13 @@ async function completeMcpResult(client, descriptor, exchange) {
   try {
     const { resultDelivery: delivery } = deliveredResponseSchema.parse(descriptor);
     const chunks = [];
-    for (let offset = 0; offset < delivery.bytes;) {
+    for (let offsetBytes = 0; offsetBytes < delivery.sizeBytes;) {
       const reply = await client.callTool({
         name: "artifact.read",
         arguments: {
           token,
-          offset,
-          maxBytes: Math.min(ARTIFACT_CHUNK_BYTES, delivery.bytes - offset),
+          offsetBytes,
+          maxBytes: Math.min(ARTIFACT_CHUNK_BYTES, delivery.sizeBytes - offsetBytes),
         },
       });
       if (exchange) (exchange.reads ??= []).push(structuredClone(reply));
@@ -71,22 +71,22 @@ async function completeMcpResult(client, descriptor, exchange) {
       );
       const decoded = Buffer.from(part.data, "base64");
       assert.ok(
-        part.offset === offset &&
+        part.offsetBytes === offsetBytes &&
           decoded.length > 0 &&
           decoded.length <= ARTIFACT_CHUNK_BYTES &&
-          part.nextOffset === offset + decoded.length &&
-          part.nextOffset <= delivery.bytes &&
-          part.eof === (part.nextOffset === delivery.bytes) &&
+          part.nextOffsetBytes === offsetBytes + decoded.length &&
+          part.nextOffsetBytes <= delivery.sizeBytes &&
+          part.eof === (part.nextOffsetBytes === delivery.sizeBytes) &&
           decoded.toString("base64") === part.data,
         "Result delivery chunk must advance within its declared bytes",
       );
       chunks.push(decoded);
-      offset = part.nextOffset;
+      offsetBytes = part.nextOffsetBytes;
     }
     const bytes = Buffer.concat(chunks);
     const text = bytes.toString("utf8");
     if (exchange) exchange.completeText = text;
-    assert.equal(bytes.length, delivery.bytes);
+    assert.equal(bytes.length, delivery.sizeBytes);
     assert.equal(hash(bytes), delivery.sha256, "Result delivery digest mismatch");
     const complete = JSON.parse(text);
     if (exchange) exchange.completeResponse = structuredClone(complete);
