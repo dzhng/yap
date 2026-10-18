@@ -159,7 +159,7 @@ test.runIf(process.platform === "darwin")(
     expect(
       await f.call("export.create", {
         projectId: project.projectId,
-        exportId,
+        requestId: exportId,
         kind: "processed-package",
         directory: f.home,
         leaf: "alignment.zip",
@@ -272,7 +272,7 @@ test("project alignment preparation resolves the project-owned tap before source
     revisionId: "missing-revision",
     preparedResourceId: "prepared-project-tap",
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
-    range: { startUs: 0, endUs: 1_000_000 },
+    sourceRange: { startUs: 0, endUs: 1_000_000 },
     channel: 0,
     text: "hello world",
     modelId: "nemo-ctc110",
@@ -327,7 +327,7 @@ test("a project alignment range past the revision is admitted clamped; one wholl
       projectId: project.projectId,
       preparedResourceId: "prepared-project-tap",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
-      range,
+      sourceRange: range,
       channel: 0,
       text: "hello world",
       modelId: "nemo-ctc110",

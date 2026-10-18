@@ -24,7 +24,7 @@ import YapControls
     var recordingCursorOverride: Any?
     var recordingCatalog: [[String: Any]]?
     var recordingNext: Any = NSNull()
-    var next: Any = ["afterSequence": 7]
+    var next: Any = "project-cursor"
     var projects: [[String: Any]] = [["projectId": "same", "title": "Caller project", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-project"]]
     var recording: [String: Any] = ["recordingId": "same", "createdAt": "2026-10-01T01:00:00Z", "state": "complete", "sourceId": "source-one", "creationSequence": 1, "lifecycleSequence": 3, "interruptionReason": NSNull(), "interruptionMessage": NSNull(), "finalizationError": NSNull(), "sourceDurationUs": 9000000, "sourceAdmissions": []]
     var deletes: [MediaTarget] = []
@@ -35,7 +35,7 @@ import YapControls
     var hold: String?
     var held: CheckedContinuation<Data, Never>?
     var heldAnswer: Data?
-    var job: [String: Any] = ["jobId": "job-one", "state": "running", "attemptId": "attempt-one", "artifact": "acquisition.import", "lane": "heavy", "generation": 1, "reason": NSNull(), "errorCode": NSNull(), "errorDetails": NSNull(), "retryable": false, "inputSha256": String(repeating: "1", count: 64), "result": NSNull(), "target": ["kind": "acquisition", "acquisitionId": "acq-one"]]
+    var job: [String: Any] = ["jobId": "job-one", "state": "running", "attemptId": "attempt-one", "artifact": "acquisition.import", "lane": "heavy", "attemptGeneration": 1, "reason": NSNull(), "errorCode": NSNull(), "errorDetails": NSNull(), "retryable": false, "inputSha256": String(repeating: "1", count: 64), "result": NSNull(), "target": ["kind": "acquisition", "acquisitionId": "acq-one"]]
     func count(_ operation: String) -> Int { calls.filter { $0.0 == operation }.count }
     func release() { let waiting = held; held = nil; waiting?.resume(returning: heldAnswer!); heldAnswer = nil }
 
@@ -50,10 +50,11 @@ import YapControls
         switch operation {
         case "recording.list":
             if let recordingCatalog {
-                let before = (params["cursor"] as? [String: Int])?["beforeSequence"] ?? Int.max
+                // The fake's opaque cursor still pins the page position, as the service's does.
+                let before = (params["cursor"] as? String).flatMap { Int($0.dropFirst("before-".count)) } ?? Int.max
                 let eligible = recordingCatalog.filter { ($0["creationSequence"] as! Int) < before && !deletedTargets.contains(.recording($0["recordingId"] as! String)) }
                 let page = Array(eligible.prefix(params["limit"] as! Int))
-                answer = ["recordings": page, "nextCursor": recordingCursorOverride ?? (eligible.count > page.count ? ["beforeSequence": page.last!["creationSequence"] as! Int] : NSNull())]
+                answer = ["recordings": page, "nextCursor": recordingCursorOverride ?? (eligible.count > page.count ? "before-\(page.last!["creationSequence"] as! Int)" : NSNull())]
             } else {
                 answer = ["recordings": deletedTargets.contains(.recording(recording["recordingId"] as! String)) ? [] : [recording], "nextCursor": recordingNext]
             }
@@ -65,7 +66,8 @@ import YapControls
         case "recording.delete", "project.delete":
             deletes.append(params["projectId"] == nil ? .recording(params["recordingId"] as! String) : .project(params["projectId"] as! String))
             if !wrongDelete { deletedTargets.insert(deletes.last!) }
-            answer = wrongDelete ? ["projectId": "wrong-target", "deleted": true] : params.merging(["deleted": true]) { first, _ in first }
+            let owner: [String: Any] = params["projectId"].map { ["projectId": $0] } ?? ["recordingId": params["recordingId"]!]
+            answer = (wrongDelete ? ["projectId": "wrong-target"] : owner).merging(["deleted": true, "freedBytes": 4096]) { first, _ in first }
         default: throw ServiceFailure(code: "UNKNOWN_OPERATION", message: operation)
         }
         if let lostDelete, operation.hasSuffix(".delete") {
@@ -83,9 +85,9 @@ import YapControls
     }
 }
 @main struct Check {
-    @MainActor static func until(_ ready: () -> Bool) async {
+    @MainActor static func until(line: Int = #line, _ ready: () -> Bool) async {
         for _ in 0..<200 where !ready() { try? await Task.sleep(for: .milliseconds(10)) }
-        precondition(ready(), "Timed out")
+        precondition(ready(), "Timed out at \(line)")
     }
     @MainActor static func main() async {
         let script = Script()
@@ -124,8 +126,9 @@ import YapControls
         precondition(!library.perform(.pauseOrResume), "Capture transport remains with its existing owner")
         script.projects = [["projectId": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]; script.next = NSNull()
         library.nextProjects()
-        await until { library.state.projects.first?.projectId == "later" && !library.state.projectsRefreshing }
-        precondition((script.calls.last { $0.0 == "project.list" }!.1["cursor"] as! [String: Int]) == ["afterSequence": 7])
+        for _ in 0..<200 where !(library.state.projects.first?.projectId == "later" && !library.state.projectsRefreshing) { try? await Task.sleep(for: .milliseconds(10)) }
+        precondition(library.state.projects.first?.projectId == "later" && !library.state.projectsRefreshing)
+        precondition(script.calls.last { $0.0 == "project.list" }!.1["cursor"] as? String == "project-cursor")
         precondition(library.state.hasPreviousProjectPage && library.state.nextProjectCursor == nil)
         // A bad page retains the last usable page and cannot invent navigation.
         let lastProjects = library.state.projects
@@ -240,6 +243,8 @@ import YapControls
         deletion.delete(.project("same"))
         await until { lostForgotten == [.project("same")] }
         precondition(lost.calls.filter { $0.0 == "project.delete" }.allSatisfy { ($0.1["projectId"] as? String) == "same" && $0.1["recordingId"] == nil })
+        precondition(Set(lost.calls.filter { $0.0 == "project.delete" }.compactMap { $0.1["requestId"] as? String }).count == 1,
+            "Every retry of one deletion replays the same requestId")
         precondition(deletion.state.recent.first?.recordingId == "same")
 
         // A page read held over deletion cannot restore the deleted project on release.
@@ -264,7 +269,7 @@ import YapControls
         await until { generation.state.projects.first?.projectId == "page-two" && !generation.state.projectsRefreshing }
         changed.hold = "project.list"; generation.refreshProjects()
         await until { changed.held != nil }
-        changed.projects = [["projectId": "page-one", "title": "First page", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-one"]]; changed.next = ["afterSequence": 7]
+        changed.projects = [["projectId": "page-one", "title": "First page", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-one"]]; changed.next = "project-cursor"
         generation.previousProjects()
         await until { generation.state.projects.first?.projectId == "page-one" && !generation.state.projectsRefreshing }
         changed.release()
@@ -300,6 +305,8 @@ import YapControls
             recovery.delete(.project("same"))
             await until { retired == [.project("same")] }
             precondition(ambiguous.count("project.delete") == 2)
+            precondition(Set(ambiguous.calls.filter { $0.0 == "project.delete" }.compactMap { $0.1["requestId"] as? String }).count == 1,
+                "Replaying an ambiguous deletion resends its original requestId")
             recovery.serviceChanged(ready: false)
         }
         // A bounded recording continuation remains older even when a new take arrives.
@@ -317,7 +324,7 @@ import YapControls
         precondition(browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor == nil)
         browsing.previousRecordings()
         await until { browsing.state.recent.map(\.recordingId) == ["take-8", "take-7", "take-6", "take-5", "take-4"] }
-        precondition(!browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor?.beforeSequence == 4)
+        precondition(!browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor != nil)
         precondition(paged.calls.filter { $0.0 == "recording.list" }.allSatisfy { ($0.1["limit"] as? Int) == 5 }, "Browsing never widens the catalog read")
         // An old page's held preparation read cannot starve the current page.
         paged.recordingCatalog = (1...7).reversed().map { sequence in

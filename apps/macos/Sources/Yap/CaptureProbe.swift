@@ -67,11 +67,11 @@ func runCaptureProbe(_ arguments: [String], selected: SelectedCaptureProbe) asyn
                 false, onScreenWindowsOnly: true)
             try emit([
                 "displays": content.displays.map {
-                    ["id": $0.displayID, "width": $0.width, "height": $0.height]
+                    ["displayId": $0.displayID, "width": $0.width, "height": $0.height]
                 },
                 "windows": content.windows.map {
                     [
-                        "id": $0.windowID, "title": $0.title ?? "",
+                        "windowId": $0.windowID, "title": $0.title ?? "",
                         "application": $0.owningApplication?.applicationName ?? "",
                     ]
                 },

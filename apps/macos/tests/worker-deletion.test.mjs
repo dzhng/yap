@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID, createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -17,6 +17,16 @@ import { withArchiveCopyBarrier } from "./fixtures/archive-copy-barrier.mjs";
 import { alive, temporary, waitFor } from "./harness.mjs";
 
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+function snapshotFiles(path, out = new Map()) {
+  if (!existsSync(path)) return out;
+  const stat = statSync(path);
+  if (stat.isFile()) {
+    out.set(path, stat.size);
+    return out;
+  }
+  for (const entry of readdirSync(path)) snapshotFiles(join(path, entry), out);
+  return out;
+}
 
 async function generated(home, seconds) {
   await mkdir(join(home, "library"), { recursive: true, mode: 0o700 });
@@ -158,13 +168,13 @@ test(
               throw new Error(JSON.stringify(result));
             return result.state === "ready" && result;
           }, 20_000);
-          const reference = siblingIndex.page.entries[0].reference;
+          const reference = siblingIndex.entries[0].reference;
           const readSibling = async () => {
             const frame = await succeeds("index.frame", reference);
             try {
               const chunk = await succeeds("artifact.read", {
                 token: frame.delivery.token,
-                offset: 0,
+                offsetBytes: 0,
                 maxBytes: 524288,
               });
               assert.equal(chunk.eof, true);
@@ -240,6 +250,7 @@ test(
           assert.ok(active.some((job) => job.artifact === "acquisition.import"));
           assert.equal(existsSync(take.directory), true);
           assert.equal(alive(worker.pid), true);
+          const filesBeforeDelete = snapshotFiles(join(home, "library"));
 
           const recordingBefore = await succeeds("recording.get", {
             recordingId: take.recordingId,
@@ -248,11 +259,12 @@ test(
           let finished = false,
             observations = 0,
             sawDirectoryRemoved = false;
-          const deletion = call("recording.delete", { recordingId: take.recordingId }).finally(
-            () => {
-              finished = true;
-            },
-          );
+          const deletion = call("recording.delete", {
+            recordingId: take.recordingId,
+            requestId: randomUUID(),
+          }).finally(() => {
+            finished = true;
+          });
           const monitor = (async () => {
             do {
               const present = existsSync(take.directory);
@@ -270,7 +282,14 @@ test(
           })();
           const [result] = await Promise.all([deletion, monitor]);
           assert.equal(result.ok, true, JSON.stringify(result));
-          assert.deepEqual(result.data, { recordingId: take.recordingId, deleted: true });
+          const filesAfterDelete = snapshotFiles(join(home, "library"));
+          const freedMeasured = [...filesBeforeDelete].reduce(
+            (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
+            0,
+          );
+          assert.equal(result.data.recordingId, take.recordingId);
+          assert.equal(result.data.deleted, true);
+          assert.ok(result.data.freedBytes > 0);
           assert.equal(alive(worker.pid), false);
           assert.equal(existsSync(take.directory), false);
           assert.equal(heldTargetResult?.ok, false, JSON.stringify(heldTargetResult));

@@ -117,9 +117,15 @@ import AVKit
         rendered.imageScaling = .scaleProportionallyUpOrDown
         window.contentView!.addSubview(rendered)
         window.contentView!.displayIfNeeded()
-        guard let bitmap = window.contentView!.bitmapImageRepForCachingDisplay(in: window.contentView!.bounds) else {
+        // Capture at a fixed 2x backing scale, as the reference was, so the comparison does not
+        // depend on whether this machine's display is Retina.
+        let bounds = window.contentView!.bounds
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(bounds.width * 2),
+            pixelsHigh: Int(bounds.height * 2), bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+            isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else {
             preconditionFailure("Could not allocate the preview window capture")
         }
+        bitmap.size = bounds.size
         window.contentView!.cacheDisplay(in: window.contentView!.bounds, to: bitmap)
         guard let data = bitmap.representation(using: .png, properties: [:]) else {
             preconditionFailure("Could not encode the preview window capture")

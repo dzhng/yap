@@ -63,7 +63,7 @@ export const modelStatusSchema = asyncWorkSchema
 export const jobStatusSchema = asyncWorkSchema
   .extend({
     attemptId: z.string().min(1),
-    generation: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+    attemptGeneration: z.int().positive().max(Number.MAX_SAFE_INTEGER),
     target: z.record(z.string(), z.unknown()),
     retryable: z.boolean(),
   })
@@ -211,7 +211,7 @@ export const publicationWorkState = {
  */
 export function publishedOutputSchema<T extends z.ZodType>(output: T) {
   return z.object({
-    generation: z.union([z.int().positive().max(Number.MAX_SAFE_INTEGER), z.string().min(1)]),
+    generation: z.string().min(1),
     attemptId: z.string().min(1).optional(),
     output,
     issues: issuesSchema,
@@ -225,7 +225,7 @@ export function publishedOutput<
 >(publication: Publication | null, output: (publication: Publication) => Output) {
   return publication
     ? {
-        generation: publication.generation,
+        generation: String(publication.generation),
         ...(publication.attemptId === undefined ? {} : { attemptId: publication.attemptId }),
         output: output(publication),
         issues: publication.issues,

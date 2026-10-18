@@ -404,7 +404,7 @@ try {
     {
       projectId,
       revisionId: latest.revision.id,
-      exportId: historicalExportId,
+      requestId: historicalExportId,
       directory,
       leaf: "historical.zip",
       kind: "processed-package",
@@ -766,7 +766,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   const expandedExportId = randomUUID();
   await call("export.create", {
     projectId: large.project.projectId,
-    exportId: expandedExportId,
+    requestId: expandedExportId,
     directory,
     leaf: "expanded-history.zip",
     kind: "processed-package",

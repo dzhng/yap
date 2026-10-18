@@ -77,7 +77,7 @@ try {
   const cold = await call("export.create", {
     ...selection,
     kind: "video",
-    exportId: coldExportId,
+    requestId: coldExportId,
     directory: out,
     leaf: "cold-export.mp4",
   });
@@ -611,7 +611,7 @@ try {
   await call("export.create", {
     ...emptySelection,
     kind: "video",
-    exportId: unavailableExportId,
+    requestId: unavailableExportId,
     directory: out,
     leaf: "unavailable.mp4",
   });

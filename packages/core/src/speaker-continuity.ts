@@ -30,8 +30,8 @@ export type SpeakerContinuityIdentity = z.infer<typeof speakerContinuityIdentity
 const speakerContinuityMetricShape = z.strictObject({
   inputFrames: z.int().positive(),
   scoredFrames: z.int().nonnegative(),
-  durationSeconds: positiveFinite,
-  inferenceSeconds: z.number().finite().nonnegative(),
+  durationUs: positiveFinite,
+  inferenceUs: z.number().finite().nonnegative(),
   peakRssBytes: z.int().nonnegative(),
   expectedSpeakerCount: z.int().positive().max(8),
   observedSpeakerCount: z.int().nonnegative().max(8),
@@ -55,11 +55,11 @@ export const speakerContinuityMetricsSchema = speakerContinuityMetricShape.super
         path: ["overlapRecall"],
         message: "overlap recall is required",
       });
-    const expectedDuration = metrics.inputFrames / 16000;
-    if (Math.abs(metrics.durationSeconds - expectedDuration) > 1e-9)
+    const expectedDuration = (metrics.inputFrames / 16000) * 1_000_000;
+    if (Math.abs(metrics.durationUs - expectedDuration) > 1e-9)
       context.addIssue({
         code: "custom",
-        path: ["durationSeconds"],
+        path: ["durationUs"],
         message: "duration differs from the admitted PCM extent",
       });
   },
@@ -120,7 +120,7 @@ export function evaluateSpeakerContinuity(input: unknown): SpeakerContinuityRece
   const controls = candidate.success ? { controls: candidate.data.controls } : {};
   const failedGates: string[] = [];
   if (metrics.scoredFrames !== metrics.inputFrames) failedGates.push("complete_input");
-  if (Math.abs(metrics.durationSeconds - metrics.inputFrames / 16000) > 1e-9)
+  if (Math.abs(metrics.durationUs - (metrics.inputFrames / 16000) * 1_000_000) > 1e-9)
     failedGates.push("duration_extent");
   if (metrics.overlapRequired && metrics.overlapRecall === null)
     failedGates.push("overlap_measurement");
@@ -136,10 +136,7 @@ export function evaluateSpeakerContinuity(input: unknown): SpeakerContinuityRece
       metrics.overlapRecall < speakerContinuityThresholds.minOverlapRecall)
   )
     failedGates.push("overlap_recall");
-  if (
-    metrics.inferenceSeconds >
-    metrics.durationSeconds * speakerContinuityThresholds.maxInferenceFactor
-  )
+  if (metrics.inferenceUs > metrics.durationUs * speakerContinuityThresholds.maxInferenceFactor)
     failedGates.push("inference_factor");
   if (metrics.peakRssBytes > speakerContinuityThresholds.maxPeakRssBytes)
     failedGates.push("peak_rss");

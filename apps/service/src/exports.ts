@@ -51,7 +51,7 @@ import type { MediaAudioInspection, PinnedProjectAudioExport } from "@yap/core/a
 type Request = Extract<
   ReturnType<typeof operationSchema.parse>,
   { operation: "export.create" }
->["params"];
+>["params"] & { exportId: string };
 type ExportOwner = Extract<JobOwner, { kind: "project" }>;
 type ReadyRendition = {
   cacheId: string;
@@ -131,7 +131,6 @@ function snapshotIssues(kind: string, projected: string | null): Issue[] {
 }
 const artifact = "export-media",
   recoveryArtifact = "export-recovery";
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const stageName = (id: string) => `.yap-export-${id}`;
 
 /** The publication lock refuses a second holder of a destination directory. This service's
@@ -208,6 +207,10 @@ export class MediaExports {
   private readonly creating = new Map<Promise<unknown>, string>();
   private readonly lifetime = new AbortController();
   private readonly retiring = new Map<string, Promise<void>>();
+  private readonly recoveryRequests = new Map<
+    string,
+    { exportId: string; result: ReturnType<MediaExports["status"]> }
+  >();
   private closed = false;
   private admittingRecovery = false;
   constructor(
@@ -583,7 +586,7 @@ export class MediaExports {
   private async prepareIntent(request: Request): Promise<ReturnType<MediaExports["status"]>> {
     this.requireAdmission(request.exportId);
     if (
-      !uuid.test(request.exportId) ||
+      !request.exportId ||
       !request.leaf ||
       [".", ".."].includes(request.leaf) ||
       /[/\0]/.test(request.leaf) ||
@@ -591,7 +594,7 @@ export class MediaExports {
     )
       throw new CatalogError(
         "INVALID_PARAMS",
-        "Export needs a UUID identity and destination filename",
+        "Export needs a request identity and destination filename",
       );
     const targetKind = "project";
     const targetId = request.projectId;
@@ -1223,11 +1226,26 @@ export class MediaExports {
     }
   }
   /** Status never observes publication files; this queues the job that does. */
-  recover(exportId: string) {
+  recover(exportId: string, requestId?: string) {
+    if (requestId) {
+      const prior = this.recoveryRequests.get(requestId);
+      if (prior) {
+        if (prior.exportId !== exportId)
+          throw new CatalogError(
+            "REQUEST_CONFLICT",
+            "Request identity names a different export recovery",
+          );
+        return prior.result;
+      }
+    }
     const intent = this.require(exportId);
     this.requireActive(intent);
     this.assertOwner(intent);
-    if (!cleanupPending(intent)) return this.status(exportId);
+    if (!cleanupPending(intent)) {
+      const result = this.status(exportId);
+      if (requestId) this.recoveryRequests.set(requestId, { exportId, result });
+      return result;
+    }
     const original = this.owners.jobs.status(this.identity(intent));
     if (!original.jobId)
       throw new CatalogError("INVALID_JOB", "Staged export has no publication job");
@@ -1237,7 +1255,9 @@ export class MediaExports {
     });
     if (job.state === "ready") this.owners.jobs.regenerate(job.jobId, job.generation);
     else this.owners.jobs.retry(job.jobId);
-    return this.status(exportId);
+    const result = this.status(exportId);
+    if (requestId) this.recoveryRequests.set(requestId, { exportId, result });
+    return result;
   }
 
   private async reconcile({ job, signal }: JobExecution): Promise<string> {

@@ -280,6 +280,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
       expect(await resumed.delete({ kind: "project", id: target.projectId })).toEqual({
         projectId: target.projectId,
         deleted: true,
+        freedBytes: 0,
       });
     } finally {
       await resumed.close();

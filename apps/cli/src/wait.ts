@@ -111,7 +111,7 @@ export async function waitForWork(options: {
       if (
         job.jobId !== jobId ||
         (pinned &&
-          (pinned.generation !== job.generation ||
+          (pinned.attemptGeneration !== job.attemptGeneration ||
             pinned.attemptId !== job.attemptId ||
             !isDeepStrictEqual(pinned.target, job.target)))
       )
@@ -132,7 +132,7 @@ export async function waitForWork(options: {
       ? {
           job: {
             jobId: current.jobId,
-            generation: current.generation,
+            attemptGeneration: current.attemptGeneration,
             attemptId: current.attemptId,
           },
         }
@@ -159,11 +159,10 @@ export async function waitForWork(options: {
   let params: Record<string, unknown> =
     read === "model.status" ? { modelId: request.params.modelId } : { ...request.params };
   const sourcePreparation =
-    read === "transcript.get" &&
-    (request.operation === "transcript.transcribe" ||
-      request.operation === "transcript.transcribe");
+    read === "transcript.get" && request.operation === "transcript.transcribe";
   if (sourcePreparation) {
-    delete params.executionRange;
+    delete params.requestId;
+    delete params.sourceRange;
     delete params.context;
     const retainedGeneration = record(record(pins.published).output).generation;
     if (typeof retainedGeneration === "string") params.generation = retainedGeneration;
@@ -175,7 +174,10 @@ export async function waitForWork(options: {
   // requested one, so the read carries the preparation's clamp.
   const admission =
     (sourcePreparation || renderPreparation) && Array.isArray(pins.issues) ? pins.issues : [];
-  if (request.operation === "export.create" && typeof pins.exportId === "string")
+  if (
+    (request.operation === "export.create" || request.operation === "export.recover") &&
+    typeof pins.exportId === "string"
+  )
     params = { exportId: pins.exportId };
   if (request.operation === "capture.stop" && typeof pins.recordingId === "string")
     params = { recordingId: pins.recordingId };
@@ -255,11 +257,12 @@ export async function waitForWork(options: {
       read &&
       !renderPreparation &&
       !operationSchema.safeParse({ operation: read, params }).success
-    )
+    ) {
       throw new ArtifactDeliveryError(
         "INVALID_RESPONSE",
         "Acknowledgement cannot pin the advertised read",
       );
+    }
     for (;;) {
       if (signal.aborted) {
         await close(latest);
@@ -291,7 +294,7 @@ export async function waitForWork(options: {
           : []),
       ].flatMap((value) => (Array.isArray(value) ? value : []));
       const count = issueCount(issues as Issue[]);
-      const suffix = current ? `(${current.jobId}, generation ${current.generation})` : "";
+      const suffix = current ? `(${current.jobId}, attempt ${current.attemptGeneration})` : "";
       const marker =
         work.state === "ready" && count > 0
           ? `${request.operation}: ready (${count} issues)${suffix ? ` ${suffix}` : ""}`
@@ -336,7 +339,8 @@ export async function waitForWork(options: {
             }
             if (state !== "ready") waiting = true;
             else if (
-              record(value.published).generation !== jobs.get(value.jobId)!.generation ||
+              String(record(value.published).generation) !==
+                String(jobs.get(value.jobId)!.attemptGeneration) ||
               pending.has(String(value.state))
             )
               waiting = true;
@@ -383,13 +387,14 @@ export async function waitForWork(options: {
           const publication = record(work.published);
           if (
             !pending.has(String(work.state)) &&
-            (!publication.generation || publication.generation === job.generation)
+            (!publication.generation ||
+              String(publication.generation) === String(job.attemptGeneration))
           )
             return metadata("settled");
           if (
             !pending.has(String(work.state)) &&
             publication.generation &&
-            publication.generation !== job.generation
+            String(publication.generation) !== String(job.attemptGeneration)
           )
             throw new ArtifactDeliveryError(
               "INVALID_RESPONSE",

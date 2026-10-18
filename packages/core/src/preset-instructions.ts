@@ -25,5 +25,5 @@ export const GET_INSTRUCTIONS_TEMPLATE = `
 `;
 
 export const LIST_INSTRUCTIONS_TEMPLATE = `
-1. Choose the preset whose description matches the request and call yap preset.get with its id.
+1. Choose the preset whose description matches the request and call yap preset.get with its presetId.
 `;

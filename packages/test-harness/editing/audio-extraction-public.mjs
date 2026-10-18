@@ -364,13 +364,14 @@ try {
   const carrier = await project(exportedAsset, "carrier", { durationUs: original.durationUs });
   const requestedExport = await call("export.create", {
     projectId: carrier.projectId,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: out,
     leaf: "excerpt.zip",
   });
+  const exportId = requestedExport.exportId;
   const exported = await poll(
-    () => call("export.status", { exportId: requestedExport.exportId }),
+    () => call("export.status", { exportId }),
     (v) => v.state === "ready",
     "export",
   );

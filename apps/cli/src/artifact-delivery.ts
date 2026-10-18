@@ -44,8 +44,8 @@ export class ArtifactDeliveryError extends Error {
 }
 const receipt = z.object({
   token: z.string().min(1),
-  bytes: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
-  expiresAt: z.int(),
+  sizeBytes: z.int().min(1).max(Number.MAX_SAFE_INTEGER),
+  expiresAtMs: z.int(),
 });
 const ready = z.object({
   state: z.literal("ready"),
@@ -58,28 +58,31 @@ const ready = z.object({
 });
 const chunk = z.object({
   data: z.string(),
-  offset: z.int().nonnegative(),
-  nextOffset: z.int().nonnegative(),
+  offsetBytes: z.int().nonnegative(),
+  nextOffsetBytes: z.int().nonnegative(),
   eof: z.boolean(),
 });
 
 type ArtifactType = "image/png" | "audio/wav" | "video/mp4" | "application/json";
-type ArtifactInfo = { bytes: number; mediaType: ArtifactType };
+type ArtifactInfo = { sizeBytes: number; mediaType: ArtifactType };
 
 // Buffer policies also describe the outcome the MCP framer must admit before consumption.
-function bufferedPolicy({ bytes, mediaType }: ArtifactInfo): true | false | ArtifactDeliveryError {
-  if (mediaType === "audio/wav" && bytes > 48 * 1024 ** 2) return false;
+function bufferedPolicy({
+  sizeBytes,
+  mediaType,
+}: ArtifactInfo): true | false | ArtifactDeliveryError {
+  if (mediaType === "audio/wav" && sizeBytes > 48 * 1024 ** 2) return false;
   if (mediaType === "video/mp4")
     return new ArtifactDeliveryError(
       "INVALID_REQUEST",
       "Playable previews must be streamed to a file",
     );
-  if (mediaType === "image/png" && bytes > 32 * 1024 ** 2)
+  if (mediaType === "image/png" && sizeBytes > 32 * 1024 ** 2)
     return new ArtifactDeliveryError(
       "LIMIT_EXCEEDED",
       "Image exceeds its buffered delivery byte limit",
     );
-  if (mediaType === "application/json" && bytes > 4 * 1024 ** 2)
+  if (mediaType === "application/json" && sizeBytes > 4 * 1024 ** 2)
     return new ArtifactDeliveryError(
       "LIMIT_EXCEEDED",
       "JSON evidence exceeds its buffered delivery byte limit",
@@ -94,13 +97,13 @@ export function describeArtifact(result: OperationResponse) {
   const parsed = ready.safeParse(data);
   if (!parsed.success)
     throw new ArtifactDeliveryError("INVALID_RESPONSE", "Ready artifact has no valid delivery");
-  const { bytes } = parsed.data.delivery;
+  const { sizeBytes } = parsed.data.delivery;
   const mediaType: ArtifactType = parsed.data.published.output.mediaType;
   return {
-    bytes,
+    sizeBytes,
     mediaType,
     delivery: parsed.data.delivery,
-    buffered: bufferedPolicy({ bytes, mediaType }),
+    buffered: bufferedPolicy({ sizeBytes, mediaType }),
   };
 }
 
@@ -121,19 +124,23 @@ async function consumeArtifact<T>(
 ): Promise<T | null> {
   const description = describeArtifact(result);
   if (!description) return null;
-  const { token, bytes } = description.delivery;
-  let expiresAt = description.delivery.expiresAt;
+  const { token, sizeBytes } = description.delivery;
+  let expiresAtMs = description.delivery.expiresAtMs;
   const { mediaType } = description;
   const socket = await resolveServiceSocket(selection);
   async function* chunks() {
     let offset = 0;
-    while (offset < bytes) {
-      if (Date.now() >= expiresAt)
+    while (offset < sizeBytes) {
+      if (Date.now() >= expiresAtMs)
         throw new ArtifactDeliveryError("ARTIFACT_EXPIRED", "Media delivery expired");
-      if (expiresAt - Date.now() < 5000) {
+      if (expiresAtMs - Date.now() < 5000) {
         const renewal = await callLocal(
           socket,
-          { id: randomUUID(), operation: "artifact.renew", params: { token } },
+          {
+            id: randomUUID(),
+            operation: "artifact.renew",
+            params: { token, requestId: randomUUID() },
+          },
           selection.signal ? { signal: selection.signal } : {},
         );
         if (!renewal.ok) throw new ArtifactDeliveryError(renewal.error.code, renewal.error.message);
@@ -141,21 +148,25 @@ async function consumeArtifact<T>(
         if (
           !renewed.success ||
           renewed.data.token !== token ||
-          renewed.data.bytes !== bytes ||
-          renewed.data.expiresAt <= expiresAt
+          renewed.data.sizeBytes !== sizeBytes ||
+          renewed.data.expiresAtMs <= expiresAtMs
         )
           throw new ArtifactDeliveryError(
             "INVALID_RESPONSE",
             "Media renewal changed its identity or failed to extend the lease",
           );
-        expiresAt = renewed.data.expiresAt;
+        expiresAtMs = renewed.data.expiresAtMs;
       }
       const response = await callLocal(
         socket,
         {
           id: randomUUID(),
           operation: "artifact.read",
-          params: { token, offset, maxBytes: Math.min(ARTIFACT_CHUNK_BYTES, bytes - offset) },
+          params: {
+            token,
+            offsetBytes: offset,
+            maxBytes: Math.min(ARTIFACT_CHUNK_BYTES, sizeBytes - offset),
+          },
         },
         selection.signal ? { signal: selection.signal } : {},
       );
@@ -167,24 +178,24 @@ async function consumeArtifact<T>(
       const part = parsedChunk.data;
       const decoded = Buffer.from(part.data, "base64");
       if (
-        part.offset !== offset ||
+        part.offsetBytes !== offset ||
         decoded.length < 1 ||
         decoded.length > ARTIFACT_CHUNK_BYTES ||
-        part.nextOffset !== offset + decoded.length ||
-        part.nextOffset > bytes ||
-        part.eof !== (part.nextOffset === bytes) ||
+        part.nextOffsetBytes !== offset + decoded.length ||
+        part.nextOffsetBytes > sizeBytes ||
+        part.eof !== (part.nextOffsetBytes === sizeBytes) ||
         decoded.toString("base64") !== part.data
       )
         throw new ArtifactDeliveryError(
           "INVALID_RESPONSE",
           "Media chunk does not advance within the delivery",
         );
-      offset = part.nextOffset;
+      offset = part.nextOffsetBytes;
       yield decoded;
     }
   }
   try {
-    return await consume({ bytes, mediaType }, chunks());
+    return await consume({ sizeBytes, mediaType }, chunks());
   } finally {
     // Expiry releases the same pin if the service disappeared or the caller was canceled.
     await closeArtifact(socket, token);
@@ -206,10 +217,10 @@ export async function artifactBytes(
   const description = describeArtifact(result);
   // Large audio remains renewable instead of becoming one huge message.
   if (description?.buffered === false) return null;
-  return consumeArtifact(selection, result, async ({ bytes, mediaType }, chunks) => {
-    const buffered = bufferedPolicy({ bytes, mediaType });
+  return consumeArtifact(selection, result, async ({ sizeBytes, mediaType }, chunks) => {
+    const buffered = bufferedPolicy({ sizeBytes, mediaType });
     if (mediaType === "video/mp4" || buffered instanceof ArtifactDeliveryError) throw buffered;
-    const output = Buffer.alloc(bytes);
+    const output = Buffer.alloc(sizeBytes);
     let offset = 0;
     for await (const chunk of chunks) {
       chunk.copy(output, offset);
@@ -227,7 +238,7 @@ export async function publishArtifactFile(
   destination: string,
   signal?: AbortSignal,
 ): Promise<ArtifactInfo & { output: string }> {
-  if (info.mediaType === "application/json" && info.bytes > 16 * 1024 ** 2)
+  if (info.mediaType === "application/json" && info.sizeBytes > 16 * 1024 ** 2)
     throw new ArtifactDeliveryError(
       "LIMIT_EXCEEDED",
       "JSON evidence exceeds its file validation byte limit",

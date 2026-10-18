@@ -29,7 +29,11 @@ export class SourceSpeakerRead {
       input.sourceRange ?? this.metadata.source.observationRange,
     );
     const sha = (value: unknown) =>
-      createHash("sha256").update(JSON.stringify(value)).digest("hex");
+      createHash("sha256")
+        .update(
+          JSON.stringify(value, (_key, item) => (typeof item === "bigint" ? Number(item) : item)),
+        )
+        .digest("hex");
     // The query is the caller's filter set; the evidence it read is the continuation's pin.
     const queryDigest = sha({ view, range }),
       evidenceDigest = sha({

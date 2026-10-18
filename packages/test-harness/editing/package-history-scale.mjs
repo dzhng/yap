@@ -327,7 +327,7 @@ try {
     "export.create",
     {
       projectId,
-      exportId: firstId,
+      requestId: firstId,
       kind: "processed-package",
       directory: out,
       leaf: "pinned-before.zip",
@@ -345,7 +345,7 @@ try {
     "export.create",
     {
       projectId,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       kind: "processed-package",
       directory: out,
       leaf: "refused.zip",
@@ -360,7 +360,7 @@ try {
   await call("export.create", {
     projectId,
     revisionId: pinnedId,
-    exportId: secondId,
+    requestId: secondId,
     kind: "processed-package",
     directory: out,
     leaf: "pinned-after.zip",
@@ -422,7 +422,7 @@ try {
   const receiverExportId = randomUUID();
   await call("export.create", {
     projectId: receivingId,
-    exportId: receiverExportId,
+    requestId: receiverExportId,
     kind: "processed-package",
     directory: out,
     leaf: "receiver-history.zip",

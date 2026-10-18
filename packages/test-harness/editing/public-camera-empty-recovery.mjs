@@ -34,14 +34,14 @@ try {
     .call("capture.start", request)
     .catch((error) => ({ failure: error.message }));
   report.inspection = await poll(
-    () => service.fixtureCall("inspect"),
+    () => service.fixtureCall("inspect.open"),
     (value) => value.requests.length === 1,
     "preparation held",
   );
   assert.equal(report.inspection.cameraStarts, 0);
   assert.equal(report.inspection.stops, 0);
   assert.equal(report.inspection.closures, 0);
-  report.take = await service.call("recording.latest", {});
+  report.take = await service.call("recording.get", {});
   assert.equal(report.take.state, "preparing");
   await service.crashController();
   report.startAnswer = await starting;
@@ -82,7 +82,7 @@ try {
   assert.deepEqual((await service.call("project.list", {})).projects, []);
   const replay = await service.call("capture.start", request);
   assert.deepEqual(replay, report.recovered);
-  assert.equal((await service.fixtureCall("inspect")).requests.length, 0);
+  assert.equal((await service.fixtureCall("inspect.open")).requests.length, 0);
   report.passed = true;
 } finally {
   if (service) {

@@ -44,8 +44,8 @@ func diagnostic(_ message: String) { FileHandle.standardError.write(Data((messag
                      && (catalog["windows"] as? [[String: Any]])?.isEmpty == true)
         let cameras = catalog["cameras"] as! [[String: Any]]
         let microphones = catalog["microphones"] as! [[String: Any]]
-        precondition(cameras.first?["id"] as? String == "chosen-camera"
-                     && microphones.first?["id"] as? String == "chosen-mic",
+        precondition(cameras.first?["cameraId"] as? String == "chosen-camera"
+                     && microphones.first?["microphoneId"] as? String == "chosen-mic",
                      "Denied screen access must retain honest camera and microphone discovery")
         do {
             _ = try await CaptureController.discoverSources(screenAuthorized: true,

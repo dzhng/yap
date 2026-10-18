@@ -182,11 +182,11 @@ final class CaptureController {
             }
             return (
                 displays: self.fixtureWindow != nil ? [] : content.displays.map {
-                    ["id": Int($0.displayID), "name": Self.displayName(of: $0.displayID),
+                    ["displayId": Int($0.displayID), "name": Self.displayName(of: $0.displayID),
                      "width": $0.width, "height": $0.height]
                 },
                 windows: windows.map {
-                    ["id": Int($0.windowID), "title": $0.title ?? "",
+                    ["windowId": Int($0.windowID), "title": $0.title ?? "",
                      "application": $0.owningApplication?.applicationName ?? ""]
                 })
         }, cameras: {
@@ -206,8 +206,8 @@ final class CaptureController {
         let screen = screenAuthorized ? try await screens() : (displays: [], windows: [])
         return [
             "displays": screen.displays, "windows": screen.windows,
-            "cameras": cameras().map { ["id": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
-            "microphones": microphones().map { ["id": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
+            "cameras": cameras().map { ["cameraId": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
+            "microphones": microphones().map { ["microphoneId": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
         ]
     }
 

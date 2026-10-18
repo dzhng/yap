@@ -298,7 +298,7 @@ For optional MCP use, read [MCP delivery](references/mcp.md); CLI is the default
 
 **Presets.** When the user names a style, asks for a video "like" a kind they've
 seen, or asks how to shoot for a style, run `yap preset.list`. Read the preset whose
-description matches with `yap preset.get --params '{"id":"…"}'` and follow its
+description matches with `yap preset.get --params '{"presetId":"…"}'` and follow its
 `instructions`. A preset is a mood the user chose, not a footage requirement: apply
 it to whatever footage they gave and never reject it; give its Shoot advice only
 when they ask what to film or have not recorded yet. It is also not permission to
@@ -338,6 +338,6 @@ don't answer, drop it.
   after cuts; use the reported mapping and retained fragments.
 - For operations accepting `params.requestId`, reuse it with identical arguments
   when retrying an uncertain write. A new intended mutation or recomputed edit
-  needs a new request ID. Export creation instead uses `exportId`; preserve it
-  and its arguments on retries. Follow each operation's advertised retry contract.
+  needs a new request ID. Export creation also keys replay on `requestId`; preserve
+  it and its arguments on retries, then use the returned `exportId` for status.
   The CLI `--id` is a transport identifier, not the durable mutation identity.

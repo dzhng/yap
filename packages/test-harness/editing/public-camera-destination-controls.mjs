@@ -34,11 +34,11 @@ try {
       { error: true },
     );
     await poll(
-      () => service.fixtureCall("inspect"),
+      () => service.fixtureCall("inspect.open"),
       (value) => value.requests.length === 1,
       "input preparation held",
     );
-    const take = await service.call("recording.latest", {});
+    const take = await service.call("recording.get", {});
     const directory = join(home, "library/recordings", take.recordingId, "camera");
     const retained = Buffer.from("retained bytes must never be truncated");
     await writeFile(join(directory, name), retained);
@@ -47,7 +47,7 @@ try {
     assert.equal(refusal.code, "OUTPUT_EXISTS");
     assert.deepEqual(await readFile(join(directory, name)), retained);
     assert.deepEqual(await readdir(directory), [name]);
-    assert.equal((await service.fixtureCall("inspect")).cameraStarts, 0);
+    assert.equal((await service.fixtureCall("inspect.open")).cameraStarts, 0);
     assert.deepEqual((await service.call("asset.list", {})).assets, []);
     report.cases[name] = { take, refusal, retainedBytes: retained.length };
     await service.stop();

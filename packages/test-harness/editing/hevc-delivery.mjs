@@ -88,15 +88,16 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
     const request = {
       projectId,
       revisionId,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       kind: "video",
       directory: out,
       leaf: codec + ".mp4",
       settings: { video: { codec } },
     };
     const admitted = await call("export.create", request);
+    const exportId = admitted.exportId;
     const receipt = await poll(
-      () => call("export.status", { exportId: request.exportId }),
+      () => call("export.status", { exportId }),
       (v) => v.state === "ready" && !v.cleanupPending,
       codec,
     );
@@ -162,7 +163,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       assert.ok(Math.abs(marker.position - 16800) <= 2);
     }
     const replay = await call("export.create", request);
-    assert.equal(replay.exportId, request.exportId);
+    assert.equal(replay.exportId, exportId);
     assert.equal(hash(await readFile(path)), report.operands[codec].sha256);
   }
   assert.equal(hash(await readFile(source)), report.sourceSha256);

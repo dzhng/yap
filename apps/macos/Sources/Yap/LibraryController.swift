@@ -164,7 +164,7 @@ final class LibraryController {
     }
 
     func delete(_ target: MediaTarget) {
-        guard ready, state.beginDelete(target) else { return }
+        guard ready, state.beginDelete(target), let requestId = state.deletions[target]?.requestId else { return }
         // Catalog answers started before this action cannot restore the retired owner.
         recordingGeneration = UUID(); projectGeneration = UUID(); jobsReading = false
         state.recordingsRefreshing = false; state.projectsRefreshing = false; pendingRecordings = false; pendingProjects = false
@@ -173,7 +173,9 @@ final class LibraryController {
         Task { @MainActor in
             do throws(ServiceFailure) {
                 let operation = target.parameters["recordingId"] == nil ? "project.delete" : "recording.delete"
-                let receipt: Deletion = try await read(operation, target.parameters)
+                var params = target.parameters
+                params["requestId"] = requestId
+                let receipt: Deletion = try await read(operation, params)
                 guard service == serviceGeneration else { return }
                 guard receipt.target == target && receipt.deleted else {
                     throw Self.invalid("The service did not confirm deletion of \(target.id).")
@@ -303,11 +305,19 @@ final class LibraryController {
         }
     }
     private struct Deletion: Decodable {
-        let target: MediaTarget; let deleted: Bool
-        private enum Keys: String, CodingKey { case deleted }
+        let target: MediaTarget; let deleted: Bool; let freedBytes: Int64
+        private enum Keys: String, CodingKey { case projectId, recordingId, deleted, freedBytes }
         init(from decoder: Decoder) throws {
-            target = try MediaTarget(from: decoder)
-            deleted = try decoder.container(keyedBy: Keys.self).decode(Bool.self, forKey: .deleted)
+            let fields = try decoder.container(keyedBy: Keys.self)
+            if let projectId = try fields.decodeIfPresent(String.self, forKey: .projectId) {
+                target = .project(projectId)
+            } else if let recordingId = try fields.decodeIfPresent(String.self, forKey: .recordingId) {
+                target = .recording(recordingId)
+            } else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Deletion result has no owner identity"))
+            }
+            deleted = try fields.decode(Bool.self, forKey: .deleted)
+            freedBytes = try fields.decode(Int64.self, forKey: .freedBytes)
         }
     }
 }

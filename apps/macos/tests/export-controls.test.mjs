@@ -37,14 +37,14 @@ import YapControls
 
     func json(_ value: Any) -> Data { try! JSONSerialization.data(withJSONObject: value) }
     func status(_ params: [String: Any]) -> [String: Any] {
-        ["exportId": params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
+        ["exportId": params["requestId"] ?? params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
          "snapshot": ["revisionId": params["revisionId"]!], "state": "queued", "abandoning": false,
          "destination": ["directory": params["directory"]!, "leaf": params["leaf"]!],
          "cleanupPending": false, "output": NSNull(), "reason": NSNull(), "retryable": false]
     }
     func call(_ operation: String, _ params: [String: Any]) async throws(ServiceFailure) -> Data {
         calls.append((operation, params))
-        let id = params["exportId"] as? String ?? ""
+        let id = params["requestId"] as? String ?? params["exportId"] as? String ?? ""
         switch operation {
         case "project.get":
             return json(["projectId": "take", "createdAt": "2026-09-17T10:11:12.345Z", "currentRevisionId": revision])
@@ -105,7 +105,7 @@ import YapControls
         exports.export("take", kind: .video)
         await until { exports.state.requests.first?.unconfirmed != nil }
         let sent = script.calls.last { $0.0 == "export.create" }!.1
-        let first = sent["exportId"] as! String
+        let first = sent["requestId"] as! String
         precondition(sent["revisionId"] as? String == "r3", "The revision is pinned before the panel opens")
         precondition(sent["directory"] as? String == CommandLine.arguments[1] && sent["leaf"] as? String == "demo.mp4")
         precondition(sent["kind"] as? String == "video")
@@ -128,7 +128,7 @@ import YapControls
         exports.resend(second)
         await until { exports.state.requests.isEmpty }
         let resent = script.calls.filter { $0.0 == "export.create" }.suffix(2).map { $0.1 }
-        precondition(resent.allSatisfy { $0["exportId"] as? String == second && $0["leaf"] as? String == "take.zip"
+        precondition(resent.allSatisfy { $0["requestId"] as? String == second && $0["leaf"] as? String == "take.zip"
             && $0["kind"] as? String == "processed-package" }, "Sending again names the same export")
         precondition(exports.state.records.map(\.exportId) == [second, first])
 
@@ -142,7 +142,7 @@ import YapControls
         let restarted = ExportController(
             call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
             choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
-        let cursor: [String: Any] = ["projectId": NSNull(), "unfinishedOnly": true, "afterExportId": first]
+        let cursor = "opaque-export-cursor"
         script.pages = [
             ["exports": [["exportId": first]], "nextCursor": cursor],
             ["exports": [["exportId": second]], "nextCursor": NSNull()],
@@ -152,7 +152,7 @@ import YapControls
         let lists = script.calls.filter { $0.0 == "export.list" }.map { $0.1 }
         precondition(lists.count == 2 && lists.allSatisfy { $0["unfinishedOnly"] as? Bool == true },
             "Discovery asks only for unfinished exports")
-        precondition(NSDictionary(dictionary: lists[1]["cursor"] as! [String: Any]).isEqual(to: cursor),
+        precondition(lists[1]["cursor"] as? String == cursor,
             "Discovery replays the complete project cursor without adding another owner")
         precondition(restarted.state.records.map(\.exportId) == [first, second], "Discovered exports keep page order")
         restarted.abandon(second)
@@ -194,7 +194,15 @@ test(
       );
       const receipts = retained.attempts
         .filter((attempt) => attempt.operation === "export.status" && attempt.response.ok)
-        .map((attempt) => attempt.response.data);
+        // The receipts predate the WorkState vocabulary: translate them once into today's public
+        // status (a committed export reads `ready`, and every async status names its job).
+        .map(({ response: { data } }) => ({
+          ...data,
+          state:
+            { committed: "ready", not_requested: "idle", waiting: "queued" }[data.state] ??
+            data.state,
+          jobId: data.exportId,
+        }));
       const fixture = join(scratch, "receipts.json");
       await writeFile(fixture, JSON.stringify(receipts));
       const executable = compileControlsCheck(
@@ -218,7 +226,7 @@ import YapControls
         switch operation {
         case "export.list": return json(pages.removeFirst())
         case "job.retry":
-            let id = params["exportId"] as! String
+            let id = params["jobId"] as! String
             if let refusal = refusedRetries[id] { throw refusal }
             if let accepted = acceptedRetries[id] { statuses[id] = accepted }
             if let lost = lostRetryReplies[id] { throw lost }
@@ -269,8 +277,7 @@ import YapControls
         let recording = receipts.first { $0["recordingId"] != nil }!
         let project = receipts.first { $0["projectId"] != nil }!
         let recordingId = recording["exportId"] as! String, projectId = project["exportId"] as! String
-        let cursor: [String: Any] = ["projectId": NSNull(),
-            "unfinishedOnly": true, "afterExportId": recordingId]
+        let cursor = "opaque-export-cursor"
         script.statuses["malformed"] = Data("{}".utf8)
         script.pages = [
             ["exports": [["exportId": "malformed"], ["exportId": recordingId]], "nextCursor": cursor],
@@ -289,7 +296,7 @@ import YapControls
         precondition(exports.state.discoveryFailure?.contains("INVALID_RESPONSE") == true,
             "Malformed status must remain visible after the last successful page")
         let lists = script.calls.filter { $0.0 == "export.list" }.map { $0.1 }
-        precondition(lists.count == 2 && NSDictionary(dictionary: lists[1]["cursor"] as! [String: Any]).isEqual(to: cursor))
+        precondition(lists.count == 2 && lists[1]["cursor"] as? String == cursor)
         let originalRecording = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(recording))
         let originalProject = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(project))
         precondition(exports.state.records == [originalRecording, originalProject], "Controller retains all public receipt fields")
@@ -413,7 +420,7 @@ import YapControls
         precondition(pending.target == originalProject.target && pending.revisionId == originalProject.revisionId
             && pending.directory == originalProject.directory && pending.leaf == originalProject.leaf)
         precondition(pending.committed && pending.cleanupPending && !pending.settled)
-        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "job.retry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
+        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.jobRetry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
         precondition(!exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.dismiss.\(projectId)" })
         script.retries[projectId] = script.json(committed)
         exports.retry(projectId)
@@ -422,7 +429,7 @@ import YapControls
         precondition(exports.state.records == [settled] && exports.state.failures[projectId] == nil)
         precondition(settled.settled && exports.state.observed.isEmpty)
         let retries = script.calls.filter { $0.0 == "job.retry" }.map { $0.1 }
-        precondition(retries.allSatisfy { NSDictionary(dictionary: $0).isEqual(to: ["exportId": projectId]) },
+        precondition(retries.allSatisfy { NSDictionary(dictionary: $0).isEqual(to: ["jobId": project["jobId"] as! String]) },
             "Retries retain the original export identity and do not choose a new owner or destination")
         exports.reveal(projectId)
         precondition(revealed == [URL(fileURLWithPath: committed["output"] as! String)])

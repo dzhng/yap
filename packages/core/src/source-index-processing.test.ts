@@ -191,7 +191,7 @@ test("face observation requests reach source index frame materialization", async
   expect(result.published!.evidence.candidateCount).toBeGreaterThan(0);
   expect(
     f.retained.page({ identity: result.published!.evidence }).entries[0]!.frame.faceObservations,
-  ).toMatchObject({ status: "available", faces: [{ id: "face-0" }] });
+  ).toMatchObject({ status: "available", faces: [{ faceId: "face-0" }] });
   const first = f.index.getSource({ ...selection, faceObservations, limit: 1 });
   expect(first.page?.nextCursor).toBeDefined();
   expect(
@@ -202,6 +202,34 @@ test("face observation requests reach source index frame materialization", async
       limit: 1,
     }).page?.entries,
   ).toHaveLength(1);
+});
+test("a source face index retained before the noun-ID cutover is refused, not projected, by generation", async () => {
+  const f = await fixture();
+  const selection = acquiredSelection(f);
+  const faceObservations = { recipe: "vision-face-rectangles-v1" as const };
+  f.index.requestSource({ ...selection, faceObservations });
+  await f.jobs.idle();
+  f.index.requestSource({ ...selection, faceObservations });
+  await f.jobs.idle();
+  const { generation } = f.index.requestSource({ ...selection, faceObservations }).published!
+    .evidence;
+  const rows = f.catalog.catalog
+    .prepare("SELECT rowid,frame FROM screenshot_index_entries")
+    .all() as { rowid: number; frame: string }[];
+  expect(rows.some((row) => row.frame.includes('"faceId":'))).toBe(true);
+  for (const row of rows)
+    f.catalog.catalog
+      .prepare("UPDATE screenshot_index_entries SET frame=? WHERE rowid=?")
+      .run(row.frame.replaceAll('"faceId":', '"id":'), row.rowid);
+  await f.restart();
+  // face.trajectory.get and index.get/index.frame read a named generation through these paths.
+  for (const read of [
+    () => f.index.getSource({ ...selection, faceObservations, generation }),
+    () => f.index.frameSource({ ...selection, generation, ordinal: 0 }),
+  ])
+    expect(read).toThrow(
+      expect.objectContaining({ code: "ARTIFACT_CHANGED" }) as unknown as CatalogError,
+    );
 });
 test("source index execution rechecks current authority before cancellation", async () => {
   const barrier = gate();

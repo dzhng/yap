@@ -46,12 +46,17 @@ export type DeletionRegistration = {
   clearTombstone?: (subject: LibrarySubject) => void | Promise<void>;
   markersPage?: (afterId?: string) => { subjects: LibrarySubject[]; nextAfterId: string | null };
   result?: (subject: LibrarySubject) => Record<string, unknown>;
+  freedBytes?: (subject: LibrarySubject) => number;
 };
 
 /** One crash-resumable ordering for every library subject kind. */
 export class LibraryDeletion {
   onUpdateProgress: (() => void) | undefined;
   private readonly active = new Map<string, Promise<Record<string, unknown>>>();
+  private readonly requests = new Map<
+    string,
+    { kind: string; id: string; cascade: boolean; result: Promise<Record<string, unknown>> }
+  >();
   private readonly lifetime = new AbortController();
   private readonly registrations = new Map<string, DeletionRegistration>();
 
@@ -72,19 +77,49 @@ export class LibraryDeletion {
 
   delete(
     subject: LibrarySubject,
-    options: { cascade?: boolean } = {},
+    options: { cascade?: boolean; requestId?: string } = {},
   ): Promise<Record<string, unknown>> {
     if (this.lifetime.signal.aborted)
       throw new CatalogError("SERVICE_STOPPED", "Library deletion is closed", {});
     const registration = this.requireRegistration(subject.kind);
+    const cascade = options.cascade ?? false;
+    if (options.requestId) {
+      const prior = this.requests.get(options.requestId);
+      if (prior) {
+        if (prior.kind !== subject.kind || prior.id !== subject.id || prior.cascade !== cascade)
+          throw new CatalogError("REQUEST_CONFLICT", "Request identity names a different deletion");
+        return prior.result;
+      }
+    }
     const key = `${subject.kind}:${subject.id}`;
     const existing = this.active.get(key);
-    if (existing) return existing;
-    const result = this.remove(subject, registration, options.cascade ?? false).finally(() => {
+    if (existing) {
+      if (options.requestId) {
+        this.requests.set(options.requestId, {
+          kind: subject.kind,
+          id: subject.id,
+          cascade,
+          result: existing,
+        });
+        void existing.catch(() => {
+          const prior = this.requests.get(options.requestId!);
+          if (prior?.result === existing) this.requests.delete(options.requestId!);
+        });
+      }
+      return existing;
+    }
+    const result = this.remove(subject, registration, cascade).finally(() => {
       this.active.delete(key);
       this.onUpdateProgress?.();
     });
     this.active.set(key, result);
+    if (options.requestId)
+      this.requests.set(options.requestId, { kind: subject.kind, id: subject.id, cascade, result });
+    if (options.requestId)
+      void result.catch(() => {
+        const prior = this.requests.get(options.requestId!);
+        if (prior?.result === result) this.requests.delete(options.requestId!);
+      });
     return result;
   }
 
@@ -94,6 +129,7 @@ export class LibraryDeletion {
     cascade: boolean,
   ): Promise<Record<string, unknown>> {
     try {
+      const freedBytes = registration.freedBytes?.(subject) ?? 0;
       let plan = this.plans.get(subject.kind, subject.id);
       if (!plan) {
         const checked = registration.checkUsers?.(subject, cascade);
@@ -106,9 +142,13 @@ export class LibraryDeletion {
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
-          return (
-            registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true }
-          );
+          return {
+            ...(registration.result?.(subject) ?? {
+              [subject.kind + "Id"]: subject.id,
+              deleted: true,
+            }),
+            freedBytes,
+          };
         }
         if (this.options.fault) await this.boundary("tombstone", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "tombstoned");
@@ -116,7 +156,10 @@ export class LibraryDeletion {
         plan = { ...plan, phase: "tombstoned" };
       }
       await this.resumePlan(subject, registration, plan);
-      return registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true };
+      return {
+        ...(registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true }),
+        freedBytes,
+      };
     } catch (error) {
       if (registration.errorMode !== "delete-failed" && error instanceof CatalogError)
         throw new CatalogError(error.code, error.message, {

@@ -388,7 +388,7 @@ test(
           },
           new AbortController().signal,
         ),
-        { code: "NATIVE_DECODE_FAILED" },
+        { code: "MEDIA_UNAVAILABLE" },
       );
       assert.deepEqual(await readdir(attempts), []);
       const restart = [];

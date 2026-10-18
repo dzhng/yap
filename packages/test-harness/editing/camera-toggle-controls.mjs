@@ -61,7 +61,7 @@ const setCamera = async (recordingId, value, transport = "cli") => {
   return reply;
 };
 const devices = async () => {
-  const inspection = await service.fixtureCall("inspect");
+  const inspection = await service.fixtureCall("inspect.open");
   return [inspection.cameraOpens, inspection.cameraStarts, inspection.cameraStops];
 };
 const stopped = async (recordingId) => {
@@ -354,7 +354,7 @@ try {
   const neverReady = await admitted(idle.recordingId);
   assert.equal(admission(neverReady, "primary").job.state, "ready");
   assert.equal(admission(neverReady, "camera").acquisitionId, null);
-  assert.deepEqual((await service.fixtureCall("inspect")).cameraOpens, 0);
+  assert.deepEqual((await service.fixtureCall("inspect.open")).cameraOpens, 0);
   // The mapping logs camera callbacks only, so a camera that was never on writes nothing into it
   // while the screen records, however long the take.
   const mappingPath = join(recordingDirectory(idle.recordingId), "camera/camera.mapping.jsonl");

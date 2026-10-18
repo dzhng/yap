@@ -166,13 +166,14 @@ try {
   const request = {
     ...selection,
     kind: "video",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory: out,
     leaf: "export.mp4",
   };
-  await call("export.create", request);
+  const createdExport = await call("export.create", request);
+  const exportId = createdExport.exportId;
   const exported = await poll(
-    () => call("export.status", { exportId: request.exportId }),
+    () => call("export.status", { exportId }),
     (v) => v.state === "ready",
     "image export",
   );

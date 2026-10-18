@@ -300,7 +300,7 @@ try {
     "export.create",
     {
       projectId,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       kind: "video",
       directory: out,
       leaf: "invalid.mp4",

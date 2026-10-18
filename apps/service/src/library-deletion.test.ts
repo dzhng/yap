@@ -82,6 +82,7 @@ test("a failed phase resumes from its durable plan without reporting success ear
       await expect(deletion.delete({ kind: "fixture", id: "one" })).resolves.toEqual({
         fixtureId: "one",
         deleted: true,
+        freedBytes: 0,
       });
     expect(plans.get("fixture", "one")).toBeNull();
     await expect(access(file)).rejects.toMatchObject({ code: "ENOENT" });

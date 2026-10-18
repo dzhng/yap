@@ -490,7 +490,12 @@ export class AssetStore {
       assets: rows.slice(0, limit).map(
         (row) =>
           ({
-            ...omit(row, "sequence", "mediaKinds"),
+            id: row.id as string,
+            bytes: row.bytes as number,
+            createdAt: row.createdAt as string,
+            fileName: row.fileName as string,
+            streamCount: row.streamCount as number,
+            fontFaceCount: row.fontFaceCount as number,
             mediaKinds: JSON.parse(row.mediaKinds as string),
           }) as AssetSummary,
       ),

@@ -29,7 +29,7 @@
         "source": { "kind": "window", "windowId": 7 }
       }
     },
-    { "name": "recording.latest", "params": {} },
+    { "name": "recording.get", "params": {} },
     { "name": "recording.list", "params": { "limit": 5 } },
     { "name": "recording.get", "params": { "recordingId": "take-1" } },
     { "name": "recording.delete", "params": { "recordingId": "take-1" } }

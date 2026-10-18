@@ -153,7 +153,7 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     return schema?.anyOf ? schema.anyOf.map((option) => option.required) : schema?.required;
   };
   expect(required("capture.start")).toEqual(["source", "requestId"]);
-  expect(required("artifact.read")).toEqual(["token", "offset"]);
+  expect(required("artifact.read")).toEqual(["token", "offsetBytes"]);
   expect(required("processing.get")).toEqual(["projectId", "revisionId", "target"]);
   expect(required("index.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
   expect(required("transcript.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
@@ -370,7 +370,7 @@ it("the recording service exposes its complete result through the same MCP artif
     (
       await client.callTool({
         name: "artifact.read",
-        arguments: { token: delivered.resultDelivery.token, offset: 0 },
+        arguments: { token: delivered.resultDelivery.token, offsetBytes: 0 },
       })
     ).structuredContent,
   );
@@ -613,7 +613,7 @@ async function defaultDeliveryFixture(disappear = false) {
   const operations: string[] = [];
   const ready = () => ({
     state: "ready",
-    published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+    published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
     delivery: delivery.open({ kind: "asset", id: "fixture" }, () => ({
       bytes: bytes.length,
       read: (buffer, position) => bytes.copy(buffer, 0, position, position + buffer.length),
@@ -664,8 +664,8 @@ async function defaultDeliveryFixture(disappear = false) {
       }
       if (operation.operation === "artifact.read") {
         if (disappear) void listener.close();
-        const { token, offset, maxBytes } = operation.params;
-        return { ok: true, data: delivery.read(token, offset, maxBytes) };
+        const { token, offsetBytes, maxBytes } = operation.params;
+        return { ok: true, data: delivery.read(token, offsetBytes, maxBytes) };
       }
       if (operation.operation === "artifact.close") {
         delivery.close(operation.params.token);
@@ -953,8 +953,8 @@ it.each([
           return {
             ok: true,
             data: {
-              offset: 0,
-              nextOffset: bytes.length,
+              offsetBytes: 0,
+              nextOffsetBytes: bytes.length,
               eof: true,
               data: bytes.toString("base64"),
             },
@@ -972,8 +972,8 @@ it.each([
                 ok: true,
                 data: {
                   state: "ready",
-                  published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-                  delivery: { token, bytes: bytes.length, expiresAt: Date.now() + 30000 },
+                  published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+                  delivery: { token, sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
                 },
               }),
             ),
@@ -1109,11 +1109,11 @@ it("selected-frame CLI and MCP deliver image bytes while metadata-only responses
       ? { state: "running", published: null }
       : {
           state: "ready",
-          published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+          published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
           delivery: {
             token: `selected-${ordinal}`,
-            bytes: bytes.length,
-            expiresAt: Date.now() + 30000,
+            sizeBytes: bytes.length,
+            expiresAtMs: Date.now() + 30000,
           },
         };
   const delivery = new DerivativeDelivery();
@@ -1130,7 +1130,12 @@ it("selected-frame CLI and MCP deliver image bytes while metadata-only responses
         reads++;
         return {
           ok: true,
-          data: { offset: 0, nextOffset: bytes.length, eof: true, data: bytes.toString("base64") },
+          data: {
+            offsetBytes: 0,
+            nextOffsetBytes: bytes.length,
+            eof: true,
+            data: bytes.toString("base64"),
+          },
         };
       }
       if (request.operation === "index.frame")
@@ -1226,8 +1231,8 @@ it(
   { timeout: 20_000 },
   async () => {
     let cameras = [
-      { id: "camera-2", name: "External camera" },
-      { id: "camera-1", name: "Built-in camera" },
+      { cameraId: "camera-2", name: "External camera" },
+      { cameraId: "camera-1", name: "Built-in camera" },
     ];
     let cameraPermission = "denied";
     const f = await serviceFixture((operation) => {

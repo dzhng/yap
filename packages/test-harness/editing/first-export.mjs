@@ -29,11 +29,12 @@ export async function exportJourney({
   const request = {
     projectId,
     kind,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory,
     leaf: `pinned.${extension}`,
   };
   const created = await call("export.create", request);
+  const exportId = created.exportId;
   assert.equal(created.snapshot.revisionId, revisionId);
   await advance();
   const replay = await call("export.create", request, { transport: "mcp" });
@@ -53,7 +54,7 @@ export async function exportJourney({
     "REQUEST_CONFLICT",
   );
   const committed = await poll(
-    () => call("export.status", { exportId: request.exportId }, { transport: "mcp" }),
+    () => call("export.status", { exportId }, { transport: "mcp" }),
     (value) => value.state === "ready",
     "full project export",
   );
@@ -69,18 +70,12 @@ export async function exportJourney({
   assert.ok(
     listed.exports.some(
       (item) =>
-        item.exportId === request.exportId &&
-        item.revisionId === revisionId &&
-        item.state === "ready",
+        item.exportId === exportId && item.revisionId === revisionId && item.state === "ready",
     ),
   );
   const retried = await call("job.retry", { jobId: committed.jobId });
   assert.equal(retried.state, "ready");
-  const afterRetry = await call(
-    "export.status",
-    { exportId: request.exportId },
-    { transport: "mcp" },
-  );
+  const afterRetry = await call("export.status", { exportId }, { transport: "mcp" });
   assert.deepEqual(afterRetry.receipt, committed.receipt);
   assert.deepEqual(await external(committed.output), file, "Retry republished a committed export");
   Object.assign(evidence, {
@@ -100,34 +95,38 @@ export async function exportJourney({
   const canceledRequest = {
     ...request,
     revisionId,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     leaf: `cancel-retry.${extension}`,
   };
   const hit = await armFault("before-commit");
   const canceledCreated = await call("export.create", canceledRequest, { transport: "mcp" });
+  const canceledExportId = canceledCreated.exportId;
   const observer = await hit();
   const canceledPath = join(directory, canceledRequest.leaf);
   await assert.rejects(stat(canceledPath), { code: "ENOENT" });
-  await call("export.cancel", { exportId: canceledRequest.exportId });
+  await call("export.cancel", { exportId: canceledExportId });
   const canceledJob = await poll(
     () => call("job.get", { jobId: canceledCreated.jobId }),
     (value) => value.state === "canceled",
     "cancel held publication",
   );
   assert.equal(canceledJob.published, null);
-  const recovering = await call("export.recover", { exportId: canceledRequest.exportId });
+  const recovering = await call("export.recover", {
+    exportId: canceledExportId,
+    requestId: `${canceledRequest.requestId}:recover`,
+  });
   assert.ok(recovering.recovery?.jobId, "Prepared publication must have a recovery job");
   await poll(
     () => call("job.get", { jobId: recovering.recovery.jobId }),
     (value) => value.state === "ready",
     "drain canceled publication and reconcile",
   );
-  const canceled = await call("export.status", { exportId: canceledRequest.exportId });
+  const canceled = await call("export.status", { exportId: canceledExportId });
   assert.equal(canceled.receipt, null);
   assert.equal(canceled.output, null);
   await assert.rejects(stat(canceledPath), { code: "ENOENT" });
   await call("job.retry", { jobId: canceledJob.jobId }, { transport: "mcp" });
-  const resumed = await waitCommit(canceledRequest.exportId);
+  const resumed = await waitCommit(canceledExportId);
   const resumedFile = await external(canceledPath);
   assert.equal(resumedFile.sha256, file.sha256);
   assert.equal(resumedFile.sha256, resumed.receipt.sha256);
@@ -142,29 +141,29 @@ export async function exportJourney({
     file: resumedFile,
   };
   const faultRequests = [];
+  const faultExportIds = [];
   for (const outcome of ["crash", "cancel"]) {
     const heldRequest = {
       ...request,
       revisionId,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       leaf: `${outcome}-after-commit.${extension}`,
     };
     faultRequests.push(heldRequest);
     const observe = await armFault("after-commit");
     const accepted = await call("export.create", heldRequest, { transport: "mcp" });
+    const heldExportId = accepted.exportId;
+    faultExportIds.push(heldExportId);
     const commitObserver = await observe();
     const path = join(directory, heldRequest.leaf);
     const preparedReceipt = JSON.parse(
-      await readFile(
-        join(directory, `.yap-export-${heldRequest.exportId}`, "prepared.json"),
-        "utf8",
-      ),
+      await readFile(join(directory, `.yap-export-${heldExportId}`, "prepared.json"), "utf8"),
     );
     const committedFile = await external(path);
     assert.equal(committedFile.sha256, preparedReceipt.sha256);
     assert.equal(committedFile.bytes, preparedReceipt.bytes);
     assert.equal(committedFile.sha256, file.sha256);
-    const unacknowledged = await call("export.status", { exportId: heldRequest.exportId });
+    const unacknowledged = await call("export.status", { exportId: heldExportId });
     assert.equal(
       unacknowledged.receipt,
       null,
@@ -186,10 +185,10 @@ export async function exportJourney({
       const interrupted = await call("job.get", { jobId: accepted.jobId });
       assert.equal(interrupted.state, "failed");
       assert.equal(interrupted.errorCode, "JOB_INTERRUPTED");
-    } else await call("export.cancel", { exportId: heldRequest.exportId });
+    } else await call("export.cancel", { exportId: heldExportId });
     const recovery = await call(
       "export.recover",
-      { exportId: heldRequest.exportId },
+      { exportId: heldExportId, requestId: `${heldRequest.requestId}:recover` },
       { transport: "mcp" },
     );
     if (recovery.recovery?.jobId)
@@ -198,7 +197,7 @@ export async function exportJourney({
         (value) => value.state === "ready",
         "reconcile real commit after interrupted reply",
       );
-    const recovered = await waitCommit(heldRequest.exportId);
+    const recovered = await waitCommit(heldExportId);
     assert.equal(recovered.snapshot.revisionId, revisionId);
     assert.deepEqual(recovered.receipt, preparedReceipt);
     assert.deepEqual(
@@ -225,26 +224,18 @@ export async function exportJourney({
     assert.ok(discovered.length <= 4, "Export pagination did not make bounded progress");
     cursor = page.nextCursor;
   } while (cursor);
-  assert.deepEqual(
-    discovered,
-    [
-      request.exportId,
-      canceledRequest.exportId,
-      ...faultRequests.map((value) => value.exportId),
-    ].sort(),
-  );
+  assert.deepEqual(discovered, [exportId, canceledExportId, ...faultExportIds].sort());
   evidence.pagination = discovered;
-  const abandoned = await call("export.abandon", { exportId: request.exportId });
+  const abandoned = await call("export.abandon", { exportId });
   assert.equal(abandoned.abandoned, true);
   assert.equal(
-    (await call("export.status", { exportId: request.exportId }, { transport: "mcp", error: true }))
-      .code,
+    (await call("export.status", { exportId }, { transport: "mcp", error: true })).code,
     "NOT_FOUND",
   );
   const remaining = await call("export.list", { projectId }, { transport: "mcp" });
   assert.deepEqual(
     remaining.exports.map((value) => value.exportId),
-    discovered.filter((id) => id !== request.exportId),
+    discovered.filter((id) => id !== exportId),
   );
   assert.deepEqual(
     await external(committed.output),
@@ -252,7 +243,7 @@ export async function exportJourney({
     "Abandonment changed committed external bytes",
   );
   evidence.abandonment = {
-    exportId: request.exportId,
+    exportId,
     statusCode: "NOT_FOUND",
     remainingIds: remaining.exports.map((value) => value.exportId),
     preservedFile: { path: committed.output, ...file },

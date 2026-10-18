@@ -17,7 +17,7 @@ models, which were 95% of a real library.
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 to 06 done.
+**Status.** Slices 00 to 07 done.
 Choices made along the way are in [choices.md](choices.md).
 
 Slice 01 evidence: protocol, core, CLI and service suites, every package build and
@@ -31,8 +31,15 @@ Slice 05 gives every listing and evidence read one opaque-cursor paging contract
 Slice 06 makes every public `state` a `WorkState` word, moves domain facts to
 `installation`, `presence` and `availability`, and replaces the ten `*.retry`
 operations with `job.retry`, each with a recovery test.
+Slice 07 names every identity `<noun>Id` and every quantity with its unit, gives
+every changing operation a replayed `requestId` (read-only and idempotent operations
+are listed in `operations.ts`), and makes deletes return `freedBytes`.
+`packages/protocol/src/naming.test.ts` enforces this for every new operation; don't
+edit it to make a slice pass. Evidence stored before the rename is refused as
+`ARTIFACT_CHANGED` and regenerated, never migrated.
 
-**Pick up at** slice 07. Slices 08+ wait for 07.
+**Pick up at** slices 08, 10, 11 and 12. They are independent and can run in
+parallel; 09 waits for 08.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
@@ -57,7 +64,7 @@ operations with `job.retry`, each with a recovery test.
 - [x] 04 Who uses this? — [slices/04-users-query.md](slices/04-users-query.md)
 - [x] 05 One paging contract — [slices/05-paging.md](slices/05-paging.md)
 - [x] 06 One async vocabulary — [slices/06-async-vocabulary.md](slices/06-async-vocabulary.md)
-- [ ] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
+- [x] 07 Identity, naming and result shapes — [slices/07-identity-naming.md](slices/07-identity-naming.md)
 - [ ] 08 `asset.delete` — [slices/08-asset-delete.md](slices/08-asset-delete.md)
 - [ ] 09 `recording.delete` takes its copies — [slices/09-recording-delete.md](slices/09-recording-delete.md)
 - [ ] 10 `project.duplicate` — [slices/10-project-duplicate.md](slices/10-project-duplicate.md)

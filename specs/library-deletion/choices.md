@@ -242,3 +242,56 @@ through that field.
   before this slice that still holds `not_requested` or `processing` will not resume
   correctly; rerun the batch. The sweep also fixed a real bug there: a transcript request
   interrupted before it reached the service reads back `idle`, and is now sent again.
+
+## Slice 07: identity, naming and result shapes
+
+- **Replay identity is `requestId` for every write, including exports and speaker bindings** (sound). Export status continues to use the generated `exportId`; the request ID is the durable replay key.
+- **Preset deletion reports its existing Trash outcome** (sound). Presets move to macOS Trash, so they keep a `trashed`-style result rather than claiming permanent deletion.
+- **Range names follow the clock, not the numeric representation** (sound). `range` always names a project-clock interval and `sourceRange` always names a source-clock interval; both clocks retain their existing integer-µs or rational representations. Side-labelled correspondence anchors keep `leftRange` and `rightRange` because the side is part of their identity.
+- **Delete byte accounting is measured before the deletion plan runs through `LibraryUsers` owners** (sound). Project and recording results report the measured `freedBytes` from the same paths the coordinator removes.
+- **`artifact.renew` and `update.check` are request-identified writes, not target-idempotent operations** (sound). Renewal extends a lease deadline and a check performs a fresh updater attempt; repeating either can change state, unlike `artifact.close` or a preference setter.
+- **The public export identity is generated from `requestId`** (sound). `exportId` is a read/status identity only; `export.create` no longer accepts it as an input.
+- **Rational source selections use `sourceRange` at every public audio/alignment boundary** (sound). Core owners continue to use their internal `range` field after the service translates the public name.
+- **Public delivery metadata uses `sizeBytes`, `expiresAtMs`, `offsetBytes` and `nextOffsetBytes`** (sound). These fields carry byte and epoch units explicitly; internal buffers may retain shorter local variable names.
+- **Correction and sampled-text identities are `correctionId` and `textId`; issue caps use `maxIssueCount`** (sound). These are public records/params and must not expose a bare `id` or an unqualified count.
+- **Native capture discovery uses noun IDs at the wire boundary** (sound). `CaptureController` emits `displayId`, `windowId`, `cameraId` and `microphoneId`; the macOS controls decoder translates those into its existing local `ControlsState` fields, which remain implementation-local names.
+- **Native picture and face observation Codable records use `regionId` and `faceId`** (sound). The retained observation structures and calculations keep their local identity variables, while the JSON encoder/decoder boundary emits and accepts only the public noun names. The retained picture control receipt was migrated once to the new public names.
+- **Evidence retained before the noun-ID cutover is stale, not migrated** (sound). The renderers that emit observation records moved their pins (`native-source-picture-v8-cursor`, `native-source-image-v3`, `native-composition-picture-v22`), so a fresh `frame.get` or `index.get` regenerates instead of reusing a bare-`id` receipt. A read that names an older index generation or cursor (`index.get`, `index.frame(s)`, `face.trajectory.get`) refuses with `ARTIFACT_CHANGED` when a retained frame record fails the domain's current strict retained-frame schema; requesting the index again regenerates it. Old renderer pins whose records still parse stay readable.
+- **Content-addressed operations are classified as idempotent instead of accepting an unused replay key** (sound, user verdict). Repeating the same input joins the same job or evidence receipt; only operations that can create a second thing or apply a change twice carry `requestId` and use the existing request-identity owner.
+- **`update.check` has no non-identity input to conflict on** (sound). Its replay test proves a repeated `requestId` returns the saved native result without another check; the strict schema leaves no second parameter whose differing value could form a request conflict.
+
+The operation classification is explicit and exhaustive. `readOnlyOperations` is:
+
+`project.get`, `project.list`, `inspect.open`, `caption.propose`, `layout.diagnostics`, `processing.get`, `output.capabilities`, `processing.capabilities`, `acquisition.get`, `asset.get`, `asset.segments`, `asset.origins`, `asset.list`, `job.get`, `export.list`, `export.status`, `package.status`, `storage.usage`, `index.get`, `face.trajectory.get`, `index.coverage`, `index.frame`, `index.frames`, `correspondence.get`, `alignment.get`, `speaker.continuity.get`, `speaker.get`, `join.verify`, `transcript.render.get`, `transcript.get`, `transcript.disfluency.get`, `transcript.search`, `preset.list`, `preset.get`, `model.list`, `model.status`, `preview.get`, `audio.get`, `frame.get`, `waveform.get`, `spectrogram.get`, `audio.pause.get`, `artifact.read`, `timeline.events`, `cursor.raw`, `login.status`, `update.status`, `skill.status`, `cli.status`, `service.health`, `service.tools`, `capture.sources`, `capture.status`, `recording.list`, `recording.get`, `revision.get`, and `revision.history`.
+
+`idempotentOperations` is:
+
+`asset.convert`, `correspondence.prepare`, `alignment.observe`, `speaker.continuity.prepare`, `speaker.observe`, `transcript.render.prepare`, `transcript.transcribe`, `transcript.review`, `frame.batch`, `cursor.render`, `voice.generate`, `audio.extract`, `audio.prepare`, `audio.measure`, `job.retry`, `job.cancel`, `export.cancel`, `export.abandon`, `package.close`, `model.prepare`, `artifact.close`, `login.setEnabled`, `update.setEnabled`, `skill.install`, `skill.uninstall`, `skill.update`, `cli.install`, `cli.uninstall`, `capture.pause`, `capture.resume`, `capture.setCamera`, `capture.stop`, `capture.cancel`, and `recording.cleanup`. The first group is content-addressed work whose same input joins one job/evidence receipt; the remaining entries repeat a target state without another change.
+
+Every remaining catalog operation takes `requestId` and replays through its existing owner, or refuses a conflicting parameter set: `project.create`, `project.delete`, `edit.apply`, `speaker.correct`, `text.seed`, `acquisition.import`, `asset.import`, `export.create`, `export.recover`, `package.open`, `package.adopt`, `recording.delete`, `transcript.import`, `speaker.bind`, `preset.update`, `preset.create`, `preset.delete`, `artifact.renew`, `update.check`, `capture.start`, `capture.restart`, `edit.undo`, and `edit.restore`.
+
+### Range inventory and naming
+
+| Operation | Field(s) | Type | Clock | Chosen public name |
+|---|---|---|---|---|
+| `preview.get`, `inspect.open`, `audio.get`, `audio.pause.get`, `transcript.get`, `transcript.search`, `index.*`, `timeline.events`, `cursor.raw` (project selectors) | `range` | `{startUs,endUs}` | project clock | `range` |
+| `sourceCaptureParams` (capture/event source selectors) | `sourceRange` | integer `{startUs,endUs}` | source clock | `sourceRange` |
+| `audio.get`, `audio.extract`, `audio.measure`, `waveform.get`, `spectrogram.get`, `audio.pause.get`, `alignment.*`, `speaker.*`, `transcript.*` (source selectors) | `sourceRange` | rational `{startUs,endUs}` | source clock | `sourceRange` |
+| `correspondence.prepare` endpoints | `sourceRange` | rational `{startUs,endUs}` | source clock | `sourceRange` |
+| `correspondence` anchors | `leftRange`, `rightRange` | rational `{startUs,endUs}` | source clock | side-labelled names retained |
+| `frame.get`, `frame.batch`, `cursor.render` | `atUs` | integer µs point(s) | source or project selector clock | `atUs` |
+| `layout.diagnostics`, `timeline.events` project rows | `projectAtUs` | integer µs point | project clock | `projectAtUs` |
+| transcript execution context | `beforeUs`, `afterUs` | integer µs durations | source clock context | unit-suffixed scalar names retained |
+
+The public rule is clock-based: `range` means a project-clock interval and `sourceRange` means a source-clock interval. Numeric representation follows the clock and does not choose the field name. Top-level project start/end pairs use the `range` object; rational source selections remain exact.
+
+### Generation identity
+
+Evidence and publication generations remain strings under the single public field `generation`. The numeric job-attempt counter is renamed `attemptGeneration` in wait metadata and adapter job summaries; it is not evidence identity.
+
+### Operation classification
+
+`readOnlyOperations` contains every operation that only reads retained state/evidence. `idempotentOperations` contains content-addressed repeats and target-state no-ops. Every remaining operation is a changing operation and carries a required `requestId`; the operation's existing owner replays the original result or refuses a conflicting request.
+
+- **`recording.get` without an id and no take refuses `NOT_FOUND`** (sound). The latest-take shorthand has the same absence contract as an id-specific get; macOS callers treat that refusal as “no take yet.”
+- **Stored job results keep `bytes` on published file receipts and `range` on the audio job publication** (questionable, user verdict pending). Both live inside job results retained on disk; renaming them would move every renderer pin that emits them and discard valid evidence. The naming lint covers operation params and exported protocol records, not retained job payloads. Revisit if a later slice already moves those pins.

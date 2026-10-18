@@ -161,14 +161,16 @@ export const captureDeviceSchema = z
 export const captureSourcesSchema = z
   .object({
     displays: z.array(
-      z.object({ id: z.int(), name: z.string(), width: z.int(), height: z.int() }).strict(),
+      z.object({ displayId: z.int(), name: z.string(), width: z.int(), height: z.int() }).strict(),
     ),
     windows: z.array(
-      z.object({ id: z.int(), title: z.string(), application: z.string() }).strict(),
+      z.object({ windowId: z.int(), title: z.string(), application: z.string() }).strict(),
     ),
     cameras: z.array(
-      z.object({ id: id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
+      z.object({ cameraId: id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
     ),
-    microphones: z.array(z.object({ id: id, name: z.string(), isDefault: z.boolean() }).strict()),
+    microphones: z.array(
+      z.object({ microphoneId: id, name: z.string(), isDefault: z.boolean() }).strict(),
+    ),
   })
   .strict();

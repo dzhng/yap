@@ -120,7 +120,7 @@ test("records its own window through the service and leaves one inspectable orig
   const sources = await succeeds(home, "capture.sources");
   assert.deepEqual(sources.displays, [], "Fixture mode must expose no display");
   assert.deepEqual(
-    sources.windows.map((window) => window.id),
+    sources.windows.map((window) => window.windowId),
     [source.windowId],
     "Fixture mode must expose this app's own window and nothing else",
   );
@@ -131,7 +131,7 @@ test("records its own window through the service and leaves one inspectable orig
   assert.deepEqual(started.sourceAdmissions, []);
   assert.deepEqual((await succeeds(home, "project.list", {})).projects, []);
   // Source discovery is immediate; a live take has no admitted source yet.
-  assert.deepEqual(await succeeds(home, "recording.latest"), started);
+  assert.deepEqual(await succeeds(home, "recording.get"), started);
 
   await delay(1_200);
   assert.equal(
@@ -362,7 +362,7 @@ test("cancel discards only its own take's media and restart names a new one", as
   assert.equal(canceled.state, "canceled");
   assert.deepEqual(readdirSync(join(home, "library", "recordings")), [kept.recordingId]);
   // Only the finished take remains discoverable, and it kept its own media.
-  assert.equal((await succeeds(home, "recording.latest")).recordingId, kept.recordingId);
+  assert.equal((await succeeds(home, "recording.get")).recordingId, kept.recordingId);
   assert.deepEqual(sourceFiles(home, kept.recordingId), [
     "capture.journal.jsonl",
     "source.journal.jsonl",

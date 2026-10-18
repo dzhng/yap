@@ -211,7 +211,7 @@ test("verified models still refuse an occupied output and report unreadable narr
   });
   assert.equal(occupied.error.code, "INVALID_OUTPUT", occupied.error.message);
   assert.equal(readFileSync(params.output, "utf8"), "earlier");
-  assert.equal(unreadable.error.code, "NATIVE_DECODE_FAILED", unreadable.error.message);
+  assert.equal(unreadable.error.code, "MEDIA_UNAVAILABLE", unreadable.error.message);
   assert.equal("retryable" in unreadable.error, false);
   assert.deepEqual(readdirSync(attempt), ["raw.jsonl"]);
 });

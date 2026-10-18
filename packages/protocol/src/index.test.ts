@@ -10,6 +10,8 @@ import {
   admitOperation,
   operationSchema,
   operationNames,
+  readOnlyOperations,
+  idempotentOperations,
   appOperations,
   parseRequest,
   responseSchema,
@@ -152,7 +154,16 @@ it("keeps app capture controls in the public catalog and decodes lifecycle recei
 
   for (const { name, params } of fixture.operations) {
     expect(operationNames.has(name), `${name} is missing from the public catalog`).toBe(true);
-    expect(operationSchema.parse({ operation: name, params })).toMatchObject({ operation: name });
+    const admitted =
+      readOnlyOperations.has(name as never) || idempotentOperations.has(name as never)
+        ? params
+        : {
+            ...params,
+            requestId: (params as Record<string, unknown>).requestId ?? `fixture-${name}`,
+          };
+    expect(operationSchema.parse({ operation: name, params: admitted })).toMatchObject({
+      operation: name,
+    });
   }
 
   for (const { id, report: value } of fixture.reports) {
@@ -211,10 +222,10 @@ it("advertises strict service-routed preset reads", () => {
     params: {},
   });
   expect(
-    operationSchema.parse({ operation: "preset.get", params: { id: "studio-podcast" } }),
+    operationSchema.parse({ operation: "preset.get", params: { presetId: "studio-podcast" } }),
   ).toMatchObject({
     operation: "preset.get",
-    params: { id: "studio-podcast" },
+    params: { presetId: "studio-podcast" },
   });
   expect(
     operationSchema.safeParse({ operation: "preset.list", params: { extra: true } }).success,
@@ -222,7 +233,7 @@ it("advertises strict service-routed preset reads", () => {
   expect(
     operationSchema.safeParse({
       operation: "preset.get",
-      params: { id: "studio-podcast", extra: true },
+      params: { presetId: "studio-podcast", extra: true },
     }).success,
   ).toBe(false);
   expect(operationNames.has("preset.list")).toBe(true);
@@ -243,9 +254,14 @@ it("reads authored project revisions while recording identities retain only sour
     success: true,
     data: { operation: "revision.get", params: { projectId: "project", revisionId: "revision" } },
   });
-  expect(request("recording.delete", { recordingId: "take" })).toMatchObject({
+  expect(
+    request("recording.delete", { recordingId: "take", requestId: "delete-take" }),
+  ).toMatchObject({
     success: true,
-    data: { operation: "recording.delete", params: { recordingId: "take" } },
+    data: {
+      operation: "recording.delete",
+      params: { recordingId: "take", requestId: "delete-take" },
+    },
   });
 });
 
@@ -253,13 +269,21 @@ it("advertises feedback review operations with shared selectors and bounded curs
   expect(
     operationSchema.parse({
       operation: "transcript.review",
-      params: { assetId: "a", streamId: "audio", range: { startUs: 0, endUs: 1_000_000 } },
+      params: {
+        assetId: "a",
+        streamId: "audio",
+        sourceRange: { startUs: 0, endUs: 1_000_000 },
+      },
     }).operation,
   ).toBe("transcript.review");
   expect(
     operationSchema.parse({
       operation: "cursor.render",
-      params: { projectId: "p", atUs: [0, 1_000_000], trailUs: 600_000 },
+      params: {
+        projectId: "p",
+        atUs: [0, 1_000_000],
+        trailUs: 600_000,
+      },
     }).operation,
   ).toBe("cursor.render");
   expect(
@@ -378,7 +402,7 @@ describe("capture selection", () => {
 it("artifact reads ask for one bounded chunk at a whole offset", () => {
   const read = (params: Record<string, unknown>) =>
     operationSchema.safeParse({ operation: "artifact.read", params: { token: "t", ...params } });
-  expect(read({ offset: 0 })).toMatchObject({
+  expect(read({ offsetBytes: 0 })).toMatchObject({
     success: true,
     data: { params: { maxBytes: ARTIFACT_CHUNK_BYTES } },
   });
@@ -496,7 +520,10 @@ it("arbitrary frame operations require a project or selected asset", () => {
     expect(
       operationSchema.safeParse({
         operation,
-        params: { assetId: "asset", streamId: "video", atUs },
+        params:
+          operation === "frame.batch"
+            ? { assetId: "asset", streamId: "video", atUs }
+            : { assetId: "asset", streamId: "video", atUs },
       }).success,
     ).toBe(true);
     expect(
@@ -511,7 +538,11 @@ it("arbitrary frame operations require a project or selected asset", () => {
 
 it("audio inspection selects exactly one project or asset stream", () => {
   for (const operation of ["audio.get"]) {
-    const params = { assetId: "asset", streamId: "audio", range: { startUs: 0, endUs: 1000 } };
+    const params = {
+      assetId: "asset",
+      streamId: "audio",
+      sourceRange: { startUs: 0, endUs: 1000 },
+    };
     expect(operationSchema.parse({ operation, params })).toBeTruthy();
     expect(() =>
       operationSchema.parse({ operation, params: { ...params, recordingId: "library" } }),
@@ -569,7 +600,7 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
     streamId: "speaker-audio",
     channel: 0,
     modelId: "parakeet-speaker",
-    observationRange: { startUs: 0, endUs: 30_000_000 },
+    sourceRange: { startUs: 0, endUs: 30_000_000 },
     generation: "speaker-generation",
   };
   const accepted: [string, Record<string, unknown>][] = [
@@ -605,7 +636,7 @@ it("project transcript reads admit explicit speaker-generation joins", () => {
         streamId: "speaker-audio",
         channel: 0,
         modelId: "sortformer",
-        observationRange: { startUs: 0, endUs: 30_000_000 },
+        sourceRange: { startUs: 0, endUs: 30_000_000 },
         generation: "speaker-generation",
       },
     ],
@@ -621,7 +652,7 @@ it("project transcript reads admit explicit speaker-generation joins", () => {
 
 it("project exports preserve their target and refuse ambiguous owners", () => {
   const destination = {
-    exportId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
+    requestId: "export-request",
     directory: "/tmp/exports",
     leaf: "tutorial.mp4",
     kind: "video",
@@ -668,10 +699,10 @@ it("source capture continuations retain every reader head through both public op
 it("caption sidecar export requires pinned revision and explicit unique placements without media settings", () => {
   const params = {
     kind: "srt",
+    requestId: "sidecar-request",
     projectId: "p",
     revisionId: "r",
     placementIds: ["caption"],
-    exportId: "11111111-1111-4111-8111-111111111111",
     directory: "/tmp",
     leaf: "selected.srt",
   };
@@ -723,6 +754,17 @@ it("loudness admission keeps source/project selectors exclusive and channel inte
       operationSchema.safeParse({ operation: "audio.measure", params: { ...source, ...extra } })
         .success,
     ).toBe(false);
+});
+
+it("uses sourceRange for rational source-clock audio selections", () => {
+  const source = { assetId: "asset", streamId: "audio", sourceRange: { startUs: 0, endUs: 1000 } };
+  expect(operationSchema.safeParse({ operation: "audio.get", params: source }).success).toBe(true);
+  expect(
+    operationSchema.safeParse({
+      operation: "audio.get",
+      params: { assetId: "asset", streamId: "audio", range: source.sourceRange },
+    }).success,
+  ).toBe(false);
 });
 
 it("pause evidence accepts source and project selections with optional detector overrides", () => {
@@ -805,7 +847,7 @@ it("admits alignment preparation over a pinned project tap", () => {
         revisionId: "revision",
         preparedResourceId: "prepared",
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
-        range: { startUs: 0, endUs: 1_000_000 },
+        sourceRange: { startUs: 0, endUs: 1_000_000 },
         channel: 0,
         text: "hello world",
         modelId: "nemo-ctc110",
@@ -823,9 +865,11 @@ it("admits generation-pinned caller speaker label bindings", () => {
       params: {
         assetId: "a".repeat(64),
         streamId: "audio",
+        requestId: "speaker-bind-request",
+        expectedBindingDigest: "0".repeat(64),
         channel: 0,
         modelId: "speaker-model",
-        observationRange: { startUs: 0, endUs: 30000000 },
+        sourceRange: { startUs: 0, endUs: 30000000 },
         generation: "speaker-generation",
         bindings: [{ slot: 0, displayName: "Ada" }],
       },
@@ -840,9 +884,11 @@ it("rejects unknown fields on speaker label bindings", () => {
       params: {
         assetId: "a".repeat(64),
         streamId: "audio",
+        requestId: "speaker-bind-invalid",
+        expectedBindingDigest: "0".repeat(64),
         channel: 0,
         modelId: "speaker-model",
-        observationRange: { startUs: 0, endUs: 30000000 },
+        sourceRange: { startUs: 0, endUs: 30000000 },
         generation: "speaker-generation",
         bindings: [{ slot: 0, displayName: "Ada", inferred: true }],
       },
@@ -872,7 +918,7 @@ it("admits long-form continuity preparation and exact receipt reads", () => {
         streamId: common.streamId,
         channel: common.channel,
         modelId: common.modelId,
-        observationRange: common.sourceRange,
+        sourceRange: common.sourceRange,
         generation: "attempt-1",
       },
     }).success,
@@ -904,9 +950,9 @@ describe("invalid params", () => {
         operation: "export.create",
         params: {
           projectId: "p",
-          exportId: "not-a-uuid",
+          requestId: "export-request",
           directory: "/tmp",
-          leaf: "a.mp4",
+          leaf: "",
           kind: "video",
         },
       }),
@@ -915,7 +961,9 @@ describe("invalid params", () => {
       error: {
         code: "INVALID_PARAMS",
         details: {
-          invalid: expect.arrayContaining([{ path: "params.exportId", message: "Invalid UUID" }]),
+          invalid: expect.arrayContaining([
+            { path: "params.leaf", message: "Too small: expected string to have >=1 characters" },
+          ]),
         },
       },
     });
@@ -936,7 +984,7 @@ it("admits exact, caller-authored speaker corrections", () => {
         expectedRevisionId: "rev",
         corrections: [
           {
-            id: "fix",
+            correctionId: "fix",
             occurrenceId: "clip",
             target: { wordIds: ["w1"] },
             value: { state: "overlap", slots: [0, 1] },

@@ -332,7 +332,7 @@ export async function captionSeeds({ service, call, out, home, font, picture, ad
   const packageExport = randomUUID();
   await api("export.create", {
     ...selection(),
-    exportId: packageExport,
+    requestId: packageExport,
     kind: "processed-package",
     directory: home,
     leaf: "captions.zip",

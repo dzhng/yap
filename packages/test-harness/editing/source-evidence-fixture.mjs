@@ -12,6 +12,8 @@ import {
   ARTIFACT_CHUNK_BYTES,
   RESPONSE_FRAME_BYTES,
   deliveredResponseSchema,
+  idempotentOperations,
+  readOnlyOperations,
   responseSchema,
 } from "@yap/protocol";
 import { z } from "zod";
@@ -153,6 +155,7 @@ export class JourneyService {
     this.report = report;
     this.logs = [];
     this.barriers = new Map();
+    this.requestSequence = 0;
   }
   async start() {
     const deadline = performance.now() + 30000;
@@ -217,19 +220,25 @@ export class JourneyService {
     this.started = true;
   }
   async call(operation, params, { transport = "cli", error = false, output } = {}) {
+    const wireParams =
+      !readOnlyOperations.has(operation) &&
+      !idempotentOperations.has(operation) &&
+      params.requestId === undefined
+        ? { ...params, requestId: `harness-${operation}-${++this.requestSequence}` }
+        : params;
     const request = this.report.exchanges
-      ? structuredClone({ operation, params, transport, error, output })
+      ? structuredClone({ operation, params: wireParams, transport, error, output })
       : undefined;
     const reply =
       transport === "mcp"
-        ? await this.mcp.callTool({ name: operation, arguments: params })
+        ? await this.mcp.callTool({ name: operation, arguments: wireParams })
         : await cliReply([
             join(root, "apps/cli/dist/main.js"),
             operation,
             "--socket",
             this.socketPath,
             "--params",
-            JSON.stringify(params),
+            JSON.stringify(wireParams),
             ...(output ? ["--output", output] : []),
           ]);
     const exchange = this.report.exchanges

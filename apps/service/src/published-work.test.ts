@@ -51,7 +51,7 @@ test("import acknowledgement, exact replay and ready inspection expose one typed
   const acknowledgementMs = performance.now() - startedAt;
   expect(accepted.data).toHaveProperty("published", null);
   expect(accepted.data).not.toHaveProperty("result");
-  const job = accepted.data as { jobId: string; attemptId: string; generation: number };
+  const job = accepted.data as { jobId: string; attemptId: string; attemptGeneration: number };
   await entered;
   const pending = await f.call("job.get", { jobId: job.jobId });
   expect(pending).toMatchObject({
@@ -60,7 +60,7 @@ test("import acknowledgement, exact replay and ready inspection expose one typed
       state: "running",
       jobId: job.jobId,
       attemptId: job.attemptId,
-      generation: 1,
+      attemptGeneration: 1,
       published: null,
     },
   });
@@ -70,7 +70,7 @@ test("import acknowledgement, exact replay and ready inspection expose one typed
   expect(ready).toMatchObject({
     state: "ready",
     published: {
-      generation: 1,
+      generation: "1",
       attemptId: job.attemptId,
       output: { assetId: expect.stringMatching(/^[a-f0-9]{64}$/) },
     },
@@ -99,7 +99,7 @@ test("a malformed worker result settles failed work in an ok transport reply wit
   if (!accepted.ok) throw Error(accepted.error.message);
   const { jobId } = accepted.data as { jobId: string };
   const failed = await f.job(jobId, "failed");
-  expect(failed).toMatchObject({ state: "failed", published: null, generation: 1 });
+  expect(failed).toMatchObject({ state: "failed", published: null, attemptGeneration: 1 });
   expect(failed).not.toHaveProperty("result");
   if (process.env.YAP_CONTRACT_TEST_OUTPUT)
     await writeFile(

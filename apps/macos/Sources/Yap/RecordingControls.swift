@@ -682,15 +682,15 @@ final class RecordingControls: NSObject {
             state.observeSources(
                 ControlsState.SourceCatalog(
                     displays: answer.displays.map {
-                        ControlsState.Display(id: $0.id, name: $0.name, width: $0.width, height: $0.height)
+                        ControlsState.Display(id: $0.displayId, name: $0.name, width: $0.width, height: $0.height)
                     },
                     windows: answer.windows.map {
-                        ControlsState.Window(id: $0.id, title: $0.title, application: $0.application)
+                        ControlsState.Window(id: $0.windowId, title: $0.title, application: $0.application)
                     },
                     microphones: answer.microphones.map {
-                        ControlsState.Microphone(id: $0.id, name: $0.name, isDefault: $0.isDefault)
+                        ControlsState.Microphone(id: $0.microphoneId, name: $0.name, isDefault: $0.isDefault)
                     }, cameras: answer.cameras.map {
-                        ControlsState.Camera(id: $0.id, name: $0.name, isDefault: $0.isDefault ?? false)
+                        ControlsState.Camera(id: $0.cameraId, name: $0.name, isDefault: $0.isDefault ?? false)
                     }))
             state.selectDefaultCameraIfNeeded(enabled: state.selection.cameraOn || sourceMode == .cameraOnly)
         } catch {
@@ -1050,23 +1050,23 @@ private struct StatusAnswer: Decodable {
 
 private struct SourcesAnswer: Decodable {
     struct Display: Decodable {
-        let id: Int
+        let displayId: Int
         let name: String
         let width: Int
         let height: Int
     }
     struct Window: Decodable {
-        let id: Int
+        let windowId: Int
         let title: String
         let application: String
     }
     struct Microphone: Decodable {
-        let id: String
+        let microphoneId: String
         let name: String
         let isDefault: Bool
     }
     struct Camera: Decodable {
-        let id: String
+        let cameraId: String
         let name: String
         let isDefault: Bool?
     }

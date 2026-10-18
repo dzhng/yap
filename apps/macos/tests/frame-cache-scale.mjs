@@ -151,7 +151,10 @@ test(
       if (retry.delivery) await call("artifact.close", { token: retry.delivery.token });
       const regenerated = await ready();
       assert.equal(regenerated.jobId, first.jobId);
-      assert.equal(regenerated.published.generation, first.published.generation + 1);
+      assert.equal(
+        Number(regenerated.published.generation),
+        Number(first.published.generation) + 1,
+      );
       assert.notEqual(regenerated.published.output.cacheId, firstFrame.cacheId);
       assert.deepEqual(await readFile(regenerated.published.output.file), firstBytes);
       assert.equal(await hash(video), originalHash);

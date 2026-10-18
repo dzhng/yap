@@ -272,13 +272,14 @@ try {
   const exported = await call("export.create", {
     projectId,
     kind: "video",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory: out,
     leaf: "export.mp4",
   });
+  const exportId = exported.exportId;
   assert.equal(exported.snapshot.revisionId, revisionId);
   const published = await poll(
-    () => call("export.status", { exportId: exported.exportId }, { transport: "mcp" }),
+    () => call("export.status", { exportId }, { transport: "mcp" }),
     (v) => v.state === "ready",
     "export",
   );

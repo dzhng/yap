@@ -29,7 +29,7 @@ test("a published output always carries its issues, empty when clean", () => {
       ({ assetId }) => ({ assetId }),
     );
     expect(published).toEqual({
-      generation: 3,
+      generation: "3",
       attemptId: "attempt",
       output: { assetId: "asset" },
       issues,
@@ -37,7 +37,8 @@ test("a published output always carries its issues, empty when clean", () => {
     expect(schema.parse(published)).toEqual(published);
   }
   expect(
-    schema.safeParse({ generation: 3, attemptId: "attempt", output: { assetId: "asset" } }).success,
+    schema.safeParse({ generation: "3", attemptId: "attempt", output: { assetId: "asset" } })
+      .success,
   ).toBe(false);
 });
 
@@ -90,7 +91,7 @@ test("status facts stay separate from WorkState", () => {
       state: "ready",
       jobId: "job",
       attemptId: "attempt",
-      generation: 1,
+      attemptGeneration: 1,
       target: {},
       retryable: true,
     }).state,

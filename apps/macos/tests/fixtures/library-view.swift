@@ -156,7 +156,7 @@ import YapControls
     }
     static func exportFixture() -> ExportsState {
         var state = ExportsState()
-        state.records = [.init(exportId: "fixture-export", target: .project("fixture-project"), kind: .video, revisionId: "fixture-revision", state: "committed", directory: "/Synthetic/Exports", leaf: "Product demonstration.mp4", output: "/Synthetic/Exports/Product demonstration.mp4", reason: "Committed output is intact; private cleanup still needs retry.", retryable: true, abandoning: false, cleanupPending: true)]
+        state.records = [.init(exportId: "fixture-export", target: .project("fixture-project"), kind: .video, revisionId: "fixture-revision", state: "ready", directory: "/Synthetic/Exports", leaf: "Product demonstration.mp4", output: "/Synthetic/Exports/Product demonstration.mp4", reason: "Committed output is intact; private cleanup still needs retry.", retryable: true, abandoning: false, cleanupPending: true)]
         return state
     }
 

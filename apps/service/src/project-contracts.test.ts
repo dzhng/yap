@@ -116,7 +116,7 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
       {
         atUs: 0,
         canvas: { width: 100, height: 100 },
-        texts: [{ id: "caption", bounds: { x: 99, y: 0, width: 5, height: 5 } }],
+        texts: [{ textId: "caption", bounds: { x: 99, y: 0, width: 5, height: 5 } }],
       },
     ],
   });
@@ -628,11 +628,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const speakerMetadata = await publishControlledObservation(f.home, speakerInput);
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Ada" },
@@ -644,7 +646,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     streamId: speakerInput.streamId,
     channel: speakerInput.channel,
     modelId: speakerInput.modelId,
-    observationRange: speakerInput.sourceRange,
+    sourceRange: speakerInput.sourceRange,
     generation: speakerMetadata.generation,
   };
   const attributed = await f.call("transcript.get", {
@@ -669,7 +671,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   expect(attributedCursor).toEqual(expect.any(String));
   const reorderedSpeaker = {
     generation: speakerMetadata.generation,
-    observationRange: speakerInput.sourceRange,
+    sourceRange: speakerInput.sourceRange,
     modelId: speakerInput.modelId,
     channel: speakerInput.channel,
     streamId: speakerInput.streamId,
@@ -688,11 +690,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-relabel",
+      expectedBindingDigest: "0128e332e14906c60e2692d34693068c5e67b389409636c720801bad805e84d2",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Adele" },
@@ -710,11 +714,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Ada" },
@@ -729,17 +735,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       speaker: attributedSpeaker,
       cursor: attributedCursor,
     }),
-  ).toMatchObject({
-    ok: true,
-    data: {
-      rows: [
-        { type: "gap", reason: "not_acquired" },
-        { id: "w4", speaker: { state: "unknown" } },
-        { id: "w5", speaker: { state: "unknown" } },
-        { id: "w6", speaker: { state: "unknown" } },
-      ],
-    },
-  });
+  ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   const rows: SourceTranscriptRow[] = [];
   let cursor: unknown;
   let generation: string | undefined;

@@ -51,15 +51,15 @@ test("chunks round-trip binary bytes and any position can be retried including E
   );
   const first = f.delivery.read(lease.token, 0, 3);
   expect(Buffer.from(first.data, "base64")).toEqual(f.data.subarray(0, 3));
-  expect(first).toMatchObject({ offset: 0, nextOffset: 3, eof: false });
+  expect(first).toMatchObject({ offsetBytes: 0, nextOffsetBytes: 3, eof: false });
   const last = f.delivery.read(lease.token, 3, 30);
   expect(Buffer.from(last.data, "base64")).toEqual(f.data.subarray(3));
-  expect(last).toMatchObject({ offset: 3, nextOffset: 7, eof: true });
+  expect(last).toMatchObject({ offsetBytes: 3, nextOffsetBytes: 7, eof: true });
   expect(f.delivery.read(lease.token, 0, 3)).toEqual(first);
   expect(f.delivery.read(lease.token, 7, 30)).toEqual({
     data: "",
-    offset: 7,
-    nextOffset: 7,
+    offsetBytes: 7,
+    nextOffsetBytes: 7,
     eof: true,
   });
   expect(() => f.cache.remove(f.file.id)).toThrow("being read");
@@ -76,7 +76,7 @@ test("a fixed expiry releases the cache without another delivery call", async ()
   const lease = f.delivery.open({ kind: "recording", id: f.recordingId }, () =>
     f.cache.acquire(f.file.id),
   );
-  expect(lease.expiresAt).toBe(31_000);
+  expect(lease.expiresAtMs).toBe(31_000);
   await vi.advanceTimersByTimeAsync(29_000);
   expect(f.delivery.read(lease.token, 0, 1).data).toBe(f.data.subarray(0, 1).toString("base64"));
   await vi.advanceTimersByTimeAsync(1000);
@@ -96,7 +96,7 @@ test("renewal retains the same bytes past the old deadline but cannot revive exp
   );
   await vi.advanceTimersByTimeAsync(20_000);
   const renewed = f.delivery.renew(lease.token);
-  expect(renewed).toEqual({ ...lease, expiresAt: 51_000 });
+  expect(renewed).toEqual({ ...lease, expiresAtMs: 51_000 });
   await vi.advanceTimersByTimeAsync(10_000);
   expect(Buffer.from(f.delivery.read(lease.token, 0, 100).data, "base64")).toEqual(f.data);
   expect(() => f.cache.remove(f.file.id)).toThrow("being read");
@@ -146,11 +146,11 @@ test("a read past the delivery's end is refused without discarding a usable leas
     expect.objectContaining({ code: "INVALID_RANGE" }),
   );
   const first = f.delivery.read(lease.token, 0, 512 * 1024);
-  const last = f.delivery.read(lease.token, first.nextOffset, 512 * 1024);
+  const last = f.delivery.read(lease.token, first.nextOffsetBytes, 512 * 1024);
   expect(
     Buffer.concat([Buffer.from(first.data, "base64"), Buffer.from(last.data, "base64")]),
   ).toEqual(f.data);
-  expect(last).toMatchObject({ nextOffset: f.data.length, eof: true });
+  expect(last).toMatchObject({ nextOffsetBytes: f.data.length, eof: true });
 });
 
 test("missing cache and broken reads report expiry and release failed transfer handles", async () => {
@@ -178,14 +178,14 @@ test("an empty derivative has a retryable empty EOF response", async () => {
   );
   expect(f.delivery.read(lease.token, 0, 1)).toEqual({
     data: "",
-    offset: 0,
-    nextOffset: 0,
+    offsetBytes: 0,
+    nextOffsetBytes: 0,
     eof: true,
   });
   expect(f.delivery.read(lease.token, 0, 1)).toEqual({
     data: "",
-    offset: 0,
-    nextOffset: 0,
+    offsetBytes: 0,
+    nextOffsetBytes: 0,
     eof: true,
   });
 });
@@ -197,7 +197,7 @@ test("open releases expired pins before attempting to acquire another artifact",
   const lease = f.delivery.open({ kind: "recording", id: f.recordingId }, () =>
     f.cache.acquire(f.file.id),
   );
-  vi.setSystemTime(lease.expiresAt);
+  vi.setSystemTime(lease.expiresAtMs);
   expect(() =>
     f.delivery.open({ kind: "recording", id: f.recordingId }, () => {
       f.cache.remove(f.file.id);
@@ -224,7 +224,7 @@ test("a caller-owned file outside the cache uses the same retryable chunk lease"
   });
   const chunk = f.delivery.read(lease.token, 0, bytes.length);
   expect(Buffer.from(chunk.data, "base64")).toEqual(bytes);
-  expect(chunk).toMatchObject({ offset: 0, nextOffset: bytes.length, eof: true });
+  expect(chunk).toMatchObject({ offsetBytes: 0, nextOffsetBytes: bytes.length, eof: true });
   expect(f.delivery.read(lease.token, 0, bytes.length)).toEqual(chunk);
   f.delivery.close(lease.token);
   expect(() => fstatSync(descriptor)).toThrow(expect.objectContaining({ code: "EBADF" }));
@@ -326,7 +326,7 @@ test("package IDs revoke separately while renewed held-file reads survive the ol
     acquire("second", "second package"),
   );
   await vi.advanceTimersByTimeAsync(20_000);
-  expect(f.delivery.renew(second.token).expiresAt).toBe(51_000);
+  expect(f.delivery.renew(second.token).expiresAtMs).toBe(51_000);
   f.delivery.revoke({ kind: "package", id: "first" });
   expect(() => f.delivery.renew(first.token)).toThrow(
     expect.objectContaining({ code: "ARTIFACT_EXPIRED" }),

@@ -45,7 +45,7 @@ the background at install and update; ordinary calls use it directly. Call
 `transcript.get` and search inspect retained evidence and never run inference. If
 an operation reports `MODEL_NOT_PREPARED`, ask the user before acquiring the
 optional model/runtime, then use `model.prepare` and retry after it is ready. A
-preparation's `executionRange` limits primary
+preparation's `sourceRange` limits primary
 source ownership; its outer `context` expands decoding without extending that
 ownership. A read's `range` only filters retained observations. Pin the returned
 `generation` when reading bounded evidence; omitting it selects full-support
@@ -435,7 +435,7 @@ range with no part inside refuses with `INVALID_RANGE` and names the bounds.
 The issue is always in the result's own `issues`, recomputed for each request,
 never stored with an output: work is keyed by the applied range, so a range past
 the end shares the output a request for the applied range gets. That holds for
-reads, a transcription `executionRange`, rendered recognition and project
+reads, a transcription `sourceRange`, rendered recognition and project
 alignment alike; `--wait` keeps the clamp on the read it settles with.
 
 For timeline inspection, use advertised `timeline.events` reads. Video scene changes

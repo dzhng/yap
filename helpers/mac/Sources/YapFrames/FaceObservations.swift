@@ -16,7 +16,7 @@ public struct FaceObservationRequest: Codable, Sendable, Equatable {
 
 public struct FaceObservations: Encodable {
     struct Face: Encodable {
-        let id: String
+        let faceId: String
         let boundingBox: Box
         let confidence: Double
         // Landmark coverage is quality evidence for the caller. `core` means the
@@ -126,7 +126,7 @@ public struct FaceObservations: Encodable {
             let bottom = max(y, min(height, Int(((1 - box.minY) * Double(height)).rounded(.up))))
             guard right > x, bottom > y else { return nil }
             let landmark = coverage(for: observation)
-            return Face(id: "face-\(index)", boundingBox: Box(x: x, y: y, width: right - x, height: bottom - y), confidence: Double(observation.confidence), landmarkCoverage: landmark.0, landmarkGroups: landmark.1)
+            return Face(faceId: "face-\(index)", boundingBox: Box(x: x, y: y, width: right - x, height: bottom - y), confidence: Double(observation.confidence), landmarkCoverage: landmark.0, landmarkGroups: landmark.1)
         }
         return result(status: faces.isEmpty ? "no_face" : "available", faces: faces, reason: faces.isEmpty ? "no_face" : nil)
     }

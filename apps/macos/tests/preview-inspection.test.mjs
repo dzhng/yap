@@ -219,26 +219,26 @@ test("public project preview pins an explicitly authored pointer movie through e
       });
       assert.equal(renewal.isError, false);
       assert.equal(renewal.structuredContent.data.token, delivered.delivery.token);
-      assert.equal(renewal.structuredContent.data.bytes, delivered.delivery.bytes);
-      assert.ok(renewal.structuredContent.data.expiresAt >= delivered.delivery.expiresAt);
+      assert.equal(renewal.structuredContent.data.sizeBytes, delivered.delivery.sizeBytes);
+      assert.ok(renewal.structuredContent.data.expiresAtMs >= delivered.delivery.expiresAtMs);
       const chunks = [];
-      for (let offset = 0; offset < delivered.delivery.bytes;) {
+      for (let offsetBytes = 0; offsetBytes < delivered.delivery.sizeBytes;) {
         const response = await client.callTool({
           name: "artifact.read",
           arguments: {
             token: delivered.delivery.token,
-            offset,
+            offsetBytes,
             maxBytes: 1024,
           },
         });
         assert.equal(response.isError, false);
         const part = response.structuredContent.data;
         const bytes = Buffer.from(part.data, "base64");
-        assert.equal(part.offset, offset);
+        assert.equal(part.offsetBytes, offsetBytes);
         assert.ok(bytes.length > 0 && bytes.length <= 1024);
-        offset += bytes.length;
-        assert.equal(part.nextOffset, offset);
-        assert.equal(part.eof, offset === delivered.delivery.bytes);
+        offsetBytes += bytes.length;
+        assert.equal(part.nextOffsetBytes, offsetBytes);
+        assert.equal(part.eof, offsetBytes === delivered.delivery.sizeBytes);
         chunks.push(bytes);
       }
       assert.deepEqual(Buffer.concat(chunks), await readFile(output));
@@ -312,7 +312,7 @@ test("public project preview pins an explicitly authored pointer movie through e
     await writeFile(join(library, "render", "abandoned.mp4"), "unverified abandoned attempt");
     service = await startPublicService(home, native);
     const regenerated = await preview(editedParams);
-    assert.equal(regenerated.published.generation, edited.published.generation + 1);
+    assert.equal(Number(regenerated.published.generation), Number(edited.published.generation) + 1);
     assert.equal(regenerated.revisionId, editedParams.revisionId);
     assert.equal(regenerated.jobId, edited.jobId);
     assert.deepEqual(await readdir(join(library, "render")), []);
@@ -333,18 +333,18 @@ test("public project preview pins an explicitly authored pointer movie through e
     // The MP4 container can change bookkeeping; the decoded edited pointer must not change.
     assert.ok(pointerPixels(regeneratedFile, 2.1, 200, 40) > 10);
     assert.equal(hash("sha256", await readFile(join(source, "video.mov"))), before);
-    await call("project.delete", { projectId });
+    await call("project.delete", { projectId, requestId: randomUUID() });
     const revoked = await callLocal(service.socket, {
       id: randomUUID(),
       operation: "artifact.read",
-      params: { token: regenerated.delivery.token, offset: 0, maxBytes: 1 },
+      params: { token: regenerated.delivery.token, offsetBytes: 0, maxBytes: 1 },
     });
     assert.equal(revoked.ok, false);
     assert.equal(revoked.error.code, "ARTIFACT_EXPIRED");
     const renewal = await callLocal(service.socket, {
       id: randomUUID(),
       operation: "artifact.renew",
-      params: { token: regenerated.delivery.token },
+      params: { token: regenerated.delivery.token, requestId: randomUUID() },
     });
     assert.equal(renewal.ok, false);
     assert.equal(renewal.error.code, "ARTIFACT_EXPIRED");

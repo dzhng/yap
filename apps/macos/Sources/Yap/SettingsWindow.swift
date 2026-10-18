@@ -199,7 +199,7 @@ final class SettingsModel: ObservableObject {
 
     func checkForUpdates() {
         guard state.updates.available, state.updates.canCheck else { return }
-        update("update.check", [:])
+        update("update.check", ["requestId": UUID().uuidString])
     }
 
     func readLoginItem() {

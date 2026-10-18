@@ -70,17 +70,17 @@ test("timeline helper consumes actual selected-source public frames and preserve
     .output;
   const outputs = new Map<string, Buffer>();
   async function delivered(data: Record<string, unknown>) {
-    const delivery = data.delivery as { token: string; bytes: number } | null;
+    const delivery = data.delivery as { token: string; sizeBytes: number } | null;
     if (!delivery) return data;
     const chunks: Buffer[] = [];
-    let offset = 0;
+    let offsetBytes = 0;
     try {
-      while (offset < delivery.bytes) {
-        const result = await f.call("artifact.read", { token: delivery.token, offset });
+      while (offsetBytes < delivery.sizeBytes) {
+        const result = await f.call("artifact.read", { token: delivery.token, offsetBytes });
         if (!result.ok) throw new Error(JSON.stringify(result));
-        const chunk = result.data as { data: string; nextOffset: number };
+        const chunk = result.data as { data: string; nextOffsetBytes: number };
         chunks.push(Buffer.from(chunk.data, "base64"));
-        offset = chunk.nextOffset;
+        offsetBytes = chunk.nextOffsetBytes;
       }
     } finally {
       await f.call("artifact.close", { token: delivery.token });
@@ -90,9 +90,10 @@ test("timeline helper consumes actual selected-source public frames and preserve
   }
   const operations: string[] = [];
   const invoke = async (operation: string, params: Record<string, unknown>) => {
-    operationSchema.parse({ operation, params });
+    const wireParams = params;
+    operationSchema.parse({ operation, params: wireParams });
     operations.push(operation);
-    const reply = await f.call(operation, params);
+    const reply = await f.call(operation, wireParams);
     if (!reply.ok) throw Object.assign(new Error(reply.error.message), reply.error);
     const data = reply.data as Record<string, unknown>;
     if (operation === "frame.batch") {

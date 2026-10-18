@@ -75,7 +75,7 @@ test("selected-source scenes retain sparse actual-time transitions across transp
     const streams = asset.data.streams.filter((stream) => stream.kind === "video");
     assert.equal(streams.length, 1);
     const params = {
-      assetId: asset.data.id,
+      assetId: asset.data.assetId,
       streamId: streams[0].id,
       sourceRange: { startUs: 0, endUs: 120_000_000 },
       limit: 2,
@@ -95,11 +95,9 @@ test("selected-source scenes retain sparse actual-time transitions across transp
         : { ok: true, data: ready };
       assert.equal(response.ok, true, JSON.stringify(response));
       transitions.push(
-        ...response.data.page.rows
-          .filter((row) => row.kind === "scene")
-          .map((row) => row.sourceAtUs),
+        ...response.data.rows.filter((row) => row.kind === "scene").map((row) => row.sourceAtUs),
       );
-      cursor = response.data.page.nextCursor;
+      cursor = response.data.nextCursor;
     } while (cursor);
     assert.deepEqual(transitions, [40_000_000, 80_000_000]);
     assert.deepEqual(publicCommand(service.socket, "timeline.events", params), ready);

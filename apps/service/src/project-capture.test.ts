@@ -22,8 +22,8 @@ test("public discovery preserves native camera order and empty results without s
   const f = await fixture(undefined, undefined, "capture.sources");
   for (const cameras of [
     [
-      { id: "camera-b", name: "External camera", isDefault: false },
-      { id: "camera-a", name: "Built-in camera", isDefault: true },
+      { cameraId: "camera-b", name: "External camera", isDefault: false },
+      { cameraId: "camera-a", name: "Built-in camera", isDefault: true },
     ],
     [],
   ]) {
@@ -482,7 +482,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
       ok: true,
       data: pending,
     });
-    expect(await f.call("recording.latest")).toMatchObject({ ok: true, data: pending });
+    expect(await f.call("recording.get")).toMatchObject({ ok: true, data: pending });
     expect(await f.call("recording.list")).toMatchObject({
       ok: true,
       data: { recordings: [pending] },
@@ -705,7 +705,9 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
       sourceDurationUs: null,
     }),
   ).toMatchObject({ ok: true, data: { state: "interrupted", sourceAdmissions: [] } });
-  expect(await f.call("recording.delete", { recordingId: next.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", { requestId: "test-delete", recordingId: next.recordingId }),
+  ).toMatchObject({
     ok: true,
     data: { deleted: true },
   });
@@ -737,7 +739,7 @@ test("lost public start reply reopens the same take and reconciles before publis
       socket.write(JSON.stringify({ id: randomUUID(), operation: "capture.start", params }) + "\n"),
     );
   });
-  const latest = await f.call("recording.latest");
+  const latest = await f.call("recording.get");
   if (!latest.ok) throw new Error(JSON.stringify(latest));
   const take = latest.data as { recordingId: string; sourceId: string };
   await f.service.close();
@@ -967,7 +969,7 @@ test("controller loss drains an unanswered native start before releasing the cap
     };
   });
   await expect
-    .poll(() => reopened.call("recording.latest"))
+    .poll(() => reopened.call("recording.get"))
     .toMatchObject({
       ok: true,
       data: {
@@ -1026,7 +1028,7 @@ test("an explicit-import namespace collision refuses source admission without hi
     }),
   ).toMatchObject({ ok: true, data: capture });
   expect(await f.call("recording.get", { recordingId })).toMatchObject({ ok: true, data: capture });
-  expect(await f.call("recording.latest")).toMatchObject({ ok: true, data: capture });
+  expect(await f.call("recording.get")).toMatchObject({ ok: true, data: capture });
   expect(await f.call("recording.list")).toMatchObject({
     ok: true,
     data: { recordings: [capture] },

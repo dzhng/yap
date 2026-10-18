@@ -64,6 +64,9 @@ public struct LibraryState: Equatable, Sendable {
     }
     public struct DeleteRequest: Equatable, Sendable {
         public let target: MediaTarget
+        /// One deletion keeps one replay identity: retrying after a lost reply asks the service for
+        /// the original result instead of deleting again.
+        public let requestId: String
         public let title: String
         public let take: ControlsState.RecentTake?
         public var failure: String?
@@ -72,14 +75,18 @@ public struct LibraryState: Equatable, Sendable {
 
     public mutating func beginDelete(_ target: MediaTarget) -> Bool {
         guard deletions[target]?.isPending != true else { return false }
-        if let old = deletions[target] { deletions[target] = .init(target: target, title: old.title, take: old.take); return true }
+        if let old = deletions[target] {
+            deletions[target] = .init(target: target, requestId: old.requestId, title: old.title, take: old.take)
+            return true
+        }
+        let requestId = UUID().uuidString
         switch target {
         case .recording(let id):
             guard let take = recent.first(where: { $0.recordingId == id }) else { return false }
-            deletions[target] = .init(target: target, title: LibraryPresentation.recordingTitle(of: take), take: take)
+            deletions[target] = .init(target: target, requestId: requestId, title: LibraryPresentation.recordingTitle(of: take), take: take)
         case .project(let id):
             guard let project = projects.first(where: { $0.projectId == id }) else { return false }
-            deletions[target] = .init(target: target, title: project.title, take: nil)
+            deletions[target] = .init(target: target, requestId: requestId, title: project.title, take: nil)
         }
         return true
     }

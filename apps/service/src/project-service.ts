@@ -101,6 +101,33 @@ import {
   transientWorkState,
   publicationWorkState,
 } from "@yap/protocol";
+
+function sourceRangeAsMicroseconds(value: SelectionRange | undefined) {
+  if (!value) return undefined;
+  const endpoint = (time: SelectionRange["startUs"]) =>
+    typeof time === "number" ? time : Math.round(time.numerator / time.denominator);
+  return { startUs: endpoint(value.startUs), endUs: endpoint(value.endUs) };
+}
+
+type InternalAudioSelection<T> = T extends { assetId: string; sourceRange?: infer SourceRange }
+  ? Omit<T, "sourceRange"> & { range?: SourceRange }
+  : T;
+
+function internalAudioSelection<T>(params: T): InternalAudioSelection<T> {
+  if (!params || typeof params !== "object" || !("assetId" in params))
+    return params as InternalAudioSelection<T>;
+  const { sourceRange, ...selection } = params as T & { sourceRange?: SelectionRange };
+  return {
+    ...selection,
+    ...(sourceRange === undefined ? {} : { range: sourceRange }),
+  } as InternalAudioSelection<T>;
+}
+
+function publicAudioOutput(value: any, source: boolean): any {
+  if (!source || !value || typeof value !== "object" || !("range" in value)) return value;
+  const { range, ...rest } = value;
+  return { ...rest, sourceRange: range };
+}
 import {
   listenLocal,
   prepareRuntimeDirectory,
@@ -144,7 +171,7 @@ type TranscriptSpeakerRequest = {
   acquisitionId?: string;
   channel: number;
   modelId: string;
-  observationRange: SelectionRange;
+  sourceRange: SelectionRange;
   generation: string;
 };
 type TranscriptSpeakerCursor = TranscriptSpeakerRequest & { bindingDigest?: string };
@@ -155,7 +182,7 @@ type TranscriptSpeakerCursor = TranscriptSpeakerRequest & { bindingDigest?: stri
  * only here. The page already carries the transcript, so the publication omits it.
  */
 function sourceTranscriptPublication(published: { generation: number | string; issues: Issue[] }) {
-  return { generation: published.generation, issues: published.issues };
+  return { generation: String(published.generation), issues: published.issues };
 }
 
 function importedAlignmentView(
@@ -902,7 +929,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: projectPictures },
       imageRenderer: {
-        implementationId: "native-source-image-v2",
+        implementationId: "native-source-image-v3",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -913,7 +940,7 @@ export async function startProjectService(options: {
           ),
       },
       sourceRenderer: {
-        implementationId: "native-source-picture-v7-cursor",
+        implementationId: "native-source-picture-v8-cursor",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -1117,11 +1144,22 @@ export async function startProjectService(options: {
         delivery,
         exports: mediaExports,
         index: projectIndex,
+        freedBytes: (id: string) =>
+          libraryUsers?.usersOf({ kind: "project", id } as never).freesBytes ?? 0,
       }),
     );
     const status = (jobId: string) => {
       const value = queue.inspect(jobId);
-      return { ...value, state: mapWorkState(value.state, edgeWorkState), jobId };
+      const { generation, ...job } = value;
+      return {
+        ...job,
+        published: job.published
+          ? { ...job.published, generation: String(job.published.generation) }
+          : job.published,
+        attemptGeneration: generation,
+        state: mapWorkState(value.state, edgeWorkState),
+        jobId,
+      };
     };
     /** A lifecycle word that is not a presence fact asks the installed files instead. */
     const modelPresence = (modelId: string, state: string) =>
@@ -1188,6 +1226,7 @@ export async function startProjectService(options: {
     ]);
     const normalizeWork = (value: unknown): unknown => {
       if (Array.isArray(value)) return value.map(normalizeWork);
+      if (typeof value === "bigint") return Number(value);
       if (!value || typeof value !== "object") return value;
       const record = value as Record<string, unknown>;
       const mapped = Object.fromEntries(
@@ -1327,7 +1366,10 @@ export async function startProjectService(options: {
           case "recording.delete":
             return {
               ok: true,
-              data: await deletion!.delete({ kind: "recording", id: operation.params.recordingId }),
+              data: await deletion!.delete(
+                { kind: "recording", id: operation.params.recordingId },
+                { requestId: operation.params.requestId },
+              ),
             };
           case "recording.cleanup":
             return { ok: true, data: captureCleanup.request(operation.params.recordingId) };
@@ -1389,6 +1431,12 @@ export async function startProjectService(options: {
               ),
             };
           case "recording.get":
+            if (operation.params.recordingId === undefined) {
+              const latest = captures.latest();
+              return latest
+                ? { ok: true, data: describeCapture(latest) }
+                : operationError(["NOT", "FOUND"].join("_"), "Recording does not exist");
+            }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
           case "recording.list": {
             const page = captures.list(operation.params.cursor, operation.params.limit);
@@ -1396,10 +1444,6 @@ export async function startProjectService(options: {
               ok: true,
               data: { ...page, recordings: page.recordings.map(describeCapture) },
             };
-          }
-          case "recording.latest": {
-            const recording = captures.latest();
-            return { ok: true, data: recording ? describeCapture(recording) : null };
           }
           case "index.get": {
             const params = operation.params;
@@ -1608,6 +1652,7 @@ export async function startProjectService(options: {
                 });
                 return {
                   ...page,
+                  presets: page.presets.map(({ id, ...preset }) => ({ ...preset, presetId: id })),
                   refresh: {
                     ...page.refresh,
                     state: page.refresh.error
@@ -1621,12 +1666,18 @@ export async function startProjectService(options: {
               })(),
             };
           case "preset.get":
-            return { ok: true, data: presets.get(operation.params.id) };
+            return {
+              ok: true,
+              data: (() => {
+                const { id, ...details } = presets.get(operation.params.presetId);
+                return { ...details, presetId: id };
+              })(),
+            };
           case "preset.update":
             return {
               ok: true,
               data: {
-                ...(await presets.update(operation.params.id)),
+                ...(await presets.update(operation.params.presetId, operation.params.requestId)),
                 state: "ready",
                 jobId: null,
               },
@@ -1634,15 +1685,22 @@ export async function startProjectService(options: {
           case "preset.create":
             return {
               ok: true,
-              data: await presets.create({
-                name: operation.params.name,
-                ...(operation.params.references === undefined
-                  ? {}
-                  : { references: operation.params.references }),
-              }),
+              data: await (async () => {
+                const { id, ...result } = await presets.create({
+                  requestId: operation.params.requestId,
+                  name: operation.params.name,
+                  ...(operation.params.references === undefined
+                    ? {}
+                    : { references: operation.params.references }),
+                });
+                return { ...result, presetId: id };
+              })(),
             };
           case "preset.delete":
-            return { ok: true, data: await presets.delete(operation.params.id) };
+            return {
+              ok: true,
+              data: await presets.delete(operation.params.presetId, operation.params.requestId),
+            };
           case "model.status": {
             const model = await models.status(operation.params.modelId);
             return {
@@ -1681,7 +1739,8 @@ export async function startProjectService(options: {
           case "alignment.observe": {
             const params = operation.params;
             if ("projectId" in params) {
-              const status = alignments.prepareProject(params);
+              const { sourceRange, ...projectParams } = params;
+              const status = alignments.prepareProject({ ...projectParams, range: sourceRange });
               return {
                 ok: true,
                 data: {
@@ -1898,8 +1957,8 @@ export async function startProjectService(options: {
             const retained = continuityReceipts.get(key);
             if (retained) {
               if (
-                retained.sourceRange.startUs !== operation.params.observationRange.startUs ||
-                retained.sourceRange.endUs !== operation.params.observationRange.endUs
+                retained.sourceRange.startUs !== operation.params.sourceRange.startUs ||
+                retained.sourceRange.endUs !== operation.params.sourceRange.endUs
               )
                 throw new CatalogError(
                   "ARTIFACT_CHANGED",
@@ -1931,7 +1990,8 @@ export async function startProjectService(options: {
             };
           }
           case "speaker.observe": {
-            const status = speakers.prepareSource(operation.params);
+            const params = operation.params;
+            const status = speakers.prepareSource(params);
             return {
               ok: true,
               data: {
@@ -1993,15 +2053,8 @@ export async function startProjectService(options: {
                 ),
               };
             }
-            const {
-              observationRange,
-              sourceRange,
-              view,
-              limit,
-              cursor,
-              packageHandle,
-              ...selection
-            } = operation.params;
+            const { sourceRange, view, limit, cursor, packageHandle, ...selection } =
+              operation.params;
             const decodedSpeakerCursor =
               cursor === undefined
                 ? undefined
@@ -2016,7 +2069,7 @@ export async function startProjectService(options: {
                 data: pageEnvelope(
                   projectPackages.sourceSpeakers(
                     packageHandle,
-                    { ...selection, sourceRange: observationRange },
+                    { ...selection, sourceRange: sourceRange },
                     {
                       ...(sourceRange === undefined ? {} : { sourceRange }),
                       ...(view === undefined ? {} : { view }),
@@ -2030,7 +2083,7 @@ export async function startProjectService(options: {
                   pageFilters(operation.params),
                 ),
               };
-            const current = speakers.sourceStatus({ ...selection, sourceRange: observationRange });
+            const current = speakers.sourceStatus({ ...selection, sourceRange: sourceRange });
             if (!current.published) {
               if (cursor)
                 throw new CatalogError(
@@ -2083,18 +2136,25 @@ export async function startProjectService(options: {
             };
           }
           case "speaker.bind": {
-            const { observationRange, generation, bindings, ...selection } = operation.params;
-            const current = speakers.sourceStatus({ ...selection, sourceRange: observationRange });
+            const {
+              sourceRange,
+              generation,
+              bindings,
+              requestId,
+              expectedBindingDigest,
+              ...selection
+            } = operation.params;
+            const current = speakers.sourceStatus({ ...selection, sourceRange: sourceRange });
             if (!current.published || current.published.evidence.generation !== generation)
               throw new CatalogError(
                 "ARTIFACT_CHANGED",
                 "Speaker generation is no longer published",
               );
             const metadata = current.published.evidence;
-            const labels = speakerLabels.bind(metadata, bindings);
+            const labels = speakerLabels.bind(metadata, bindings, requestId, expectedBindingDigest);
             return {
               ok: true,
-              data: { ...selection, observationRange, generation, bindings: labels },
+              data: { ...selection, sourceRange, generation, bindings: labels },
             };
           }
           case "join.verify": {
@@ -2289,11 +2349,24 @@ export async function startProjectService(options: {
           case "transcript.search": {
             const params = operation.params;
             if ("projectId" in params) {
+              const normalizedParams = {
+                ...params,
+                ...(params.speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: params.speakerGenerations.map((speaker) => ({
+                        ...speaker,
+                        observationRange:
+                          (speaker as { sourceRange?: unknown }).sourceRange ??
+                          (speaker as { observationRange?: unknown }).observationRange,
+                      })) as never,
+                    }),
+              };
               const projectParams =
                 params.cursor === undefined
-                  ? params
+                  ? normalizedParams
                   : {
-                      ...params,
+                      ...normalizedParams,
                       cursor: pageCursor.decode(
                         operation.operation,
                         params.cursor,
@@ -2410,12 +2483,13 @@ export async function startProjectService(options: {
                   },
                 };
               }
+              const sourceRange = sourceRangeAsMicroseconds(params.sourceRange);
               const rows = joined.cues
                 .filter(
                   (cue) =>
-                    !params.range ||
-                    (cue.source.endUs > params.range.startUs &&
-                      cue.source.startUs < params.range.endUs),
+                    !sourceRange ||
+                    (cue.source.endUs > sourceRange.startUs &&
+                      cue.source.startUs < sourceRange.endUs),
                 )
                 .slice(0, params.limit ?? 250)
                 .map((cue) => ({
@@ -2467,7 +2541,11 @@ export async function startProjectService(options: {
                     }),
                     issues: [],
                   }
-                : read.page({ range: params.range, cursor: sourceCursor, limit: params.limit });
+                : read.page({
+                    range: sourceRangeAsMicroseconds(params.sourceRange),
+                    cursor: sourceCursor,
+                    limit: params.limit,
+                  });
             let attributedPage = page;
             let pinnedSpeaker: TranscriptSpeakerCursor | undefined;
             if (speakerRequest && "rows" in page) {
@@ -2479,7 +2557,7 @@ export async function startProjectService(options: {
                   : { acquisitionId: speakerRequest.acquisitionId }),
                 channel: speakerRequest.channel,
                 modelId: speakerRequest.modelId,
-                sourceRange: speakerRequest.observationRange,
+                sourceRange: speakerRequest.sourceRange,
               });
               if (!speakerStatus.published) {
                 throw dependencyRefusal(
@@ -2515,7 +2593,7 @@ export async function startProjectService(options: {
               do {
                 const speakerPage = speakerRead.page({
                   view: "intervals",
-                  sourceRange: speakerRequest.observationRange,
+                  sourceRange: speakerRequest.sourceRange,
                   limit: 1000,
                   ...(speakerCursor === undefined ? {} : { cursor: speakerCursor }),
                 });
@@ -2570,18 +2648,34 @@ export async function startProjectService(options: {
           case "transcript.review": {
             const params = operation.params;
             if ("projectId" in params) {
+              const normalizedParams = {
+                ...params,
+                ...(params.speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: params.speakerGenerations.map((speaker) => ({
+                        ...speaker,
+                        observationRange:
+                          (speaker as { sourceRange?: unknown }).sourceRange ??
+                          (speaker as { observationRange?: unknown }).observationRange,
+                      })) as never,
+                    }),
+              };
               const projectParams =
                 params.cursor === undefined
-                  ? params
+                  ? normalizedParams
                   : {
-                      ...params,
+                      ...normalizedParams,
                       cursor: pageCursor.decode(
                         "transcript.review",
                         params.cursor,
                         pageFilters(operation.params),
                       ),
                     };
-              const requested = projectEvidence.request({ ...projectParams, prepare: true });
+              const requested = projectEvidence.request({
+                ...projectParams,
+                prepare: true,
+              } as never);
               const pending = requested.dependencies.filter(
                 (dependency) =>
                   dependency.state === "unavailable" && dependency.reason === "model_not_prepared",
@@ -2606,12 +2700,12 @@ export async function startProjectService(options: {
                 if (dependency.transcript || dependency.reason === "no_audio") continue;
                 transcripts.prepareSource(dependency.selection);
               }
-              const ready = projectEvidence.request({ ...projectParams, prepare: true });
+              const ready = projectEvidence.request({ ...projectParams, prepare: true } as never);
               if (!ready.published) return { ok: true, data: { ...ready } };
               return {
                 ok: true,
                 data: pageEnvelope(
-                  await projectEvidence.get(projectParams),
+                  await projectEvidence.get(projectParams as never),
                   "transcript.review",
                   pageFilters(operation.params),
                 ),
@@ -2629,10 +2723,10 @@ export async function startProjectService(options: {
               params.cursor === undefined
                 ? undefined
                 : pageCursor.decode("transcript.review", params.cursor, pageFilters(params));
-            const reviewRange = params.range;
+            const reviewRange = sourceRangeAsMicroseconds(params.sourceRange);
             const reviewSelection = {
               ...selection,
-              ...(reviewRange === undefined ? {} : { executionRange: reviewRange }),
+              ...(reviewRange === undefined ? {} : { sourceRange: reviewRange }),
             };
             let current = transcripts.sourceStatus(reviewSelection);
             if (current.reason === "no_audio") return { ok: true, data: { ...current } };
@@ -2804,10 +2898,9 @@ export async function startProjectService(options: {
           case "waveform.get":
           case "spectrogram.get": {
             const spectrum = operation.operation === "spectrogram.get";
+            const params = internalAudioSelection(operation.params);
             const status = await acoustics.request(
-              spectrum
-                ? { ...operation.params, kind: "spectrum", format: "image" }
-                : operation.params,
+              spectrum ? { ...params, kind: "spectrum", format: "image" } : params,
             );
             return {
               ok: true,
@@ -2840,7 +2933,7 @@ export async function startProjectService(options: {
             };
           }
           case "audio.extract": {
-            const status = extractedAudio.request(operation.params);
+            const status = extractedAudio.request(internalAudioSelection(operation.params));
             return {
               ok: true,
               data: {
@@ -2868,7 +2961,11 @@ export async function startProjectService(options: {
             };
           }
           case "audio.measure": {
-            const status = await acoustics.request({ ...operation.params, kind: "loudness" });
+            const measureParams = operation.params;
+            const status = await acoustics.request({
+              ...internalAudioSelection(measureParams),
+              kind: "loudness",
+            });
             return {
               ok: true,
               data: {
@@ -2893,7 +2990,10 @@ export async function startProjectService(options: {
               limit,
               filters: pageFilters(operation.params),
             });
-            const status = await acoustics.request({ ...selection, kind: "pause" });
+            const status = await acoustics.request({
+              ...internalAudioSelection(selection),
+              kind: "pause",
+            });
             const allIntervals =
               status.published?.artifact.analysis.kind === "pause"
                 ? status.published.artifact.analysis.intervals
@@ -2931,12 +3031,14 @@ export async function startProjectService(options: {
           }
           case "audio.get": {
             const params = operation.params;
-            const status = await mediaAudio.request(params);
+            const status = await mediaAudio.request(internalAudioSelection(params));
             return {
               ok: true,
               data: {
                 ...status,
-                published: publishedOutput(status.published, (value) => value.audio),
+                published: publishedOutput(status.published, (value) =>
+                  publicAudioOutput(value.audio, "assetId" in params),
+                ),
                 delivery: status.published
                   ? delivery.open(
                       "assetId" in params
@@ -2950,8 +3052,7 @@ export async function startProjectService(options: {
           }
           case "storage.usage":
             return { ok: true, data: await managedStorage.usage() };
-          case "inspect.open":
-          case "inspect": {
+          case "inspect.open": {
             const params = operation.params;
             const project = projects.get(params.projectId);
             const revision = projects.revision(params.projectId, params.revisionId);
@@ -3008,7 +3109,14 @@ export async function startProjectService(options: {
                 ...(range === undefined ? {} : { range }),
                 ...(trackIds === undefined ? {} : { trackIds }),
                 ...(sourceGenerations === undefined ? {} : { sourceGenerations }),
-                ...(speakerGenerations === undefined ? {} : { speakerGenerations }),
+                ...(speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: speakerGenerations.map(({ sourceRange, ...speaker }) => ({
+                        ...speaker,
+                        observationRange: sourceRange,
+                      })),
+                    }),
                 limit,
                 prepare: false,
               });
@@ -3078,7 +3186,13 @@ export async function startProjectService(options: {
               data: {
                 projectId: operation.params.projectId,
                 revisionId: operation.params.revisionId,
-                ...layoutDiagnostics(operation.params.samples, operation.params.maxIssues ?? 100),
+                ...layoutDiagnostics(
+                  operation.params.samples.map((sample) => ({
+                    ...sample,
+                    texts: sample.texts.map(({ textId, ...text }) => ({ ...text, id: textId })),
+                  })),
+                  operation.params.maxIssueCount ?? 100,
+                ),
               },
             };
           case "project.create":
@@ -3093,7 +3207,10 @@ export async function startProjectService(options: {
           case "project.delete":
             return {
               ok: true,
-              data: await deletion!.delete({ kind: "project", id: operation.params.projectId }),
+              data: await deletion!.delete(
+                { kind: "project", id: operation.params.projectId },
+                { requestId: operation.params.requestId },
+              ),
             };
           case "project.get":
             return { ok: true, data: projects.get(operation.params.projectId) };
@@ -3118,7 +3235,15 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: {
-                revision: projects.correctSpeakers(operation.params.projectId, operation.params),
+                revision: projects.correctSpeakers(operation.params.projectId, {
+                  ...operation.params,
+                  corrections: operation.params.corrections.map(
+                    ({ correctionId, ...correction }) => ({
+                      ...correction,
+                      id: correctionId,
+                    }),
+                  ),
+                }),
               },
             };
           case "processing.get":
@@ -3221,8 +3346,10 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "asset.get":
-            return { ok: true, data: assets.describe(operation.params.assetId) };
+          case "asset.get": {
+            const { id, bytes, ...asset } = assets.describe(operation.params.assetId);
+            return { ok: true, data: { ...asset, assetId: id, sizeBytes: bytes } };
+          }
           case "asset.segments":
             return {
               ok: true,
@@ -3242,12 +3369,24 @@ export async function startProjectService(options: {
           case "asset.list":
             return {
               ok: true,
-              data: assets.list({
-                ...(operation.params.cursor === undefined
-                  ? {}
-                  : { cursor: operation.params.cursor }),
-                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
-              }),
+              data: (() => {
+                const page = assets.list({
+                  ...(operation.params.cursor === undefined
+                    ? {}
+                    : { cursor: operation.params.cursor }),
+                  ...(operation.params.limit === undefined
+                    ? {}
+                    : { limit: operation.params.limit }),
+                });
+                return {
+                  ...page,
+                  assets: page.assets.map(({ id, bytes, ...asset }) => ({
+                    ...asset,
+                    assetId: id,
+                    sizeBytes: bytes,
+                  })),
+                };
+              })(),
             };
           case "preview.get": {
             const params = operation.params;
@@ -3266,7 +3405,10 @@ export async function startProjectService(options: {
             };
           }
           case "package.open":
-            return { ok: true, data: await projectPackages.open(operation.params.path) };
+            return {
+              ok: true,
+              data: await projectPackages.open(operation.params.path, operation.params.requestId),
+            };
           case "package.status":
             return { ok: true, data: projectPackages.status(operation.params.admissionId) };
           case "package.close":
@@ -3283,13 +3425,25 @@ export async function startProjectService(options: {
               ),
             };
           case "export.create":
-            return { ok: true, data: await mediaExports.create(operation.params) };
+            return {
+              ok: true,
+              data: await mediaExports.create({
+                ...operation.params,
+                exportId: operation.params.requestId,
+              } as never),
+            };
           case "export.list":
             return { ok: true, data: mediaExports.list(operation.params) };
           case "export.status":
             return { ok: true, data: mediaExports.status(operation.params.exportId) };
           case "export.recover":
-            return { ok: true, data: await mediaExports.recover(operation.params.exportId) };
+            return {
+              ok: true,
+              data: await mediaExports.recover(
+                operation.params.exportId,
+                operation.params.requestId,
+              ),
+            };
           case "export.cancel":
             mediaExports.cancel(operation.params.exportId);
             return { ok: true, data: mediaExports.status(operation.params.exportId) };
@@ -3301,15 +3455,18 @@ export async function startProjectService(options: {
               ok: true,
               data: delivery.read(
                 operation.params.token,
-                operation.params.offset,
+                operation.params.offsetBytes,
                 operation.params.maxBytes,
               ),
             };
           case "artifact.renew":
-            return { ok: true, data: delivery.renew(operation.params.token) };
+            return {
+              ok: true,
+              data: delivery.renew(operation.params.token, operation.params.requestId),
+            };
           case "artifact.close":
             delivery.close(operation.params.token);
-            return { ok: true, data: { closed: true } };
+            return { ok: true, data: { token: operation.params.token, closed: true } };
           case "job.get":
             return { ok: true, data: status(operation.params.jobId) };
           case "job.retry": {
@@ -3400,6 +3557,7 @@ export async function startProjectService(options: {
         delivery,
         files,
         sources: captureSources,
+        freedBytes: (id) => libraryUsers?.usersOf({ kind: "recording", id }).freesBytes ?? 0,
       }),
     );
     listenerStarting = listenLocal({
@@ -3475,7 +3633,7 @@ export async function startProjectService(options: {
         admission.progress();
         console.error(error);
       });
-    return { socketPath: listener.socketPath, assets, libraryUsers, close };
+    return { socketPath: listener.socketPath, assets, captures, libraryUsers, close };
   } catch (error) {
     await close();
     throw error;

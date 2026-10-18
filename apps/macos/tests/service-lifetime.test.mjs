@@ -63,10 +63,19 @@ test("ordinary launch owns one service child and answers health without starting
   assert.equal(exists(join(home, "recordings")), false);
   const latest = await callLocal(socketPath(home), {
     id: "idle-latest",
-    operation: "recording.latest",
+    operation: "recording.get",
     params: {},
   });
-  assert.deepEqual(latest, { id: "idle-latest", ok: true, data: null });
+  assert.deepEqual(latest, {
+    id: "idle-latest",
+    ok: false,
+    error: {
+      code: "NOT_FOUND",
+      message: "Recording does not exist",
+      retryable: false,
+      details: {},
+    },
+  });
   assert.doesNotMatch(instance.diagnostics, /capture|permission/i);
 });
 

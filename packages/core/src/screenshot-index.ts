@@ -93,6 +93,8 @@ export type IndexDomain<D extends IndexRecords> = {
     close(): Promise<unknown>;
   };
   isDeleting(owner: IndexOwner): boolean;
+  /** The current strict retained frame record; a record from an older evidence format is stale. */
+  retainedFrame: { safeParse(value: unknown): { success: boolean } };
 };
 type Generation = {
   identity: string;
@@ -765,11 +767,15 @@ export class ScreenshotIndexStore<
         ...(query.through === undefined ? [] : [query.through]),
         query.limit,
       ) as Pick<Entry, "candidate" | "frame" | "coverageCount">[];
-    return rows.map(({ candidate, frame, coverageCount }) => ({
-      candidate: JSON.parse(candidate),
-      frame: JSON.parse(frame),
-      coverageCount,
-    }));
+    return rows.map(({ candidate, frame, coverageCount }) => {
+      const record: unknown = JSON.parse(frame);
+      if (!this.domain.retainedFrame.safeParse(record).success)
+        throw new CatalogError(
+          "ARTIFACT_CHANGED",
+          "Retained index predates the current evidence format; request the index again",
+        );
+      return { candidate: JSON.parse(candidate), frame: record as D["frame"], coverageCount };
+    });
   }
   protected coverageRows(identity: D["identity"], query: CoverageQuery): IndexCoverage<D>[] {
     const rows = this.store.catalog

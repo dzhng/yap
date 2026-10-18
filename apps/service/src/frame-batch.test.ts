@@ -1,6 +1,14 @@
 import { afterEach, expect, test } from "vitest";
 import { writeFile, readFile, chmod } from "node:fs/promises";
-import type { OperationFailure, OperationResult } from "@yap/protocol";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import {
+  faceObservationsSchema,
+  pictureObservationsSchema,
+  type OperationFailure,
+  type OperationResult,
+} from "@yap/protocol";
 import type { MediaFrameInspection } from "@yap/core/frame-inspection";
 import type { SourceSelection } from "@yap/core/source-selection";
 import type { DerivativeDelivery } from "./delivery.js";
@@ -28,77 +36,82 @@ function batch(reply: OperationResult) {
   if (!reply.ok) throw new Error(JSON.stringify(reply));
   return reply.data as SourceSelection & { items: FrameItem[] };
 }
-async function fixture() {
+async function fixture(home?: string) {
   const observationRequests: unknown[] = [];
   const attempts: number[] = [],
     failures = new Set<number>();
-  const f = await projectServiceFixture(cleanups, async (operation, params) => {
-    if (operation === "media.probe")
+  const f = await projectServiceFixture(
+    cleanups,
+    async (operation, params) => {
+      if (operation === "media.probe")
+        return {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              {
+                id: "v",
+                kind: "video",
+                codec: "fixture",
+                decodable: true,
+                startUs: 0,
+                endUs: 1_000_000,
+                segments: [{ startUs: 0, endUs: 1_000_000, empty: false }],
+                width: 1,
+                height: 1,
+                orientedWidth: 1,
+                orientedHeight: 1,
+              },
+            ],
+          },
+        };
+      expect(operation).toBe("media.sourceFrame");
+      const at = Number(params.atUs);
+      observationRequests.push(params.observations);
+      attempts.push(at);
+      if (failures.has(at))
+        return {
+          ok: false,
+          error: {
+            code: "DECODE_FAILED",
+            message: "controlled picture failure",
+            retryable: true,
+            details: {},
+          },
+        };
+      const asset = params.asset as { assetId: string; streamId: string };
+      await writeFile(String(params.output), png, { flag: "wx" });
+      // This native edge proves service/cache/delivery behavior, not decoded pixel quality.
       return {
         ok: true,
         data: {
-          originUs: 0,
-          streams: [
-            {
-              id: "v",
-              kind: "video",
-              codec: "fixture",
-              decodable: true,
-              startUs: 0,
-              endUs: 1_000_000,
-              segments: [{ startUs: 0, endUs: 1_000_000, empty: false }],
-              width: 1,
-              height: 1,
-              orientedWidth: 1,
-              orientedHeight: 1,
-            },
-          ],
+          file: params.output,
+          mediaType: "image/png",
+          assetId: asset.assetId,
+          streamId: asset.streamId,
+          requestedSourceUs: at,
+          actualSourceUs: at,
+          sample: {
+            value: String(at),
+            timescale: 1_000_000,
+            endValue: String(at + 100_000),
+            endTimescale: 1_000_000,
+            originUs: 0,
+          },
+          width: 1,
+          height: 1,
+          sourceWidth: 1,
+          sourceHeight: 1,
+          decodedSamples: 1,
+          readerOpens: 1,
+          bytes: png.length,
+          ...(params.observations ? { observations: whiteObservations(params.observations) } : {}),
+          ...(params.faceObservations ? { faceObservations: oneFace } : {}),
         },
       };
-    expect(operation).toBe("media.sourceFrame");
-    const at = Number(params.atUs);
-    observationRequests.push(params.observations);
-    attempts.push(at);
-    if (failures.has(at))
-      return {
-        ok: false,
-        error: {
-          code: "DECODE_FAILED",
-          message: "controlled picture failure",
-          retryable: true,
-          details: {},
-        },
-      };
-    const asset = params.asset as { assetId: string; streamId: string };
-    await writeFile(String(params.output), png, { flag: "wx" });
-    // This native edge proves service/cache/delivery behavior, not decoded pixel quality.
-    return {
-      ok: true,
-      data: {
-        file: params.output,
-        mediaType: "image/png",
-        assetId: asset.assetId,
-        streamId: asset.streamId,
-        requestedSourceUs: at,
-        actualSourceUs: at,
-        sample: {
-          value: String(at),
-          timescale: 1_000_000,
-          endValue: String(at + 100_000),
-          endTimescale: 1_000_000,
-          originUs: 0,
-        },
-        width: 1,
-        height: 1,
-        sourceWidth: 1,
-        sourceHeight: 1,
-        decodedSamples: 1,
-        readerOpens: 1,
-        bytes: png.length,
-        ...(params.observations ? { observations: whiteObservations(params.observations) } : {}),
-      },
-    };
-  });
+    },
+    home,
+  );
   const imported = await f.call("asset.import", { requestId: "batch-source", path: f.path });
   if (!imported.ok) throw new Error(JSON.stringify(imported));
   const job = imported.data as { jobId: string };
@@ -149,10 +162,18 @@ test("service source batches isolate invalid admission and retain ordered duplic
       requestedSourceUs: item.atUs,
       actualSourceUs: item.atUs,
     });
-    const part = await f.call("artifact.read", { token: item.data.delivery!.token, offset: 0 });
+    const part = await f.call("artifact.read", {
+      token: item.data.delivery!.token,
+      offsetBytes: 0,
+    });
     expect(part).toMatchObject({
       ok: true,
-      data: { offset: 0, nextOffset: png.length, eof: true, data: png.toString("base64") },
+      data: {
+        offsetBytes: 0,
+        nextOffsetBytes: png.length,
+        eof: true,
+        data: png.toString("base64"),
+      },
     });
     expect(await readFile(item.data.published!.output.file)).toEqual(png);
   }
@@ -223,7 +244,7 @@ test("service source batches require independent explicit retry of a failed pict
   expect(final.items[0]).toMatchObject({ ok: true, data: { published: published.data.published } });
   expect(final.items[1]).toMatchObject({
     ok: true,
-    data: { state: "ready", jobId: bad.data.jobId, published: { generation: 2 } },
+    data: { state: "ready", jobId: bad.data.jobId, published: { generation: "2" } },
   });
   for (const item of final.items) {
     if (!item.ok) throw new Error(JSON.stringify(item));
@@ -233,6 +254,15 @@ test("service source batches require independent explicit retry of a failed pict
   await closeDeliveries(f, final.items);
 });
 
+const oneFace = {
+  recipe: "vision-face-rectangles-v1",
+  implementationId: "vision-face-rectangles-v1:revision-3:fixture-OS",
+  coordinateSpace: "delivered-top-left-pixels",
+  width: 1,
+  height: 1,
+  status: "available",
+  faces: [{ faceId: "face-0", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, confidence: 0.9 }],
+};
 function whiteObservations(request: unknown) {
   const histogram = Array<number>(256).fill(0);
   histogram[255] = 1;
@@ -245,6 +275,22 @@ function whiteObservations(request: unknown) {
     brightFraction: 1,
   };
   const rect = { x: 0, y: 0, width: 1, height: 1 };
+  const measured = (regionId: string) => ({
+    regionId,
+    requestedRect: rect,
+    sampledRect: rect,
+    state: "measured",
+    coverage: {
+      requestedPixels: 1,
+      rasterPixels: 1,
+      opaquePixels: 1,
+      transparentPixels: 0,
+      partialAlphaPixels: 0,
+    },
+    channels: { red: metric, green: metric, blue: metric },
+    luma: metric,
+  });
+  const regions = (request as { regions?: { regionId: string }[] }).regions ?? [];
   return {
     recipe: "profile-managed-srgb-rgba8-rec709-encoded-luma-opaque-only-v1",
     coordinateSpace: "delivered-top-left-pixels",
@@ -256,22 +302,8 @@ function whiteObservations(request: unknown) {
     height: 1,
     rgbaSha256: "b".repeat(64),
     request,
-    full: {
-      id: "full",
-      requestedRect: rect,
-      sampledRect: rect,
-      state: "measured",
-      coverage: {
-        requestedPixels: 1,
-        rasterPixels: 1,
-        opaquePixels: 1,
-        transparentPixels: 0,
-        partialAlphaPixels: 0,
-      },
-      channels: { red: metric, green: metric, blue: metric },
-      luma: metric,
-    },
-    regions: [],
+    full: measured("full"),
+    regions: regions.map((region) => measured(region.regionId)),
     edgeBands: [],
   };
 }
@@ -314,4 +346,91 @@ test("public picture observations are retained with selection and create a disti
   });
   expect(f.observationRequests).toEqual([undefined, normalized]);
   await closeDeliveries(f, received.items);
+});
+
+/** Rewrites retained catalog JSON the way the last build before the noun-ID cutover wrote it. */
+function writeAsBeforeNounIds(home: string) {
+  const old = (text: string) =>
+    text
+      .replaceAll('"regionId":', '"id":')
+      .replaceAll('"faceId":', '"id":')
+      .replaceAll('"native-source-picture-v8-cursor"', '"native-source-picture-v7-cursor"');
+  const db = new DatabaseSync(join(home, "library", "catalog.sqlite"));
+  try {
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+      .all() as { name: string }[];
+    let rewritten = 0;
+    for (const { name } of tables) {
+      const columns = (db.prepare(`PRAGMA table_info("${name}")`).all() as { name: string }[]).map(
+        (column) => column.name,
+      );
+      for (const row of db.prepare(`SELECT * FROM "${name}"`).all() as Record<string, unknown>[]) {
+        const next: Record<string, unknown> = {};
+        for (const column of columns) {
+          const value = row[column];
+          if (typeof value === "string" && old(value) !== value) next[column] = old(value);
+        }
+        if (typeof next.input === "string" && columns.includes("inputSha256"))
+          next.inputSha256 = createHash("sha256").update(next.input).digest("hex");
+        const changed = Object.keys(next);
+        if (!changed.length) continue;
+        rewritten++;
+        // Some catalog tables are WITHOUT ROWID; the complete prior row identifies the record.
+        db.prepare(
+          `UPDATE "${name}" SET ${changed.map((column) => `"${column}"=?`).join(",")} WHERE ${columns
+            .map((column) => `"${column}" IS ?`)
+            .join(" AND ")}`,
+        ).run(
+          ...(changed.map((column) => next[column]) as string[]),
+          ...(columns.map((column) => row[column]) as string[]),
+        );
+      }
+    }
+    return rewritten;
+  } finally {
+    db.close();
+  }
+}
+
+test("source frames retained before the noun-ID cutover regenerate instead of serving bare ids", async () => {
+  const f = await fixture();
+  const selections = [
+    { faceObservations: {}, observations: {} },
+    {
+      faceObservations: {},
+      observations: { regions: [{ regionId: "r", rect: { x: 0, y: 0, width: 1, height: 1 } }] },
+    },
+  ].map((extra) => ({ ...f.selection, atUs: 0, ...extra }));
+  const before = new Map<number, string>();
+  for (const [index, selection] of selections.entries()) {
+    const requested = await f.call("frame.get", selection);
+    if (!requested.ok) throw new Error(JSON.stringify(requested));
+    const jobId = (requested.data as { jobId: string }).jobId;
+    await f.job(jobId, "ready");
+    before.set(index, jobId);
+  }
+  await f.service.close();
+  expect(writeAsBeforeNounIds(f.home)).toBeGreaterThan(0);
+
+  const upgraded = await fixture(f.home);
+  for (const [index, selection] of selections.entries()) {
+    const reply = await upgraded.call("frame.get", selection);
+    if (!reply.ok) throw new Error(JSON.stringify(reply));
+    const status = reply.data as FrameStatus;
+    // Evidence from the earlier build is stale, never projected under the new public names.
+    expect(status.published).toBeNull();
+    expect(status.jobId).not.toBe(before.get(index));
+    await upgraded.job(status.jobId!, "ready");
+    const ready = await upgraded.call("frame.get", selection);
+    if (!ready.ok) throw new Error(JSON.stringify(ready));
+    const output = (ready.data as FrameStatus).published!.output as {
+      observations: unknown;
+      faceObservations: unknown;
+    };
+    expect(pictureObservationsSchema.parse(output.observations)).toBeDefined();
+    expect(faceObservationsSchema.parse(output.faceObservations).faces[0]!.faceId).toBe("face-0");
+    const token = (ready.data as FrameStatus).delivery?.token;
+    if (token) await upgraded.call("artifact.close", { token });
+  }
 });

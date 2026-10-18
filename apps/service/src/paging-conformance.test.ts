@@ -147,7 +147,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "assets",
-      ids: (value) => (value as { id: string }).id,
+      ids: (value) => (value as { assetId: string }).assetId,
       expectedOrder: assetIds.reverse(),
     };
   },
@@ -214,7 +214,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "presets",
-      ids: (value) => (value as { id: string }).id,
+      ids: (value) => (value as { presetId: string }).presetId,
     };
   },
   "revision.history": async () => {
@@ -293,7 +293,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       data(
         await f.call("export.create", {
           projectId,
-          exportId,
+          requestId: exportId,
           kind: "video",
           directory: f.home,
           leaf: `${exportId}.mp4`,
@@ -321,7 +321,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       assetId,
       streamId: "audio-1",
       channel: 0,
-      range: { startUs: 0, endUs: 4_000_000 },
+      sourceRange: { startUs: 0, endUs: 4_000_000 },
     });
     const candidate = {
       offsetUs: 120_000,
@@ -380,13 +380,16 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
   },
   "transcript.review": async () => {
     const f = await transcribed();
-    const params = { ...f.selection, range: { startUs: 0, endUs: 6_000_000 } };
+    const params = {
+      ...f.selection,
+      sourceRange: { startUs: 0, endUs: 6_000_000 },
+    };
     await ready(f, "transcript.review", params);
     return {
       call: f.call,
       params,
       plural: "rows",
-      otherFilters: [{ ...params, range: { startUs: 0, endUs: 2_000_000 } }],
+      otherFilters: [{ ...params, sourceRange: { startUs: 0, endUs: 2_000_000 } }],
     };
   },
   "transcript.search": async () => {
@@ -472,7 +475,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       "5.000 6.000 speaker_1",
     ]);
     const { sourceRange, ...selection } = input;
-    const params = { ...selection, observationRange: sourceRange };
+    const params = { ...selection, sourceRange: sourceRange };
     return {
       call: f.call,
       params,

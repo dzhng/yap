@@ -27,6 +27,8 @@ import {
 } from "@yap/client";
 import {
   operationNames,
+  readOnlyOperations,
+  idempotentOperations,
   admitOperation,
   operationSchema,
   FrameError,
@@ -107,9 +109,17 @@ function request(id: string, operation: string, params: unknown): OperationReque
       "UNKNOWN_OPERATION",
       `Unknown service operation: ${operation.slice(0, 120)}`,
     );
-  const sending = parseRequest({ id, operation, params });
+  const normalizedParams =
+    params &&
+    typeof params === "object" &&
+    !readOnlyOperations.has(operation as never) &&
+    !idempotentOperations.has(operation as never) &&
+    !("requestId" in params)
+      ? { ...(params as Record<string, unknown>), requestId: id }
+      : params;
+  const sending = parseRequest({ id, operation, params: normalizedParams });
   encodeJsonLine(sending, REQUEST_FRAME_BYTES);
-  const admitted = admitOperation({ operation, params });
+  const admitted = admitOperation({ operation, params: normalizedParams });
   if (!admitted.ok)
     throw new UsageError(admitted.error.code, admitted.error.message, admitted.error.details);
   return sending;
@@ -392,7 +402,7 @@ async function main() {
           }
           const output = join(directory, `${String(index + 1).padStart(2, "0")}.png`);
           await publishArtifactFile(
-            { bytes: media.bytes.length, mediaType: media.mediaType },
+            { sizeBytes: media.bytes.length, mediaType: media.mediaType },
             [media.bytes],
             output,
             selected.signal,

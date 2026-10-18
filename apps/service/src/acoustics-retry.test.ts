@@ -160,7 +160,7 @@ test("a waveform whose audio prerequisite failed recovers through job.retry on t
   const ready = await until(f, "waveform.get", "ready");
   expect(ready).toMatchObject({ dependency: { jobId: failed.jobId, state: "ready" } });
   expect(ready.jobId).not.toBe(failed.jobId);
-  const read = await f.call("artifact.read", { token: ready.delivery!.token, offset: 0 });
+  const read = await f.call("artifact.read", { token: ready.delivery!.token, offsetBytes: 0 });
   if (!read.ok) throw new Error(JSON.stringify(read));
   expect(
     JSON.parse(Buffer.from((read.data as { data: string }).data, "base64").toString()),
@@ -191,12 +191,12 @@ test("a spectrogram whose image render failed recovers through job.retry and del
     data: { jobId: failed.jobId },
   });
   const ready = await until(f, "spectrogram.get", "ready");
-  expect(ready).toMatchObject({ jobId: failed.jobId, published: { generation: 2 } });
+  expect(ready).toMatchObject({ jobId: failed.jobId, published: { generation: "2" } });
   expect(f.calls.filter((call) => call === "media.acousticImage")).toHaveLength(2);
   expect(f.calls.filter((call) => call === "media.sourceAudio")).toHaveLength(1);
   const read = await f.call("artifact.read", {
     token: ready.delivery!.token,
-    offset: 0,
+    offsetBytes: 0,
     maxBytes: png.length,
   });
   expect(read).toMatchObject({ ok: true, data: { data: png.toString("base64"), eof: true } });

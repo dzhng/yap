@@ -42,7 +42,7 @@ try {
     });
     await service.start();
     const recording = await poll(
-      () => service.call("recording.latest", {}),
+      () => service.call("recording.get", {}),
       (value) =>
         value.sourceAdmissions.length === 2 &&
         value.sourceAdmissions.every((source) => source.job?.state === "failed"),

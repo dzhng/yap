@@ -150,6 +150,13 @@ export class ProjectPackages {
   }
   private parent: Awaited<ReturnType<typeof openPackageParent>> | undefined;
   private registry: PackageRegistry<ValidatedProjectPackage, ProjectPackageManifest> | undefined;
+  private readonly openRequests = new Map<
+    string,
+    {
+      path: string;
+      result: ReturnType<PackageRegistry<ValidatedProjectPackage, ProjectPackageManifest>["open"]>;
+    }
+  >();
   private preparing: Promise<void> | undefined;
   private closed = false;
   constructor(private readonly owners: Owners) {}
@@ -241,9 +248,20 @@ export class ProjectPackages {
     });
     return this.preparing;
   }
-  async open(path: string) {
+  async open(path: string, requestId?: string) {
+    const prior = requestId ? this.openRequests.get(requestId) : undefined;
+    if (prior) {
+      if (prior.path !== path)
+        throw new CatalogError(
+          "REQUEST_CONFLICT",
+          "Request identity names a different package path",
+        );
+      return prior.result;
+    }
     await this.prepare();
-    return this.registry!.open(path);
+    const result = this.registry!.open(path);
+    if (requestId) this.openRequests.set(requestId, { path, result });
+    return result;
   }
   projectSpeakers(packageHandle: string, input: ProjectSpeakerInput) {
     if (!this.registry) throw new CatalogError("CONTEXT_CLOSED", "Project package is not open");

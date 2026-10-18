@@ -368,5 +368,6 @@ export function projectIndexDomain(
       active = undefined;
     },
     isDeleting: (owner) => owner.kind === "project" && read.isDeleting(owner.projectId),
+    retainedFrame: retainedProjectFrameSchema,
   };
 }

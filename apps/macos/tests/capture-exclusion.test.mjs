@@ -52,7 +52,7 @@ async function displayTake(origin) {
   const display = sources.displays[0];
   const started = await succeeds(home, "capture.start", {
     requestId: randomUUID(),
-    source: { kind: "display", displayId: display.id },
+    source: { kind: "display", displayId: display.displayId },
     microphone: false,
     systemAudio: false,
   });
@@ -61,7 +61,7 @@ async function displayTake(origin) {
   );
   assert.equal(
     Number(onDisplay),
-    display.id,
+    display.displayId,
     "The controls have to be on the display this take records, or this proves nothing",
   );
   await delay(seconds * 1000);

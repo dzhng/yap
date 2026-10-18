@@ -9,7 +9,7 @@ const sourceEndpointSchema = z.strictObject({
   streamId: id,
   acquisitionId: id.optional(),
   channel: z.int().nonnegative(),
-  range: selectionRangeSchema,
+  sourceRange: selectionRangeSchema,
 });
 const projectEndpointSchema = z.strictObject({
   kind: z.literal("project"),
@@ -18,7 +18,7 @@ const projectEndpointSchema = z.strictObject({
   preparedResourceId: id,
   tap: processingTapSchema,
   channel: z.int().nonnegative(),
-  range: selectionRangeSchema,
+  sourceRange: selectionRangeSchema,
 });
 export const correspondenceEndpointSchema = z.discriminatedUnion("kind", [
   sourceEndpointSchema,

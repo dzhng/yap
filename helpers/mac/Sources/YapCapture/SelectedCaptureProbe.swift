@@ -44,10 +44,10 @@ public final class SelectedCaptureProbe {
             }
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             return try JSONSerialization.data(withJSONObject: [
-                "cameras": NativeCapture.cameraDevices().map { ["id": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
-                "microphones": NativeCapture.microphoneCandidates().map { ["id": $0.uniqueID, "name": $0.localizedName] },
-                "displays": content.displays.map { ["id": $0.displayID, "width": $0.width, "height": $0.height] },
-                "windows": content.windows.map { ["id": $0.windowID, "title": $0.title ?? ""] as [String: Any] },
+                "cameras": NativeCapture.cameraDevices().map { ["cameraId": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
+                "microphones": NativeCapture.microphoneCandidates().map { ["microphoneId": $0.uniqueID, "name": $0.localizedName] },
+                "displays": content.displays.map { ["displayId": $0.displayID, "width": $0.width, "height": $0.height] },
+                "windows": content.windows.map { ["windowId": $0.windowID, "title": $0.title ?? ""] as [String: Any] },
             ])
         case "permission-camera":
             let granted = await AVCaptureDevice.requestAccess(for: .video)

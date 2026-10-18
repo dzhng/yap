@@ -55,7 +55,7 @@ let otherFolder = CommandLine.arguments[3]
             owner["currentRevisionId"] = revision
             answer = owner
         case "export.create":
-            let id = params["exportId"] as! String
+            let id = params["requestId"] as! String
             var receipt: [String: Any] = ["exportId": id, "kind": params["kind"]!,
                 "snapshot": ["revisionId": params["revisionId"]!], "state": "queued",
                 "destination": ["directory": params["directory"]!, "leaf": params["leaf"]!],
@@ -128,7 +128,7 @@ let otherFolder = CommandLine.arguments[3]
         precondition(request["revisionId"] as? String == "r-before" && request["kind"] as? String == "processed-package")
         precondition(request["directory"] as? String == canonicalFolder && request["leaf"] as? String == "requested.zip", "Chosen directory mismatch: \(request["directory"]!) vs \(canonicalFolder)")
         precondition(chooser.names == ["Project Named - project- test second line r-before.zip"])
-        let id = request["exportId"] as! String
+        let id = request["requestId"] as! String
         precondition(id == id.lowercased() && UUID(uuidString: id) != nil)
         try! FileManager.default.removeItem(atPath: selectedFolder)
         try! FileManager.default.createSymbolicLink(atPath: selectedFolder, withDestinationPath: otherFolder)

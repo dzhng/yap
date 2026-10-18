@@ -45,7 +45,7 @@ const call = (operation, params = {}) => {
   return answer.data;
 };
 
-const recordingId = values.recording ?? call("recording.latest").recordingId;
+const recordingId = values.recording ?? call("recording.get").recordingId;
 const recording = call("recording.get", { recordingId });
 const source = join(home, "library", "recordings", recordingId, "source");
 const video = join(source, "video.mov");

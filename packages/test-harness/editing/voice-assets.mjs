@@ -475,13 +475,14 @@ try {
   ]);
   const exporting = await call("export.create", {
     projectId: carrier.projectId,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: out,
     leaf: "generated.zip",
   });
+  const exportId = exporting.exportId;
   const exported = await poll(
-    () => call("export.status", { exportId: exporting.exportId }),
+    () => call("export.status", { exportId }),
     (v) => v.state === "ready",
     "export",
   );

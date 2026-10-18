@@ -240,7 +240,7 @@ test("production service measurement leases deliver complete JSON to CLI and MCP
     await callLocal(service.socketPath, {
       id: "closed",
       operation: "artifact.read",
-      params: { token: measured.result.data.delivery.token, offset: 0 },
+      params: { token: measured.result.data.delivery.token, offsetBytes: 0 },
     }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_EXPIRED" } });
 }, 15000);

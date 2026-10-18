@@ -38,7 +38,7 @@ export const faceObservationsSchema = z
     faces: z
       .array(
         z.strictObject({
-          id: z.string().regex(/^face-[0-9]+$/),
+          faceId: z.string().regex(/^face-[0-9]+$/),
           boundingBox: faceBoxSchema,
           confidence: z.number().finite().min(0).max(1),
           landmarkCoverage: landmarkCoverageSchema.optional(),

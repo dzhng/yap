@@ -252,12 +252,12 @@ test("thirty-minute generated native index scale", { timeout: timeoutMs + 150_00
       });
       assert.equal(page.state, "ready");
       pages++;
-      candidates += page.page.entries.length;
-      if (!page.page.nextCursor) break;
-      assert.notDeepEqual(page.page.nextCursor, cursor, "Paging must advance");
-      cursor = page.page.nextCursor;
+      candidates += page.entries.length;
+      if (!page.nextCursor) break;
+      assert.notDeepEqual(page.nextCursor, cursor, "Paging must advance");
+      cursor = page.nextCursor;
     }
-    assert.equal(candidates, ready.page.metadata.candidateCount);
+    assert.equal(candidates, ready.metadata.candidateCount);
     assert.equal(await hash(video), report.sourceHash);
     const metrics = await indexScaleMetrics(join(home, "library", "catalog.sqlite"), 5000);
     assert.notEqual(
@@ -270,8 +270,8 @@ test("thirty-minute generated native index scale", { timeout: timeoutMs + 150_00
       pages,
       candidates,
       ...metrics,
-      retainedPngBytes: ready.page.metadata.bytes,
-      metadata: ready.page.metadata,
+      retainedPngBytes: ready.metadata.sizeBytes,
+      metadata: ready.metadata,
     });
   } catch (error) {
     report.state = "failed";

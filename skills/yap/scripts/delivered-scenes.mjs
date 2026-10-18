@@ -190,7 +190,7 @@ export async function deliveredScenes(request, invoke, { readFile = readBytes } 
     ino: before.ino,
   };
   const imported = await invoke("asset.import", {
-    requestId: `delivered-scenes:${request.exportId}`,
+    requestId: `delivered-scenes:${request.requestId}`,
     path: exportStatus.output,
   });
   const importedJob = await waitJob(invoke, imported.jobId, budgets);

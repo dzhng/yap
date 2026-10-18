@@ -141,16 +141,20 @@ async function fixture(t, wrap = (worker) => worker) {
       await service.close();
       service = await startProjectService({ home, worker, nativeExecutable: binary });
     },
-    request: (extra = {}) => ({
-      projectId,
-      revisionId: edited.revision.id,
-      placementIds: [placementId],
-      kind: "srt",
-      directory: output,
-      leaf: "captions.srt",
-      exportId: randomUUID(),
-      ...extra,
-    }),
+    request: (extra = {}) => {
+      const requestId = randomUUID();
+      const request = {
+        projectId,
+        revisionId: edited.revision.id,
+        placementIds: [placementId],
+        kind: "srt",
+        directory: output,
+        leaf: "captions.srt",
+        requestId,
+        ...extra,
+      };
+      return request;
+    },
     edit: async (text) => {
       edited = await good("edit.apply", {
         projectId,
@@ -178,7 +182,11 @@ test("public new export replaces unchanged Yap-owned bytes and old intent never 
   assert.match(after.toString(), /Revised words/);
   assert.equal(hash(after), second.receipt.sha256);
   assert.deepEqual(second.receipt.replacement.file, first.receipt.file);
-  await f.good("export.recover", { exportId: firstRequest.exportId }, true);
+  await f.good(
+    "export.recover",
+    { exportId: firstRequest.requestId, requestId: "recover-first" },
+    true,
+  );
   assert.deepEqual(await readFile(second.output), after);
   if (process.env.YAP_EXPORT_EVIDENCE)
     await writeFile(
@@ -271,17 +279,17 @@ test(
     assert.deepEqual(await readFile(first.output), before);
     release.resolve();
     const canceledRecord = await cancel;
-    const canceled = await f.call("export.status", { exportId: request.exportId });
+    const canceled = await f.call("export.status", { exportId: request.requestId });
     assert.equal(canceled.code, 0, JSON.stringify(canceled));
     assert.equal(canceled.response.ok, true, JSON.stringify(canceled));
-    assert.equal(canceled.response.data.exportId, request.exportId);
-    assert.equal(canceledRecord.exportId, request.exportId);
+    assert.equal(canceled.response.data.exportId, request.requestId);
+    assert.equal(canceledRecord.exportId, request.requestId);
     assert.equal(canceledRecord.state, "canceled");
     assert.equal(canceledRecord.jobId, pending.jobId);
     assert.equal(canceledRecord.snapshot.revisionId, request.revisionId);
     assert.deepEqual(await readFile(first.output), before);
     await f.good("job.retry", { jobId: pending.jobId }, true);
-    const retried = await f.good("export.status", { exportId: request.exportId }, true);
+    const retried = await f.good("export.status", { exportId: request.requestId }, true);
     assert.deepEqual(retried.receipt.replacement.file, first.receipt.file);
     assert.match(await readFile(retried.output, "utf8"), /After cancellation/);
   },
@@ -315,7 +323,11 @@ test(
     assert.match(bytes.toString(), /Recovered replacement/);
     loseObservation = false;
     await f.restart();
-    const recovered = await f.good("export.recover", { exportId: request.exportId }, true);
+    const recovered = await f.good(
+      "export.recover",
+      { exportId: request.requestId, requestId: `${request.requestId}:recover` },
+      true,
+    );
     assert.equal(recovered.receipt.file.ino, inode);
     assert.equal(recovered.receipt.sha256, hash(bytes));
     assert.deepEqual(await readFile(recovered.output), bytes);
@@ -349,12 +361,12 @@ test(
     const second = f.request();
     await f.good("export.create", second);
     release.resolve();
-    const won = await f.good("export.status", { exportId: first.exportId }, true);
-    const lost = await f.call("export.status", { exportId: second.exportId }, true);
+    const won = await f.good("export.status", { exportId: first.requestId }, true);
+    const lost = await f.call("export.status", { exportId: second.requestId }, true);
     assert.equal(lost.code, 1, JSON.stringify(lost));
     assert.equal(lost.response.data.receipt, null);
     assert.match(await readFile(won.output, "utf8"), /First publisher/);
-    const secondStatus = await f.good("export.status", { exportId: second.exportId });
+    const secondStatus = await f.good("export.status", { exportId: second.requestId });
     if (secondStatus.jobId) await f.call("job.retry", { jobId: secondStatus.jobId }, true);
     assert.match(await readFile(won.output, "utf8"), /First publisher/);
   },
@@ -407,9 +419,13 @@ for (const mode of ["foreign", "symlink"])
     await assertDisplaced(displaced);
     const visible = await readFile(first.output);
     assert.match(visible.toString(), /Uncertain new output/);
-    await f.call("export.recover", { exportId: request.exportId }, true);
+    await f.call(
+      "export.recover",
+      { exportId: request.requestId, requestId: `${request.requestId}:recover` },
+      true,
+    );
     await f.call("job.retry", { jobId: failed.response.data.jobId }, true);
-    const abandoned = await f.call("export.abandon", { exportId: request.exportId });
+    const abandoned = await f.call("export.abandon", { exportId: request.requestId });
     assert.equal(abandoned.code, 1, JSON.stringify(abandoned));
     assert.deepEqual(await readFile(first.output), visible);
     await assertDisplaced(displaced);
@@ -450,7 +466,7 @@ test("an SRT export of literal markup publishes and reports the issue in its sta
   const request = f.request({ leaf: "markup.srt" });
   const exported = await f.good("export.create", request, true);
   assert.match(await readFile(exported.output, "utf8"), /<b>literal<\/b> words/);
-  const status = await f.good("export.status", { exportId: request.exportId }, true);
+  const status = await f.good("export.status", { exportId: request.requestId }, true);
   assert.deepEqual(
     status.issues.map((issue) => issue.code),
     ["srt-literal-markup"],
@@ -479,7 +495,7 @@ test("a failed export recovers through job.retry with the jobId its status retur
   const request = f.request();
   const created = await f.call("export.create", request, true);
   assert.equal(created.code, 1, JSON.stringify(created));
-  const failed = await f.good("export.status", { exportId: request.exportId });
+  const failed = await f.good("export.status", { exportId: request.requestId });
   assert.equal(failed.state, "failed", JSON.stringify(failed));
   assert.equal(failed.retryable, true, JSON.stringify(failed));
   assert.equal(failed.jobId, created.response.data.jobId);
@@ -487,7 +503,7 @@ test("a failed export recovers through job.retry with the jobId its status retur
   await assert.rejects(readFile(join(f.output, request.leaf)), { code: "ENOENT" });
   const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
   assert.equal(retried.jobId, failed.jobId);
-  const ready = await f.good("export.status", { exportId: request.exportId });
+  const ready = await f.good("export.status", { exportId: request.requestId });
   assert.equal(ready.state, "ready", JSON.stringify(ready));
   assert.equal(ready.jobId, failed.jobId);
   assert.equal(allocations, 2);
@@ -595,18 +611,18 @@ test("job.retry on a failed export also retries the export's own failed audio re
     kind: "audio",
     directory: f.output,
     leaf: "audio.wav",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
   };
   const created = await f.call("export.create", request, true);
   assert.equal(created.code, 1, JSON.stringify(created));
-  const failed = await f.good("export.status", { exportId: request.exportId });
+  const failed = await f.good("export.status", { exportId: request.requestId });
   assert.equal(failed.state, "failed", JSON.stringify(failed));
   assert.equal(failed.retryable, true);
   assert.equal(failed.jobId, created.response.data.jobId);
   assert.equal(mixes, 1);
   const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
   assert.equal(retried.jobId, failed.jobId);
-  const ready = await f.good("export.status", { exportId: request.exportId });
+  const ready = await f.good("export.status", { exportId: request.requestId });
   assert.equal(ready.state, "ready", JSON.stringify(ready));
   assert.equal(ready.jobId, failed.jobId);
   assert.equal(mixes, 2);

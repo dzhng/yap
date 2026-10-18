@@ -20,7 +20,7 @@ const said = (text) => ({ type: "user", message: { content: text } });
 test("refusals count tool results by code or message, not files the agent wrote", () => {
   const counts = countSession(
     session(
-      bash("a", "yap transcript.review --params '{\"executionRange\":{}}'"),
+      bash("a", "yap transcript.review --params '{\"sourceRange\":{}}'"),
       result(
         "a",
         '"errorCode": "TRANSCRIPT_BOUNDARY_DISAGREEMENT" ... TRANSCRIPT_BOUNDARY_DISAGREEMENT',

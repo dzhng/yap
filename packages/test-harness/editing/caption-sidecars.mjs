@@ -88,9 +88,10 @@ try {
   });
   const placementIds = [edited.edit.labels.second, edited.edit.labels.first];
   const base = { projectId, revisionId: edited.revision.id, placementIds, directory: out };
-  const request = { ...base, kind: "srt", exportId: randomUUID(), leaf: "captions.srt" };
+  const request = { ...base, kind: "srt", requestId: randomUUID(), leaf: "captions.srt" };
   const held = await service.arm("publication.allocate");
   const admitted = await call("export.create", request);
+  const exportId = admitted.exportId;
   assert.equal(admitted.snapshot.revisionId, edited.revision.id);
   assert.equal(admitted.snapshot.cueCount, 2);
   assert.ok(!("content" in admitted.snapshot) && !("cues" in admitted.snapshot));
@@ -119,10 +120,10 @@ try {
   await service.stop(true);
   await service.start();
   await call("job.retry", {
-    jobId: (await call("export.status", { exportId: request.exportId })).jobId,
+    jobId: (await call("export.status", { exportId })).jobId,
   });
   const committed = await poll(
-    () => call("export.status", { exportId: request.exportId }),
+    () => call("export.status", { exportId }),
     (value) => value.state === "ready" && !value.cleanupPending,
     "SRT publication",
   );
@@ -138,18 +139,19 @@ try {
   );
   assert.equal((await call("export.create", request)).receipt.sha256, committed.receipt.sha256);
   const retried = await call("job.retry", {
-    jobId: (await call("export.status", { exportId: request.exportId })).jobId,
+    jobId: (await call("export.status", { exportId })).jobId,
   });
   assert.equal(retried.state, "ready");
   assert.equal(
-    (await call("export.status", { exportId: request.exportId })).receipt.sha256,
+    (await call("export.status", { exportId })).receipt.sha256,
     committed.receipt.sha256,
   );
   report.srt = committed;
-  const vttRequest = { ...base, kind: "vtt", exportId: randomUUID(), leaf: "captions.vtt" };
-  await call("export.create", vttRequest, { transport: "mcp" });
+  const vttRequest = { ...base, kind: "vtt", requestId: randomUUID(), leaf: "captions.vtt" };
+  const vttCreated = await call("export.create", vttRequest, { transport: "mcp" });
+  const vttExportId = vttCreated.exportId;
   report.vtt = await poll(
-    () => call("export.status", { exportId: vttRequest.exportId }),
+    () => call("export.status", { exportId: vttExportId }),
     (value) => value.state === "ready" && !value.cleanupPending,
     "VTT publication",
   );
@@ -188,7 +190,7 @@ try {
           "export.create",
           {
             ...base,
-            exportId: randomUUID(),
+            requestId: randomUUID(),
             kind: "srt",
             leaf: suffix + ".srt",
             placementIds: ids,
@@ -203,14 +205,15 @@ try {
   for (const label of ["literal", "spaced-tag"]) {
     const markup = {
       ...base,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       kind: "srt",
       leaf: `${label}.srt`,
       placementIds: [edited.edit.labels[label]],
     };
-    await call("export.create", markup);
+    const markupCreated = await call("export.create", markup);
+    const markupExportId = markupCreated.exportId;
     const written = await poll(
-      () => call("export.status", { exportId: markup.exportId }),
+      () => call("export.status", { exportId: markupExportId }),
       (value) => value.state === "ready" && !value.cleanupPending,
       `${label} SRT`,
     );
@@ -221,14 +224,15 @@ try {
   }
   const literalRequest = {
     ...base,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "vtt",
     leaf: "literal.vtt",
     placementIds: [edited.edit.labels.literal],
   };
-  await call("export.create", literalRequest);
+  const literalCreated = await call("export.create", literalRequest);
+  const literalExportId = literalCreated.exportId;
   const literal = await poll(
-    () => call("export.status", { exportId: literalRequest.exportId }),
+    () => call("export.status", { exportId: literalExportId }),
     (value) => value.state === "ready" && !value.cleanupPending,
     "literal VTT",
   );
@@ -239,14 +243,15 @@ try {
   report.literalVtt = { status: literal, decoded: literalDecoded };
   const syntaxRequest = {
     ...base,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "vtt",
     leaf: "syntax.vtt",
     placementIds: [edited.edit.labels.timing, edited.edit.labels["spaced-tag"]],
   };
-  await call("export.create", syntaxRequest);
+  const syntaxCreated = await call("export.create", syntaxRequest);
+  const syntaxExportId = syntaxCreated.exportId;
   const syntax = await poll(
-    () => call("export.status", { exportId: syntaxRequest.exportId }),
+    () => call("export.status", { exportId: syntaxExportId }),
     (value) => value.state === "ready" && !value.cleanupPending,
     "literal subtitle syntax VTT",
   );
@@ -271,14 +276,15 @@ try {
   assert.ok(syntaxDecoded.includes(",,hello < b>bold"), syntaxDecoded);
   const emptyRequest = {
     ...base,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "srt",
     leaf: "empty.srt",
     placementIds: [edited.edit.labels.empty],
   };
-  await call("export.create", emptyRequest);
+  const emptyCreated = await call("export.create", emptyRequest);
+  const emptyExportId = emptyCreated.exportId;
   const empty = await poll(
-    () => call("export.status", { exportId: emptyRequest.exportId }),
+    () => call("export.status", { exportId: emptyExportId }),
     (value) => value.state === "ready" && !value.cleanupPending,
     "empty SRT",
   );
@@ -288,17 +294,18 @@ try {
   );
   assert.equal((await readFile(empty.output)).length, 0);
   await writeFile(join(out, "taken.srt"), "foreign content", { flag: "wx" });
-  const collision = { ...base, exportId: randomUUID(), kind: "srt", leaf: "taken.srt" };
-  await call("export.create", collision);
+  const collision = { ...base, requestId: randomUUID(), kind: "srt", leaf: "taken.srt" };
+  const collisionCreated = await call("export.create", collision);
+  const collisionExportId = collisionCreated.exportId;
   let failed;
   for (let i = 0; i < 100; i++) {
-    failed = await call("export.status", { exportId: collision.exportId });
+    failed = await call("export.status", { exportId: collisionExportId });
     if (failed.state === "failed") break;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   assert.equal(failed.state, "failed");
   assert.equal(await readFile(join(out, "taken.srt"), "utf8"), "foreign content");
-  await call("export.abandon", { exportId: collision.exportId });
+  await call("export.abandon", { exportId: collisionExportId });
   assert.ok(!(await readdir(out)).some((name) => name.startsWith(".yap-export-")));
   report.checks.push(
     "CLI/MCP same owner",

@@ -67,10 +67,10 @@ function attachment(info: NonNullable<ReturnType<typeof describeArtifact>>, batc
     block: mediaContent(info.mediaType, "", batch),
     bytes:
       !batch && info.mediaType === "application/json"
-        ? add(info.bytes, info.bytes)
-        : info.bytes > RESPONSE_FRAME_BYTES
+        ? add(info.sizeBytes, info.sizeBytes)
+        : info.sizeBytes > RESPONSE_FRAME_BYTES
           ? RESPONSE_FRAME_BYTES + 1
-          : 4 * Math.ceil(info.bytes / 3),
+          : 4 * Math.ceil(info.sizeBytes / 3),
   };
 }
 

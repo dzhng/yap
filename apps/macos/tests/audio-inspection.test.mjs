@@ -291,7 +291,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
       assert.deepEqual(await readFile(value.file), wave);
     });
     assert.equal(regenerated.jobId, ready.jobId);
-    assert.equal(regenerated.published.generation, ready.published.generation + 1);
+    assert.equal(Number(regenerated.published.generation), Number(ready.published.generation) + 1);
     assert.equal(regenerated.revisionId, edited.revision.id);
     assert.deepEqual(await hashes(), original);
   } finally {
@@ -316,9 +316,12 @@ test("public selected audio preserves unity and explicit missing-stream refusal 
         const selection = binding(acquisition, role);
         const samples = (path) =>
           ffmpeg(["-i", path, "-f", "f32le", "-ac", "1", "-ar", "48000", "pipe:1"]);
-        await audio({ ...selection, range: { startUs: 0, endUs: 1000000 } }, async (value) => {
-          assert.deepEqual(samples(value.file), samples(join(source, `${role}.mov`)));
-        });
+        await audio(
+          { ...selection, sourceRange: { startUs: 0, endUs: 1000000 } },
+          async (value) => {
+            assert.deepEqual(samples(value.file), samples(join(source, `${role}.mov`)));
+          },
+        );
         const absent = role === "narration" ? "system" : "narration";
         assert.equal(
           acquisition.evidence.receipt.header[
@@ -333,7 +336,7 @@ test("public selected audio preserves unity and explicit missing-stream refusal 
         const refused = await request("audio.get", {
           ...selection,
           streamId: "missing",
-          range: { startUs: 0, endUs: 1000000 },
+          sourceRange: { startUs: 0, endUs: 1000000 },
         });
         assert.equal(refused.ok, false);
         assert.equal(refused.error.code, "UNSUPPORTED_MEDIA");
@@ -375,9 +378,9 @@ test("public source audio keeps native failure until explicit retry after restor
     hidden = registered + ".held";
     await rename(registered, hidden);
     const params = {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: stream.id,
-      range: { startUs: 0, endUs: 1000000 },
+      sourceRange: { startUs: 0, endUs: 1000000 },
     };
     const failed = await waitFor(async () => {
       const status = await call("audio.get", params);
@@ -391,7 +394,7 @@ test("public source audio keeps native failure until explicit retry after restor
     hidden = undefined;
     assert.deepEqual(await readFile(registered), original);
     for (let i = 0; i < 3; i++) assert.deepEqual(await call("audio.get", params), failed);
-    const retry = await call("job.retry", params);
+    const retry = await call("job.retry", { jobId: failed.jobId });
     assert.equal(retry.jobId, failed.jobId);
     assert.notEqual(retry.state, "failed");
     const samples = (path) =>
@@ -400,12 +403,16 @@ test("public source audio keeps native failure until explicit retry after restor
       assert.deepEqual(samples(value.file), samples(source));
     });
     assert.equal(result.jobId, failed.jobId);
-    assert.equal(result.published.generation, 2);
+    assert.equal(result.published.generation, "2");
     assert.equal(result.published.output.frames, 48000);
     assert.deepEqual(await readFile(registered), original);
-    const repeated = await call("job.retry", params);
-    assert.deepEqual(repeated.published, result.published);
-    await call("artifact.close", { token: repeated.delivery.token });
+    // job.retry answers with the job's status. Retrying a ready job starts no new attempt: the
+    // job reads exactly as before, and the item still serves the same publication.
+    const settled = await call("job.get", { jobId: failed.jobId });
+    const repeated = await call("job.retry", { jobId: failed.jobId });
+    assert.deepEqual(repeated, settled);
+    assert.equal(repeated.published.generation, result.published.generation);
+    assert.deepEqual((await audio(params)).published, result.published);
   } finally {
     try {
       if (hidden) await rename(hidden, registered);

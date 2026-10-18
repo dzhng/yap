@@ -99,7 +99,7 @@ const readyTranscript = {
 };
 let data;
 switch (operation) {
-  case "recording.latest":
+  case "recording.get":
     data = { recordingId: "fixture-recording" };
     break;
   case "recording.get":
@@ -349,7 +349,7 @@ switch (operation) {
   case "export.create":
     mkdirSync(params.directory, { recursive: true });
     writeFileSync(join(params.directory, params.leaf), "controlled package fixture");
-    data = { exportId: params.exportId, state: "queued" };
+    data = { exportId: params.requestId, state: "queued" };
     break;
   case "export.status": {
     const creation = readFileSync(process.env.YAP_CALLER_TRACE, "utf8")
@@ -357,10 +357,10 @@ switch (operation) {
       .split("\n")
       .map(JSON.parse)
       .findLast(
-        (item) => item.operation === "export.create" && item.params.exportId === params.exportId,
+        (item) => item.operation === "export.create" && item.params.requestId === params.exportId,
       );
     data = {
-      exportId: params.exportId,
+      requestId: params.exportId,
       state: "ready",
       jobId: null,
       output: join(creation.params.directory, creation.params.leaf),

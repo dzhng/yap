@@ -80,7 +80,7 @@ test("explicit source admission supports both spellings of an absolute temporary
       assert.equal(raw.ok, true, JSON.stringify(raw));
       assert.equal(raw.data.state, "ready");
       assert.deepEqual(
-        raw.data.page.rows.map((row) => row.captureAtUs),
+        raw.data.rows.map((row) => row.captureAtUs),
         [0, 100_000, 800_000],
       );
       await service.close();

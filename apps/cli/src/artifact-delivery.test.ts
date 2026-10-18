@@ -30,18 +30,22 @@ async function fixture(
         renewals++;
         return {
           ok: true,
-          data: { token: "lease", bytes: bytes.length, expiresAt: Date.now() + 30000 },
+          data: { token: "lease", sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
         };
       }
       onRead();
       reads++;
-      const { offset, maxBytes } = request.params as { offset: number; maxBytes: number };
+      const { offsetBytes: offset, maxBytes } = request.params as {
+        offsetBytes: number;
+        maxBytes: number;
+      };
       const part = bytes.subarray(offset, offset + maxBytes);
       return {
         ok: true,
         data: {
-          offset,
-          nextOffset: malformed === true || malformed === reads ? offset : offset + part.length,
+          offsetBytes: offset,
+          nextOffsetBytes:
+            malformed === true || malformed === reads ? offset : offset + part.length,
           eof: offset + part.length === bytes.length,
           data: part.toString("base64"),
         },
@@ -57,8 +61,8 @@ async function fixture(
     ok: true,
     data: {
       state: "ready",
-      delivery: { token: "lease", bytes: bytes.length, expiresAt: Date.now() + 30000 },
-      published: { generation: 1, output: { mediaType }, issues: [] },
+      delivery: { token: "lease", sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
+      published: { generation: "1", output: { mediaType }, issues: [] },
     },
   };
   return {
@@ -215,7 +219,7 @@ test.each(["video/mp4", "audio/wav"] as const)(
     }
     expect(await artifactFile(f.selection, f.result, output)).toEqual({
       output,
-      bytes: bytes.length,
+      sizeBytes: bytes.length,
       mediaType,
     });
     expect((await readFile(output)).equals(bytes)).toBe(true);
@@ -271,7 +275,7 @@ test("waveform JSON streams unchanged and uses bounded buffered delivery with le
   const output = folder + "/waveform.json";
   expect(await artifactFile(f.selection, f.result, output)).toEqual({
     output,
-    bytes: bytes.length,
+    sizeBytes: bytes.length,
     mediaType: "application/json",
   });
   expect(await readFile(output)).toEqual(bytes);

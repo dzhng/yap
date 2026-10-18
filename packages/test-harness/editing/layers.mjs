@@ -373,13 +373,13 @@ try {
               projectId: project.projectId,
               revisionId: project.revisionId,
               kind: "video",
-              exportId: randomUUID(),
+              requestId: randomUUID(),
               directory: out,
               leaf: `${name}-export.mp4`,
             };
-            await call("export.create", request);
+            const created = await call("export.create", request);
             const exported = await poll(
-              () => call("export.status", { exportId: request.exportId }, { transport: "mcp" }),
+              () => call("export.status", { exportId: created.exportId }, { transport: "mcp" }),
               (v) => v.state === "ready",
               "layer export",
             );

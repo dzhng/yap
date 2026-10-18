@@ -49,13 +49,13 @@ async function fixture(
         if (op.operation === "artifact.read")
           return {
             ok: true,
-            data: delivery.read(op.params.token, op.params.offset, op.params.maxBytes),
+            data: delivery.read(op.params.token, op.params.offsetBytes, op.params.maxBytes),
           };
         if (op.operation === "artifact.renew")
-          return { ok: true, data: delivery.renew(op.params.token) };
+          return { ok: true, data: delivery.renew(op.params.token, op.params.requestId) };
         if (op.operation === "artifact.close") {
           delivery.close(op.params.token);
-          return { ok: true, data: { closed: true } };
+          return { ok: true, data: { token: op.params.token, closed: true } };
         }
       }
       return handler(request, signal);
@@ -121,18 +121,27 @@ test("full result capacity refuses before dispatch while maintenance drains the 
       params,
       resultDelivery: { inlineBytes: 1 },
     });
-  expect(await request("artifact.read", { token: tokens[0], offset: 0 })).toMatchObject({
+  expect(await request("artifact.read", { token: tokens[0], offsetBytes: 0 })).toMatchObject({
     ok: true,
-    data: { offset: 0, eof: true },
+    data: { offsetBytes: 0, eof: true },
   });
-  expect(await request("artifact.renew", { token: tokens[0] })).toMatchObject({
+  expect(
+    await request("artifact.renew", { token: tokens[0], requestId: "renew-test" }),
+  ).toMatchObject({
     ok: true,
     data: { token: tokens[0] },
   });
+  const renewed = await request("artifact.renew", { token: tokens[0], requestId: "renew-replay" });
+  expect(await request("artifact.renew", { token: tokens[0], requestId: "renew-replay" })).toEqual(
+    renewed,
+  );
+  expect(() => f.delivery.renew(tokens[1]!, "renew-replay")).toThrowError(
+    expect.objectContaining({ code: "REQUEST_CONFLICT" }),
+  );
   expect(await request("artifact.close", { token: tokens[0] })).toEqual({
     id: "maintenance",
     ok: true,
-    data: { closed: true },
+    data: { token: tokens[0], closed: true },
   });
   const next = await f.ask("next");
   if (!("resultDelivery" in next)) throw Error("Missing next delivery");

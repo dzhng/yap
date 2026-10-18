@@ -17,7 +17,7 @@ type Item = {
   data: {
     state: string;
     jobId: string | null;
-    published: { generation: number } | null;
+    published: { generation: string } | null;
     delivery?: { token: string };
   };
 };
@@ -169,14 +169,16 @@ test("a failed cursor.render item recovers through job.retry with the jobId it r
   const [ready] = items(await f.call("cursor.render", request));
   expect(ready).toMatchObject({
     ok: true,
-    data: { state: "ready", jobId, published: { generation: expect.any(Number) } },
+    data: { state: "ready", jobId, published: { generation: expect.any(String) } },
   });
   // The retried attempt re-rendered with the same captured trail.
   expect(f.overlays).toHaveLength(2);
   expect(f.overlays[1]).toEqual(f.overlays[0]);
   expect(f.overlays[1]).toBeTruthy();
   const token = ready!.data.delivery!.token;
-  expect(await f.call("artifact.read", { token, offset: 0, maxBytes: png.length })).toMatchObject({
+  expect(
+    await f.call("artifact.read", { token, offsetBytes: 0, maxBytes: png.length }),
+  ).toMatchObject({
     ok: true,
     data: { data: png.toString("base64"), eof: true },
   });

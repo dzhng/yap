@@ -73,10 +73,10 @@ try {
   );
   const asset = await call("asset.get", { assetId: importJob.published.output.assetId });
   const streamId = asset.streams.find((stream) => stream.kind === "audio").id;
-  const sourceSelection = { assetId: asset.id, streamId };
+  const sourceSelection = { assetId: asset.assetId, streamId };
   const sourceScope = {
     ...sourceSelection,
-    executionRange: { startUs: 20500000, endUs: 26500000 },
+    sourceRange: { startUs: 20500000, endUs: 26500000 },
   };
   const sourcePrepared = await poll(
     () => call("transcript.transcribe", sourceScope),

@@ -45,7 +45,7 @@ struct Refused: LocalizedError { var errorDescription: String? { "NOT_FOUND: pro
     var delayed = false
     var queued = true
     var deleted = false
-    var expiresIn = 12.0
+    var expiresIn = 30.0
     var brokenFile = false
     var closed: [String] = []
     var serial = 0
@@ -67,13 +67,13 @@ struct Refused: LocalizedError { var errorDescription: String? { "NOT_FOUND: pro
         if operation == "artifact.renew" {
             renewals += 1
             if refuseRenewal { throw Refused() }
-            return try JSONSerialization.data(withJSONObject: ["token": params["token"]!, "bytes": bytes,
-                "expiresAt": (Date().timeIntervalSince1970 + 30) * 1000])
+            return try JSONSerialization.data(withJSONObject: ["token": params["token"]!, "sizeBytes": bytes,
+                "expiresAtMs": (Date().timeIntervalSince1970 + 30) * 1000])
         }
         precondition(operation == "preview.get")
         if queued {
             queued = false
-            return Data(#"{"projectId":"take","revisionId":"r7","state":"processing"}"#.utf8)
+            return Data(#"{"projectId":"take","revisionId":"r7","state":"running"}"#.utf8)
         }
         precondition(params["revisionId"] as? String == "r7", "Follow-up must stay on pinned revision")
         serial += 1
@@ -81,8 +81,8 @@ struct Refused: LocalizedError { var errorDescription: String? { "NOT_FOUND: pro
         lastToken = token
         if delayed { try await Task.sleep(for: .milliseconds(100)) }
         return try JSONSerialization.data(withJSONObject: ["projectId": "take", "revisionId": "r7", "state": "ready",
-            "delivery": ["token": token, "bytes": bytes, "expiresAt": (Date().timeIntervalSince1970 + expiresIn) * 1000],
-            "published": ["generation": 1, "output": ["projectId": "take", "revisionId": "r7", "mediaType": "video/mp4", "file": brokenFile ? file + "-missing" : file, "bytes": bytes]]])
+            "delivery": ["token": token, "sizeBytes": bytes, "expiresAtMs": (Date().timeIntervalSince1970 + expiresIn) * 1000],
+            "published": ["generation": "1", "output": ["projectId": "take", "revisionId": "r7", "mediaType": "video/mp4", "file": brokenFile ? file + "-missing" : file, "bytes": bytes]]])
     }
 }
 @main struct Probe {
@@ -253,9 +253,9 @@ struct PlaybackFailure: LocalizedError {
         }
         return try JSONSerialization.data(withJSONObject: [
             "projectId": project, "revisionId": revision, "state": "ready",
-            "delivery": ["token": "continuous-token", "bytes": 167145,
-                "expiresAt": (Date().timeIntervalSince1970 + 30) * 1000],
-            "published": ["generation": 1, "output": ["projectId": project, "revisionId": revision,
+            "delivery": ["token": "continuous-token", "sizeBytes": 167145,
+                "expiresAtMs": (Date().timeIntervalSince1970 + 30) * 1000],
+            "published": ["generation": "1", "output": ["projectId": project, "revisionId": revision,
                 "mediaType": "video/mp4", "file": file, "bytes": 167145]],
         ])
     }

@@ -154,7 +154,7 @@ function data<T>(result: OperationResult): T {
 }
 async function expectReadable(f: Awaited<ReturnType<typeof fixture>>, ready: IndexRead) {
   expect(ready.entries!.length).toBeGreaterThan(0);
-  const frame = data<{ delivery: { token: string; bytes: number } }>(
+  const frame = data<{ delivery: { token: string; sizeBytes: number } }>(
     await f.call("index.frame", {
       ...f.selection,
       generation: ready.metadata!.generation,
@@ -162,7 +162,11 @@ async function expectReadable(f: Awaited<ReturnType<typeof fixture>>, ready: Ind
     }),
   );
   const read = data<{ data: string }>(
-    await f.call("artifact.read", { token: frame.delivery.token, offset: 0, maxBytes: 1 << 16 }),
+    await f.call("artifact.read", {
+      token: frame.delivery.token,
+      offsetBytes: 0,
+      maxBytes: 1 << 16,
+    }),
   );
   expect(Buffer.from(read.data, "base64")).toEqual(png);
   expect(await f.call("artifact.close", { token: frame.delivery.token })).toMatchObject({

@@ -139,16 +139,18 @@ test(
       );
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
       for (const recordingId of [target.recordingId, missingId])
-        assert.deepEqual(await call("recording.delete", { recordingId }), {
+        assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
           recordingId,
           deleted: true,
+          freedBytes: recordingId === missingId ? 16 : 0,
         });
       assert.deepEqual(await instance.reap(), []);
       ({ instance } = await launchReady(home));
       for (const recordingId of [target.recordingId, missingId])
-        assert.deepEqual(await call("recording.delete", { recordingId }), {
+        assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
           recordingId,
           deleted: true,
+          freedBytes: recordingId === missingId ? 16 : 0,
         });
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
     } finally {

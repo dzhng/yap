@@ -5,7 +5,7 @@ import { ResourceReferences } from "./references.js";
 import { join } from "node:path";
 
 export type LibraryUserSubject = {
-  kind: "asset" | "acquisition" | "recording";
+  kind: "asset" | "acquisition" | "recording" | "project";
   id: string;
 };
 export type LibraryUserProject = {

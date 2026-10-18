@@ -24,9 +24,9 @@ afterEach(async () => {
 async function fixture(
   make: (
     open: (
-      bytes: Buffer,
+      sizeBytes: Buffer,
       declaredBytes?: number,
-    ) => { token: string; bytes: number; expiresAt: number },
+    ) => { token: string; sizeBytes: number; expiresAtMs: number },
   ) => OperationResult,
   options: { discovery?: boolean; loseConnection?: boolean } = {},
 ) {
@@ -64,7 +64,7 @@ async function fixture(
         if (options.loseConnection) void server.close();
         return {
           ok: true,
-          data: delivery.read(op.params.token, op.params.offset, op.params.maxBytes),
+          data: delivery.read(op.params.token, op.params.offsetBytes, op.params.maxBytes),
         };
       }
       if (op.operation === "artifact.renew") {
@@ -97,25 +97,25 @@ async function fixture(
   );
   return { client, calls, firstRead, result, operations, socketPath: server.socketPath, delivery };
 }
-async function readBytes(client: Client, token: string, bytes: number) {
+async function readBytes(client: Client, token: string, sizeBytes: number) {
   const chunks: Buffer[] = [];
-  for (let offset = 0; offset < bytes;) {
+  for (let offsetBytes = 0; offsetBytes < sizeBytes;) {
     const read = responseSchema.parse(
-      (await client.callTool({ name: "artifact.read", arguments: { token, offset } }))
+      (await client.callTool({ name: "artifact.read", arguments: { token, offsetBytes } }))
         .structuredContent,
     );
     if (!read.ok) throw Error(read.error.message);
-    const chunk = read.data as { data: string; nextOffset: number };
+    const chunk = read.data as { data: string; nextOffsetBytes: number };
     chunks.push(Buffer.from(chunk.data, "base64"));
-    expect(chunk.nextOffset).toBeGreaterThan(offset);
-    offset = chunk.nextOffset;
+    expect(chunk.nextOffsetBytes).toBeGreaterThan(offsetBytes);
+    offsetBytes = chunk.nextOffsetBytes;
   }
   return Buffer.concat(chunks);
 }
-const ready = (delivery: { token: string; bytes: number; expiresAt: number }) => ({
+const ready = (delivery: { token: string; sizeBytes: number; expiresAtMs: number }) => ({
   state: "ready",
   published: {
-    generation: 1,
+    generation: "1",
     output: { mediaType: "image/png", recipe: { width: 640, height: 360 } },
     issues: [],
   },
@@ -193,7 +193,7 @@ test("default SDK defers all eight one MiB images together, retaining complete i
   const items = (result.data as { items: { data: ReturnType<typeof ready> }[] }).items;
   for (const [index, item] of items.entries()) {
     expect(
-      (await readBytes(f.client, item.data.delivery.token, item.data.delivery.bytes)).equals(
+      (await readBytes(f.client, item.data.delivery.token, item.data.delivery.sizeBytes)).equals(
         buffers[index]!,
       ),
     ).toBe(true);
@@ -372,7 +372,11 @@ test("an admitted batch keeps owned connection failures isolated after its selec
   expect(f.operations).toEqual(["service.health", "frame.batch", "artifact.read"]);
 });
 
-const audioArguments = { assetId: "fixture", streamId: "audio", range: { startUs: 0, endUs: 100 } };
+const audioArguments = {
+  assetId: "fixture",
+  streamId: "audio",
+  sourceRange: { startUs: 0, endUs: 100 },
+};
 for (const [kind, operation, mediaType] of [
   ["audio", "audio.get", "audio/wav"],
   ["JSON", "waveform.get", "application/json"],
@@ -386,7 +390,7 @@ for (const [kind, operation, mediaType] of [
       ok: true,
       data: {
         state: "ready",
-        published: { generation: 1, output: { mediaType }, issues: [] },
+        published: { generation: "1", output: { mediaType }, issues: [] },
         delivery: open(bytes, kind === "audio" ? 8 * 1024 ** 2 : bytes.length),
         evidence: { exact: true },
       },
@@ -404,7 +408,7 @@ for (const [name, operation, published, bytes, message, closes] of [
   [
     "image raw cap",
     "frame.get",
-    { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+    { generation: "1", output: { mediaType: "image/png" }, issues: [] },
     32 * 1024 ** 2 + 1,
     "Image exceeds its buffered delivery byte limit",
     1,
@@ -412,7 +416,7 @@ for (const [name, operation, published, bytes, message, closes] of [
   [
     "JSON raw cap",
     "waveform.get",
-    { generation: 1, output: { mediaType: "application/json" }, issues: [] },
+    { generation: "1", output: { mediaType: "application/json" }, issues: [] },
     4 * 1024 ** 2 + 1,
     "JSON evidence exceeds its buffered delivery byte limit",
     1,
@@ -420,7 +424,7 @@ for (const [name, operation, published, bytes, message, closes] of [
   [
     "large audio metadata",
     "audio.get",
-    { generation: 1, output: { mediaType: "audio/wav" }, issues: [] },
+    { generation: "1", output: { mediaType: "audio/wav" }, issues: [] },
     Number.MAX_SAFE_INTEGER,
     null,
     0,
@@ -469,8 +473,8 @@ for (const [kind, operation, mediaType, bytes] of [
       ok: true,
       data: {
         state: "ready",
-        published: { generation: 1, output: { mediaType }, issues: [] },
-        delivery: { ...open(bytes), expiresAt: Date.now() + 1000 },
+        published: { generation: "1", output: { mediaType }, issues: [] },
+        delivery: { ...open(bytes), expiresAtMs: Date.now() + 1000 },
         clock: { originUs: 4, domain: "source" },
       },
     }));

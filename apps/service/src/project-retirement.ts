@@ -18,6 +18,7 @@ export type ProjectRetirementOwners = {
   delivery: DerivativeDelivery;
   exports: Pick<MediaExports, "retireOwner">;
   index: ScreenshotIndexStore<ProjectIndexRecords>;
+  freedBytes?: (id: string) => number;
 };
 
 export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegistration {
@@ -58,5 +59,6 @@ export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegi
       };
     },
     result: (subject) => ({ projectId: subject.id, deleted: true }),
+    freedBytes: (subject) => owners.freedBytes?.(subject.id) ?? 0,
   };
 }

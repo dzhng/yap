@@ -17,6 +17,7 @@ import {
   type ControlMessage,
   type ControlResponse,
 } from "@yap/protocol";
+import { idempotentOperations, operationNames, readOnlyOperations } from "@yap/protocol";
 
 /** The same framed pipe and socket composition as the native host, with observable write completion. */
 export async function projectServiceControlFixture(
@@ -41,8 +42,16 @@ export async function projectServiceControlFixture(
   });
   const control = async (operation: string, params: Record<string, unknown> = {}) => {
     const id = `fixture-${++sequence}`;
+    const needsRequestId =
+      operationNames.has(operation) &&
+      !readOnlyOperations.has(operation as never) &&
+      !idempotentOperations.has(operation as never) &&
+      params.requestId === undefined;
+    const wireParams = needsRequestId ? { ...params, requestId: id } : params;
     const response = once(events, id);
-    input.write(JSON.stringify({ event: "request", request: { id, operation, params } }) + "\n");
+    input.write(
+      JSON.stringify({ event: "request", request: { id, operation, params: wireParams } }) + "\n",
+    );
     return (await response)[0] as ControlResponse;
   };
   return { ...fixture, control, events, input, output };
@@ -98,13 +107,31 @@ export async function projectServiceFixture(
     nativeExecutable: undefined,
   });
   cleanups.push(() => service.close());
+  let requestSequence = 0;
   async function call(operation: string, params: Record<string, unknown>) {
-    const result = await callLocal(service.socketPath, { id: "test", operation, params });
-    if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
-      expect(result.data).not.toHaveProperty("input");
-      expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));
+    // Public writes now require request identity. Keep older service fixtures focused on their
+    // behavior by supplying a fresh identity when the test is not explicitly exercising replay.
+    const needsRequestId =
+      !readOnlyOperations.has(operation as never) &&
+      !idempotentOperations.has(operation as never) &&
+      params.requestId === undefined;
+    const wireParams = needsRequestId
+      ? { ...params, requestId: `fixture-${operation}-${++requestSequence}` }
+      : params;
+    try {
+      const result = await callLocal(service.socketPath, {
+        id: "test",
+        operation,
+        params: wireParams,
+      });
+      if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
+        expect(result.data).not.toHaveProperty("input");
+        expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));
+      }
+      return result;
+    } catch (error) {
+      throw error;
     }
-    return result;
   }
   async function job(jobId: string, state: string) {
     const deadline = performance.now() + 3000;
@@ -114,7 +141,8 @@ export async function projectServiceFixture(
       if (result.ok) {
         const data = result.data as {
           state: string;
-          published: { generation: number; attemptId: string; output: { assetId: string } } | null;
+          published: { generation: string; attemptId: string; output: { assetId: string } } | null;
+          attemptGeneration: number;
           errorCode: string | null;
         };
         if (data.state === state) return data;

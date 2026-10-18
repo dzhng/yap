@@ -151,7 +151,7 @@ import CryptoKit
             .map { String(format: "%02x", $0) }.joined()
         precondition(hash == CommandLine.arguments[4], "Source changed during native playback")
         print("PASS pinned native player past original lease deadline; current edit is 6s")
-        _ = try await host.call("project.delete", ["projectId":id])
+        _ = try await host.call("project.delete", ["projectId":id, "requestId": UUID().uuidString])
         for _ in 0..<30 { owner.tick(); await pause(); if visible() == nil { break } }
         precondition(visible() == nil && view.player == nil)
         precondition(!FileManager.default.fileExists(atPath: asset.url.path))

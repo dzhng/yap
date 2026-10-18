@@ -22,7 +22,7 @@ export const pictureObservationRequestSchema = z
     regions: z
       .array(
         z.strictObject({
-          id: z
+          regionId: z
             .string()
             .min(1)
             .refine((id) => new TextEncoder().encode(id).length <= 128),
@@ -35,7 +35,7 @@ export const pictureObservationRequestSchema = z
   .refine(
     (r) =>
       r.darkAtOrBelow < r.brightAtOrAbove &&
-      new Set(r.regions.map((v) => v.id)).size === r.regions.length &&
+      new Set(r.regions.map((v) => v.regionId)).size === r.regions.length &&
       r.regions.reduce((sum, v) => sum + v.rect.width * v.rect.height, 0) <= maxPicturePixels,
   );
 export type PictureObservationRequest = z.input<typeof pictureObservationRequestSchema>;
@@ -49,7 +49,7 @@ const metric = z.strictObject({
   brightFraction: fraction.optional(),
 });
 const region = z.strictObject({
-  id: z.string().min(1),
+  regionId: z.string().min(1),
   requestedRect: pictureRectSchema,
   sampledRect: pictureRectSchema.optional(),
   state: z.enum(["measured", "unavailable"]),
@@ -112,14 +112,17 @@ export const pictureObservationsSchema = z
     const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
     const raster = { x: 0, y: 0, width: v.width, height: v.height };
     if (
-      v.full.id !== "full" ||
+      v.full.regionId !== "full" ||
       !equal(v.full.requestedRect, raster) ||
       v.regions.length !== v.request.regions.length
     )
       reject();
     for (const [i, r] of [v.full, ...v.regions].entries()) {
       const requested = v.request.regions[i - 1];
-      if (i > 0 && (!requested || r.id !== requested.id || !equal(r.requestedRect, requested.rect)))
+      if (
+        i > 0 &&
+        (!requested || r.regionId !== requested.regionId || !equal(r.requestedRect, requested.rect))
+      )
         reject();
       const q = r.requestedRect,
         x = Math.max(0, q.x),

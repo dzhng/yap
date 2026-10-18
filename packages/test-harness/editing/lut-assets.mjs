@@ -186,7 +186,7 @@ try {
   await call("export.create", {
     projectId,
     revisionId,
-    exportId: movieId,
+    requestId: movieId,
     kind: "video",
     directory: out,
     leaf: "graded.mp4",
@@ -260,7 +260,7 @@ try {
   await call("export.create", {
     projectId: referenceProject.project.projectId,
     revisionId: referencePlaced.revision.id,
-    exportId: referenceExportId,
+    requestId: referenceExportId,
     kind: "video",
     directory: out,
     leaf: "reference.mp4",

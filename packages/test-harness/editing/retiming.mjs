@@ -462,7 +462,7 @@ async function tinyAdmission(source) {
       ["preview.get", { range: { startUs: 0, endUs: 2500 } }],
       [
         "export.create",
-        { exportId: randomUUID(), kind: "video", directory: out, leaf: "must-not-render.mp4" },
+        { requestId: randomUUID(), kind: "video", directory: out, leaf: "must-not-render.mp4" },
       ],
     ]) {
       const error = await call(operation, { ...selected, ...extra }, { error: true });
@@ -1070,7 +1070,7 @@ try {
   const packageId = randomUUID();
   await call("export.create", {
     projectId,
-    exportId: packageId,
+    requestId: packageId,
     kind: "processed-package",
     directory: out,
     leaf: "retimed-package.zip",

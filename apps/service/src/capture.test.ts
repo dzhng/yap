@@ -469,7 +469,9 @@ it("reports the device while the take it is capturing awaits deletion", async ()
   });
   if (!started.ok) throw new Error("the take must start");
   const { recordingId } = started.data as { recordingId: string };
-  expect(await service.call("recording.delete", { recordingId })).toMatchObject({
+  expect(
+    await service.call("recording.delete", { requestId: "test-delete", recordingId }),
+  ).toMatchObject({
     ok: false,
     error: { code: "CAPTURE_NOT_QUIET", retryable: true },
   });
@@ -555,7 +557,7 @@ it("cancels only the named take, removes its media, and refuses to revive it aft
     data: { state: "canceled" },
   });
   expect(await readdir(join(home, "library/recordings"))).toEqual([keptId]);
-  expect(await service.call("recording.latest")).toMatchObject({
+  expect(await service.call("recording.get")).toMatchObject({
     ok: true,
     data: { recordingId: keptId },
   });
@@ -1145,7 +1147,7 @@ it(
       source: fixtureSource,
     });
     expect(started).toMatchObject({ ok: false, error: { code: "TIMEOUT" } });
-    const latest = await service.call("recording.latest");
+    const latest = await service.call("recording.get");
     if (!latest.ok) throw new Error("Allocated take must be discoverable");
     const { recordingId } = latest.data as { recordingId: string };
     const stopped = await service.call("capture.stop", { recordingId });
@@ -1239,7 +1241,7 @@ it("pages source capture facts across default service restart without creating a
     },
   });
   if (!first.ok) throw new Error(JSON.stringify(first));
-  expect(await service.call("recording.latest")).toMatchObject({
+  expect(await service.call("recording.get")).toMatchObject({
     ok: true,
     data: { recordingId: unfinished.recordingId, sourceId: unfinished.sourceId },
   });

@@ -81,10 +81,10 @@ async function fixture(
 const job = (state: string, generation = 2) => ({
   jobId: "job",
   attemptId: `attempt-${generation}`,
-  generation,
+  attemptGeneration: generation,
   state,
   target: { kind: "import", importId: "admission" },
-  published: { generation: 1, attemptId: "older", output: { assetId: "old" }, issues: [] },
+  published: { generation: "1", attemptId: "older", output: { assetId: "old" }, issues: [] },
 });
 
 test("wait submits a mutation once and waits for its current generation instead of accepting retained output", async () => {
@@ -100,7 +100,7 @@ test("wait submits a mutation once and waits for its current generation instead 
           : {
               ...job("ready"),
               published: {
-                generation: 2,
+                generation: "2",
                 attemptId: "attempt-2",
                 output: { assetId: "new" },
                 issues: [],
@@ -118,7 +118,11 @@ test("wait submits a mutation once and waits for its current generation instead 
   expect(JSON.parse(output.stdout)).toMatchObject({
     id: "wait-case",
     ok: true,
-    data: { state: "ready", generation: 2, published: { output: { assetId: "new" } } },
+    data: {
+      state: "ready",
+      attemptGeneration: 2,
+      published: { output: { assetId: "new" } },
+    },
   });
   expect(f.calls.map((request) => request.operation)).toEqual([
     "asset.import",
@@ -138,8 +142,8 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
           revisionId: "r7",
           state: "running",
           jobId: "job",
-          published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-          delivery: { token: "old-pin", bytes: 1, expiresAt: Date.now() + 30000 },
+          published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+          delivery: { token: "old-pin", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
         },
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -160,11 +164,11 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
   expect(output.code).toBe(2);
   expect(JSON.parse(output.stdout)).toMatchObject({
     ok: true,
-    data: { state: "running", published: { generation: 1 } },
+    data: { state: "running", published: { generation: "1" } },
     wait: {
       state: "timed_out",
       timeoutMs: 80,
-      job: { jobId: "job", generation: 2, attemptId: "attempt-2" },
+      job: { jobId: "job", attemptGeneration: 2, attemptId: "attempt-2" },
     },
   });
   expect(f.calls.filter((request) => request.operation === "frame.get")).toHaveLength(1);
@@ -182,13 +186,13 @@ test("an older ready rendition never becomes the final file while its replacemen
           revisionId: "r7",
           state: "ready",
           jobId: "job",
-          published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-          delivery: { token: "old-pin", bytes: 1, expiresAt: Date.now() + 30000 },
+          published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+          delivery: { token: "old-pin", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
         },
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
     if (request.operation === "artifact.read")
-      return { ok: true, data: { data: "eA==", offset: 0, nextOffset: 1, eof: true } };
+      return { ok: true, data: { data: "eA==", offsetBytes: 0, nextOffsetBytes: 1, eof: true } };
     expect(request.operation).toBe("job.get");
     return {
       ok: true,
@@ -322,7 +326,7 @@ test("alignment preparation waits for its admitted job and reuses the same liter
           : {
               state: "ready",
               published: {
-                generation: 1,
+                generation: "1",
                 attemptId: "attempt",
                 output: { generation: "attempt", source: { text: params.text } },
               },
@@ -364,7 +368,7 @@ test("bounded transcript preparation waits for its admitted generation without r
     "transcript.transcribe",
     {
       ...selection,
-      executionRange: { startUs: 0, endUs: 1000000 },
+      sourceRange: { startUs: 0, endUs: 1000000 },
       context: { beforeUs: 10, afterUs: 20 },
     },
     ["--wait", "--timeout-ms", "1000"],
@@ -379,7 +383,10 @@ test("bounded transcript preparation waits for its admitted generation without r
     "job.get",
     "transcript.get",
   ]);
-  expect(f.calls[2]!.params).toEqual({ ...selection, generation });
+  expect(f.calls[2]!.params).toEqual({
+    ...selection,
+    generation,
+  });
 });
 
 test("a clamped transcript preparation keeps its range-clamped issue through the pinned read", async () => {
@@ -413,7 +420,7 @@ test("a clamped transcript preparation keeps its range-clamped issue through the
   });
   const output = await f.run(
     "transcript.transcribe",
-    { ...selection, executionRange: { startUs: 0, endUs: 5000 } },
+    { ...selection, sourceRange: { startUs: 0, endUs: 5000 } },
     ["--wait", "--timeout-ms", "1000"],
   );
   expect(output.code, output.stdout + output.stderr).toBe(0);
@@ -448,7 +455,7 @@ test("a clamp joined to a full read page stays within the issue bound", async ()
   });
   const output = await f.run(
     "transcript.transcribe",
-    { ...selection, executionRange: { startUs: 0, endUs: 5000 } },
+    { ...selection, sourceRange: { startUs: 0, endUs: 5000 } },
     ["--wait", "--timeout-ms", "1000"],
   );
   expect(output.code, output.stdout + output.stderr).toBe(0);
@@ -471,7 +478,7 @@ test.each(["running", "ready"])(
       at: { range: { startUs: 0, endUs: 1000 } },
       evidence: {},
     };
-    const published = { generation: 2, issues: [dropped] };
+    const published = { generation: "2", issues: [dropped] };
     const f = await fixture((request) => {
       if (request.operation === "transcript.transcribe")
         return {
@@ -584,7 +591,7 @@ test("a clamped render preparation keeps its range-clamped issue through the pin
         state: "ready",
         jobId: null,
         issues: [clamp],
-        published: { generation: 1, attemptId: generation, output: { generation }, issues: [] },
+        published: { generation: "1", attemptId: generation, output: { generation }, issues: [] },
       },
     };
   });
@@ -627,7 +634,7 @@ test("an already published render preparation reads its words without waiting on
         ...params,
         state: "ready",
         jobId: null,
-        published: { generation: 1, attemptId: generation, output: { generation }, issues: [] },
+        published: { generation: "1", attemptId: generation, output: { generation }, issues: [] },
       },
     };
   });
@@ -816,8 +823,8 @@ test("batch wait inspects replacement jobs before accepting retained ready items
               data: {
                 state: "ready",
                 jobId: "job",
-                published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-                delivery: { token: "old", bytes: 1, expiresAt: Date.now() + 30000 },
+                published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+                delivery: { token: "old", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
               },
             },
             {
@@ -873,7 +880,7 @@ test("a changed pinned revision interrupts waiting without delivering another re
           delivery:
             reads === 1
               ? null
-              : { token: "foreign-revision", bytes: 1, expiresAt: Date.now() + 30000 },
+              : { token: "foreign-revision", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
         },
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -927,7 +934,7 @@ test("SIGINT preserves the acknowledged selection and closes leases after cancel
           state: "running",
           jobId: "job",
           published: null,
-          delivery: { token: "unused", bytes: 1, expiresAt: Date.now() + 30000 },
+          delivery: { token: "unused", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
         },
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -1002,8 +1009,8 @@ test("the wait deadline covers media delivery and never publishes an incomplete 
           assetId: "a",
           streamId: "s",
           state: "ready",
-          published: { generation: 1, output: { mediaType: "application/json" }, issues: [] },
-          delivery: { token: "measurement", bytes: 2, expiresAt: Date.now() + 30000 },
+          published: { generation: "1", output: { mediaType: "application/json" }, issues: [] },
+          delivery: { token: "measurement", sizeBytes: 2, expiresAtMs: Date.now() + 30000 },
         },
       };
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -1011,7 +1018,12 @@ test("the wait deadline covers media delivery and never publishes an incomplete 
     await new Promise((resolve) => setTimeout(resolve, 180));
     return {
       ok: true,
-      data: { offset: 0, nextOffset: 2, eof: true, data: Buffer.from("{}").toString("base64") },
+      data: {
+        offsetBytes: 0,
+        nextOffsetBytes: 2,
+        eof: true,
+        data: Buffer.from("{}").toString("base64"),
+      },
     };
   });
   const destination = `${f.home}/measurement.json`;
@@ -1082,10 +1094,10 @@ test("a delayed batch delivers only completed items and retains each terminal fa
                 state: ready ? "ready" : "running",
                 jobId: "ready-job",
                 published: ready
-                  ? { generation: 2, output: { mediaType: "image/png" }, issues: [] }
+                  ? { generation: "2", output: { mediaType: "image/png" }, issues: [] }
                   : null,
                 delivery: ready
-                  ? { token: "ready", bytes: 2, expiresAt: Date.now() + 30000 }
+                  ? { token: "ready", sizeBytes: 2, expiresAtMs: Date.now() + 30000 }
                   : null,
               },
             },
@@ -1116,7 +1128,12 @@ test("a delayed batch delivers only completed items and retains each terminal fa
     expect(request.operation).toBe("artifact.read");
     return {
       ok: true,
-      data: { offset: 0, nextOffset: 2, eof: true, data: Buffer.from("ok").toString("base64") },
+      data: {
+        offsetBytes: 0,
+        nextOffsetBytes: 2,
+        eof: true,
+        data: Buffer.from("ok").toString("base64"),
+      },
     };
   });
   const directory = `${f.home}/completed-batch`;
@@ -1156,8 +1173,8 @@ test("batch file publication drains a failed disk write without exposing a parti
             ok: true,
             data: {
               state: "ready",
-              published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-              delivery: { token: `frame-${atUs}`, bytes: 4, expiresAt: Date.now() + 30000 },
+              published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+              delivery: { token: `frame-${atUs}`, sizeBytes: 4, expiresAtMs: Date.now() + 30000 },
             },
           })),
         },
@@ -1166,7 +1183,12 @@ test("batch file publication drains a failed disk write without exposing a parti
     expect(request.operation).toBe("artifact.read");
     return {
       ok: true,
-      data: { offset: 0, nextOffset: 4, eof: true, data: Buffer.from("full").toString("base64") },
+      data: {
+        offsetBytes: 0,
+        nextOffsetBytes: 4,
+        eof: true,
+        data: Buffer.from("full").toString("base64"),
+      },
     };
   });
   const preload = `${f.home}/disk-failure.mjs`;
@@ -1243,7 +1265,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
               published:
                 atUs === 7 || reads >= 3
                   ? {
-                      generation: atUs === 7 ? 1 : 2,
+                      generation: atUs === 7 ? "1" : "2",
                       output: { mediaType: "image/png" },
                       issues: [],
                     }
@@ -1252,8 +1274,8 @@ test("cached failed batch jobs drain every fresh retained lease while another it
                 atUs === 7 || reads >= 3
                   ? {
                       token: atUs === 7 ? `failed-${reads}` : "ready",
-                      bytes: 2,
-                      expiresAt: Date.now() + 30000,
+                      sizeBytes: 2,
+                      expiresAtMs: Date.now() + 30000,
                     }
                   : null,
             },
@@ -1269,6 +1291,9 @@ test("cached failed batch jobs drain every fresh retained lease while another it
             request.params.jobId === "failed-job" ? "failed" : reads >= 3 ? "ready" : "running",
           ),
           jobId: request.params.jobId,
+          ...(request.params.jobId === "ready-job"
+            ? { published: { generation: "2", output: { assetId: "ready" }, issues: [] } }
+            : {}),
           target: { kind: "project", projectId: "p", revisionId: "r7" },
         },
       };
@@ -1277,7 +1302,12 @@ test("cached failed batch jobs drain every fresh retained lease while another it
     expect(request.params.token).toBe("ready");
     return {
       ok: true,
-      data: { offset: 0, nextOffset: 2, eof: true, data: Buffer.from("ok").toString("base64") },
+      data: {
+        offsetBytes: 0,
+        nextOffsetBytes: 2,
+        eof: true,
+        data: Buffer.from("ok").toString("base64"),
+      },
     };
   });
   const directory = `${f.home}/failed-batch`;
@@ -1338,8 +1368,8 @@ test.each(["failed", "canceled"])(
             revisionId: "r7",
             state: "ready",
             jobId: "job",
-            published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-            delivery: { token: "old", bytes: 1, expiresAt: Date.now() + 30000 },
+            published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+            delivery: { token: "old", sizeBytes: 1, expiresAtMs: Date.now() + 30000 },
           },
         };
       if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -1358,8 +1388,8 @@ test.each(["failed", "canceled"])(
     ]);
     expect(output.code).toBe(1);
     expect(JSON.parse(output.stdout)).toMatchObject({
-      data: { state, generation: 2, published: { generation: 1 } },
-      wait: { state: "settled", job: { generation: 2 } },
+      data: { state, attemptGeneration: 2, published: { generation: "1" } },
+      wait: { state: "settled", job: { attemptGeneration: 2 } },
     });
     expect(
       f.calls.filter((r) => r.operation.endsWith("retry") || r.operation === "artifact.read"),
@@ -1374,7 +1404,7 @@ test("job.retry waits for the shared job and preserves its identity", async () =
         ok: true,
         data: {
           ...job("ready"),
-          published: { generation: 2 },
+          published: { generation: "2" },
           jobId: "job",
           target: { kind: "project", projectId: "p" },
         },
@@ -1384,7 +1414,7 @@ test("job.retry waits for the shared job and preserves its identity", async () =
       ok: true,
       data: {
         ...job("ready"),
-        published: { generation: 2 },
+        published: { generation: "2" },
         jobId: "job",
         target: { kind: "project", projectId: "p" },
       },
@@ -1453,14 +1483,18 @@ test.each(
         data: { assetId: "a", state: "running", jobId: "job" },
         wait: {
           state: "interrupted",
-          job: { jobId: "job", generation: 2, attemptId: "attempt-2" },
+          job: { jobId: "job", attemptGeneration: 2, attemptId: "attempt-2" },
           error: { code: "INVALID_RESPONSE" },
         },
       });
     else {
       expect(reply).toMatchObject({ data: { state: "ready" }, wait: { state: "settled" } });
       if (!initialReady)
-        expect(reply.wait.job).toEqual({ jobId: "job", generation: 2, attemptId: "attempt-2" });
+        expect(reply.wait.job).toEqual({
+          jobId: "job",
+          attemptGeneration: 2,
+          attemptId: "attempt-2",
+        });
     }
     expect(f.calls.filter((r) => r.operation === operation).at(-1)?.params).not.toHaveProperty(
       "generation",
@@ -1494,7 +1528,7 @@ test.each(["export.create", "export.status", "export.recover"])(
       operation,
       operation === "export.create"
         ? {
-            exportId: "550e8400-e29b-41d4-a716-446655440000",
+            requestId: "550e8400-e29b-41d4-a716-446655440000",
             projectId: "p",
             kind: "video",
             directory: "/tmp",
@@ -1563,7 +1597,7 @@ test.each(["export.recover", "export.status"])(
           cleanupPending: false,
           receipt,
           output: "/tmp/final.mp4",
-          recovery: { jobId: "recovery-job", state: "ready", published: { generation: 2 } },
+          recovery: { jobId: "recovery-job", state: "ready", published: { generation: "2" } },
         },
       };
     });
@@ -1573,7 +1607,7 @@ test.each(["export.recover", "export.status"])(
       data: { ...base, state: "ready", receipt, output: "/tmp/final.mp4" },
       wait: {
         state: "settled",
-        job: { jobId: "recovery-job", generation: 2, attemptId: "attempt-2" },
+        job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       },
     });
     expect(f.calls.filter((r) => r.operation === "job.get").map((r) => r.params.jobId)).toEqual([
@@ -1596,7 +1630,7 @@ test.each([
   "terminal $state recovery / $exposedState status preserves export history and exits unsuccessfully",
   async ({ state, exposedState }) => {
     const exportId = "550e8400-e29b-41d4-a716-446655440000";
-    const receipt = { leaf: "final.mp4", bytes: 2, sha256: "a".repeat(64) };
+    const receipt = { leaf: "final.mp4", sizeBytes: 2, sha256: "a".repeat(64) };
     const base = {
       exportId,
       projectId: "p",
@@ -1631,13 +1665,17 @@ test.each([
         },
       };
     });
-    const output = await f.run("export.recover", { exportId }, ["--wait", "--timeout-ms", "1000"]);
+    const output = await f.run("export.recover", { exportId, requestId: "recover-terminal" }, [
+      "--wait",
+      "--timeout-ms",
+      "1000",
+    ]);
     expect(output.code).toBe(1);
     expect(JSON.parse(output.stdout)).toMatchObject({
       data: { ...base, recovery: { jobId: "recovery-job", state: exposedState, published: null } },
       wait: {
         state: "settled",
-        job: { jobId: "recovery-job", generation: 2, attemptId: "attempt-2" },
+        job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       },
     });
     expect(f.calls.map((r) => r.operation)).toEqual([
@@ -1687,13 +1725,17 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
       },
     };
   });
-  const output = await f.run("export.recover", { exportId }, ["--wait", "--timeout-ms", "1000"]);
+  const output = await f.run("export.recover", { exportId, requestId: "recover-interrupted" }, [
+    "--wait",
+    "--timeout-ms",
+    "1000",
+  ]);
   expect(output.code).toBe(1);
   expect(JSON.parse(output.stdout)).toMatchObject({
     data: { ...base, recovery: { jobId: "recovery-job", state: "failed" } },
     wait: {
       state: "interrupted",
-      job: { jobId: "recovery-job", generation: 2, attemptId: "attempt-2" },
+      job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       error: { code: "INVALID_RESPONSE" },
     },
   });
@@ -1746,8 +1788,8 @@ test("batch media delivery timeout reclassifies settled wait while keeping compl
               ok: true,
               data: {
                 state: "ready",
-                published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-                delivery: { token: "slow", bytes: 2, expiresAt: Date.now() + 30000 },
+                published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+                delivery: { token: "slow", sizeBytes: 2, expiresAtMs: Date.now() + 30000 },
               },
             },
           ],
@@ -1757,7 +1799,12 @@ test("batch media delivery timeout reclassifies settled wait while keeping compl
       await new Promise((resolve) => setTimeout(resolve, 180));
       return {
         ok: true,
-        data: { offset: 0, nextOffset: 2, eof: true, data: Buffer.from("ok").toString("base64") },
+        data: {
+          offsetBytes: 0,
+          nextOffsetBytes: 2,
+          eof: true,
+          data: Buffer.from("ok").toString("base64"),
+        },
       };
     }
     if (request.operation === "artifact.close") return { ok: true, data: { closed: true } };
@@ -1829,7 +1876,7 @@ test("one published output reports the same issues through the service, CLI --wa
     return reply.data as {
       jobId: string;
       state: string;
-      published: { generation: number; attemptId: string; issues: unknown } | null;
+      published: { generation: string; attemptId: string; issues: unknown } | null;
     };
   };
   let ready = await handler("asset.import", params);
@@ -1852,7 +1899,7 @@ test("one published output reports the same issues through the service, CLI --wa
       {
         outputKind: "artifact",
         outputId: ready.published!.attemptId,
-        generation: ready.published!.generation,
+        generation: Number(ready.published!.generation),
       },
       [issue],
     ),
@@ -1879,7 +1926,7 @@ test("one published output reports the same issues through the service, CLI --wa
   expect(waited).toMatchObject({ ok: true, wait: { state: "settled" } });
   expect(waited.data.published?.issues).toEqual(served.published?.issues);
   expect(cli.stderr.trim().split("\n").at(-1)).toMatch(
-    /^asset\.import: ready \(1 issues\) \(\S+, generation 1\)$/,
+    /^asset\.import: ready \(1 issues\) \(\S+, attempt 1\)$/,
   );
 
   const client = new Client({ name: "issue-parity", version: "1" });
@@ -1908,12 +1955,12 @@ test("a ready read counts its admission issues beside its published issues", asy
       streamId: "s",
       state: "ready",
       issues: [clamp],
-      published: { generation: 1, output: {}, issues: [published] },
+      published: { generation: "1", output: {}, issues: [published] },
     },
   }));
   const output = await f.run(
     "audio.get",
-    { assetId: "a", streamId: "s", range: { startUs: 0, endUs: 2 } },
+    { assetId: "a", streamId: "s", sourceRange: { startUs: 0, endUs: 2 } },
     ["--wait", "--timeout-ms", "1000"],
   );
   // The stub serves no delivery; the progress line is the claim here.
@@ -1954,7 +2001,7 @@ test("the ready marker counts the issues a truncation entry stands for", async (
       state: "ready",
       issues: [],
       published: {
-        generation: 1,
+        generation: "1",
         output: {},
         issues: [
           { code: "range-clamped", message: "m", evidence: {} },
@@ -1965,7 +2012,7 @@ test("the ready marker counts the issues a truncation entry stands for", async (
   }));
   const output = await f.run(
     "audio.get",
-    { assetId: "a", streamId: "s", range: { startUs: 0, endUs: 2 } },
+    { assetId: "a", streamId: "s", sourceRange: { startUs: 0, endUs: 2 } },
     ["--wait", "--timeout-ms", "1000"],
   );
   expect(output.stderr.split("\n")).toContain("audio.get: ready (42 issues)");

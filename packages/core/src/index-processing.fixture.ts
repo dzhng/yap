@@ -238,7 +238,7 @@ export async function fixture(
                       status: "available",
                       faces: [
                         {
-                          id: "face-0",
+                          faceId: "face-0",
                           boundingBox: { x: 0, y: 0, width: 1, height: 1 },
                           confidence: 0.9,
                         },
@@ -292,7 +292,7 @@ export async function fixture(
                     status: "available",
                     faces: [
                       {
-                        id: "face-0",
+                        faceId: "face-0",
                         boundingBox: { x: 0, y: 0, width: 1, height: 1 },
                         confidence: 0.9,
                       },

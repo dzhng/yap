@@ -32,7 +32,7 @@ help schema and preserve the returned JSON envelope.
 
 `acquisition.import`, `acquisition.get`, `asset.import`, `asset.convert`,
 `asset.get`, `asset.segments`, `asset.origins`, `asset.list`, `recording.get`,
-`recording.latest`, `recording.list`, `recording.delete`,
+`recording.list`, `recording.delete`,
 `recording.cleanup`, and `storage.usage` discover admitted media, retain
 source identities, and reclaim only verified working files.
 

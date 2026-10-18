@@ -203,8 +203,16 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     f.jobs.submit(other);
     await expect.poll(() => f.jobs.status(other).published?.result).toBe("sibling result");
     finish.resolve("late result");
-    await expect(first).resolves.toEqual({ recordingId: target.recordingId, deleted: true });
-    await expect(second).resolves.toEqual({ recordingId: target.recordingId, deleted: true });
+    await expect(first).resolves.toEqual({
+      recordingId: target.recordingId,
+      deleted: true,
+      freedBytes: 0,
+    });
+    await expect(second).resolves.toEqual({
+      recordingId: target.recordingId,
+      deleted: true,
+      freedBytes: 0,
+    });
     await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
     expect(f.store.deleting(target.recordingId)).toBeNull();
     expect(f.removed).toEqual([target.recordingId]);
@@ -233,6 +241,7 @@ test("delete removes donor files but never sibling donors or prepared speech mod
   await expect(f.deletion.delete({ kind: "recording", id: target.recordingId })).resolves.toEqual({
     recordingId: target.recordingId,
     deleted: true,
+    freedBytes: 0,
   });
   await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);

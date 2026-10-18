@@ -207,17 +207,18 @@ try {
         }),
       });
     }
-    const exportId = randomUUID();
+    const requestId = randomUUID();
     const exportRequest = {
       projectId,
       revisionId,
-      exportId,
+      requestId,
       kind: "video",
       directory,
       leaf: "export.mp4",
       settings,
     };
-    await call("export.create", exportRequest);
+    const created = await call("export.create", exportRequest);
+    const exportId = created.exportId;
     const exported = await poll(
       () => call("export.status", { exportId }, { transport: "mcp" }),
       (value) => value.state === "ready",

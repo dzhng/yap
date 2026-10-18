@@ -13,6 +13,7 @@ final class SparkleDriver: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private let changed: () -> Void
     private var checkObservation: NSKeyValueObservation?
     private var requestCancellation: (() -> Void)?
+    private var checkResults: [String: [String: Any]] = [:]
 
     init?(owner: UpdateCoordinator, bundle: Bundle = .main,
           changed: @escaping () -> Void = {}, terminate: @escaping () -> Void) {
@@ -69,15 +70,23 @@ final class SparkleDriver: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             }
             owner.setEnabled(enabled)
         case "update.check":
+            guard let requestId = params["requestId"] as? String, !requestId.isEmpty else {
+                throw ServiceFailure(code: "INVALID_PARAMS", message: "Expected a requestId.")
+            }
+            if let prior = checkResults[requestId] { return prior }
             guard canCheckForUpdates else { throw owner.checkFailure }
             try owner.beginManualCheck()
             updater.checkForUpdates()
         default:
             throw ServiceFailure(code: "UNKNOWN_OPERATION", message: "Unknown updater operation.")
         }
-        return ["available": owner.available, "enabled": owner.enabled,
+        let result: [String: Any] = ["available": owner.available, "enabled": owner.enabled,
                 "canCheck": canCheckForUpdates, "message": owner.checkMessage as Any? ?? NSNull(),
                 "update": owner.status.parameters["update"]!]
+        if operation == "update.check", let requestId = params["requestId"] as? String {
+            checkResults[requestId] = result
+        }
+        return result
     }
     /// All aliases use this persistent private inode, before any SDK cycle starts.
     private static func prepareLock(_ relative: String) throws {

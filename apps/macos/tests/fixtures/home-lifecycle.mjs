@@ -43,7 +43,7 @@ export function compileHomeDriver(scratch) {
             let deadline = Date().addingTimeInterval(60)
             while true {
                 let answer = line(lifecycle.handle("skill.status"))
-                if !answer.contains("\"state\":\"updating\"") || Date() > deadline { return answer }
+                if (!answer.contains("\"state\":\"updating\"") && !answer.contains("\"state\":\"running\"")) || Date() > deadline { return answer }
                 Thread.sleep(forTimeInterval: 0.1)
             }
         }

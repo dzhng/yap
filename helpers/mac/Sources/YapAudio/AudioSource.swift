@@ -30,8 +30,10 @@ struct SourceTrack {
         let streamId = selection.streamId
         let sourceOffsetUs = selection.sourceOffsetUs
         let source = URL(fileURLWithPath: path)
+        // An absent file is a missing prerequisite, not undecodable media: restoring the bytes
+        // makes a retry succeed, so the code must stay retryable.
         guard FileManager.default.fileExists(atPath: source.path) else {
-            throw NativeFailure.decodeFailed("No source media at \(source.path).")
+            throw NativeFailure("MEDIA_UNAVAILABLE", "No source media at \(source.path).")
         }
         let input = try MediaInput(url: source, purpose: purpose)
         let asset = input.asset

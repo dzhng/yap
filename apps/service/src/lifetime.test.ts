@@ -382,7 +382,7 @@ it("validates project composition requests at the canonical wire boundary", asyn
       expectedRevisionId: "r0",
       ranges: [{ startUs: 0, endUs: 1 }],
     }),
-    deletion: await call("recording.delete", { recordingId: "same-id" }),
+    deletion: await call("recording.delete", { requestId: "test-delete", recordingId: "same-id" }),
   };
   const output = process.env.YAP_CONTRACT_OUTPUT;
   if (output)

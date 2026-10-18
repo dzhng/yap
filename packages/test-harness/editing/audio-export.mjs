@@ -74,15 +74,16 @@ async function exported(selection, name, settings, transport = "cli") {
   const request = {
     ...selection,
     kind: "audio",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory: await realpath(out),
     leaf: name + (settings?.container === "m4a" ? ".m4a" : ".wav"),
     ...(settings ? { settings } : {}),
   };
   const before = await call("project.get", { projectId: selection.projectId });
   const initial = await call("export.create", request, { transport });
+  const exportId = initial.exportId;
   const status = await poll(
-    () => call("export.status", { exportId: request.exportId }, { transport }),
+    () => call("export.status", { exportId }, { transport }),
     (v) => v.state === "ready",
     name,
   );
@@ -358,13 +359,13 @@ try {
   const occupiedRequest = {
     projectId,
     kind: "audio",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory: await realpath(out),
     leaf: "occupied.wav",
   };
-  await call("export.create", occupiedRequest);
+  const occupiedCreated = await call("export.create", occupiedRequest);
   const refused = await poll(
-    () => call("export.status", { exportId: occupiedRequest.exportId }),
+    () => call("export.status", { exportId: occupiedCreated.exportId }),
     (v) => v.state === "failed",
     "occupied destination",
   );
@@ -381,7 +382,7 @@ try {
         {
           projectId,
           kind: "audio",
-          exportId: randomUUID(),
+          requestId: randomUUID(),
           directory: out,
           leaf: "unsupported",
           settings,
@@ -498,6 +499,7 @@ try {
         "AAC packet padding exceeds bounds",
       );
       report.checks.aac.push({
+        requestId: exportedAudio.request.requestId,
         settings,
         receipt: exportedAudio.status,
         stream,
@@ -541,7 +543,7 @@ try {
       {
         ...selection,
         kind: "audio",
-        exportId: originalAAC.receipt.exportId,
+        requestId: originalAAC.requestId,
         directory: originalAAC.receipt.destination.directory,
         leaf: originalAAC.receipt.destination.leaf,
         settings: originalAAC.settings,
@@ -571,7 +573,7 @@ try {
       ...selection,
       kind: "audio",
       settings: cancelSettings,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       directory: await realpath(out),
       leaf: "aac-canceled-retried.m4a",
     };

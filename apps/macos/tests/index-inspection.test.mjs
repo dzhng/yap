@@ -77,15 +77,15 @@ test("bundled source index retains selected images, pinned continuation and cach
     if (["failed", "unavailable"].includes(result.state)) throw new Error(JSON.stringify(result));
     return result.state === "ready" && result;
   }, 30000);
-  assert.equal(ready.page.metadata.candidateCount, 2);
-  const reference = ready.page.entries[0].reference;
-  assert.equal(ready.page.entries[0].candidate.requestedSourceUs, 0);
+  assert.equal(ready.metadata.candidateCount, 2);
+  const reference = ready.entries[0].reference;
+  assert.equal(ready.entries[0].candidate.requestedSourceUs, 0);
   const read = async (ref) => {
     const result = await call("index.frame", ref);
     try {
       const chunk = await call("artifact.read", {
         token: result.delivery.token,
-        offset: 0,
+        offsetBytes: 0,
         maxBytes: 524288,
       });
       assert.equal(chunk.eof, true);
@@ -133,14 +133,14 @@ test("bundled source index retains selected images, pinned continuation and cach
   assert.equal(first.frame.actualSourceUs, 0);
   const next = await call("index.get", {
     ...selection,
-    cursor: ready.page.nextCursor,
+    cursor: ready.nextCursor,
     limit: 1,
   });
   assert.equal(next.assetId, selection.assetId);
   assert.equal(next.streamId, selection.streamId);
   assert.equal(next.generation, ready.generation);
-  assert.equal(next.page.entries[0].candidate.requestedSourceUs, 11_999_999);
-  assert.equal(next.page.nextCursor, null);
+  assert.equal(next.entries[0].candidate.requestedSourceUs, 11_999_999);
+  assert.equal(next.nextCursor, null);
   const batch = await call("index.frames", {
     ...selection,
     generation: reference.generation,
@@ -183,7 +183,7 @@ test("bundled source index retains selected images, pinned continuation and cach
     limit: 1,
   });
   assert.equal(historical.generation, ready.generation);
-  assert.deepEqual(historical.page, ready.page);
+  assert.deepEqual(historical, ready);
   assert.equal(digest(await readFile(video)), sourceHash);
   assert.deepEqual(await instance.reap(), []);
 });

@@ -288,7 +288,7 @@ final class ExportController {
 
     private func send(_ request: ExportsState.Request) async {
         var params: [String: Any] = [
-            "exportId": request.exportId,
+            "requestId": request.exportId,
             "kind": request.kind.rawValue, "revisionId": request.revisionId,
             "directory": request.directory, "leaf": request.leaf,
         ]

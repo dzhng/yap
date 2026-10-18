@@ -21,6 +21,7 @@ final class UpdateCoordinator {
             switch state {
             case "idle": workState = "idle"
             case "disabled", "unavailable": workState = "unavailable"
+            case "checking", "downloading", "installing": workState = "running"
             case "failed": workState = "failed"
             case "waiting": workState = "queued"
             default: preconditionFailure("Unknown update state: \(state)")

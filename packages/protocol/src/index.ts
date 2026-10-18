@@ -33,7 +33,7 @@ export const operationErrorSchema = z.object({
 });
 export const waitJobSchema = z.object({
   jobId: z.string().min(1),
-  generation: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+  attemptGeneration: z.int().positive().max(Number.MAX_SAFE_INTEGER),
   attemptId: z.string().min(1),
 });
 /** Adapter deadline outcome; it does not change the service's work or publication state. */
@@ -70,11 +70,11 @@ export const deliveredResponseSchema = z.object({
   ok: z.boolean(),
   resultDelivery: z.object({
     token: z.string().min(1),
-    bytes: z
+    sizeBytes: z
       .int()
       .positive()
       .max(RESPONSE_FRAME_BYTES - 1),
-    expiresAt: z.int(),
+    expiresAtMs: z.int(),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
     mediaType: z.literal("application/json"),
   }),

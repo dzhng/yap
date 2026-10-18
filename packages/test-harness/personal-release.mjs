@@ -163,7 +163,7 @@ const main = async () => {
     )
   )
     throw new Error("The explicit edit plan must contain caller-selected remove ranges");
-  const recordingId = values.recording ?? call("recording.latest")?.recordingId;
+  const recordingId = values.recording ?? call("recording.get")?.recordingId;
   if (!recordingId) throw new Error("No recording to inspect; record a take first");
   const recording = call("recording.get", { recordingId });
   step("recording", {
@@ -618,7 +618,14 @@ const main = async () => {
     ["processed-package", "demo.zip"],
   ]) {
     const exportId = randomUUID();
-    call("export.create", { projectId, exportId, kind, revisionId, directory: out, leaf });
+    call("export.create", {
+      projectId,
+      requestId: exportId,
+      kind,
+      revisionId,
+      directory: out,
+      leaf,
+    });
     const deadline = Date.now() + 900_000;
     for (;;) {
       const status = call("export.status", { exportId });

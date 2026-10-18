@@ -33,10 +33,13 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
   await mkdir(sibling, { recursive: true, mode: 0o700 });
   await writeFile(join(directory, "partial"), "unfinished donor bytes");
   await writeFile(join(sibling, "retained"), "unrelated bytes");
-  expect(await f.call("recording.delete", { recordingId })).toMatchObject({
+  const removedBytes = (await stat(join(directory, "partial"))).size;
+  const deleted = await f.call("recording.delete", { requestId: "test-delete", recordingId });
+  expect(deleted).toMatchObject({
     ok: true,
     data: { recordingId, deleted: true },
   });
+  if (deleted.ok) expect((deleted.data as { freedBytes: number }).freedBytes).toBe(removedBytes);
   expect(f.nativeCalls.slice(-2)).toEqual(["capture.cancel", "capture.status"]);
   await expect(readFile(join(directory, "partial"))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(join(sibling, "retained"), "utf8")).toBe("unrelated bytes");
@@ -44,10 +47,15 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(await f.call("recording.delete", { recordingId })).toMatchObject({
-    ok: true,
-    data: { recordingId, deleted: true },
-  });
+  expect(await f.call("recording.delete", { requestId: "test-delete", recordingId })).toMatchObject(
+    {
+      ok: true,
+      data: { recordingId, deleted: true },
+    },
+  );
+  expect(
+    await f.call("recording.delete", { requestId: "test-delete", recordingId: randomUUID() }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
 });
 
 function deferred<T>() {
@@ -84,9 +92,11 @@ test("deletion fences retries and joins an acquisition borrowing the donor befor
   const { recordingId, directory, acquisitionId, job } = await settleCapture(f, "held-source");
   await entered.promise;
   let finished = false;
-  const deletion = f.call("recording.delete", { recordingId }).finally(() => {
-    finished = true;
-  });
+  const deletion = f
+    .call("recording.delete", { requestId: "test-delete", recordingId })
+    .finally(() => {
+      finished = true;
+    });
   cleanup.push(async () => {
     release.resolve();
     await deletion.catch(() => {});
@@ -188,7 +198,10 @@ test.each([
     if (!imported.ok) throw new Error(JSON.stringify(imported));
     const importedJob = imported.data as { jobId: string };
     await entered.promise;
-    const deleting = f.call("recording.delete", { recordingId: take.recordingId });
+    const deleting = f.call("recording.delete", {
+      requestId: "test-delete",
+      recordingId: take.recordingId,
+    });
     cleanup.push(async () => {
       release.resolve();
       await deleting.catch(() => {});
@@ -226,7 +239,12 @@ test("a retained donor lease refuses deletion without hiding independent ready a
   if (!acquired.ok) throw new Error(JSON.stringify(acquired));
   const held = await openDirectoryLease(join(take.directory, ".."), "shared");
   cleanup.push(() => held.close());
-  expect(await f.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", {
+      requestId: "test-delete-first",
+      recordingId: take.recordingId,
+    }),
+  ).toMatchObject({
     ok: false,
     error: { code: "RECORDING_BUSY", retryable: true },
   });
@@ -241,7 +259,12 @@ test("a retained donor lease refuses deletion without hiding independent ready a
   });
   expect(await readFile(join(take.directory, "video.mov"), "utf8")).toBe("borrowed source bytes");
   await held.close();
-  expect(await f.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", {
+      requestId: "test-delete-second",
+      recordingId: take.recordingId,
+    }),
+  ).toMatchObject({
     ok: true,
     data: { deleted: true },
   });
@@ -274,7 +297,9 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
   await expect
     .poll(() => f.call("job.get", { jobId: take.job.jobId }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
-  expect(await f.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", { requestId: "test-delete", recordingId: take.recordingId }),
+  ).toMatchObject({
     ok: false,
     error: { code: "MEDIA_UNAVAILABLE", retryable: true },
   });
@@ -290,7 +315,12 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
       ),
     )
     .toBe(true);
-  expect(await reopened.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
+  expect(
+    await reopened.call("recording.delete", {
+      requestId: "test-delete",
+      recordingId: take.recordingId,
+    }),
+  ).toMatchObject({
     ok: true,
     data: { deleted: true },
   });
@@ -418,7 +448,9 @@ test("ready source originals, evidence and authored project history survive publ
     .poll(() => f.call("cursor.raw", { projectId }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   const before = await inspect(f);
-  expect(await f.call("recording.delete", { recordingId: take.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", { requestId: "test-delete", recordingId: take.recordingId }),
+  ).toMatchObject({
     ok: true,
     data: { deleted: true },
   });

@@ -349,5 +349,6 @@ export function sourceIndexDomain(
       };
     },
     isDeleting: () => false,
+    retainedFrame: retainedSourceFrameSchema,
   };
 }

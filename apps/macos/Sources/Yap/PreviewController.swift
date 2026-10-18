@@ -154,7 +154,7 @@ final class PreviewController {
     /// no renewal response may revive a session that was closed while awaiting the service.
     func tick() {
         guard let target else { return }
-        if let lease, lease.expiresAt <= now().timeIntervalSince1970 * 1000 {
+        if let lease, lease.expiresAtMs <= now().timeIntervalSince1970 * 1000 {
             stop("Preview lease expired. Open Preview again to continue.")
             return
         }
@@ -176,12 +176,13 @@ final class PreviewController {
                 _ = try await call("project.get", target.parameters)
                 guard generation == current else { return }
                 guard let currentLease, now() >= renewAt else { reading = false; return }
-                let data = try await call("artifact.renew", ["token": currentLease.token])
+                // Each renewal is its own write: it extends the lease from now, so it gets a fresh request identity.
+                let data = try await call("artifact.renew", ["token": currentLease.token, "requestId": UUID().uuidString])
                 let renewed = try JSONDecoder().decode(Lease.self, from: data)
                 guard generation == current else { return }
-                guard currentLease.expiresAt > now().timeIntervalSince1970 * 1000,
-                    renewed.token == currentLease.token, renewed.bytes == currentLease.bytes,
-                    renewed.expiresAt > now().timeIntervalSince1970 * 1000 else {
+                guard currentLease.expiresAtMs > now().timeIntervalSince1970 * 1000,
+                    renewed.token == currentLease.token, renewed.sizeBytes == currentLease.sizeBytes,
+                    renewed.expiresAtMs > now().timeIntervalSince1970 * 1000 else {
                     throw InvalidAnswer()
                 }
                 lease = renewed
@@ -189,7 +190,7 @@ final class PreviewController {
             } else {
                 var params: [String: Any] = requestOperation == "job.retry" ? ["jobId": workJobId as Any] : target.parameters
                 if requestOperation != "job.retry", let pinnedRevision { params["revisionId"] = pinnedRevision }
-                if let previewRange = initialPreviewRange() { params["range"] = previewRange }
+                if requestOperation != "job.retry", let previewRange = initialPreviewRange() { params["range"] = previewRange }
                 if requestOperation != "job.retry" { params["maxLongEdge"] = draftMaxLongEdge }
                 let data = try await call(requestOperation, params)
                 // Decode the lease separately so a late or otherwise invalid ready answer
@@ -213,9 +214,11 @@ final class PreviewController {
                         guard let movie = answer.published?.output, let delivered,
                             movie.target == target, movie.revisionId == answer.revisionId,
                             movie.mediaType == "video/mp4", movie.bytes > 0,
-                            !delivered.token.isEmpty, delivered.bytes == movie.bytes,
-                            delivered.expiresAt > now().timeIntervalSince1970 * 1000,
-                            movie.file.hasPrefix("/") else { throw InvalidAnswer() }
+                            !delivered.token.isEmpty, delivered.sizeBytes == movie.bytes,
+                            delivered.expiresAtMs > now().timeIntervalSince1970 * 1000,
+                            movie.file.hasPrefix("/") else {
+                            throw InvalidAnswer()
+                        }
                         lease = delivered
                         renewAt = now().addingTimeInterval(10)
                         polling = false
@@ -309,8 +312,8 @@ final class PreviewController {
                         movie.target == target, movie.revisionId == revisionId,
                         continuationRangeMatches(movie, answerRange: answer.range),
                         movie.mediaType == "video/mp4", movie.bytes > 0,
-                        !delivered.token.isEmpty, delivered.bytes == movie.bytes,
-                        delivered.expiresAt > self.now().timeIntervalSince1970 * 1000,
+                        !delivered.token.isEmpty, delivered.sizeBytes == movie.bytes,
+                        delivered.expiresAtMs > self.now().timeIntervalSince1970 * 1000,
                         movie.file.hasPrefix("/") {
                         continuationLease = delivered
                         continuationMovie = movie
@@ -364,7 +367,7 @@ final class PreviewController {
             stop("Preview continuation range is invalid. Open Preview again to continue.")
             return
         }
-        guard full.expiresAt > now().timeIntervalSince1970 * 1000 else {
+        guard full.expiresAtMs > now().timeIntervalSince1970 * 1000 else {
             release(full.token)
             continuationLease = nil
             continuationMovie = nil
@@ -396,8 +399,8 @@ final class PreviewController {
     }
     private struct Lease: Decodable {
         let token: String
-        let bytes: Int64
-        let expiresAt: Double
+        let sizeBytes: Int64
+        let expiresAtMs: Double
     }
     private struct Delivery: Decodable { let delivery: Lease? }
     private struct History: Decodable {
@@ -435,6 +438,7 @@ final class PreviewController {
             let revisionId: String
             let file: String
             let mediaType: String
+            /// Published outputs keep the renderer receipt's `bytes`; only delivery leases say `sizeBytes`.
             let bytes: Int64
             let playbackRange: Answer.PlaybackRange?
             private enum Keys: String, CodingKey { case revisionId, file, mediaType, bytes, range }

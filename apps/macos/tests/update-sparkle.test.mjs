@@ -128,7 +128,7 @@ func diagnostic(_ message: String) {}
                 if driver.canCheckForUpdates { break }
                 try? await Task.sleep(for: .milliseconds(10))
             }
-            _ = try! update("update.check")
+            _ = try! update("update.check", ["requestId": "manual-check"])
             if CommandLine.arguments.last == "manual-cancel" {
                 for _ in 0..<200 {
                     if FileManager.default.fileExists(atPath: ${JSON.stringify(join(scratch, "feed-received"))}) { break }
@@ -147,9 +147,7 @@ func diagnostic(_ message: String) {}
                 withExtendedLifetime(driver) {}
                 return
             }
-            var duplicateRejected = false
-            do { _ = try update("update.check") }
-            catch { duplicateRejected = error.code == "UPDATE_BUSY" && error.retryable }
+            let replay = try! update("update.check", ["requestId": "manual-check"])
             for _ in 0..<200 {
                 if owner.status.state == "failed" { break }
                 try? await Task.sleep(for: .milliseconds(10))
@@ -159,7 +157,7 @@ func diagnostic(_ message: String) {}
             print(String(decoding: try! JSONSerialization.data(withJSONObject: [
                 "enabled": owner.enabled, "state": owner.status.state,
                 "error": owner.status.error?.code as Any? ?? NSNull(),
-                "duplicateRejected": duplicateRejected]), as: UTF8.self))
+                "replayed": replay["enabled"] as? Bool == false]), as: UTF8.self))
             withExtendedLifetime(driver) {}
             return
         case "disable": owner.setEnabled(false)
@@ -261,12 +259,21 @@ func diagnostic(_ message: String) {}
     assert.deepEqual(observe("enable"), { before: false, after: true, state: "idle" });
     assert.deepEqual(observe("observe"), { before: true, after: true, state: "idle" });
     assert.deepEqual(observe("no-update"), {
-      update: { state: "idle", availableVersion: null, blockers: [], error: null },
+      update: {
+        state: "idle",
+        jobId: null,
+        availability: "available",
+        availableVersion: null,
+        blockers: [],
+        error: null,
+      },
     });
     for (const mode of ["wrong-domain", "download-error"]) {
       assert.deepEqual(observe(mode), {
         update: {
           state: "failed",
+          jobId: null,
+          availability: "available",
           availableVersion: null,
           blockers: [],
           error: { code: "UPDATE_FAILED", message: "Localized result", retryable: false },
@@ -274,13 +281,20 @@ func diagnostic(_ message: String) {}
       });
     }
     assert.deepEqual(observe("recovered-no-update"), {
-      update: { state: "idle", availableVersion: null, blockers: [], error: null },
+      update: {
+        state: "idle",
+        jobId: null,
+        availability: "available",
+        availableVersion: null,
+        blockers: [],
+        error: null,
+      },
     });
     assert.deepEqual(observe("manual-check"), {
       enabled: false,
       state: "failed",
       error: "UPDATE_FAILED",
-      duplicateRejected: true,
+      replayed: true,
     });
     assert.deepEqual(observe("observe"), { before: false, after: false, state: "disabled" });
   },

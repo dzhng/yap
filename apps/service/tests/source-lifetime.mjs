@@ -229,7 +229,10 @@ if (process.argv[2] === "--child") {
       pid = undefined;
       service = await startPublicService(home, native);
       if (mode !== "cleanup") {
-        report.after = await service.call("recording.delete", { recordingId: take.recordingId });
+        report.after = await service.call("recording.delete", {
+          requestId: `recording-delete-${mode}`,
+          recordingId: take.recordingId,
+        });
         assert.equal(report.after.ok, true, JSON.stringify(report.after));
         assert.equal(report.after.data.deleted, true);
         await assert.rejects(access(root), { code: "ENOENT" });

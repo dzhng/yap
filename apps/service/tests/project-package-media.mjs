@@ -123,7 +123,7 @@ async function adoptedMedia(t, kind) {
   const admitted = await call("asset.import", { path: input, requestId: randomUUID() });
   const imported = await ready(() => call("job.get", { jobId: admitted.jobId }));
   const asset = await call("asset.get", { assetId: imported.published.output.assetId });
-  const managedSource = service.assets.path(asset.id);
+  const managedSource = service.assets.path(asset.assetId);
   const video = asset.streams.find((s) => s.kind === "video");
   const project = await call("project.create", {
     requestId: randomUUID(),
@@ -145,7 +145,7 @@ async function adoptedMedia(t, kind) {
         operation: "place",
         clip: {
           trackId: { label: "video" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: video.id,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -155,8 +155,8 @@ async function adoptedMedia(t, kind) {
   });
   const exportId = randomUUID();
   await call("export.create", {
+    requestId: exportId,
     projectId,
-    exportId,
     kind: "processed-package",
     directory: output,
     leaf: "project.zip",
@@ -182,7 +182,11 @@ async function adoptedMedia(t, kind) {
     socket.once("error", reject);
     socket.once("connect", () =>
       socket.write(
-        encodeJsonLine({ id: randomUUID(), operation: "package.open", params: { path: archive } }),
+        encodeJsonLine({
+          id: randomUUID(),
+          operation: "package.open",
+          params: { path: archive, requestId: "package-open-disconnected" },
+        }),
       ),
     );
     // Recover the admission through public discovery without parsing its discarded reply.
@@ -216,7 +220,7 @@ async function adoptedMedia(t, kind) {
     ...selected,
     ...(kind === "frame"
       ? { atUs: 100000, maxLongEdge: 96 }
-      : { range: { startUs: 0, endUs: 250000 } }),
+      : { sourceRange: { startUs: 0, endUs: 250000 } }),
   };
   const failed = await until(async () => {
     const status = await call(`${kind}.get`, request);
@@ -227,12 +231,12 @@ async function adoptedMedia(t, kind) {
   await call("job.retry", { jobId: failed.jobId });
   const retried = await ready(() => call(`${kind}.get`, request));
   assert.equal(retried.jobId, failed.jobId);
-  assert.equal(retried.published.generation, 2);
+  assert.equal(retried.published.generation, "2");
   const signature =
     kind === "frame" ? Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) : Buffer.from("RIFF");
   const content = await call("artifact.read", {
     token: retried.delivery.token,
-    offset: 0,
+    offsetBytes: 0,
     maxBytes: signature.length,
   });
   assert.deepEqual(Buffer.from(content.data, "base64"), signature);
@@ -240,7 +244,7 @@ async function adoptedMedia(t, kind) {
   assert.deepEqual(
     await call("artifact.read", {
       token: retried.delivery.token,
-      offset: 0,
+      offsetBytes: 0,
       maxBytes: signature.length,
     }),
     content,
@@ -270,7 +274,7 @@ async function adoptedMedia(t, kind) {
   hold = true;
   await call(`${kind}.get`, {
     ...request,
-    ...(kind === "frame" ? { atUs: 300000 } : { range: { startUs: 100000, endUs: 350000 } }),
+    ...(kind === "frame" ? { atUs: 300000 } : { sourceRange: { startUs: 100000, endUs: 350000 } }),
   });
   pid = await until(async () =>
     Number(
@@ -296,7 +300,7 @@ async function adoptedMedia(t, kind) {
     (error) => error.code === "ESRCH",
   );
   pid = undefined;
-  assert.ok(Date.now() < retried.delivery.expiresAt);
+  assert.ok(Date.now() < retried.delivery.expiresAtMs);
   assert.deepEqual(retained(), [], "Service closure releases unexpired artifact descriptors");
   assert.deepEqual(await readdir(join(home, "library", "render")), []);
   assert.equal(hash(await readFile(input)), oracle.fixtureSha256);

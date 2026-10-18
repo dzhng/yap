@@ -7,7 +7,7 @@ const endpoint = (assetId: string) => ({
   assetId,
   streamId: "audio-1",
   channel: 0,
-  range: { startUs: 0, endUs: 4_000_000 },
+  sourceRange: { startUs: 0, endUs: 4_000_000 },
 });
 const measurement = {
   verdict: "accepted" as const,

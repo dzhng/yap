@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
@@ -17,6 +17,23 @@ import {
   waitFor,
   requireScreenPermission,
 } from "./harness.mjs";
+
+function sizeTree(path) {
+  if (!existsSync(path)) return 0;
+  const stat = statSync(path);
+  if (stat.isFile()) return stat.size;
+  return readdirSync(path).reduce((sum, entry) => sum + sizeTree(join(path, entry)), 0);
+}
+function snapshotFiles(path, out = new Map()) {
+  if (!existsSync(path)) return out;
+  const stat = statSync(path);
+  if (stat.isFile()) {
+    out.set(path, stat.size);
+    return out;
+  }
+  for (const entry of readdirSync(path)) snapshotFiles(join(path, entry), out);
+  return out;
+}
 
 // This gate records only the app-owned fixture window, with both audio roles disabled.
 test(
@@ -65,9 +82,19 @@ test(
     assert.equal(identityBefore.ok, true, JSON.stringify(identityBefore));
     assert.equal(identityBefore.data.recordingId, take.recordingId);
     assert.ok(before.data.totalBytes > 0);
-    const cliResult = await cliCall("recording.delete", reference);
+    const directoryBytes = sizeTree(directory);
+    const filesBeforeDelete = snapshotFiles(join(home, "library"));
+    const cliResult = await cliCall("recording.delete", { ...reference, requestId: randomUUID() });
     assert.equal(cliResult.ok, true);
-    assert.deepEqual(cliResult.data, { recordingId: take.recordingId, deleted: true });
+    const filesAfterDelete = snapshotFiles(join(home, "library"));
+    const freedMeasured = [...filesBeforeDelete].reduce(
+      (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
+      0,
+    );
+    assert.equal(cliResult.data.recordingId, take.recordingId);
+    assert.equal(cliResult.data.deleted, true);
+    assert.ok(cliResult.data.freedBytes >= directoryBytes);
+    assert.ok(freedMeasured <= cliResult.data.freedBytes);
     assert.equal(existsSync(directory), false);
     assert.equal((await cliCall("recording.get", reference)).error.code, "NOT_FOUND");
     assert.equal(
@@ -75,7 +102,12 @@ test(
       "NOT_FOUND",
     );
     assert.equal(
-      (await succeeds("recording.delete", { recordingId: take.recordingId })).deleted,
+      (
+        await succeeds("recording.delete", {
+          recordingId: take.recordingId,
+          requestId: randomUUID(),
+        })
+      ).deleted,
       true,
     );
     // Native capture capacity and the service's durable capture priority must both be released.
@@ -104,14 +136,17 @@ test(
       assert.equal(replacementBefore.structuredContent.ok, true);
       assert.equal(replacementBefore.structuredContent.data.recordingId, replacement.recordingId);
       assert.ok(usage.structuredContent.data.totalBytes > 0);
+      const replacementDirectory = join(home, "library", "recordings", replacement.recordingId);
+      const replacementFreedBytes = sizeTree(replacementDirectory);
       const result = await client.callTool({
         name: "recording.delete",
-        arguments: { recordingId: replacement.recordingId },
+        arguments: { recordingId: replacement.recordingId, requestId: randomUUID() },
       });
       assert.equal(result.structuredContent.ok, true);
       assert.deepEqual(result.structuredContent.data, {
         recordingId: replacement.recordingId,
         deleted: true,
+        freedBytes: replacementFreedBytes,
       });
       const absent = await client.callTool({
         name: "recording.get",

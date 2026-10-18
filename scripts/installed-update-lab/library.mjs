@@ -74,7 +74,7 @@ export async function populateLibrary(home, source, call) {
   await data("export.create", {
     projectId,
     revisionId: authored.revision.id,
-    exportId,
+    requestId: exportId,
     kind: "processed-package",
     directory: destination,
     leaf: "fixture.zip",

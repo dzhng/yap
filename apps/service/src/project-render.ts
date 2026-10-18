@@ -584,7 +584,7 @@ export function projectFrameRenderer(
 ): ProjectFrameRenderer {
   return {
     implementationId:
-      "native-composition-picture-v21" +
+      "native-composition-picture-v22" +
       (capabilities.sdrCorrection ? ":" + capabilities.sdrCorrection : "") +
       (capabilities.lut ? ":" + capabilities.lut : ""),
     ...capabilities,

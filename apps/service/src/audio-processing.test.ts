@@ -1371,7 +1371,7 @@ real(
       const exportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId,
+        requestId: exportId,
         kind: "video",
         directory: home,
         leaf: "delivered.mp4",
@@ -1801,7 +1801,7 @@ real(
       const movieExportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId: movieExportId,
+        requestId: movieExportId,
         kind: "video",
         directory: home,
         leaf: "prepared.mp4",
@@ -1823,7 +1823,7 @@ real(
       const exportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId,
+        requestId: exportId,
         kind: "processed-package",
         directory: home,
         leaf: "prepared.zip",

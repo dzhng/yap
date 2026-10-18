@@ -13,6 +13,7 @@ export type RecordingRetirementOwners = {
   delivery: DerivativeDelivery;
   files: Pick<ManagedFiles, "removeRecordingDirectory">;
   sources: CaptureSources;
+  freedBytes?: (id: string) => number;
 };
 
 export function recordingRetirement(owners: RecordingRetirementOwners): DeletionRegistration {
@@ -60,5 +61,6 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       };
     },
     result: (subject) => ({ recordingId: subject.id, deleted: true }),
+    freedBytes: (subject) => owners.freedBytes?.(subject.id) ?? 0,
   };
 }

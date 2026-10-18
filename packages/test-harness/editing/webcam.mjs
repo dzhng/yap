@@ -231,7 +231,7 @@ try {
       startRequest,
       independent,
       allocated,
-      inspection: await service.fixtureCall("inspect"),
+      inspection: await service.fixtureCall("inspect.open"),
     };
   } else {
     await cp(resolve(values.primary), donor, { recursive: true });

@@ -41,6 +41,129 @@ afterEach(async () => {
   vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
+
+test("recording.get without an id resolves the latest take and removed recording.latest is unknown", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  const older = f.service.captures.allocate({ requestId: "older", arguments: "{}" }).recording;
+  const latest = f.service.captures.allocate({ requestId: "latest", arguments: "{}" }).recording;
+  expect(await f.call("recording.latest", {})).toMatchObject({
+    ok: false,
+    error: { code: "UNKNOWN_OPERATION" },
+  });
+  expect(await f.call("recording.get", {})).toMatchObject({
+    ok: true,
+    data: { recordingId: latest.recordingId },
+  });
+  expect(latest.recordingId).not.toBe(older.recordingId);
+});
+
+test("asset.list rows expose assetId and sizeBytes without legacy id or bytes", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const imported = await f.call("asset.import", { requestId: "asset-list-contract", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const listed = await f.call("asset.list", {});
+  expect(listed).toMatchObject({ ok: true, data: { assets: expect.any(Array) } });
+  if (listed.ok) {
+    const row = (listed.data as { assets: Record<string, unknown>[] }).assets[0]!;
+    expect(row).toHaveProperty("assetId");
+    expect(row).toHaveProperty("sizeBytes");
+    expect(row).not.toHaveProperty("id");
+    expect(row).not.toHaveProperty("bytes");
+  }
+});
+
+test("export.create replays by requestId and refuses a conflicting request", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.externalDirectory") {
+      const info = (await import("node:fs")).fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "publication.inspect") return { ok: true, data: { file: null } };
+    return { ok: true, data: {} };
+  });
+  const created = await f.call("project.create", {
+    requestId: "export-replay-project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const request = {
+    requestId: "export-replay",
+    projectId,
+    kind: "processed-package",
+    directory: f.home,
+    leaf: "replay.zip",
+  };
+  const first = await f.call("export.create", request);
+  if (!first.ok) throw new Error(JSON.stringify(first));
+  expect(first).toMatchObject({ ok: true });
+  const replay = await f.call("export.create", request);
+  expect(replay).toMatchObject({
+    ok: true,
+    data: { exportId: (first.data as { exportId: string }).exportId },
+  });
+  expect(await f.call("export.create", { ...request, leaf: "different.zip" })).toMatchObject({
+    ok: false,
+    error: { code: "REQUEST_CONFLICT" },
+  });
+});
+
+test("export.recover replays by requestId and refuses a different export", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.externalDirectory") {
+      const info = (await import("node:fs")).fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "publication.inspect") return { ok: true, data: { file: null } };
+    return { ok: true, data: {} };
+  });
+  const created = await f.call("project.create", {
+    requestId: "recover-replay-project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const exported = await f.call("export.create", {
+    requestId: "recover-replay-export",
+    projectId,
+    kind: "processed-package",
+    directory: f.home,
+    leaf: "recover-replay.zip",
+  });
+  if (!exported.ok) throw new Error(JSON.stringify(exported));
+  const exportId = (exported.data as { exportId: string }).exportId;
+  const request = { requestId: "recover-replay", exportId };
+  const first = await f.call("export.recover", request);
+  expect(first).toMatchObject({ ok: true, data: { exportId } });
+  expect(await f.call("export.recover", request)).toEqual(first);
+  expect(await f.call("export.recover", { ...request, exportId: "other-export" })).toMatchObject({
+    ok: false,
+    error: { code: "REQUEST_CONFLICT" },
+  });
+});
 const metadata = {
   originUs: 0,
   streams: [
@@ -116,9 +239,21 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
   ]);
   expect(details.cascadeFreesBytes).toBe(before);
   const totalBefore = Number((await stat(cachePath)).size);
-  expect(await f.call("project.delete", { projectId: project.projectId })).toMatchObject({
-    ok: true,
+  const deleted = await f.call("project.delete", {
+    requestId: "test-delete",
+    projectId: project.projectId,
   });
+  expect(deleted).toMatchObject({
+    ok: true,
+    data: { projectId: project.projectId, deleted: true },
+  });
+  if (deleted.ok) expect((deleted.data as { freedBytes: number }).freedBytes).toBe(totalBefore);
+  expect(
+    await f.call("project.delete", { requestId: "test-delete", projectId: project.projectId }),
+  ).toEqual(deleted);
+  expect(
+    await f.call("project.delete", { requestId: "test-delete", projectId: "different-project" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   await expect(stat(cachePath)).rejects.toMatchObject({ code: "ENOENT" });
   expect(totalBefore).toBe(before);
 });
@@ -130,7 +265,7 @@ test("correspondence receipts are admitted and paged without declaring an edit",
     assetId,
     streamId: "audio-1",
     channel: 0,
-    range: { startUs: 0, endUs: 4_000_000 },
+    sourceRange: { startUs: 0, endUs: 4_000_000 },
   });
   const measurement = {
     verdict: "accepted",
@@ -649,7 +784,7 @@ test("observing export admission never cancels its held publication owner", asyn
   const projectId = (created.data as { project: { projectId: string } }).project.projectId;
   const exporting = f.control("export.create", {
     projectId,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: f.home,
     leaf: "package.zip",
@@ -704,7 +839,11 @@ test("deletion cleanup remains owned through disconnect until its storage worker
   const cancel = new AbortController();
   const deleting = callLocal(
     f.service.socketPath,
-    { id: "delete", operation: "project.delete", params: { projectId } },
+    {
+      id: "delete",
+      operation: "project.delete",
+      params: { projectId, requestId: "disconnect-delete" },
+    },
     { signal: cancel.signal },
   ).catch((error) => error);
   await entered;
@@ -917,7 +1056,10 @@ test("project service delivers complete operation results through its shared art
     resultDelivery: { inlineBytes: 100 },
   });
   if (!("resultDelivery" in answer)) throw Error("Missing project result delivery");
-  const read = await f.call("artifact.read", { token: answer.resultDelivery.token, offset: 0 });
+  const read = await f.call("artifact.read", {
+    token: answer.resultDelivery.token,
+    offsetBytes: 0,
+  });
   if (!read.ok) throw Error(read.error.message);
   const chunk = read.data as { data: string };
   const bytes = Buffer.from(chunk.data, "base64");
@@ -1260,7 +1402,7 @@ test("large provenance history cannot hide metadata and every origin remains pag
     operation: "asset.get",
     params: { assetId },
   });
-  expect(get).toMatchObject({ ok: true, data: { id: assetId, streams: metadata.streams } });
+  expect(get).toMatchObject({ ok: true, data: { assetId, streams: metadata.streams } });
   expect(Buffer.byteLength(JSON.stringify(get))).toBeLessThan(1024);
   const observed: ReturnType<AssetStore["origins"]>["origins"] = [];
   let cursor: ReturnType<AssetStore["origins"]>["nextCursor"] = null;
@@ -1397,7 +1539,7 @@ test("shutdown aborts an in-flight export destination admission before draining 
   const pending = f
     .call("export.create", {
       projectId: project.projectId,
-      exportId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
+      requestId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
       kind: "video",
       directory: f.home,
       leaf: "output.mp4",
@@ -1465,7 +1607,10 @@ test("selected-source transcript reads report unprepared models without download
     },
   });
   expect(
-    await f.call("transcript.review", { ...selection, range: { startUs: 0, endUs: 1_000_000 } }),
+    await f.call("transcript.review", {
+      ...selection,
+      sourceRange: { startUs: 0, endUs: 1_000_000 },
+    }),
   ).toMatchObject({
     ok: true,
     data: { state: "running", model: { state: "running" } },
@@ -1689,7 +1834,7 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
   const selection = {
     assetId: admitted.published!.output.assetId,
     streamId: "audio:1",
-    range: { startUs: 0, endUs: 21 },
+    sourceRange: { startUs: 0, endUs: 21 },
   };
   const pending = await f.call("audio.get", selection);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
@@ -1712,10 +1857,10 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
   });
   if (!ready.ok) throw new Error(JSON.stringify(ready));
   const { token } = (ready.data as { delivery: { token: string } }).delivery;
-  const read = await f.call("artifact.read", { token, offset: 0 });
+  const read = await f.call("artifact.read", { token, offsetBytes: 0 });
   expect(read).toMatchObject({
     ok: true,
-    data: { data: wave.toString("base64"), eof: true, nextOffset: wave.length },
+    data: { data: wave.toString("base64"), eof: true, nextOffsetBytes: wave.length },
   });
   expect(await f.call("artifact.close", { token })).toMatchObject({ ok: true });
 });
@@ -1754,8 +1899,8 @@ test("project export refuses a dangling prepared audio reference before native w
     id: "export",
     operation: "export.create",
     params: {
+      requestId: "dangling-prepared-export",
       projectId: project.projectId,
-      exportId: "7c3f4225-31f5-4467-9bb5-4f82d2ddf0d5",
       kind: "processed-package",
       directory: f.home,
       leaf: "prepared.zip",
@@ -1897,7 +2042,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v7-cursor",
+      implementationId: "native-source-picture-v8-cursor",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {
@@ -1935,13 +2080,15 @@ test("asset job and cache presence checks preserve source validation without hyd
     const ready = await f.call("frame.get", selection);
     if (!ready.ok) throw new Error(JSON.stringify(ready));
     const token = (ready.data as { delivery: { token: string } }).delivery.token;
-    expect(await f.call("artifact.read", { token, offset: 0, maxBytes: payload.length })).toEqual({
+    expect(
+      await f.call("artifact.read", { token, offsetBytes: 0, maxBytes: payload.length }),
+    ).toEqual({
       id: "test",
       ok: true,
       data: {
         data: payload.toString("base64"),
-        offset: 0,
-        nextOffset: payload.length,
+        offsetBytes: 0,
+        nextOffsetBytes: payload.length,
         eof: true,
       },
     });
@@ -2080,18 +2227,18 @@ test("preset reads cross the public wire without changing the catalog format", a
     ok: true,
     data: {
       presets: expect.arrayContaining([
-        expect.objectContaining({ id: "studio-podcast", source: "bundled" }),
-        expect.objectContaining({ id: "on-location-conversation", source: "bundled" }),
-        expect.objectContaining({ id: "tactile-launch-film", source: "bundled" }),
+        expect.objectContaining({ presetId: "studio-podcast", source: "bundled" }),
+        expect.objectContaining({ presetId: "on-location-conversation", source: "bundled" }),
+        expect.objectContaining({ presetId: "tactile-launch-film", source: "bundled" }),
       ]),
       refresh: { checkedAt: null, commit: null, error: null, available: [] },
       instructions: expect.any(Array),
     },
   });
-  expect(await f.call("preset.get", { id: "tactile-launch-film" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "tactile-launch-film" })).toMatchObject({
     ok: true,
     data: {
-      id: "tactile-launch-film",
+      presetId: "tactile-launch-film",
       text: expect.stringContaining("## Shoot"),
       path: expect.stringContaining("tactile-launch-film"),
       kitPath: expect.stringContaining("presets/kit"),
@@ -2099,7 +2246,7 @@ test("preset reads cross the public wire without changing the catalog format", a
       instructions: expect.arrayContaining([expect.stringContaining("tactile-launch-film")]),
     },
   });
-  expect(await f.call("preset.get", { id: "missing-preset" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "missing-preset" })).toMatchObject({
     ok: false,
     error: { code: "PRESET_NOT_FOUND" },
   });
@@ -2144,14 +2291,19 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { refresh: { apiBase: "https://api.test", rawBase: "https://raw.test", fetch } },
   });
-  expect(await f.call("preset.update", {})).toMatchObject({
+  const updated = await f.call("preset.update", { requestId: "preset-update-replay" });
+  expect(updated).toMatchObject({
     ok: true,
     // The startup refresh may already have installed it; either way the result says what to do.
     data: { refresh: { commit, error: null }, instructions: [expect.any(String)] },
   });
+  expect(await f.call("preset.update", { requestId: "preset-update-replay" })).toEqual(updated);
+  expect(
+    await f.call("preset.update", { requestId: "preset-update-replay", presetId: "other" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
-    data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
+    data: { presets: [expect.objectContaining({ presetId: "wire-demo", source: "downloaded" })] },
   });
   expect(
     requested
@@ -2169,30 +2321,41 @@ test("a local preset is created, read and trashed over the public wire", async (
     },
   });
   const created = await f.call("preset.create", {
+    requestId: "preset-create-replay",
     name: "Vertical explainer",
     references: ["https://example.com/v"],
   });
   expect(created).toMatchObject({
     ok: true,
     data: {
-      id: "vertical-explainer",
+      presetId: "vertical-explainer",
       path: expect.stringContaining("presets/vertical-explainer"),
       instructions: expect.any(Array),
     },
   });
+  expect(
+    await f.call("preset.create", {
+      requestId: "preset-create-replay",
+      name: "Vertical explainer",
+      references: ["https://example.com/v"],
+    }),
+  ).toEqual(created);
+  expect(
+    await f.call("preset.create", { requestId: "preset-create-replay", name: "Different" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({
     ok: true,
-    data: { id: "vertical-explainer-2" },
+    data: { presetId: "vertical-explainer-2" },
   });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
     data: {
       presets: expect.arrayContaining([
-        expect.objectContaining({ id: "vertical-explainer", source: "local" }),
+        expect.objectContaining({ presetId: "vertical-explainer", source: "local" }),
       ]),
     },
   });
-  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "vertical-explainer" })).toMatchObject({
     ok: true,
     data: { source: "local", text: expect.stringContaining("https://example.com/v") },
   });
@@ -2200,14 +2363,27 @@ test("a local preset is created, read and trashed over the public wire", async (
     ok: false,
     error: { code: "PRESET_REFERENCE_INVALID" },
   });
-  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({
+  expect(await f.call("preset.delete", { presetId: "studio-podcast" })).toMatchObject({
     ok: false,
     error: { code: "PRESET_NOT_LOCAL" },
   });
-  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({
+  const deletedPreset = await f.call("preset.delete", {
+    presetId: "vertical-explainer",
+    requestId: "preset-delete-replay",
+  });
+  expect(deletedPreset).toMatchObject({
     ok: true,
     data: { trashedPaths: [expect.stringContaining("vertical-explainer")] },
   });
+  expect(
+    await f.call("preset.delete", {
+      presetId: "vertical-explainer",
+      requestId: "preset-delete-replay",
+    }),
+  ).toEqual(deletedPreset);
+  expect(
+    await f.call("preset.delete", { presetId: "other", requestId: "preset-delete-replay" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(trashed).toHaveLength(1);
   expect(catalogFormat).toBe(29);
 });
