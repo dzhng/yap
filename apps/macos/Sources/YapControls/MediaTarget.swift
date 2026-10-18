@@ -13,6 +13,8 @@ public enum MediaTarget: Hashable, Sendable, Decodable {
         }
     }
 
+    public var isAsset: Bool { if case .asset = self { true } else { false } }
+
     public var parameters: [String: String] {
         switch self {
         case .recording(let id): ["recordingId": id]

@@ -110,14 +110,20 @@ final class LibraryController {
                 }
                 // A recording row's status and sources come from the recording itself.
                 var takes: [ControlsState.RecentTake] = []
+                var vanished: Set<MediaTarget> = []
                 for case .recording(let id) in page.media.map(\.target) {
-                    let take: ControlsState.RecentTake = try await read("recording.get", ["recordingId": id])
+                    let take: ControlsState.RecentTake
+                    do throws(ServiceFailure) { take = try await read("recording.get", ["recordingId": id]) }
+                    catch where error.code == "NOT_FOUND" {
+                        // Deleted elsewhere since the page was read: it drops from this page.
+                        vanished.insert(.recording(id)); continue
+                    }
                     guard service == serviceGeneration && generation == recordingGeneration else { return }
                     guard take.recordingId == id else { throw Self.invalid("Recording returned a different identity") }
                     try validate(take)
                     takes.append(take)
                 }
-                state.media = page.media.filter { state.deletions[$0.target] == nil }
+                state.media = page.media.filter { state.deletions[$0.target] == nil && !vanished.contains($0.target) }
                 state.recent = takes.filter { state.deletions[.recording($0.recordingId)] == nil }
                 state.nextRecordingCursor = page.nextCursor
                 recordingPageIndex = index; state.hasPreviousRecordingPage = index > 0
@@ -187,8 +193,10 @@ final class LibraryController {
         }
     }
 
-    func delete(_ target: MediaTarget, cascade: Bool = false) {
-        guard ready, state.beginDelete(target, cascade: cascade), let requestId = state.deletions[target]?.requestId else { return }
+    func delete(_ target: MediaTarget, cascade: Bool = false, projects: [String]? = nil) {
+        guard ready, state.beginDelete(target, cascade: cascade, cascadeProjects: projects),
+            let requestId = state.deletions[target]?.requestId else { return }
+        let alsoDeleted = state.deletions[target]?.cascadeProjects ?? []
         // Catalog answers started before this action cannot restore the retired owner.
         recordingGeneration = UUID(); projectGeneration = UUID(); jobsReading = false
         state.recordingsRefreshing = false; state.projectsRefreshing = false; pendingRecordings = false; pendingProjects = false
@@ -212,7 +220,13 @@ final class LibraryController {
                 recordingGeneration = UUID(); projectGeneration = UUID(); jobsReading = false
                 state.recordingsRefreshing = false; state.projectsRefreshing = false
                 state.finishDelete(target, failure: nil)
-                forgetExports(target); deleted()
+                forgetExports(target)
+                // The projects the cascade took with it are gone too.
+                for id in alsoDeleted {
+                    closePreview(.project(id)); forgetExports(.project(id))
+                    state.projects.removeAll { $0.projectId == id }
+                }
+                deleted()
             } catch {
                 guard service == serviceGeneration else { return }
                 // Something still uses it: the refusal itself says what, and asking once more is
@@ -222,7 +236,7 @@ final class LibraryController {
                     let name = state.confirmationName(for: target) {
                     state.finishDelete(target, failure: error.localizedDescription)
                     if await confirm(.cascade(target, name: name, inUse: inUse)) {
-                        delete(target, cascade: true)
+                        delete(target, cascade: true, projects: inUse.usedBy.map(\.projectId))
                     } else {
                         state.cancelDelete(target)
                     }

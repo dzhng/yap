@@ -21,6 +21,7 @@ public struct DeleteConfirmation: Equatable, Sendable {
     /// What an `IN_USE` refusal says about the item's users, as the service sent it.
     public struct InUse: Decodable, Equatable, Sendable {
         public struct Project: Decodable, Equatable, Sendable {
+            public let projectId: String
             public let title: String
             public let revisions: Int
         }
@@ -57,7 +58,8 @@ public struct DeleteConfirmation: Equatable, Sendable {
         let parts = [
             inUse.usedBy.isEmpty ? nil : inUse.usedBy.count == 1 ? "this project" : "these projects",
             count(inUse.derivedAssets.count, "file made from it", "files made from it"),
-            count(inUse.acquisitions.count, "recording source", "recording sources"),
+            // A recording's own copies go with any delete of it, so only an import names its sources.
+            count(target.isAsset ? inUse.acquisitions.count : 0, "recording source", "recording sources"),
         ].compactMap { $0 }
         let also = parts.count < 2 ? parts.joined() : parts.dropLast().joined(separator: ", ") + " and " + parts.last!
         return .init(title: "Delete “\(name)”?", users: users, lead: users.isEmpty ? nil : "This \(noun) is used by:",

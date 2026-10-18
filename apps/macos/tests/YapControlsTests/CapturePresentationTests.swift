@@ -310,6 +310,14 @@ func runDeleteConfirmationTests() {
         lead: "This recording is used by:",
         message: "Deleting it also deletes these projects (\(size(1_400_000_000)) total). This can’t be undone.",
         confirm: "Delete all", cascade: true), "The cascade dialog lists the refusal's users: \(cascade)")
+    let ownCopies = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"recordingId":"take","usedBy":[{"kind":"project","projectId":"p-1","title":"Q4 demo","revisions":2}],"acquisitions":[{"kind":"acquisition","acquisitionId":"own-copy"}],"derivedAssets":[],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
+    precondition(ownCopies.usedBy.map(\.projectId) == ["p-1"], "The refusal keeps each project's identity")
+    precondition(DeleteConfirmation.cascade(.recording("take"), name: "x", inUse: ownCopies).message
+        == "Deleting it also deletes this project (\(size(2)) total). This can’t be undone.",
+        "A recording's own copies are not users: they go with any delete, so the dialog never names them")
+    precondition(DeleteConfirmation.cascade(.asset("a-1"), name: "x", inUse: ownCopies).message
+        == "Deleting it also deletes this project and 1 recording source (\(size(2)) total). This can’t be undone.",
+        "An import that a recording also holds names that source")
     let derivedOnly = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"usedBy":[],"acquisitions":[],"derivedAssets":[{"kind":"asset","assetId":"d"}],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
     let derived = DeleteConfirmation.cascade(.asset("a-1"), name: "x.mp4", inUse: derivedOnly)
     precondition(derived.users.isEmpty && derived.lead == nil

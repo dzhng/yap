@@ -103,6 +103,8 @@ public struct LibraryState: Equatable, Sendable {
         /// Whether this request also deletes the item's users. A cascade is a different request
         /// from the plain delete it follows, so it has its own identity.
         public var cascade = false
+        /// Projects a confirmed cascade deletes with it, as the refusal named them.
+        public var cascadeProjects: [String] = []
         public let title: String
         public let take: ControlsState.RecentTake?
         /// The page row, so a deletion still shows after its row leaves the page.
@@ -111,11 +113,12 @@ public struct LibraryState: Equatable, Sendable {
         public var isPending: Bool { failure == nil }
     }
 
-    public mutating func beginDelete(_ target: MediaTarget, cascade: Bool = false) -> Bool {
+    public mutating func beginDelete(_ target: MediaTarget, cascade: Bool = false, cascadeProjects users: [String]? = nil) -> Bool {
         guard deletions[target]?.isPending != true else { return false }
         if let old = deletions[target] {
             deletions[target] = .init(target: target, requestId: old.cascade == cascade ? old.requestId : UUID().uuidString,
-                cascade: cascade, title: old.title, take: old.take, media: old.media)
+                cascade: cascade, cascadeProjects: cascade ? users ?? old.cascadeProjects : [],
+                title: old.title, take: old.take, media: old.media)
             return true
         }
         let requestId = UUID().uuidString
@@ -125,13 +128,13 @@ public struct LibraryState: Equatable, Sendable {
             let take = recent.first { $0.recordingId == id }
             guard take != nil || row != nil else { return false }
             let title = take.map(LibraryPresentation.recordingTitle(of:)) ?? ElapsedTime.shortTime(of: row!.createdAt)
-            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: title, take: take, media: row)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: title, take: take, media: row)
         case .asset:
             guard let row else { return false }
-            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: row.title, take: nil, media: row)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: row.title, take: nil, media: row)
         case .project(let id):
             guard let project = projects.first(where: { $0.projectId == id }) else { return false }
-            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, title: project.title, take: nil, media: nil)
+            deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: project.title, take: nil, media: nil)
         }
         return true
     }

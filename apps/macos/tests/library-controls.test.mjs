@@ -32,6 +32,8 @@ import YapControls
     var wrongDelete = false
     /// When set, a plain delete is refused IN_USE with these details; a cascade goes through.
     var inUse: [String: Any]?
+    /// Recordings that vanish between the page read and their own read.
+    var gone: Set<String> = []
     var lostDelete: String?
     var failure: (String, String)?
     var hold: String?
@@ -66,6 +68,8 @@ import YapControls
                 answer = ["media": deletedTargets.contains(.recording(recording["recordingId"] as! String)) ? [] : [row(recording)], "nextCursor": recordingNext]
             }
         case "project.list": answer = ["projects": projects.filter { !deletedTargets.contains(.project($0["projectId"] as? String ?? "")) }, "nextCursor": next]
+        case "recording.get" where gone.contains(params["recordingId"] as? String ?? ""):
+            throw ServiceFailure(code: "NOT_FOUND", message: "recording was deleted")
         case "recording.get":
             answer = recordingCatalog?.first { $0["recordingId"] as? String == params["recordingId"] as? String } ?? recording
         case "job.get": answer = job
@@ -397,7 +401,8 @@ import YapControls
         asking.recording["sourceAdmissions"] = []
         var asked: [DeleteConfirmation] = []
         var answer = false
-        let confirmed = LibraryController(call: { op, params throws(ServiceFailure) in try await asking.call(op, params) }, confirm: { asked.append($0); return answer }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        var cascadeClosed: [MediaTarget] = [], cascadeForgotten: [MediaTarget] = []
+        let confirmed = LibraryController(call: { op, params throws(ServiceFailure) in try await asking.call(op, params) }, confirm: { asked.append($0); return answer }, changed: {}, closePreview: { cascadeClosed.append($0) }, forgetExports: { cascadeForgotten.append($0) }, deleted: {}, preview: { _ in }, export: { _, _ in })
         confirmed.serviceChanged(ready: true)
         await until { confirmed.state.recent.count == 1 && !confirmed.state.projectsRefreshing }
         confirmed.perform(.deleteRecording("same"))
@@ -417,8 +422,22 @@ import YapControls
         precondition(sent.count == 2 && sent[0]["cascade"] == nil && sent[1]["cascade"] as? Bool == true
                      && sent[0]["requestId"] as? String != sent[1]["requestId"] as? String,
                      "The plain delete goes first; confirming the cascade sends cascade:true as its own request: \(sent)")
+        precondition(cascadeClosed.contains(.project("p")) && cascadeForgotten.contains(.project("p")),
+                     "Projects the cascade deleted lose their preview and exports too: \(cascadeClosed) \(cascadeForgotten)")
         asking.inUse = nil
         confirmed.serviceChanged(ready: false)
+
+        // A recording deleted elsewhere between the page read and its own read drops from the page.
+        let racing = Script()
+        racing.recordingCatalog = [racing.recording, racing.recording.merging(["recordingId": "gone", "creationSequence": 0]) { _, new in new }]
+        racing.gone = ["gone"]
+        let survived = LibraryController(call: { op, params throws(ServiceFailure) in try await racing.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        survived.serviceChanged(ready: true)
+        await until { !survived.state.recordingsRefreshing && racing.count("recording.get") == 2 }
+        precondition(survived.state.recordingFailure == nil && survived.state.media.map(\.target) == [.recording("same")]
+                     && survived.state.recent.map(\.recordingId) == ["same"],
+                     "One vanished recording does not blank the page: \(String(describing: survived.state.recordingFailure))")
+        survived.serviceChanged(ready: false)
         print("PASS native library pages, typed deletion and source-only recording facts")
         print(String(data: try! JSONSerialization.data(withJSONObject: Script.exchanges), encoding: .utf8)!)
     }
