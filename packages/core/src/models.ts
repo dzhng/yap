@@ -11,10 +11,20 @@ import {
   rmSync,
   type BigIntStats,
 } from "node:fs";
-import { mkdir, open, rename, rm, realpath, type FileHandle } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  rename,
+  rm,
+  rmdir,
+  realpath,
+  readdir,
+  lstat,
+  type FileHandle,
+} from "node:fs/promises";
 import { dirname, join, isAbsolute } from "node:path";
 import { O_NOFOLLOW_ANY } from "./open-flags.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, type Catalog } from "./catalog.js";
 import { pageCursor } from "./page-cursor.js";
 import type {
   SpeechModelFile,
@@ -74,6 +84,31 @@ function privateDirectory(path: string): void {
 async function writeAll(handle: FileHandle, data: Uint8Array): Promise<void> {
   for (let offset = 0; offset < data.byteLength;)
     offset += (await handle.write(data, offset)).bytesWritten;
+}
+async function fileBytes(path: string): Promise<number> {
+  let total = 0;
+  try {
+    const stat = await lstat(path, { bigint: true });
+    if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return Number(stat.size);
+    if (!stat.isDirectory()) return 0;
+    for (const name of await readdir(path)) total += await fileBytes(join(path, name));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return total;
+}
+function fileBytesSync(path: string): number {
+  try {
+    const stat = lstatSync(path, { bigint: true });
+    if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return Number(stat.size);
+    if (!stat.isDirectory()) return 0;
+    return readdirSync(path).reduce((total, name) => total + fileBytesSync(join(path, name)), 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
 }
 /** Creates a new regular file that cannot land through a symlinked path component. */
 const createFile = (path: string) =>
@@ -263,6 +298,11 @@ class Preparation {
 
   async settled(): Promise<void> {
     await Promise.allSettled([this.flight?.done, this.verification]);
+  }
+
+  async cancel(): Promise<void> {
+    this.flight?.controller.abort(new Error("Model preparation was removed"));
+    await this.settled();
   }
 
   async runtime(purpose: "voice" | "speaker" | "alignment"): Promise<PreparedRuntime> {
@@ -463,7 +503,8 @@ class Preparation {
         "MODEL_RUNTIME_UNAVAILABLE",
         "Runtime preparation requires its owned execution adapter",
       );
-    const staging = join(this.models, ".staging", randomUUID());
+    privateDirectory(dirname(this.root));
+    const staging = join(this.models, ".staging", this.manifest.name, randomUUID());
     try {
       const folder = join(staging, this.manifest.folderName);
       await stored(() => mkdir(folder, { recursive: true, mode: 0o700 }));
@@ -546,6 +587,7 @@ class Preparation {
       });
     } finally {
       await rm(staging, { recursive: true, force: true }).catch(() => {});
+      await rmdir(dirname(staging)).catch(() => {});
     }
   }
 
@@ -629,23 +671,54 @@ export class Models {
     return [...this.preparations.values()].some((preparation) => preparation.updateBlocked);
   }
   private readonly preparations = new Map<string, Preparation>();
+  private readonly directory: string;
   constructor(
     home: string,
     fetch: typeof globalThis.fetch = globalThis.fetch,
     manifests: readonly ModelManifest[] = registeredModels,
+    private readonly catalog: Catalog,
     materializeRuntime?: RuntimeMaterializer,
   ) {
-    const directory = join(realpathSync(home), "models");
-    privateDirectory(directory);
-    rmSync(join(directory, ".staging"), { recursive: true, force: true });
-    privateDirectory(join(directory, ".staging"));
+    this.directory = join(realpathSync(home), "models");
+    privateDirectory(this.directory);
+    rmSync(join(this.directory, ".staging"), { recursive: true, force: true });
+    privateDirectory(join(this.directory, ".staging"));
+    this.catalog.catalog.exec(`CREATE TABLE IF NOT EXISTS model_removals (
+      modelId TEXT NOT NULL,
+      requestId TEXT NOT NULL UNIQUE,
+      removedAtMs INTEGER NOT NULL,
+      freedBytes INTEGER NOT NULL,
+      completedAtMs INTEGER,
+      clearedAtMs INTEGER,
+      PRIMARY KEY(modelId, requestId)
+    ) STRICT`);
     for (const manifest of manifests) {
       if (this.preparations.has(manifest.name)) throw new Error("Duplicate registered model ID");
       this.preparations.set(
         manifest.name,
-        new Preparation(directory, fetch, manifest, materializeRuntime),
+        new Preparation(this.directory, fetch, manifest, materializeRuntime),
       );
     }
+    // A removal the last service run did not finish completes now, before any preparation can
+    // start, so its later replay can never undo a model prepared after the restart.
+    const interrupted = this.catalog.catalog
+      .prepare("SELECT modelId, requestId FROM model_removals WHERE completedAtMs IS NULL")
+      .all() as { modelId: string; requestId: string }[];
+    for (const { modelId, requestId } of interrupted) {
+      const paths = this.removalPaths(modelId);
+      const freedBytes = paths.reduce((total, path) => total + fileBytesSync(path), 0);
+      for (const path of paths) rmSync(path, { recursive: true, force: true });
+      this.catalog.catalog
+        .prepare("UPDATE model_removals SET freedBytes=?, completedAtMs=? WHERE requestId=?")
+        .run(freedBytes, Date.now(), requestId);
+    }
+  }
+  private removalPaths(modelId: string): string[] {
+    return [
+      join(this.directory, modelId),
+      join(this.directory, ".cache", modelId),
+      join(this.directory, ".staging", modelId),
+    ];
   }
   private selected(modelId: string): Preparation {
     const model = this.preparations.get(modelId);
@@ -653,7 +726,7 @@ export class Models {
       throw new CatalogError("NOT_FOUND", "Model is not registered", { modelId, kind: "model" });
     return model;
   }
-  /** Registered models have no deletion tombstone; this keeps the listing-store contract uniform. */
+  /** Removal fences acquisition but never removes a registered model from discovery. */
   listable(modelId: string): boolean {
     return this.preparations.has(modelId);
   }
@@ -715,7 +788,7 @@ export class Models {
   async prepareAuto(signal: AbortSignal): Promise<void> {
     await Promise.all(
       [...this.preparations.values()]
-        .filter((model) => model.manifest.autoPrepare)
+        .filter((model) => model.manifest.autoPrepare && !this.removed(model.manifest.name))
         .map(async (model) => {
           if (!(await model.intact(signal))) await model.prepare(signal, {});
         }),
@@ -740,7 +813,62 @@ export class Models {
     }));
   }
   prepare(modelId: string, signal: AbortSignal, sources: ModelSources = {}) {
-    return this.selected(modelId).prepare(signal, sources);
+    const model = this.selected(modelId);
+    this.clearRemoved(modelId);
+    return model.prepare(signal, sources);
+  }
+  async remove(modelId: string, requestId: string) {
+    const model = this.selected(modelId);
+    const prior = this.catalog.catalog
+      .prepare("SELECT modelId, freedBytes, completedAtMs FROM model_removals WHERE requestId=?")
+      .get(requestId) as
+      | { modelId: string; freedBytes: number; completedAtMs: number | null }
+      | undefined;
+    if (prior) {
+      if (prior.modelId !== modelId)
+        throw new CatalogError("REQUEST_CONFLICT", "Removal request ID names another model");
+      if (prior.completedAtMs !== null)
+        return { modelId, deleted: true as const, freedBytes: prior.freedBytes };
+      return this.finishRemoval(model, requestId);
+    }
+    this.catalog.transaction(() => {
+      this.catalog.catalog
+        .prepare(
+          "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,0,NULL,NULL)",
+        )
+        .run(modelId, requestId, Date.now());
+    });
+    return this.finishRemoval(model, requestId);
+  }
+  private async finishRemoval(model: Preparation, requestId: string) {
+    await model.cancel();
+    const paths = this.removalPaths(model.manifest.name);
+    let freedBytes = 0;
+    for (const path of paths) freedBytes += await fileBytes(path);
+    this.catalog.catalog
+      .prepare("UPDATE model_removals SET freedBytes=? WHERE requestId=? AND completedAtMs IS NULL")
+      .run(freedBytes, requestId);
+    for (const path of paths) await rm(path, { recursive: true, force: true });
+    this.catalog.catalog
+      .prepare(
+        "UPDATE model_removals SET completedAtMs=? WHERE requestId=? AND completedAtMs IS NULL",
+      )
+      .run(Date.now(), requestId);
+    return { modelId: model.manifest.name, deleted: true as const, freedBytes };
+  }
+  private removed(modelId: string): boolean {
+    return !!this.catalog.catalog
+      .prepare(
+        "SELECT 1 FROM model_removals WHERE modelId=? AND (completedAtMs IS NULL OR clearedAtMs IS NULL) LIMIT 1",
+      )
+      .get(modelId);
+  }
+  private clearRemoved(modelId: string): void {
+    this.catalog.catalog
+      .prepare(
+        "UPDATE model_removals SET clearedAtMs=? WHERE modelId=? AND completedAtMs IS NOT NULL AND clearedAtMs IS NULL",
+      )
+      .run(Date.now(), modelId);
   }
   runtime(modelId: string, purpose: "voice" | "speaker" | "alignment") {
     return this.selected(modelId).runtime(purpose);

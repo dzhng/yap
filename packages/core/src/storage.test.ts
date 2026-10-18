@@ -90,6 +90,7 @@ test("actual usage includes partial, canceled and deleting bytes and separates s
     cacheBytes: 34,
     otherBytes: 7,
     sharedBytes: 0,
+    modelBytes: 0,
     totalBytes: 77,
     measurement: "live",
   });
@@ -112,7 +113,8 @@ test("actual usage includes partial, canceled and deleting bytes and separates s
     cacheBytes: 34,
     otherBytes: 7,
     sharedBytes: databaseBytes + 78,
-    totalBytes: databaseBytes + 215,
+    modelBytes: 1000,
+    totalBytes: databaseBytes + 1215,
   });
   expect(await readFile(pending.path)).toHaveLength(23);
 });
@@ -476,7 +478,8 @@ test("shared-library aggregation counts registered cache bytes and retains unown
     evidenceBytes: 0,
     cacheBytes: 17,
     sharedBytes: first.sharedBytes + 43,
-    totalBytes: first.totalBytes + 60,
+    modelBytes: 1000,
+    totalBytes: first.totalBytes + 1060,
   });
   await expect(storage.usage(take.recordingId)).rejects.toMatchObject({ code: "NOT_FOUND" });
   expect(store.get(take.recordingId).recordingId).toBe(take.recordingId);

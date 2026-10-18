@@ -246,7 +246,7 @@ export async function fixture(
         }),
     },
   });
-  const models = new Models(home);
+  const models = new Models(home, globalThis.fetch, undefined, catalog);
   const speakerLabels = new SpeakerLabelStore(catalog);
   const speakerRecords = new SpeakerEvidenceStore(
     catalog,

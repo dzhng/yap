@@ -62,7 +62,8 @@ test.runIf(process.platform === "darwin")(
     const source = {
         ...alignmentSource,
         supportDigest: selected.supportDigest,
-        engine: new Models(library).alignment("nemo-ctc110").engine,
+        engine: new Models(library, globalThis.fetch, undefined, catalog).alignment("nemo-ctc110")
+          .engine,
       },
       operands = alignmentOutput();
     for (const field of ["nativeReceipt", "report"] as const) {

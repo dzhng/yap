@@ -7,14 +7,23 @@ import { CatalogError } from "./catalog.js";
 import type { DerivedCache } from "./cache.js";
 import { O_NOFOLLOW_ANY } from "./open-flags.js";
 
-type Category = "sourceBytes" | "evidenceBytes" | "cacheBytes" | "otherBytes" | "sharedBytes";
+type Category =
+  | "sourceBytes"
+  | "evidenceBytes"
+  | "cacheBytes"
+  | "otherBytes"
+  | "sharedBytes"
+  | "modelBytes";
 export type StorageUsage = Record<Category | "totalBytes", number> & {
   recordingId: string | null;
   observedAt: string;
   measurement: "live";
 };
 type DirectoryIdentity = { path: string; dev: bigint; ino: bigint };
-type Location = { area: "home" | "recordings" | "recording" | "files"; category: Category };
+type Location = {
+  area: "home" | "recordings" | "recording" | "models" | "files";
+  category: Category;
+};
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
 /** Actual regular-file lengths, never artifact metadata or an estimate of SQLite row ownership.
@@ -111,6 +120,7 @@ export class ManagedStorage {
       cacheBytes: 0,
       otherBytes: 0,
       sharedBytes: 0,
+      modelBytes: 0,
       totalBytes: 0,
     };
     const checkDirectories = async (directories: readonly DirectoryIdentity[]) => {
@@ -191,10 +201,11 @@ export class ManagedStorage {
           for (let entry = await directory.read(); entry; entry = await directory.read()) {
             this.lifetime.signal.throwIfAborted();
             const child = join(path, entry.name);
-            if (location.area === "home" && entry.name === "models") continue;
             let next: Location = { area: "files", category: location.category };
             if (this.store !== null && location.area === "home" && entry.name === "recordings")
               next = { area: "recordings", category: "sharedBytes" };
+            else if (location.area === "home" && entry.name === "models")
+              next = { area: "models", category: "modelBytes" };
             else if (location.area === "recordings" && this.recording(entry.name))
               next = { area: "recording", category: "otherBytes" };
             else if (location.area === "recording")

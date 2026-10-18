@@ -825,6 +825,29 @@ export class JobQueue {
     };
   }
 
+  /** Whether a currently running request's canonical input names the selected model. */
+  hasRunningModelRequest(modelId: string): boolean {
+    const rows = this.store.catalog
+      .prepare("SELECT input FROM jobs WHERE state='running'")
+      .all() as { input: string }[];
+    const namesModel = (value: unknown): boolean => {
+      if (Array.isArray(value)) return value.some(namesModel);
+      if (!value || typeof value !== "object") return false;
+      for (const [key, child] of Object.entries(value)) {
+        if (key === "modelId" && child === modelId) return true;
+        if (namesModel(child)) return true;
+      }
+      return false;
+    };
+    return rows.some((row) => {
+      try {
+        return namesModel(JSON.parse(row.input));
+      } catch {
+        return false;
+      }
+    });
+  }
+
   retainedArtifact(owner: JobOwner, artifact: string, attemptId: string): RetainedArtifact | null {
     const row = this.store.catalog
       .prepare(

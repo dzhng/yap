@@ -372,6 +372,17 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Delete a project and drain its work while preserving original assets. Repeating deletion succeeds; creation retries never recreate it.",
     ),
   z
+    .object({
+      operation: z.literal("project.duplicate"),
+      params: project
+        .extend({ requestId: id, revisionId: id.optional(), title: z.string().optional() })
+        .strict(),
+    })
+    .strict()
+    .describe(
+      "Duplicate a project revision into a new independent project; replay requestId for the same copy, and use revisionId to choose a historical document. This is a project copy, distinct from the clip-level duplicate edit.",
+    ),
+  z
     .object({ operation: z.literal("project.get"), params: project })
     .strict()
     .describe("Read project metadata and its current revision identity."),
@@ -718,7 +729,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes. Models and external exports are excluded; files may change while scanned.",
+      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes; modelBytes counts every regular file under models/, including cache and staging. External exports are excluded; files may change while scanned.",
     ),
   z
     .object({
@@ -1214,6 +1225,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .strict()
     .describe(
       "Explicitly prepare the selected registered model. Supply absolute runtimeSource and modelSource when model.list marks them required. modelSource admits pinned local files; omission downloads only when the registered acquisition policy permits it. Returns preparation progress; poll model.status. Reuses ready files and joins current preparation. Status and execution never acquire dependencies.",
+    ),
+  z
+    .object({
+      operation: z.literal("model.remove"),
+      params: z.object({ modelId: id, requestId: id }).strict(),
+    })
+    .strict()
+    .describe(
+      "Remove every prepared file for the selected registered model, including its compiler cache and staging bytes. A running job that names the model is a retryable MODEL_IN_USE refusal. Removal persists across service restarts; call model.prepare explicitly to acquire it again.",
     ),
   z
     .object({

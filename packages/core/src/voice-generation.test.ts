@@ -46,7 +46,7 @@ async function fixture(outputFrames = 6000) {
     const catalog = new Catalog(join(home, "catalog.sqlite"));
     const assets = new AssetStore(catalog, home);
     await assets.recover();
-    const registry = new Models(home);
+    const registry = new Models(home, globalThis.fetch, undefined, catalog);
     const model = registry.list().find((m) => m.modelId === voiceProfile.id)!;
     const ready = async () => {
       reads++;

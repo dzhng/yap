@@ -268,7 +268,7 @@ The operation classification is explicit and exhaustive. `readOnlyOperations` is
 
 `asset.convert`, `correspondence.prepare`, `alignment.observe`, `speaker.continuity.prepare`, `speaker.observe`, `transcript.render.prepare`, `transcript.transcribe`, `transcript.review`, `frame.batch`, `cursor.render`, `voice.generate`, `audio.extract`, `audio.prepare`, `audio.measure`, `job.retry`, `job.cancel`, `export.cancel`, `export.abandon`, `package.close`, `model.prepare`, `artifact.close`, `login.setEnabled`, `update.setEnabled`, `skill.install`, `skill.uninstall`, `skill.update`, `cli.install`, `cli.uninstall`, `capture.pause`, `capture.resume`, `capture.setCamera`, `capture.stop`, `capture.cancel`, and `recording.cleanup`. The first group is content-addressed work whose same input joins one job/evidence receipt; the remaining entries repeat a target state without another change.
 
-Every remaining catalog operation takes `requestId` and replays through its existing owner, or refuses a conflicting parameter set: `project.create`, `project.delete`, `edit.apply`, `speaker.correct`, `text.seed`, `acquisition.import`, `asset.import`, `export.create`, `export.recover`, `package.open`, `package.adopt`, `recording.delete`, `transcript.import`, `speaker.bind`, `preset.update`, `preset.create`, `preset.delete`, `artifact.renew`, `update.check`, `capture.start`, `capture.restart`, `edit.undo`, and `edit.restore`.
+Every remaining catalog operation takes `requestId` and replays through its existing owner, or refuses a conflicting parameter set: `project.create`, `project.delete`, `edit.apply`, `speaker.correct`, `text.seed`, `acquisition.import`, `asset.import`, `export.create`, `export.recover`, `package.open`, `package.adopt`, `recording.delete`, `transcript.import`, `speaker.bind`, `preset.update`, `preset.create`, `preset.delete`, `artifact.renew`, `update.check`, `capture.start`, `capture.restart`, `edit.undo`, `edit.restore`, `model.remove`, `asset.delete`, and `project.duplicate`.
 
 ### Range inventory and naming
 
@@ -306,3 +306,28 @@ Evidence and publication generations remain strings under the single public fiel
 - **Cascade results report `cascadeFreesBytes`** (sound). A cascade removes every user recorded by the refusal query, so its byte result must match the same measured closure the refusal exposed.
 - **`ASSET_DELETED` is a non-retryable conflict and `IN_USE` is a non-retryable destructive refusal** (sound). A deleted import request cannot be replayed, while a live owner requires an explicit cascade decision.
 - **Finished deletion request results live in the durable deletion-plan owner** (sound). Replaying the same request after restart must return its saved `freedBytes` even after the subject row and plan are gone.
+
+## Slice 10: project duplicate
+
+- **The default duplicate title is the source title followed by ` copy`** (sound). The wording is explicit, stable and keeps the source title intact while making the new project distinguishable in listings.
+
+## Slice 11: model removal
+
+- **`model_removals` is additive and request identified** (sound). It is created with
+  `IF NOT EXISTS` and has `modelId TEXT NOT NULL`, `requestId TEXT NOT NULL UNIQUE`,
+  `removedAtMs INTEGER NOT NULL`, `freedBytes INTEGER NOT NULL`, nullable
+  `completedAtMs INTEGER`, and nullable `clearedAtMs INTEGER`, with a composite primary
+  key of `(modelId, requestId)`. A row is an unfinished removal until `completedAtMs`
+  is set. Service startup finishes every unfinished removal before any preparation can
+  start (synchronously in the `Models` constructor, where no flight exists), so a later
+  replay only returns the receipt and can never undo a model prepared after the restart;
+  `freedBytes` then counts the bytes still there at restart. A completed row is
+  the request receipt forever. The removal fence is a completed row whose
+  `clearedAtMs` is NULL; explicit `model.prepare` sets `clearedAtMs` and keeps every
+  receipt for replay.
+- **Model removal keeps staging names model scoped** (sound). Preparation stages under
+  `models/.staging/<modelId>/<flightId>` so `freedBytes` can include only the selected
+  model's in-flight staging while `storage.usage.modelBytes` counts all model bytes.
+- **`Models` always owns a catalog connection** (sound). The constructor requires the
+  shared `Catalog`; model removal cannot silently run without durable request receipts
+  or a persistent preparation fence.

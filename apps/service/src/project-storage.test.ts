@@ -39,7 +39,7 @@ async function setup() {
   };
 }
 
-test("aggregate project-library storage reports live managed bytes and excludes models and donor files", async () => {
+test("aggregate project-library storage reports live managed bytes including model storage", async () => {
   const f = await setup();
   const first = await f.call("storage.usage", {});
   expect(first.ok).toBe(true);
@@ -50,6 +50,8 @@ test("aggregate project-library storage reports live managed bytes and excludes 
     ["acquisitions/retained/journal.jsonl", 13],
     ["staging/prepared-audio/unfinished.wav", 17],
     ["models/weights.bin", 1000],
+    ["models/.cache/parakeet/compiler.bin", 7],
+    ["models/.staging/parakeet/flight/model.bin", 9],
   ] as const) {
     const file = join(f.home, "library", path);
     await mkdir(dirname(file), { recursive: true });
@@ -62,8 +64,9 @@ test("aggregate project-library storage reports live managed bytes and excludes 
   expect(result.data).toMatchObject({
     recordingId: null,
     measurement: "live",
-    totalBytes: baseline.totalBytes + 41,
+    totalBytes: baseline.totalBytes + 1057,
     sharedBytes: baseline.sharedBytes + 41,
+    modelBytes: 1016,
     sourceBytes: 0,
     evidenceBytes: 0,
   });

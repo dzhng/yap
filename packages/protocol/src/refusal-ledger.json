@@ -1497,6 +1497,13 @@
         "helpers/mac/Sources/YapSpeech/SpeechModelFiles.swift": 1
       }
     },
+    "MODEL_IN_USE": {
+      "category": "resource-bound",
+      "retryable": true,
+      "files": {
+        "apps/service/src/project-service.ts": 1
+      }
+    },
     "MODEL_NOT_PREPARED": {
       "category": "missing-prerequisite",
       "retryable": true,
@@ -2004,8 +2011,9 @@
         "packages/core/src/acquisitions.ts": 3,
         "packages/core/src/assets.ts": 1,
         "packages/core/src/capture-store.ts": 1,
+        "packages/core/src/models.ts": 1,
         "packages/core/src/presets.ts": 3,
-        "packages/core/src/projects.ts": 3,
+        "packages/core/src/projects.ts": 4,
         "packages/core/src/speaker-labels.ts": 1
       }
     },

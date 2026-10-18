@@ -131,6 +131,7 @@ function editResult(
   return { revision: result.revision, edit: omit(result.edit, "document") };
 }
 export type ProjectHistoryCursor = string;
+export type DuplicateStep = "project" | "references" | "revision" | "result";
 const projectColumns = "projectId,title,createdAt,currentRevisionId";
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>
@@ -161,6 +162,7 @@ export class ProjectStore {
     private readonly assets: AssetStore,
     private readonly transcripts: TranscriptStore,
     private readonly acquisitions = new AcquisitionStore(store),
+    private readonly duplicateFault?: (step: DuplicateStep) => void,
   ) {
     this.references = new ResourceReferences(store);
     store.catalog.exec(`
@@ -238,6 +240,75 @@ export class ProjectStore {
           JSON.stringify(result),
         );
       this.insertRevision(revision);
+      return result;
+    });
+  }
+  duplicate(input: { requestId: string; projectId: string; revisionId?: string; title?: string }): {
+    project: Project;
+    revision: ProjectRevision;
+  } {
+    const argumentsKey = canonical({
+      operation: "duplicate",
+      projectId: input.projectId,
+      revisionId: input.revisionId ?? null,
+      title: input.title ?? null,
+    });
+    return this.store.transaction(() => {
+      const prior = this.store.catalog
+        .prepare("SELECT createArguments,createResult FROM projects WHERE createRequestId=?")
+        .get(input.requestId);
+      if (prior) {
+        if (prior.createArguments !== argumentsKey)
+          throw new CatalogError(
+            "REQUEST_CONFLICT",
+            "Request ID was already used with different arguments",
+          );
+        return JSON.parse(prior.createResult as string) as {
+          project: Project;
+          revision: ProjectRevision;
+        };
+      }
+      const source = this.get(input.projectId);
+      const selected = this.revision(input.projectId, input.revisionId);
+      const projectId = randomUUID();
+      const revisionId = randomUUID();
+      const createdAt = new Date().toISOString();
+      const revision: ProjectRevision = {
+        ...selected,
+        id: revisionId,
+        projectId,
+        ordinal: 0,
+        createdAt,
+        operation: "create",
+        document: structuredClone(selected.document),
+        ...(selected.speakerCorrections === undefined
+          ? {}
+          : { speakerCorrections: structuredClone(selected.speakerCorrections) }),
+      };
+      const project: Project = {
+        projectId,
+        title: input.title ?? `${source.title} copy`,
+        createdAt,
+        currentRevisionId: revisionId,
+      };
+      const result = { project, revision };
+      this.duplicateFault?.("project");
+      this.store.catalog
+        .prepare(
+          `INSERT INTO projects(projectId,title,createdAt,currentRevisionId,createRequestId,createArguments,createResult) VALUES(?,?,?,?,?,?,?)`,
+        )
+        .run(
+          projectId,
+          project.title,
+          createdAt,
+          revisionId,
+          input.requestId,
+          argumentsKey,
+          JSON.stringify(result),
+        );
+      this.duplicateFault?.("references");
+      this.insertRevision(revision);
+      this.duplicateFault?.("result");
       return result;
     });
   }
@@ -827,6 +898,7 @@ export class ProjectStore {
       { kind: "revision", id: revision.id },
       documentAcquisitionIds(revision.document),
     );
+    this.duplicateFault?.("revision");
     this.store.catalog
       .prepare("INSERT INTO project_revisions VALUES(?,?,?,?)")
       .run(revision.id, revision.projectId, revision.ordinal, JSON.stringify(revision));
