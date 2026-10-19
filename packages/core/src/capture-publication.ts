@@ -29,7 +29,7 @@ const published = z.strictObject({
     bytes: z.int().positive().max(268_435_456),
     sha256: hash,
     lastSequence: z.int().positive(),
-    layout: z.union([z.literal(1), z.literal(2)]),
+    layout: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   }),
   members: z.strictObject({
     "video.mov": media,
@@ -191,7 +191,8 @@ export function readCapturePublication(
     const camera = kind === "camera";
     if (
       receipt.journal.file !== (camera ? "capture.journal.jsonl" : "source.journal.jsonl") ||
-      receipt.journal.layout !== (camera ? 1 : 2) ||
+      // A screen journal is layout 2, or 3 once it can carry marks; a camera journal is 1.
+      (camera ? receipt.journal.layout !== 1 : receipt.journal.layout === 1) ||
       Boolean(receipt.members["camera.publication.json"]) !== camera ||
       Boolean(receipt.members["camera.mapping.jsonl"]) !== camera
     )

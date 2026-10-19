@@ -120,6 +120,10 @@ public struct MarkRecognizer {
     public var hasFirstFrame: Bool
     public var cameraOnly: Bool
 
+    /// The stroke while ⇧ is still held, before it is a mark: what the overlay draws under the
+    /// pointer. It empties when the stroke ends, recorded or not.
+    public var activeStroke: [MarkPoint] { stroke }
+
     /// Updates the capture facts supplied by the owner. Blocking state clears an in-progress
     /// gesture so evidence from before a pause or source transition cannot leak afterward.
     public mutating func updateCaptureState(

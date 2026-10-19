@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { readRecoveryReceipt } from "./capture-publication.js";
+import { readCapturePublication, readRecoveryReceipt } from "./capture-publication.js";
 
 test("recovery receipt rejects unknown top-level fields", () => {
   expect(() =>
@@ -63,4 +63,42 @@ test("recovery receipt rejects a completion message without a completion code", 
       sourcePublication: null,
     }),
   ).toThrowError(expect.objectContaining({ code: "INVALID_RESPONSE" }));
+});
+
+/** What native capture reports for a screen take whose journal has the given layout. */
+function screenPublication(layout: number) {
+  return {
+    generation: "generation",
+    sourceId: "source",
+    inputsClosed: true,
+    camera: null,
+    primary: {
+      state: "published",
+      source: {
+        kind: "primary",
+        sourceId: "source",
+        sourceDurationUs: 2_796_908,
+        originHostUs: 793_489_750_500,
+        journal: {
+          file: "source.journal.jsonl",
+          bytes: 21_677,
+          sha256: "a".repeat(64),
+          lastSequence: 15,
+          layout,
+        },
+        members: { "video.mov": { bytes: "8623", sha256: "b".repeat(64) } },
+      },
+    },
+  };
+}
+
+test("a screen take journaled with marks (layout 3) publishes like one without", () => {
+  const allocation = { recordingId: "take", sourceId: "source", camera: null };
+  for (const layout of [2, 3])
+    expect(
+      readCapturePublication(screenPublication(layout), allocation, null).authorities.primary
+        ?.journal.layout,
+    ).toBe(layout);
+  for (const layout of [1, 4])
+    expect(() => readCapturePublication(screenPublication(layout), allocation, null)).toThrow();
 });

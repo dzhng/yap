@@ -239,15 +239,28 @@ package final class ScreenCaptureInput: CaptureInputSession {
     /// app, which is listed once any window of its own is on screen.
     package func excludeOwnWindows() async -> Bool {
         guard let display else { return true }
-        guard let video else { return false }
+        guard let video else {
+            Self.diagnose("capture exclusion refused: video stream is not ready")
+            return false
+        }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let filter = CaptureExclusion.ownExcludingFilter(display, in: content) else { return false }
+            guard let filter = CaptureExclusion.ownExcludingFilter(display, in: content) else {
+                Self.diagnose("capture exclusion refused: own application was not listed")
+                return false
+            }
             try await video.updateContentFilter(filter)
             return true
         } catch {
+            Self.diagnose("capture exclusion refused: \(error.localizedDescription)")
             return false
         }
+    }
+
+    /// Each refusal says why on stderr, in the app's diagnostic form: a take that keeps the
+    /// controls hidden from captures otherwise looks the same whichever step said no.
+    private static func diagnose(_ message: String) {
+        FileHandle.standardError.write(Data("yap: \(message)\n".utf8))
     }
 
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {

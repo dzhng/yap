@@ -38,12 +38,15 @@ final class CaptureController {
     var updateProgress: (() -> Void)?
     /// Latest camera frame from the one capture session, delivered on its writer queue.
     nonisolated(unsafe) var onCameraFrame: (@Sendable (NativeCapture.CameraPreviewFrame) -> Void)?
+    /// What a screen take recognizes as the person draws, pins and undoes, on its writer queue.
+    nonisolated(unsafe) var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
 
     init(fixtureWindow: NSWindow?, capture: NativeCapture = NativeCapture()) {
         self.capture = capture
         self.fixtureWindow = fixtureWindow
         self.startHold = FixtureStartHold.inFixture(fixtureWindow)
         capture.onCameraFrame = { [weak self] frame in self?.onCameraFrame?(frame) }
+        capture.onMarkUpdate = { [weak self] update in self?.onMarkUpdate?(update) }
         capture.onInterruption = { [weak self] reason in
             guard let self, let interrupted = self.take ?? self.pendingStart else { return }
             let recordingId = interrupted.recordingId
