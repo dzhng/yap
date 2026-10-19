@@ -12,7 +12,7 @@ test("face observations retain all boxes in delivered top-left coordinates", () 
       status: "available",
       reason: undefined,
       faces: [
-        { faceId: "face-0", boundingBox: { x: 10, y: 20, width: 30, height: 40 }, confidence: 0.9 },
+        { id: "face-0", boundingBox: { x: 10, y: 20, width: 30, height: 40 }, confidence: 0.9 },
       ],
     }).success,
   ).toBe(true);
@@ -28,9 +28,7 @@ test("face states refuse contradictory boxes", () => {
       height: 10,
       status: "no_face",
       reason: "no_face",
-      faces: [
-        { faceId: "face-0", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, confidence: 0.5 },
-      ],
+      faces: [{ id: "face-0", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, confidence: 0.5 }],
     }).success,
   ).toBe(false);
 });
@@ -45,7 +43,7 @@ test("face observations retain landmark coverage evidence separately from detect
     status: "available",
     faces: [
       {
-        faceId: "face-0",
+        id: "face-0",
         boundingBox: { x: 10, y: 20, width: 30, height: 40 },
         confidence: 0.99,
         landmarkCoverage: "partial",

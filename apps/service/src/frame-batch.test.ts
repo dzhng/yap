@@ -261,7 +261,7 @@ const oneFace = {
   width: 1,
   height: 1,
   status: "available",
-  faces: [{ faceId: "face-0", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, confidence: 0.9 }],
+  faces: [{ id: "face-0", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, confidence: 0.9 }],
 };
 function whiteObservations(request: unknown) {
   const histogram = Array<number>(256).fill(0);
@@ -275,8 +275,8 @@ function whiteObservations(request: unknown) {
     brightFraction: 1,
   };
   const rect = { x: 0, y: 0, width: 1, height: 1 };
-  const measured = (regionId: string) => ({
-    regionId,
+  const measured = (id: string) => ({
+    id,
     requestedRect: rect,
     sampledRect: rect,
     state: "measured",
@@ -290,7 +290,7 @@ function whiteObservations(request: unknown) {
     channels: { red: metric, green: metric, blue: metric },
     luma: metric,
   });
-  const regions = (request as { regions?: { regionId: string }[] }).regions ?? [];
+  const regions = (request as { regions?: { id: string }[] }).regions ?? [];
   return {
     recipe: "profile-managed-srgb-rgba8-rec709-encoded-luma-opaque-only-v1",
     coordinateSpace: "delivered-top-left-pixels",
@@ -303,7 +303,7 @@ function whiteObservations(request: unknown) {
     rgbaSha256: "b".repeat(64),
     request,
     full: measured("full"),
-    regions: regions.map((region) => measured(region.regionId)),
+    regions: regions.map((region) => measured(region.id)),
     edgeBands: [],
   };
 }
@@ -348,13 +348,13 @@ test("public picture observations are retained with selection and create a disti
   await closeDeliveries(f, received.items);
 });
 
-/** Rewrites retained catalog JSON the way the last build before the noun-ID cutover wrote it. */
-function writeAsBeforeNounIds(home: string) {
+/** Rewrites retained catalog JSON the way 0.1.61 wrote it: faces and regions named after their kind. */
+function writeAsBeforeOwnIds(home: string) {
   const old = (text: string) =>
     text
-      .replaceAll('"regionId":', '"id":')
-      .replaceAll('"faceId":', '"id":')
-      .replaceAll('"native-source-picture-v9-cursor"', '"native-source-picture-v7-cursor"');
+      .replace(/"id":("[^"]*"),"(rect|requestedRect)"/g, '"regionId":$1,"$2"')
+      .replaceAll('"id":"face-', '"faceId":"face-')
+      .replaceAll('"native-source-picture-v10-cursor"', '"native-source-picture-v9-cursor"');
   const db = new DatabaseSync(join(home, "library", "catalog.sqlite"));
   try {
     const tables = db
@@ -393,13 +393,13 @@ function writeAsBeforeNounIds(home: string) {
   }
 }
 
-test("source frames retained before the noun-ID cutover regenerate instead of serving bare ids", async () => {
+test("source frames retained by 0.1.61 regenerate instead of serving faces and regions named after their kind", async () => {
   const f = await fixture();
   const selections = [
     { faceObservations: {}, observations: {} },
     {
       faceObservations: {},
-      observations: { regions: [{ regionId: "r", rect: { x: 0, y: 0, width: 1, height: 1 } }] },
+      observations: { regions: [{ id: "r", rect: { x: 0, y: 0, width: 1, height: 1 } }] },
     },
   ].map((extra) => ({ ...f.selection, atUs: 0, ...extra }));
   const before = new Map<number, string>();
@@ -411,7 +411,7 @@ test("source frames retained before the noun-ID cutover regenerate instead of se
     before.set(index, jobId);
   }
   await f.service.close();
-  expect(writeAsBeforeNounIds(f.home)).toBeGreaterThan(0);
+  expect(writeAsBeforeOwnIds(f.home)).toBeGreaterThan(0);
 
   const upgraded = await fixture(f.home);
   for (const [index, selection] of selections.entries()) {
@@ -429,7 +429,7 @@ test("source frames retained before the noun-ID cutover regenerate instead of se
       faceObservations: unknown;
     };
     expect(pictureObservationsSchema.parse(output.observations)).toBeDefined();
-    expect(faceObservationsSchema.parse(output.faceObservations).faces[0]!.faceId).toBe("face-0");
+    expect(faceObservationsSchema.parse(output.faceObservations).faces[0]!.id).toBe("face-0");
     const token = (ready.data as FrameStatus).delivery?.token;
     if (token) await upgraded.call("artifact.close", { token });
   }

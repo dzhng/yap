@@ -20,7 +20,7 @@ test("malformed native histogram, coverage, region and edge operands refuse with
   const cases = [
     (v: typeof controls.chart) => {
       v.request.regions = Array.from({ length: 8 }, (_, i) => ({
-        regionId: `large-${i}`,
+        id: `large-${i}`,
         rect: { x: 0, y: 0, width: 8192, height: 8192 },
       }));
     },

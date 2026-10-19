@@ -415,7 +415,7 @@ test("face observations measured on another raster cannot publish as the request
           status: "available",
           faces: [
             {
-              faceId: "face-0",
+              id: "face-0",
               boundingBox: { x: 10, y: 10, width: 20, height: 30 },
               confidence: 0.9,
             },

@@ -280,6 +280,7 @@
           ],
           "minimum": 255
         },
+        "id": "top",
         "state": "measured",
         "channels": {
           "red": {
@@ -1084,21 +1085,20 @@
           "rasterPixels": 4,
           "partialAlphaPixels": 0,
           "requestedPixels": 4
-        },
-        "regionId": "top"
+        }
       }
     ],
     "request": {
       "brightAtOrAbove": 250,
       "regions": [
         {
+          "id": "top",
           "rect": {
             "height": 1,
             "x": 0,
             "y": 0,
             "width": 4
-          },
-          "regionId": "top"
+          }
         }
       ],
       "edgeOpaqueFraction": 1,
@@ -1677,6 +1677,7 @@
         "brightFraction": 0.25
       },
       "state": "measured",
+      "id": "full",
       "coverage": {
         "requestedPixels": 16,
         "opaquePixels": 16,
@@ -2480,8 +2481,7 @@
           ],
           "minimum": 0
         }
-      },
-      "regionId": "full"
+      }
     },
     "width": 4
   },
@@ -2755,6 +2755,7 @@
             0
           ]
         },
+        "id": "outside",
         "state": "unavailable",
         "reason": "outside_raster",
         "coverage": {
@@ -3545,8 +3546,7 @@
               0
             ]
           }
-        },
-        "regionId": "outside"
+        }
       },
       {
         "sampledRect": {
@@ -3826,6 +3826,7 @@
           ],
           "minimum": 255
         },
+        "id": "clipped",
         "state": "measured",
         "channels": {
           "red": {
@@ -4630,8 +4631,7 @@
           "rasterPixels": 1,
           "partialAlphaPixels": 0,
           "requestedPixels": 2
-        },
-        "regionId": "clipped"
+        }
       }
     ],
     "request": {
@@ -4640,22 +4640,22 @@
       "brightAtOrAbove": 250,
       "regions": [
         {
+          "id": "outside",
           "rect": {
             "height": 2,
             "x": -10,
             "y": -10,
             "width": 2
-          },
-          "regionId": "outside"
+          }
         },
         {
+          "id": "clipped",
           "rect": {
             "height": 1,
             "x": -1,
             "y": 0,
             "width": 2
-          },
-          "regionId": "clipped"
+          }
         }
       ],
       "darkAtOrBelow": 5
@@ -4958,6 +4958,7 @@
         ],
         "minimum": 255
       },
+      "id": "full",
       "state": "measured",
       "channels": {
         "red": {
@@ -5762,8 +5763,7 @@
         "rasterPixels": 3,
         "partialAlphaPixels": 1,
         "requestedPixels": 3
-      },
-      "regionId": "full"
+      }
     },
     "width": 3
   },
@@ -6037,6 +6037,7 @@
             0
           ]
         },
+        "id": "outside",
         "state": "unavailable",
         "reason": "outside_raster",
         "channels": {
@@ -6827,8 +6828,7 @@
           "requestedPixels": 4,
           "opaquePixels": 0,
           "partialAlphaPixels": 0
-        },
-        "regionId": "outside"
+        }
       },
       {
         "sampledRect": {
@@ -7108,6 +7108,7 @@
           "brightFraction": 0,
           "minimum": 0
         },
+        "id": "clipped",
         "state": "measured",
         "channels": {
           "red": {
@@ -7912,29 +7913,28 @@
           "requestedPixels": 2,
           "opaquePixels": 1,
           "partialAlphaPixels": 0
-        },
-        "regionId": "clipped"
+        }
       }
     ],
     "request": {
       "regions": [
         {
+          "id": "outside",
           "rect": {
             "width": 2,
             "y": -10,
             "x": -10,
             "height": 2
-          },
-          "regionId": "outside"
+          }
         },
         {
+          "id": "clipped",
           "rect": {
             "width": 2,
             "y": 0,
             "x": -1,
             "height": 1
-          },
-          "regionId": "clipped"
+          }
         }
       ],
       "darkAtOrBelow": 5,
@@ -9325,6 +9325,7 @@
         "brightFraction": 0,
         "minimum": 0
       },
+      "id": "full",
       "state": "measured",
       "channels": {
         "red": {
@@ -10129,8 +10130,7 @@
         "requestedPixels": 16,
         "opaquePixels": 16,
         "partialAlphaPixels": 0
-      },
-      "regionId": "full"
+      }
     },
     "width": 4
   },
@@ -10404,6 +10404,7 @@
             0
           ]
         },
+        "id": "outside",
         "state": "unavailable",
         "reason": "outside_raster",
         "coverage": {
@@ -11194,8 +11195,7 @@
               0
             ]
           }
-        },
-        "regionId": "outside"
+        }
       },
       {
         "sampledRect": {
@@ -11475,6 +11475,7 @@
           ],
           "minimum": 0
         },
+        "id": "clipped",
         "state": "measured",
         "channels": {
           "red": {
@@ -12279,8 +12280,7 @@
           "rasterPixels": 1,
           "partialAlphaPixels": 0,
           "requestedPixels": 2
-        },
-        "regionId": "clipped"
+        }
       }
     ],
     "request": {
@@ -12289,22 +12289,22 @@
       "brightAtOrAbove": 250,
       "regions": [
         {
+          "id": "outside",
           "rect": {
             "height": 2,
             "x": -10,
             "y": -10,
             "width": 2
-          },
-          "regionId": "outside"
+          }
         },
         {
+          "id": "clipped",
           "rect": {
             "height": 1,
             "x": -1,
             "y": 0,
             "width": 2
-          },
-          "regionId": "clipped"
+          }
         }
       ],
       "darkAtOrBelow": 5
@@ -13152,6 +13152,7 @@
         ],
         "minimum": 0
       },
+      "id": "full",
       "state": "measured",
       "channels": {
         "red": {
@@ -13956,8 +13957,7 @@
         "rasterPixels": 16,
         "partialAlphaPixels": 0,
         "requestedPixels": 16
-      },
-      "regionId": "full"
+      }
     },
     "width": 4
   },
@@ -14231,6 +14231,7 @@
             0
           ]
         },
+        "id": "outside",
         "state": "unavailable",
         "reason": "outside_raster",
         "coverage": {
@@ -15021,8 +15022,7 @@
               0
             ]
           }
-        },
-        "regionId": "outside"
+        }
       },
       {
         "sampledRect": {
@@ -15302,6 +15302,7 @@
           ],
           "minimum": 0
         },
+        "id": "clipped",
         "state": "measured",
         "channels": {
           "red": {
@@ -16106,8 +16107,7 @@
           "rasterPixels": 1,
           "partialAlphaPixels": 0,
           "requestedPixels": 2
-        },
-        "regionId": "clipped"
+        }
       }
     ],
     "request": {
@@ -16116,22 +16116,22 @@
       "brightAtOrAbove": 250,
       "regions": [
         {
+          "id": "outside",
           "rect": {
             "height": 2,
             "x": -10,
             "y": -10,
             "width": 2
-          },
-          "regionId": "outside"
+          }
         },
         {
+          "id": "clipped",
           "rect": {
             "height": 1,
             "x": -1,
             "y": 0,
             "width": 2
-          },
-          "regionId": "clipped"
+          }
         }
       ],
       "darkAtOrBelow": 5
@@ -16707,6 +16707,7 @@
         ],
         "minimum": 0
       },
+      "id": "full",
       "state": "measured",
       "channels": {
         "red": {
@@ -17511,8 +17512,7 @@
         "rasterPixels": 12,
         "partialAlphaPixels": 0,
         "requestedPixels": 12
-      },
-      "regionId": "full"
+      }
     },
     "width": 3
   }

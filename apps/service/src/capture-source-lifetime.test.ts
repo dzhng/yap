@@ -24,7 +24,7 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
   const f = await fixture(undefined, filesWorker);
   const started = await f.call("capture.start", {
     requestId: "delete-active",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId } = started.data as { id: string };
@@ -363,7 +363,7 @@ test("cancel losing to completed capture releases admission without discarding t
   const f = await fixture(undefined, sourceWorker, "capture.cancel");
   const started = await f.call("capture.start", {
     requestId: "cancel-completed",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -623,7 +623,7 @@ test("public discard fences and drains queued managed imports before native canc
   const { id: recordingId, sourceId } = data<{ id: string; sourceId: string }>(
     await f.call("capture.start", {
       requestId: "discard-borrower",
-      source: { kind: "display", displayId: 1 },
+      source: { kind: "display", id: 1 },
     }),
   );
   const directory = join(f.home, "library", "recordings", recordingId, "source");

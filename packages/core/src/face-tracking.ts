@@ -98,7 +98,7 @@ export function trackFaceObservations(
       active.track.samples[active.track.samples.length - 1] = {
         atUs: sample.atUs,
         status: "observed",
-        faceId: chosen.face.faceId,
+        faceId: chosen.face.id,
         boundingBox: chosen.face.boundingBox,
         confidence: chosen.face.confidence,
         ...landmarkEvidence(chosen.face),
@@ -118,7 +118,7 @@ export function trackFaceObservations(
       track.samples.push({
         atUs: sample.atUs,
         status: "observed",
-        faceId: face.faceId,
+        faceId: face.id,
         boundingBox: face.boundingBox,
         confidence: face.confidence,
         ...landmarkEvidence(face),

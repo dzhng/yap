@@ -295,18 +295,18 @@ it("advertises feedback review operations with shared selectors and bounded curs
 });
 
 describe("capture selection", () => {
-  const source = { kind: "window", windowId: 7 } as const;
+  const source = { kind: "window", id: 7 } as const;
   it("admits an explicitly selected camera as primary video with the shared audio defaults", () => {
     expect(
       operationSchema.parse({
         operation: "capture.start",
-        params: { requestId: "camera-take", source: { kind: "camera", deviceId: "camera-2" } },
+        params: { requestId: "camera-take", source: { kind: "camera", id: "camera-2" } },
       }),
     ).toMatchObject({
       operation: "capture.start",
       params: {
         requestId: "camera-take",
-        source: { kind: "camera", deviceId: "camera-2" },
+        source: { kind: "camera", id: "camera-2" },
         microphone: true,
         systemAudio: false,
       },
@@ -329,11 +329,11 @@ describe("capture selection", () => {
   });
   it("refuses companion camera authority on a primary camera and malformed device identities", () => {
     for (const params of [
-      { source: { kind: "camera", deviceId: "primary" }, cameraDeviceId: "companion" },
+      { source: { kind: "camera", id: "primary" }, cameraDeviceId: "companion" },
       { source: { kind: "camera" } },
-      { source: { kind: "camera", deviceId: "" } },
-      { source: { kind: "camera", deviceId: "c".repeat(257) } },
-      { source: { kind: "camera", deviceId: "primary", displayId: 7 } },
+      { source: { kind: "camera", id: "" } },
+      { source: { kind: "camera", id: "c".repeat(257) } },
+      { source: { kind: "camera", id: "primary", displayId: 7 } },
     ]) {
       expect(
         operationSchema.safeParse({
@@ -347,7 +347,7 @@ describe("capture selection", () => {
         recordingId: "r",
         sourceId: "s",
         outputDirectory: "/tmp/source",
-        source: { kind: "camera", deviceId: "primary" },
+        source: { kind: "camera", id: "primary" },
         cameraDeviceId: "companion",
         cameraSourceId: "c",
         cameraDirectory: "/tmp/camera",
@@ -361,7 +361,7 @@ describe("capture selection", () => {
           recordingId: "r",
           sourceId: "s",
           outputDirectory: "/tmp/source",
-          source: { kind: "camera", deviceId: "primary" },
+          source: { kind: "camera", id: "primary" },
           ...companion,
         }).success,
       ).toBe(false);
@@ -377,7 +377,7 @@ describe("capture selection", () => {
     for (const selection of [
       { source, cameraAtStart: "off" },
       { source, cameraAtStart: "on" },
-      { source: { kind: "camera", deviceId: "primary" }, cameraAtStart: "off" },
+      { source: { kind: "camera", id: "primary" }, cameraAtStart: "off" },
       { ...companion, cameraAtStart: "paused" },
     ]) {
       expect(captureSelectionSchema.safeParse(selection).success).toBe(false);

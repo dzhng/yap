@@ -1132,7 +1132,7 @@ test("capture preparation, reports and finalization block without interrupting t
   const nativeCall = once(f.events, "call");
   const start = f.control("capture.start", {
     requestId: "take",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   const [native] = await nativeCall;
   expect(native.request.operation).toBe("capture.start");
@@ -1269,7 +1269,7 @@ test("fresh service owns capture facts without enabling capture or creating span
   });
   const start = {
     requestId: "not-wired",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     microphone: false,
     systemAudio: false,
   };
@@ -2257,7 +2257,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v9-cursor",
+      implementationId: "native-source-picture-v10-cursor",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {

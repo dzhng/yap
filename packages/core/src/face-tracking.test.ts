@@ -9,7 +9,7 @@ const observation = (faces: Array<{ x: number; y: number; width: number; height:
   height: 100,
   status: faces.length ? ("available" as const) : ("no_face" as const),
   faces: faces.map((boundingBox, index) => ({
-    faceId: `face-${index}`,
+    id: `face-${index}`,
     boundingBox,
     confidence: 0.9,
   })),

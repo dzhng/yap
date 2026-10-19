@@ -820,11 +820,7 @@ function allocationArguments(
     operation,
     selection.recordingId ?? null,
     source.kind,
-    source.kind === "camera"
-      ? source.deviceId
-      : source.kind === "window"
-        ? source.windowId
-        : source.displayId,
+    source.kind === "region" ? source.displayId : source.id,
     source.kind === "region" ? [source.x, source.y, source.width, source.height] : null,
     selection.microphone,
     selection.systemAudio,

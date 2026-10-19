@@ -343,7 +343,7 @@ function capturingPeer(
   };
 }
 
-const fixtureSource = { kind: "window", windowId: 7 };
+const fixtureSource = { kind: "window", id: 7 };
 
 it("preserves a terminal report's message through public reads and restart", async () => {
   const home = await temporaryHome();
@@ -770,7 +770,7 @@ it(
     expect(
       await service.call("capture.start", {
         requestId: "replay",
-        source: { kind: "window", windowId: 8 },
+        source: { kind: "window", id: 8 },
       }),
     ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
     await expect
@@ -962,7 +962,7 @@ it("refuses a start request ID reused for a different take instead of reinterpre
   expect(started).toMatchObject({ ok: true, data: { state: "recording" } });
   for (const changed of [
     { ...request, systemAudio: true },
-    { ...request, source: { kind: "window", windowId: 8 } },
+    { ...request, source: { kind: "window", id: 8 } },
     { ...request, microphoneDeviceId: "device-1" },
   ])
     expect(await service.call("capture.start", changed)).toMatchObject({
@@ -986,7 +986,7 @@ it("allocates one primary camera and refuses a replay that changes its selected 
   });
   const request = {
     requestId: "camera-primary",
-    source: { kind: "camera", deviceId: "camera-selected" },
+    source: { kind: "camera", id: "camera-selected" },
     microphone: false,
     systemAudio: false,
   };
@@ -1008,7 +1008,7 @@ it("allocates one primary camera and refuses a replay that changes its selected 
   expect(
     await service.call("capture.start", {
       ...request,
-      source: { kind: "camera", deviceId: "different-camera" },
+      source: { kind: "camera", id: "different-camera" },
     }),
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   const replayed = await service.call("capture.start", request);
@@ -1023,7 +1023,7 @@ it("allocates one primary camera and refuses a replay that changes its selected 
   expect(
     await reopened.call("capture.start", {
       ...request,
-      source: { kind: "camera", deviceId: "different-camera" },
+      source: { kind: "camera", id: "different-camera" },
     }),
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await reopened.call("capture.start", request)).toMatchObject({

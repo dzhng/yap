@@ -6,7 +6,7 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* slices 01–03 landed; next is 04. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01–04 landed (04's app side is in 06); 07 is in progress; next is 05. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
@@ -19,7 +19,7 @@ section and the TODO list before you end a pass.
 - [x] 01 Owner references are `{kind, id}` everywhere (core `JobOwner`/`JobTarget`, evidence owners)
 - [x] 02 Jobs: `JobQueue.inspect` is the one public job record; `JobQueue.work` is what an operation that started a job reports
 - [x] 03 Library records name themselves `id`
-- [ ] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows
+- [x] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows (the app's side is in 06)
 - [ ] 05 Catalog format 30 and package version 7, each with a tested migration
 - [ ] 06 macOS app decoders
 - [ ] 07 CLI, skill, evals and docs

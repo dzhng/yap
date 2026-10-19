@@ -1254,8 +1254,8 @@ it(
   { timeout: 20_000 },
   async () => {
     let cameras = [
-      { cameraId: "camera-2", name: "External camera" },
-      { cameraId: "camera-1", name: "Built-in camera" },
+      { id: "camera-2", name: "External camera" },
+      { id: "camera-1", name: "Built-in camera" },
     ];
     let cameraPermission = "denied";
     const f = await serviceFixture((operation) => {
@@ -1322,7 +1322,7 @@ it(
     ).toMatchObject({ ok: true, data: { cameras: [] } });
     const malformed = {
       requestId: "malformed-camera",
-      source: { kind: "window", windowId: 1, displayId: 1 },
+      source: { kind: "window", id: 1, displayId: 1 },
       cameraDeviceId: "camera-2",
     };
     expect(cli(f.socket, "capture.start", malformed).result).toMatchObject({

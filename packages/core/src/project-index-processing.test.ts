@@ -98,7 +98,7 @@ test("face observation requests reach project index frame materialization", asyn
   expect(
     f.projectRetained.page({ identity: result.published!.evidence }).entries[0]!.frame
       .faceObservations,
-  ).toMatchObject({ status: "available", faces: [{ faceId: "face-0" }] });
+  ).toMatchObject({ status: "available", faces: [{ id: "face-0" }] });
 });
 
 test("a project face index retained before the noun-ID cutover is refused by generation and regenerates on request", async () => {
@@ -111,15 +111,15 @@ test("a project face index retained before the noun-ID cutover is refused by gen
   await f.jobs.idle();
   const before = f.index.getProject({ projectId: f.projectId, faceObservations, limit: 1 });
   const reference = before.page!.entries[0]!.reference;
-  // The last build before the cutover retained bare face ids under its own renderer pin.
+  // 0.1.61 retained faces named `faceId` under its own renderer pin.
   const rows = f.catalog.catalog
     .prepare("SELECT rowid,frame FROM screenshot_index_entries")
     .all() as { rowid: number; frame: string }[];
   for (const row of rows)
     f.catalog.catalog
       .prepare("UPDATE screenshot_index_entries SET frame=? WHERE rowid=?")
-      .run(row.frame.replaceAll('"faceId":', '"id":'), row.rowid);
-  expect(rows.some((row) => row.frame.includes('"faceId":'))).toBe(true);
+      .run(row.frame.replaceAll('"id":"face-', '"faceId":"face-'), row.rowid);
+  expect(rows.some((row) => row.frame.includes('"id":"face-'))).toBe(true);
   await f.restart("renderer-after-cutover");
 
   const stale = (read: () => unknown) => {
@@ -142,7 +142,7 @@ test("a project face index retained before the noun-ID cutover is refused by gen
   const ready = f.index.getProject({ projectId: f.projectId, faceObservations, limit: 1 });
   expect(ready.page!.metadata.generation).not.toBe(reference.generation);
   expect(ready.page!.entries[0]!.frame.faceObservations).toMatchObject({
-    faces: [{ faceId: "face-0" }],
+    faces: [{ id: "face-0" }],
   });
 });
 

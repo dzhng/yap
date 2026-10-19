@@ -133,7 +133,7 @@ test("deletion quiescence waits behind a held start and keeps source files", asy
   try {
     const start = service.start({
       requestId: "held",
-      source: { kind: "window", windowId: 1 },
+      source: { kind: "window", id: 1 },
       microphone: false,
       systemAudio: false,
     });
@@ -386,7 +386,7 @@ test("a marked finished take neither starts replacement capture nor touches nati
       service.restart({
         recordingId: recording.id,
         requestId: "replacement",
-        source: { kind: "window", windowId: 1 },
+        source: { kind: "window", id: 1 },
         microphone: false,
         systemAudio: false,
       }),

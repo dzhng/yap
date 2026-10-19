@@ -50,7 +50,7 @@ async function fixtureApp(home, environment = {}) {
     ...environment,
   });
   const [, windowId] = await instance.waitFor(/capture fixture window=(\d+)/);
-  return { instance, servicePid, source: { kind: "window", windowId: Number(windowId) } };
+  return { instance, servicePid, source: { kind: "window", id: Number(windowId) } };
 }
 
 /** A held start waits for this file: `holding` asks a launch to hold, `release` ends the hold. */
@@ -299,7 +299,7 @@ test("a source this app may not capture fails the start and settles that take", 
   const refused = await call(
     home,
     "capture.start",
-    silent("other-window", { kind: "window", windowId: source.windowId + 1 }),
+    silent("other-window", { kind: "window", id: source.windowId + 1 }),
   );
   assert.equal(refused.ok, false);
   assert.equal(refused.error.code, "SOURCE_UNAVAILABLE");

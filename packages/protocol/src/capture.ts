@@ -11,9 +11,9 @@ const finite = z.number().finite();
 const authorization = z.enum(["authorized", "denied", "restricted", "not_determined", "unknown"]);
 
 export const captureSourceSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("display"), displayId: z.int().nonnegative() }).strict(),
-  z.object({ kind: z.literal("window"), windowId: z.int().nonnegative() }).strict(),
-  z.object({ kind: z.literal("camera"), deviceId: id.max(256) }).strict(),
+  z.object({ kind: z.literal("display"), id: z.int().nonnegative() }).strict(),
+  z.object({ kind: z.literal("window"), id: z.int().nonnegative() }).strict(),
+  z.object({ kind: z.literal("camera"), id: id.max(256) }).strict(),
   z
     .object({
       kind: z.literal("region"),
@@ -161,16 +161,14 @@ export const captureDeviceSchema = z
 export const captureSourcesSchema = z
   .object({
     displays: z.array(
-      z.object({ displayId: z.int(), name: z.string(), width: z.int(), height: z.int() }).strict(),
+      z.object({ id: z.int(), name: z.string(), width: z.int(), height: z.int() }).strict(),
     ),
     windows: z.array(
-      z.object({ windowId: z.int(), title: z.string(), application: z.string() }).strict(),
+      z.object({ id: z.int(), title: z.string(), application: z.string() }).strict(),
     ),
     cameras: z.array(
-      z.object({ cameraId: id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
+      z.object({ id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
     ),
-    microphones: z.array(
-      z.object({ microphoneId: id, name: z.string(), isDefault: z.boolean() }).strict(),
-    ),
+    microphones: z.array(z.object({ id, name: z.string(), isDefault: z.boolean() }).strict()),
   })
   .strict();

@@ -53,7 +53,7 @@ async function displayTake(origin) {
   const display = sources.displays[0];
   const started = await succeeds(home, "capture.start", {
     requestId: randomUUID(),
-    source: { kind: "display", displayId: display.displayId },
+    source: { kind: "display", id: display.displayId },
     microphone: false,
     systemAudio: false,
   });

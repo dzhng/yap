@@ -348,7 +348,7 @@ export async function settleCapture(
 ) {
   const started = await f.call("capture.start", {
     requestId,
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };

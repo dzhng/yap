@@ -54,7 +54,7 @@ test(
     const start = () =>
       succeeds("capture.start", {
         requestId: randomUUID(),
-        source: { kind: "window", windowId: Number(windowId) },
+        source: { kind: "window", id: Number(windowId) },
         microphone: false,
         systemAudio: false,
       });

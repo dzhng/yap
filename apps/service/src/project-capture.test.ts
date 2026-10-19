@@ -22,8 +22,8 @@ test("public discovery preserves native camera order and empty results without s
   const f = await fixture(undefined, undefined, "capture.sources");
   for (const cameras of [
     [
-      { cameraId: "camera-b", name: "External camera", isDefault: false },
-      { cameraId: "camera-a", name: "Built-in camera", isDefault: true },
+      { id: "camera-b", name: "External camera", isDefault: false },
+      { id: "camera-a", name: "Built-in camera", isDefault: true },
     ],
     [],
   ]) {
@@ -62,7 +62,7 @@ test("public camera selection preserves its allocated binding across native forw
   const f = await fixture();
   const params = {
     requestId: "camera-selection",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   };
   const started = await f.call("capture.start", params);
@@ -99,7 +99,7 @@ test("a published primary reaches ready while its selected camera publication re
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "independent-publication",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
@@ -179,7 +179,7 @@ test("a reserved camera starts off and turns on and off in the take's control or
   const f = await fixture(undefined, undefined, "capture.pause");
   const started = await f.call("capture.start", {
     requestId: "camera-starts-off",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
@@ -230,7 +230,7 @@ test("a camera turn-on that outlasts an ordinary native call is still answered",
   const f = await fixture(undefined, undefined, "capture.setCamera", 100);
   const started = await f.call("capture.start", {
     requestId: "slow-camera",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
@@ -244,7 +244,7 @@ test("a camera turn-on that outlasts an ordinary native call is still answered",
     recordingId,
     sourceId,
     elapsedUs: 0,
-    selection: { source: { kind: "display", displayId: 1 }, cameraDeviceId: "camera-a" },
+    selection: { source: { kind: "display", id: 1 }, cameraDeviceId: "camera-a" },
     camera: { deviceId: "camera-a", state: "on" },
     permissions: { screen: true, microphone: "authorized", camera: "authorized" },
   });
@@ -258,7 +258,7 @@ test("a camera toggle refuses without a reserved camera or a live take, and carr
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "camera-refusals",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
@@ -285,7 +285,7 @@ test("a camera toggle refuses without a reserved camera or a live take, and carr
 
   const plain = await f.call("capture.start", {
     requestId: "no-camera",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!plain.ok) throw new Error(JSON.stringify(plain));
   const screenOnly = (plain.data as { id: string }).id;
@@ -301,7 +301,7 @@ test("a take whose reserved camera never turned on completes and admits its prim
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "camera-never-on",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
@@ -382,7 +382,7 @@ test("source admission failure remains discoverable through stop replay and serv
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "failed-source",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -462,7 +462,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "admission-rollback",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -528,7 +528,7 @@ test("explicit source retry publishes the same acquisition and remains ready wit
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "ready-source",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -608,7 +608,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
   cleanup.push(async () => release());
   const started = await f.call("capture.start", {
     requestId: "capture-priority",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -662,7 +662,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
 
 test("private lifecycle order, cancel and no-video outcomes retain the capture owner's authority", async () => {
   const f = await fixture();
-  const selection = { source: { kind: "display", displayId: 1 } };
+  const selection = { source: { kind: "display", id: 1 } };
   const started = await f.call("capture.start", { requestId: "ordered-take", ...selection });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -727,7 +727,7 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
 
 test("lost public start reply reopens the same take and reconciles before publishing source admission", async () => {
   const f = await fixture();
-  const params = { requestId: "lost-start-reply", source: { kind: "display", displayId: 1 } };
+  const params = { requestId: "lost-start-reply", source: { kind: "display", id: 1 } };
   await new Promise<void>((resolve, reject) => {
     const socket = new Socket();
     const timer = setTimeout(() => {
@@ -847,7 +847,7 @@ test("reopened recovery admits a verified primary while allocated camera recover
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "independent-recovery",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
@@ -951,7 +951,7 @@ test("reopened recovery admits a verified primary while allocated camera recover
 test("controller loss drains an unanswered native start before releasing the capture catalog", async () => {
   const f = await fixture(undefined, undefined, "capture.start");
   const start = f
-    .call("capture.start", { requestId: "silent-start", source: { kind: "display", displayId: 1 } })
+    .call("capture.start", { requestId: "silent-start", source: { kind: "display", id: 1 } })
     .catch((error: Error) => ({ disconnected: error.message }));
   await expect.poll(() => f.nativeCalls).toContain("capture.start");
   f.input.end();
@@ -997,7 +997,7 @@ test("controller loss drains an unanswered native start before releasing the cap
 
 test("an explicit-import namespace collision refuses source admission without hiding completed capture facts", async () => {
   const f = await fixture(undefined, sourceWorker);
-  const params = { requestId: "collision-take", source: { kind: "display", displayId: 1 } };
+  const params = { requestId: "collision-take", source: { kind: "display", id: 1 } };
   const started = await f.call("capture.start", params);
   if (!started.ok) throw new Error(JSON.stringify(started));
   const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
@@ -1102,7 +1102,7 @@ test("fresh capture allocates and replays through its private controller without
   cleanup.push(() => service.close());
   const params = {
     requestId: "capture-replay",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     microphone: false,
     systemAudio: false,
   };
@@ -1172,7 +1172,7 @@ test("unpublished raw camera recovery receives its byte-scaled materialization b
     const f = await fixture();
     const started = await f.call("capture.start", {
       requestId: "raw-camera-budget",
-      source: { kind: "display", displayId: 1 },
+      source: { kind: "display", id: 1 },
       cameraDeviceId: "camera-a",
     });
     if (!started.ok) throw new Error(JSON.stringify(started));

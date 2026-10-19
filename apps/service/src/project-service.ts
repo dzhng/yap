@@ -931,7 +931,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: projectPictures },
       imageRenderer: {
-        implementationId: "native-source-image-v4",
+        implementationId: "native-source-image-v5",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -942,7 +942,7 @@ export async function startProjectService(options: {
           ),
       },
       sourceRenderer: {
-        implementationId: "native-source-picture-v9-cursor",
+        implementationId: "native-source-picture-v10-cursor",
         render: async (request, signal) =>
           withRenderedFile(
             worker,

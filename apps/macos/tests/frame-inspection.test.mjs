@@ -30,7 +30,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   };
   const take = await call("capture.start", {
     requestId: randomUUID(),
-    source: { kind: "window", windowId: Number(window) },
+    source: { kind: "window", id: Number(window) },
     microphone: false,
     systemAudio: false,
   });

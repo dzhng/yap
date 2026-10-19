@@ -4,13 +4,13 @@
     { "name": "capture.status", "params": {} },
     {
       "name": "capture.start",
-      "params": { "requestId": "app-start", "source": { "kind": "window", "windowId": 7 } }
+      "params": { "requestId": "app-start", "source": { "kind": "window", "id": 7 } }
     },
     {
       "name": "capture.start",
       "params": {
         "requestId": "app-start-camera-off",
-        "source": { "kind": "display", "displayId": 1 },
+        "source": { "kind": "display", "id": 1 },
         "cameraDeviceId": "camera-1",
         "cameraAtStart": "off"
       }
@@ -26,7 +26,7 @@
       "params": {
         "requestId": "app-restart",
         "recordingId": "take-1",
-        "source": { "kind": "window", "windowId": 7 }
+        "source": { "kind": "window", "id": 7 }
       }
     },
     { "name": "recording.get", "params": {} },
@@ -91,7 +91,7 @@
         "sourceId": "source-1",
         "elapsedUs": 1000000,
         "selection": {
-          "source": { "kind": "display", "displayId": 1 },
+          "source": { "kind": "display", "id": 1 },
           "microphone": true,
           "systemAudio": false,
           "cameraDeviceId": "camera-1",

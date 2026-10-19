@@ -26,7 +26,7 @@ func verifyPictureObservations(in parent: URL) throws {
         "asset": ["assetId": "chart", "streamId": "image:0", "path": input.path],
         "output": output.path, "maxLongEdge": 4,
         "observations": ["darkAtOrBelow": 5, "brightAtOrAbove": 250, "edgeDarkFraction": 0.98, "edgeOpaqueFraction": 1, "regions": [
-            ["regionId": "top", "rect": ["x": 0, "y": 0, "width": 4, "height": 1]],
+            ["id": "top", "rect": ["x": 0, "y": 0, "width": 4, "height": 1]],
         ]],
     ]
     let request = try JSONDecoder().decode(SourceImageRenderer.Request.self,
@@ -74,8 +74,8 @@ func verifyPictureObservations(in parent: URL) throws {
         var body: [String: Any] = ["asset": ["assetId": name, "streamId": "image:0", "path": source.path],
             "output": target.path, "maxLongEdge": 4,
             "observations": ["darkAtOrBelow": 5, "brightAtOrAbove": 250, "edgeDarkFraction": 0.98, "edgeOpaqueFraction": 1,
-                "regions": [["regionId": "outside", "rect": ["x": -10, "y": -10, "width": 2, "height": 2]],
-                    ["regionId": "clipped", "rect": ["x": -1, "y": 0, "width": 2, "height": 1]]]]]
+                "regions": [["id": "outside", "rect": ["x": -10, "y": -10, "width": 2, "height": 2]],
+                    ["id": "clipped", "rect": ["x": -1, "y": 0, "width": 2, "height": 1]]]]]
         func render(_ body: [String: Any]) throws -> Data {
             try JSONEncoder().encode(SourceImageRenderer.write(JSONDecoder().decode(SourceImageRenderer.Request.self,
                 from: JSONSerialization.data(withJSONObject: body))))
@@ -119,7 +119,7 @@ func verifyPictureObservations(in parent: URL) throws {
     var invalid = body
     invalid["output"] = directory.appendingPathComponent("invalid.png").path
     invalid["observations"] = ["darkAtOrBelow": 5, "brightAtOrAbove": 250, "edgeDarkFraction": 0.98, "edgeOpaqueFraction": 1,
-        "regions": [["regionId": "invalid", "rect": ["x": Int.min, "y": 0, "width": 1, "height": 1]]]]
+        "regions": [["id": "invalid", "rect": ["x": Int.min, "y": 0, "width": 1, "height": 1]]]]
     do {
         _ = try SourceImageRenderer.write(JSONDecoder().decode(SourceImageRenderer.Request.self,
             from: JSONSerialization.data(withJSONObject: invalid)))

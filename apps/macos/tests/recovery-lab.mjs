@@ -63,7 +63,7 @@ async function app(home) {
     YAP_FIXTURE_WINDOW: "1",
   });
   const [, windowId] = await instance.waitFor(/capture fixture window=(\d+)/);
-  return { instance, source: { kind: "window", windowId: Number(windowId) } };
+  return { instance, source: { kind: "window", id: Number(windowId) } };
 }
 
 const seconds = (us) => (us == null ? null : Number((us / 1_000_000).toFixed(3)));

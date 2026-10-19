@@ -12,7 +12,7 @@ public struct PictureObservationRequest: Codable, Sendable, Equatable {
         let height: Int
     }
     public struct Region: Codable, Sendable, Equatable {
-        let regionId: String
+        let id: String
         let rect: Rect
     }
     let darkAtOrBelow: Int
@@ -26,10 +26,10 @@ public struct PictureObservationRequest: Codable, Sendable, Equatable {
             darkAtOrBelow < brightAtOrAbove,
             edgeDarkFraction.isFinite, (0...1).contains(edgeDarkFraction),
             edgeOpaqueFraction.isFinite, (0...1).contains(edgeOpaqueFraction),
-            regions.count <= 8, Set(regions.map(\.regionId)).count == regions.count,
+            regions.count <= 8, Set(regions.map(\.id)).count == regions.count,
             regions.reduce(0, { $0 + $1.rect.width * $1.rect.height }) <= 8192 * 8192,
             regions.allSatisfy({
-                !$0.regionId.isEmpty && $0.regionId.utf8.count <= 128
+                !$0.id.isEmpty && $0.id.utf8.count <= 128
                     && (-1_000_000...1_000_000).contains($0.rect.x)
                     && (-1_000_000...1_000_000).contains($0.rect.y)
                     && (1...8192).contains($0.rect.width) && (1...8192).contains($0.rect.height)
@@ -68,7 +68,7 @@ public struct PictureObservations: Encodable {
         let partialAlphaPixels: Int
     }
     struct Region: Encodable {
-        let regionId: String
+        let id: String
         let requestedRect: PictureObservationRequest.Rect
         let sampledRect: PictureObservationRequest.Rect?
         let state: String
@@ -125,7 +125,7 @@ public struct PictureObservations: Encodable {
         let raster = PictureObservationRequest.Rect(x: 0, y: 0, width: width, height: height)
         var rows = [Axis](repeating: Axis(), count: height)
         var columns = [Axis](repeating: Axis(), count: width)
-        func region(regionId: String, rect: PictureObservationRequest.Rect, axes: Bool = false) throws -> Region {
+        func region(id: String, rect: PictureObservationRequest.Rect, axes: Bool = false) throws -> Region {
             let left = max(0, rect.x), top = max(0, rect.y)
             let right = min(width, rect.x + rect.width), bottom = min(height, rect.y + rect.height)
             let intersection = right > left && bottom > top
@@ -161,7 +161,7 @@ public struct PictureObservations: Encodable {
                     darkFraction: opaque == 0 ? nil : Double(bins[0...request.darkAtOrBelow].reduce(0, +)) / Double(opaque),
                     brightFraction: opaque == 0 ? nil : Double(bins[request.brightAtOrAbove...255].reduce(0, +)) / Double(opaque))
             }
-            return Region(regionId: regionId, requestedRect: rect, sampledRect: intersection,
+            return Region(id: id, requestedRect: rect, sampledRect: intersection,
                 state: opaque > 0 ? "measured" : "unavailable",
                 reason: opaque > 0 ? nil : intersection == nil ? "outside_raster" : "no_opaque_pixels",
                 coverage: Coverage(requestedPixels: rect.width * rect.height,
@@ -170,8 +170,8 @@ public struct PictureObservations: Encodable {
                 channels: Channels(red: metric(histograms[0]), green: metric(histograms[1]), blue: metric(histograms[2])),
                 luma: metric(histograms[3]))
         }
-        let full = try region(regionId: "full", rect: raster, axes: true)
-        let regions = try request.regions.map { try region(regionId: $0.regionId, rect: $0.rect) }
+        let full = try region(id: "full", rect: raster, axes: true)
+        let regions = try request.regions.map { try region(id: $0.id, rect: $0.rect) }
         func band(edge: String, axis: [Axis], breadth: Int, reverse: Bool) -> EdgeBand? {
             let ordered = reverse ? Array(axis.reversed()) : axis
             var depth = 0, total = Axis()
