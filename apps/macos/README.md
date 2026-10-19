@@ -20,7 +20,9 @@ are ready before the first content click.
 
 The global shortcuts are one catalog, [ShortcutBindings](Sources/YapControls/ShortcutBindings.swift),
 shared by Settings, registration and the `shortcuts.get`/`shortcuts.set` app operations, so a key
-means the same thing however it was set. Bindings are physical key codes, and they apply as soon as
+means the same thing however it was set. A binding is a physical key code and Carbon modifier mask;
+callers name keys (`ctrl+cmd+r`), and [ShortcutKeys](Sources/YapControls/ShortcutKeys.swift) is the
+one owner of key names and labels, through the current keyboard layout. Bindings apply as soon as
 they change. A set names only the actions it changes and keeps every other binding; one invalid
 entry refuses the whole set. A key macOS refuses is reported by its action, never by its label. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
 pause, restart) only while a take or countdown is live, so they take no characters away otherwise.

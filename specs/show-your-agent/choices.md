@@ -45,8 +45,10 @@ verdict, least confident first.
   can be off by up to one observation step.
 - **A shortcuts file with one bad entry is refused whole at launch**, with the defaults
   registered and the reason in the menu; the next `shortcuts.set` writes over it.
-- **`shortcuts.json` and `shortcuts.set` store modifiers as the Carbon mask** (⌥⇧ = 2560); the
-  label carries the human form. Fine for one platform; revisit if the CLI wants portable names.
+- **`shortcuts.json` stores modifiers as the Carbon mask** (⌥⇧ = 2560); the label carries the
+  human form. Revisited after 0.1.64: `shortcuts.set` takes key names (`ctrl+cmd+r`) and both
+  shortcut operations answer them, because an agent could not be expected to know macOS key
+  numbering. The file keeps its shape so existing bindings survive.
 - **The travel threshold is the picture's long edge in pixels** (`pictureLongEdgePx`), not a
   display width; portrait captures use their height.
 - **`timeline.events` reads a take's marks into memory per request.** Marks per take are few.
