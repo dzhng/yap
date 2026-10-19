@@ -253,6 +253,9 @@ export async function startProjectService(options: {
   presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
+  /** Transcribe every recording and import in the background. The installed service turns it
+   * on; library callers and tests get only the transcription they ask for unless they opt in. */
+  autoTranscribe?: boolean;
   deletionFault?: DeletionFault;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
 }) {
@@ -399,7 +402,7 @@ export async function startProjectService(options: {
           const stream = assets
             .get(binding.assetId)
             .streams.find((candidate) => candidate.id === binding.streamId);
-          if (stream?.kind !== "audio") continue;
+          if (stream?.kind !== "audio" || !options.autoTranscribe) continue;
           transcriptBacklog?.enqueue({
             assetId: binding.assetId,
             streamId: binding.streamId,
@@ -649,7 +652,7 @@ export async function startProjectService(options: {
           { kind: "job", id: job.jobId },
           (published) => {
             for (const stream of published.streams)
-              if (stream.kind === "audio")
+              if (stream.kind === "audio" && options.autoTranscribe)
                 transcriptBacklog.enqueue({ assetId: published.id, streamId: stream.id });
             queueMicrotask(() => void transcriptBacklog.drain());
           },

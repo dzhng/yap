@@ -40,6 +40,8 @@ try {
     // Empty-home lifecycle tests opt out explicitly; installed runs keep the
     // first-party model acquisition default when the variable is absent.
     autoPrepareModels: process.env.YAP_AUTO_PREPARE_MODELS !== "0",
+    // Every recording and import is transcribed in the background once the model is ready.
+    autoTranscribe: process.env.YAP_AUTO_TRANSCRIBE !== "0",
   });
   for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const)
     process.on(signal, () => {

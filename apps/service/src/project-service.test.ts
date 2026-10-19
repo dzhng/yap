@@ -1847,7 +1847,9 @@ test("shutdown aborts an in-flight export destination admission before draining 
 
 test("audio imports persist one pending transcript per audio stream without a model", async () => {
   const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
-  const f = await projectServiceFixture(cleanups, controlledSpeech(requests));
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), undefined, {
+    autoTranscribe: true,
+  });
   const imported = await f.call("asset.import", { requestId: "backlog", path: f.path });
   expect(imported).toMatchObject({ ok: true });
   if (!imported.ok) return;
@@ -1872,7 +1874,9 @@ test("a ready model submits one background transcript per audio stream and clear
   const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
   const home = await mkdtemp(join(tmpdir(), "transcript-backlog-ready-"));
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home);
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
   await modelMetadata(await realpath(join(f.home, "library")));
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,
@@ -1905,7 +1909,9 @@ test("model.prepare drains pending transcript rows", async () => {
   const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
   const home = await mkdtemp(join(tmpdir(), "transcript-backlog-prepare-"));
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home);
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
   await modelMetadata(await realpath(join(home, "library")));
   const imported = await f.call("asset.import", { requestId: "prepare-backlog", path: f.path });
   expect(imported.ok).toBe(true);
@@ -1930,7 +1936,9 @@ test("service restart drains pending transcript rows when the model is already r
   const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
   const home = await mkdtemp(join(tmpdir(), "transcript-backlog-restart-"));
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const first = await projectServiceFixture(cleanups, controlledSpeech(requests), home);
+  const first = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
   const imported = await first.call("asset.import", {
     requestId: "restart-backlog",
     path: first.path,
@@ -1945,7 +1953,9 @@ test("service restart drains pending transcript rows when the model is already r
   ).toEqual({ count: 2 });
   await first.service.close();
   await modelMetadata(await realpath(join(home, "library")));
-  const second = await projectServiceFixture(cleanups, controlledSpeech(requests), home);
+  const second = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
   await expect
     .poll(() => second.call("model.status", { modelId: "parakeet" }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
@@ -1975,7 +1985,7 @@ test("explicit transcript transcription joins the queued background job and prom
   };
   const home = await mkdtemp(join(tmpdir(), "transcript-backlog-join-"));
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const f = await projectServiceFixture(cleanups, worker, home);
+  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
   await modelMetadata(await realpath(join(home, "library")));
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,
@@ -2036,7 +2046,7 @@ test("asset conversion does not enqueue transcript work for a conversion output"
       };
     return { ok: true as const, data: {} };
   };
-  const f = await projectServiceFixture(cleanups, worker);
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
   const imported = await f.call("asset.import", { requestId: "convert-source", path: f.path });
   expect(imported.ok).toBe(true);
   if (!imported.ok) return;
@@ -2087,7 +2097,7 @@ test("acquisition publication enqueues audio streams with its acquisition select
       };
     return sourceWorker(operation, params, options);
   };
-  const f = await projectServiceFixture(cleanups, worker);
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
   const path = join(f.home, "acquisition-source");
   await mkdir(path);
   await writeFile(join(path, "capture.journal.jsonl"), JSON.stringify({ sessionID: "acquired" }));
@@ -2133,7 +2143,7 @@ test("non-retryable transcript failure is not resubmitted by a second drain", as
   };
   const home = await mkdtemp(join(tmpdir(), "transcript-backlog-failure-"));
   cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const f = await projectServiceFixture(cleanups, worker, home);
+  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
   await modelMetadata(await realpath(join(home, "library")));
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,

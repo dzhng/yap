@@ -29,8 +29,10 @@ export function indexCaptureEvidence(
       ?.sourceToAssetOffsetUs ?? 0,
   );
   const offsetUs = Number(offset.numerator) / Number(offset.denominator);
+  // Only the source selection: the capture reader parses it strictly, and an index identity
+  // carries far more than a selection.
   const moments = owners.capture
-    .marks({ ...selection, acquisitionId })
+    .marks({ assetId: selection.assetId, streamId: selection.streamId, acquisitionId })
     .map((mark) => ({
       sourceUs: mark.sourceUs + offsetUs,
       kind: mark.kind === "stroke" ? ("mark" as const) : mark.kind,
