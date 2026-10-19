@@ -28,10 +28,56 @@ export const links = {
 };
 
 export const meta = {
-  title: "Yap — just yap; your agent makes it a great video",
+  title: "Yap — just yap. Your agent gets it.",
   description:
-    "Yap gives Claude Code, Codex and any agent the eyes, ears and hands to record, understand and edit video on your Mac. Free, local, and your originals are never touched.",
+    "Show your agent a bug or a design in four keys, or show people a polished video. Yap gives Claude Code, Codex and any agent the eyes, ears and hands for video on your Mac. Free and local.",
+  /** Describes og.png for social cards. */
+  imageAlt: "Yap — just yap. Your agent gets it.",
 };
+
+export const hero = {
+  kicker: "for Claude Code, Codex & any agent",
+  headline: "Just yap.",
+  subline: "Your agent gets it.",
+  lede: "Talk and point at your screen, then paste it to your agent. Or hand it one rough take for people. Yap gives your agent the eyes, ears and hands to get what you meant.",
+};
+
+/** The two directions, equal weight: the hotkey loop for agents, polished video for people. */
+export const directions = [
+  {
+    hand: "show",
+    title: "your agent",
+    body: "Bug reports, design feedback, a pull request reviewed out loud, “watch me do it”. Four keys instead of three paragraphs:",
+    items: [
+      { title: "Start `⌥⇧S`", body: "Records the display under your pointer. No countdown." },
+      {
+        title: "Talk and draw `hold ⇧`",
+        body: "Shift-click drops a numbered pin. `⌥⇧Z` undoes a mark, `⌥⇧X` cancels.",
+      },
+      { title: "Finish `⌥⇧S`", body: "The transcript is prepared in the background." },
+      {
+        title: "Paste `⌥⇧V`",
+        body: "A short prompt: the recording, what was captured, your marks and clicks.",
+      },
+    ],
+    fine: "Rebind the keys in Settings. No extra permission; allow Accessibility so `⌥⇧V` can paste for you; otherwise it copies.",
+  },
+  {
+    hand: "show",
+    title: "people",
+    body: "Demos, team updates, podcasts and talks. One rough take instead of an editor:",
+    items: [
+      { title: "Record `⌥⇧S`", body: "Same key, or drop in any video you already have." },
+      { title: "Ask `⌥⇧V`", body: "Paste, then add “a 60-second demo with captions.”" },
+      {
+        title: "Review",
+        body: "Your agent cuts, captions and cleans up.",
+      },
+      { title: "Export", body: "Video, audio or captions for where it’s going." },
+    ],
+    fine: "Originals stay untouched; every edit is a revision you can undo.",
+  },
+];
 
 export const heroArt = {
   image: "header.png",
@@ -50,7 +96,10 @@ export const launchVideo = {
 };
 
 export const asks = [
-  "Watch this recording of the checkout bug and fix it.",
+  "Here's the checkout bug. Fix the button I pinned.",
+  "Watch me do this, then write a script that does it for me.",
+  "I drew on the three spacing issues. Fix them in the CSS.",
+  "Here's my review of the diff. Address each thing I pointed at.",
   "Tighten this into a 60-second product demo. Cut the dead air and false starts.",
   "Make a vertical version for X with big, punchy captions.",
   "Here's a launch video I love. Match its pacing and caption style.",
@@ -80,14 +129,14 @@ export const howItWorks = [
     alt: "A person hands over a note in plain words while Xiaohei cuts the recorded film with huge scissors",
     kicker: "in plain words",
     title: "Yap, ask, done",
-    body: "Record from the menu bar, or hand over a video you already have. Ask in plain words. Your agent reads the transcript, looks at the frames, listens to the audio, then cuts, captions and exports.",
+    body: "Press ⌥⇧S and talk, record from the menu bar, or hand over a video you already have. Paste the prompt or ask in plain words. Your agent reads the transcript, looks at the frames and your pins, listens to the audio, then fixes what you showed, or cuts, captions and exports.",
   },
   {
     image: "02-evidence-not-opinions.png",
     alt: "A toolbox holds the transcript, waveform and frames while Xiaohei, on a stool, marks the cut",
     kicker: "the agent decides",
     title: "Evidence, not opinions",
-    body: "Word-timed transcripts, frames, waveforms, scene and cursor events, loudness. Yap supplies the facts; your agent makes the calls, so the result follows your intent, not a house style.",
+    body: "Word-timed transcripts, frames, your marks and pins, waveforms, scene and cursor events, loudness. Yap supplies the facts; your agent makes the calls, so the result follows your intent, not a house style.",
   },
   {
     image: "03-originals-untouched.png",
@@ -110,7 +159,7 @@ export const humanSteps = [
   },
   {
     title: "Just yap",
-    body: "Record from the menu bar and ask for the video you want. Not happy? Say so in one more sentence.",
+    body: "Press ⌥⇧S to show your agent something and ⌥⇧V to hand it over, or record and ask for the video you want. Not happy? Say so in one more sentence.",
   },
 ];
 
@@ -118,7 +167,7 @@ export const humanSteps = [
 export function llmsText() {
   return `# Yap
 
-> Yap is a free macOS toolkit (a menu-bar app, the \`yap\` CLI and an agent skill) that gives Claude Code, Codex and other agent harnesses the eyes, ears and hands to record, understand and edit video locally. It has no built-in agent and makes zero editorial decisions: the agent decides, Yap supplies evidence and precise, non-destructive operations.
+> Just yap. Your agent gets it. Yap is a free macOS toolkit (a menu-bar app, the \`yap\` CLI and an agent skill) that gives Claude Code, Codex and other agent harnesses the eyes, ears and hands to record, understand and edit video locally. It works in two directions. Show your agent: the user records with a hotkey, talks, draws and drops numbered pins, then pastes a prompt that hands you the recording. Show people: the user hands you a rough take and you make it a polished, captioned video in the right format. Yap has no built-in agent and makes zero editorial decisions: the agent decides, Yap supplies evidence and precise, non-destructive operations, and originals are never touched.
 
 Requirements: ${requirements.replace(" · ", ", ")}. Linux and Docker cannot run the native app or capture media.
 
@@ -139,12 +188,13 @@ Facts that change what you do:
 
 ## Use
 
+- A prompt the user pastes from Yap (⌥⇧V) names a recording ID, what was captured (screen, camera, microphone), and the user's marks, pins and clicks with their times and the window each was on. Every recording and import is transcribed in the background. Explore the recording with the yap CLI as the skill describes, then act on what the user showed you.
 - [yap skill](${links.skill}): how to record, understand and edit video for the user with the toolkit. Start a fresh agent session after the app installs it so it is discovered (\`/yap\` in Claude Code, \`$yap\` in Codex).
 
 ## Optional
 
-- [README](${links.repo}): what Yap is and what people make with it.
-- [Positioning](${links.positioning}): what is possible today and what isn't yet.
+- [README](${links.repo}): what Yap is, the hotkey loop, and what people make with it.
+- [Positioning](${links.positioning}): what is possible today, what isn't yet, and how Yap compares with the alternatives.
 - [Latest release](${links.releases}): the app kit, its release.json receipt and SHA256SUMS.
 `;
 }
