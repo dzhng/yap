@@ -429,6 +429,9 @@ final class RecordingControls: NSObject {
             let counting = preferences.countdown
         else { return start() }
         state.counting = true
+        // The menu hangs from the menu bar, right where the count and then the controls appear.
+        // A refused start shows it again to explain.
+        capturePopover.close()
         render()
         countdown.run(counting, on: NSScreen.recording(state.selection.source) ?? statusItem.button?.window?.screen) { [weak self] began in
             guard let self else { return }
@@ -440,6 +443,7 @@ final class RecordingControls: NSObject {
 
     private func start() {
         guard let request = state.beginStart(newRequestId: UUID().uuidString) else { return }
+        capturePopover.close()
         render()
         send("capture.start", parameters(of: request.start, requestId: request.requestId)) {
             [weak self] result in
