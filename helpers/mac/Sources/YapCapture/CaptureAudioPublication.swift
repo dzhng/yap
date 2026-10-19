@@ -88,7 +88,7 @@ package enum CaptureAudioPublication {
     } else {
       let summary = try CaptureJournal.streamAcceptedPCM(lease: lease) { _ in }
       guard let prefix = summary.validatedPrefix, let header = summary.header,
-        header.schemaVersion == 2
+        header.schemaVersion == 2 || header.schemaVersion == 3
       else { throw failure("Publication requires accepted PCM journal evidence.") }
       intent = Intent(
         version: 1, sourceID: header.sessionID, role: role,
@@ -373,7 +373,8 @@ package enum CaptureAudioPublication {
     let summary = try CaptureJournal.streamAcceptedPCM(lease: lease, through: intent.journal) {
       if $0.role == role { accepted = $0.physicalFirstFrame + $0.frameCount }
     }
-    guard summary.header?.sessionID == intent.sourceID, summary.header?.schemaVersion == 2
+    guard summary.header?.sessionID == intent.sourceID,
+        summary.header?.schemaVersion == 2 || summary.header?.schemaVersion == 3
     else { throw conflict("Publication journal no longer matches the pinned intent.") }
     return accepted
   }
