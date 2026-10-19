@@ -22,6 +22,9 @@ controls share that one preference.
 No capture sees the floating controls by default. Settings can let screenshots and
 screen sharing see them; they become visible to captures only after the running take
 confirms it leaves this app's windows out, so they never enter Yap's own recording.
+The ink and numbered pins a person draws during a screen take float over every display and
+are never visible to any capture, whatever that setting says. They draw only the mark stream
+the capture recognizes (the live stroke, recorded marks, undos) and classify nothing.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
 turned on and off during the take; the menu's switch only decides how it starts. The menu's
 switch and the floating controls' camera button send one action, which during a take is the

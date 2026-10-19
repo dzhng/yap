@@ -342,6 +342,8 @@ private func runLiveMarkJournalTests() throws {
         width: 32, height: 32, sessionID: "live-marks", requestedSourceRect: nil,
         onFailure: { _ in })
     defer { writer.cancel() }
+    let updates = MarkUpdates()
+    writer.onMarkUpdate = { updates.list.append($0) }
     let origin = CaptureHostTime.nowUs()
     let geometry = CaptureGeometry(
         outputWidth: 32, outputHeight: 32,
@@ -382,13 +384,27 @@ private func runLiveMarkJournalTests() throws {
             && marks[0].points[1].x == nil && marks[0].points[1].y == nil
             && expectedOutside?.eligibility == "outside",
         "A live mark keeps source time and points, got \(marks)")
+    // The overlay draws the stroke while ⇧ is held, then the recorded mark, and nothing else: a
+    // reading that leaves the stroke as it was says nothing new.
+    let first = MarkPoint(x: 105, y: 105, hostUs: origin + 10)
+    let second = MarkPoint(x: 120, y: 105, hostUs: origin + 20)
+    precondition(
+        updates.list == [.liveStroke([first]), .liveStroke([first, second]), .committed(marks[0]), .liveStroke([])],
+        "The overlay sees the live stroke grow, then the recorded mark, got \(updates.list)")
     try writer.undoMark()
     marks.removeAll()
     _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
     precondition(
         marks.count == 2 && marks[1].retracts == marks[0].id && marks[1].points.isEmpty,
         "Undo appends a retracting mark without rewriting the original")
-    print("PASS replayed cursor readings produce a source-timed journal mark")
+    precondition(updates.list.last == .retracted(marks[0].id), "The overlay hears which mark was undone")
+    print("PASS replayed cursor readings produce a source-timed journal mark and the overlay's stream")
+}
+
+/// What the writer told the overlay, in order. The writer calls it on its own queue, which the
+/// test drives synchronously.
+private final class MarkUpdates: @unchecked Sendable {
+    var list: [CaptureMarkUpdate] = []
 }
 
 private func liveMarkFrame(atHostUs hostUs: Int64, geometry: CaptureGeometry) -> CMSampleBuffer {

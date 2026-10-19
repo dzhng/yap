@@ -61,6 +61,15 @@ private final class TrackWriter {
     }
 }
 
+/// What a live take tells the person drawing on it, in the order it happened: the stroke still
+/// being drawn, each mark once it is recorded, and each mark undo takes back. It carries the
+/// recognizer's decisions, so whoever draws them classifies nothing.
+public enum CaptureMarkUpdate: Equatable, Sendable {
+    case liveStroke([MarkPoint])
+    case committed(JournalMark)
+    case retracted(String)
+}
+
 // All writer and clock mutations run on this queue, including control boundaries.
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
@@ -106,6 +115,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var markMonitorTokens: [Any] = []
     private var recordedMarks: [(id: String, kind: String, pin: Int?)] = []
     private var retractedMarkIDs = Set<String>()
+    package var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
+    /// Points of the live stroke the overlay was last told about. A stroke only grows until it
+    /// ends, so its length is enough to know whether there is anything new to say.
+    private var publishedStrokePoints = 0
 
     package init(
         request: CaptureRequest, width: Int, height: Int, sessionID: String,
@@ -271,6 +284,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 point: reading.global, buttonDown: reading.buttons != 0))
         self.markRecognizer = recognizer
         append(events, fallbackSourceUs: sourceUs)
+        publishActiveStroke(recognizer)
     }
 
     /// Appends a retracting mark for the most recent mark that has not already been undone.
@@ -289,6 +303,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
             retractedMarkIDs.insert(target.id)
+            onMarkUpdate?(.retracted(target.id))
         }
     }
 
@@ -319,6 +334,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     }
                     self.markRecognizer = recognizer
                     self.append(events, fallbackSourceUs: sourceUs)
+                    self.publishActiveStroke(recognizer)
                 }
             }
         }
@@ -356,7 +372,17 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
             recordedMarks.append((mark.id, mark.kind, mark.pin))
+            onMarkUpdate?(.committed(mark))
         }
+    }
+
+    /// Tells the overlay about the live stroke only when it changed. It follows any mark the same
+    /// reading recorded, so an ended stroke is drawn as its mark before its live line goes.
+    private func publishActiveStroke(_ recognizer: MarkRecognizer) {
+        let stroke = recognizer.activeStroke
+        guard stroke.count != publishedStrokePoints else { return }
+        publishedStrokePoints = stroke.count
+        onMarkUpdate?(.liveStroke(stroke))
     }
 
     private func flushCursorSamples() {

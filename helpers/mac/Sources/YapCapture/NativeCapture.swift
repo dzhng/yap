@@ -25,6 +25,8 @@ public final class NativeCapture {
     private let termination = CaptureTermination<CaptureResult?>()
     public var onInterruption: ((CaptureFailure) -> Void)?
     public var onCameraFrame: (@Sendable (CameraPreviewFrame) -> Void)?
+    /// The marks a screen take recognizes as they happen, delivered on its writer queue.
+    public var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
     private var failure: CaptureFailure?
     private enum State: String { case idle, selecting, recording, paused, finalizing }
     private var state = State.idle
@@ -170,6 +172,7 @@ public final class NativeCapture {
             }
         }
         sink = writer
+        writer.onMarkUpdate = onMarkUpdate
         input = prepared
         do {
             try await prepared.start(writer: writer, output: writer, framesPerSecond: nil,

@@ -86,6 +86,8 @@ final class RecordingControls: NSObject {
     private lazy var overlay = RecordingOverlayPanel(
         preferences: preferences, perform: { [weak self] action in self?.perform(action) },
         excludeFromTake: { [weak self] in await self?.excludeOwnWindowsFromTake() ?? false })
+    private lazy var inkOverlay = InkOverlayPanel(
+        excludeFromTake: { [weak self] in await self?.excludeOwnWindowsFromTake() ?? false })
     /// Asks the capture session to leave this app's windows out of the running take.
     var excludeOwnWindowsFromTake: @MainActor () async -> Bool = { false }
     private let recordingPreview = PreviewWindow()
@@ -114,6 +116,7 @@ final class RecordingControls: NSObject {
     /// The clock a check asked the floating controls to show. Every render reconciles the controls
     /// with the state, so a request that is not held here is gone on the next status tick.
     private var observedOverlay: RecordingOverlay.Presentation?
+    private var observedInk = false
     private var lastCameraPreviewUpdate = Date.distantPast
     private let cameraPreviewContext = CIContext()
 
@@ -319,6 +322,18 @@ final class RecordingControls: NSObject {
         guard ControlsProbe.observed else { return }
         observedOverlay = .init(elapsed: elapsed, paused: false, symbol: "record.circle.fill")
         render()
+    }
+
+    /// The marks a screen take recognizes, for the ink over every display.
+    func receiveMarkUpdate(_ update: CaptureMarkUpdate) {
+        inkOverlay.receive(update)
+    }
+
+    /// Ink a check asked to look at stays up with or without a take.
+    func showInk(scene: String, front: Bool) -> (display: CGDirectDisplayID, marks: [CGRect])? {
+        guard ControlsProbe.observed else { return nil }
+        observedInk = true
+        return inkOverlay.showFixture(scene, front: front)
     }
 
     @objc private func toggleCapture() {
@@ -838,6 +853,7 @@ final class RecordingControls: NSObject {
         capturePopover.update(captureInput())
         libraryWindow.update(state: state, exports: exports.state)
         overlay.update(RecordingOverlay.presentation(for: state) ?? observedOverlay)
+        inkOverlay.update(active: observedInk || state.device?.state == .recording || state.device?.state == .paused)
         let camera = RecordingOverlay.camera(for: state)
         // A camera that is off forgets its last picture, so turning it on again never shows it.
         if !camera.recording { cameraPreviewImage = nil }
