@@ -195,7 +195,7 @@ const layoutDiagnosticParams = project
               .array(
                 z
                   .object({
-                    textId: id,
+                    id,
                     bounds: z
                       .object({
                         x: z.number(),
@@ -432,7 +432,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
             .array(
               z
                 .object({
-                  correctionId: id,
+                  id,
                   occurrenceId: id,
                   target: z.union([
                     z.object({ wordIds: z.array(id).min(1) }).strict(),

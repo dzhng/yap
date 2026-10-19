@@ -984,7 +984,7 @@ it("admits exact, caller-authored speaker corrections", () => {
         expectedRevisionId: "rev",
         corrections: [
           {
-            correctionId: "fix",
+            id: "fix",
             occurrenceId: "clip",
             target: { wordIds: ["w1"] },
             value: { state: "overlap", slots: [0, 1] },

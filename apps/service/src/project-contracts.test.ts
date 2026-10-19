@@ -116,7 +116,7 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
       {
         atUs: 0,
         canvas: { width: 100, height: 100 },
-        texts: [{ textId: "caption", bounds: { x: 99, y: 0, width: 5, height: 5 } }],
+        texts: [{ id: "caption", bounds: { x: 99, y: 0, width: 5, height: 5 } }],
       },
     ],
   });

@@ -3185,10 +3185,7 @@ export async function startProjectService(options: {
               ok: true,
               data: (() => {
                 const diagnostics = layoutDiagnostics(
-                  operation.params.samples.map((sample) => ({
-                    ...sample,
-                    texts: sample.texts.map(({ textId, ...text }) => ({ ...text, id: textId })),
-                  })),
+                  operation.params.samples,
                   operation.params.maxIssueCount ?? 100,
                 );
                 return {
@@ -3257,15 +3254,7 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: {
-                revision: projects.correctSpeakers(operation.params.projectId, {
-                  ...operation.params,
-                  corrections: operation.params.corrections.map(
-                    ({ correctionId, ...correction }) => ({
-                      ...correction,
-                      id: correctionId,
-                    }),
-                  ),
-                }),
+                revision: projects.correctSpeakers(operation.params.projectId, operation.params),
               },
             };
           case "processing.get":
