@@ -9,10 +9,20 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* every implementation slice (00–14) is merged on this branch. In progress:
-slice 15 closeout (full repository run). Open: M images (need the user: no image generator is set up
-here), and the closeout checks that need a person and a signed, installed build (D18 timing, a real
-⌥⇧V paste with Accessibility, a fresh agent acting on a real pasted prompt).
+*Status, 2026-10-19:* every slice (00–14) is implemented and merged on this branch, the whole-feature
+review's 15 findings are fixed, and the full repository check passes (format, lint, build, types, every
+test package, tools). One macOS test, `recording-overlays.test.mjs` "with the countdown off…", failed
+once under `--concurrency=2` (another package's app tests took focus) and passed 3/3 twice alone.
+
+What is left needs the user or a signed, installed build, so pick these up with them:
+- M: regenerate `.github/readme/header.png`, `apps/site/og.png`, `apps/site/launch-poster.jpg`
+  (old tagline drawn in; no image generator is set up here).
+- Review the taste calls at the top of [choices.md](choices.md) (ink look, Settings shortcuts,
+  paste notice, prompt wording).
+- Slice 15 on a signed, installed build: time ⌥⇧S → talk and draw → ⌥⇧S → ⌥⇧V (under 2 s
+  overhead, D18); paste with Accessibility granted lands ⌘V in the front app; the light paste
+  notice reads on a real screen; a fresh Claude Code and Codex session act on a real pasted
+  prompt without a follow-up question. Then run close-spec.
 
 You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
 the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
