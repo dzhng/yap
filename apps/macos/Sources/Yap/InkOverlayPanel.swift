@@ -39,8 +39,8 @@ final class InkOverlayPanel {
         if active { show() } else { hide() }
     }
 
+    /// A mark that arrives before the panels open is kept and drawn once they do.
     func receive(_ update: CaptureMarkUpdate) {
-        guard !screens.isEmpty else { return }
         switch update {
         case .liveStroke(let points):
             live = points
@@ -85,7 +85,6 @@ final class InkOverlayPanel {
     }
 
     private func hide() {
-        guard !screens.isEmpty else { return }
         fadeTimer?.invalidate()
         fadeTimer = nil
         for screen in screens { screen.panel.close() }

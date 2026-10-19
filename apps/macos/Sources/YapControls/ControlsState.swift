@@ -333,6 +333,14 @@ public struct ControlsState: Equatable, Sendable {
         return device.state == .recording || device.state == .paused || device.state == .selecting || device.state == .finalizing
     }
 
+    /// Whether the ink is up: while the device records or pauses, and from the moment a start
+    /// answers that its take is live, since marks come straight from the capture and can arrive
+    /// before a status read says the device is recording.
+    public var showsInk: Bool {
+        if device?.state == .recording || device?.state == .paused { return true }
+        return take?.state == "recording" || take?.state == "paused"
+    }
+
     /// The source owned by the live take, retained before the next catalog poll can refresh the
     /// menu selection. A restart must use this identity when a hotkey chose another display. It
     /// belongs to one take: a later take, however it was started, restarts on its own selection.

@@ -398,6 +398,23 @@ private func runLiveMarkJournalTests() throws {
         marks.count == 2 && marks[1].retracts == marks[0].id && marks[1].points.isEmpty,
         "Undo appends a retracting mark without rewriting the original")
     precondition(updates.list.last == .retracted(marks[0].id), "The overlay hears which mark was undone")
+    // Another stroke, then a pause: the paused take still takes the undo.
+    writer.queue.sync {
+        for (offset, x, shift) in [(40, 105, true), (50, 120, true), (60, 120, false)] as [(Int64, Double, Bool)] {
+            writer.accept(CursorReading(
+                hostUs: origin + offset, global: CGPoint(x: x, y: 105),
+                buttons: 0, zeroOriginHeight: 800, shift: shift, otherModifiers: false))
+        }
+    }
+    writer.pause()
+    try writer.undoMark()
+    marks.removeAll()
+    _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+    let live = marks.filter { $0.retracts == nil }
+    precondition(
+        marks.filter { $0.retracts != nil }.map(\.retracts) == [marks[0].id, live.last?.id]
+            && live.count == 2,
+        "Undo while paused retracts the latest mark, got \(marks)")
     print("PASS replayed cursor readings produce a source-timed journal mark and the overlay's stream")
 }
 

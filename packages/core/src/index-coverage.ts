@@ -19,7 +19,13 @@ export class CoverageTracker {
   private pointerIndex = 0;
   private position = -Infinity;
   private lastChosen = -Infinity;
-  private travelPx = 0;
+  // Travel through each sample the scan has passed, so travel since a choice is measured from the
+  // choice's own time even when it is reported after the scan moved past it.
+  private travelTotals: number[] = [];
+  private travelSinceChosenFrom = 0;
+  // Pointer time minus scan time at the last advance: a project scan reads a fragment whose
+  // source runs on its own clock.
+  private pointerOffset = 0;
   // The stillness run of the last chosen picture, when the scan saw it; unknown counts as changed.
   private chosenRun: number | undefined;
 
@@ -33,7 +39,9 @@ export class CoverageTracker {
     this.pointerIndex = 0;
     this.position = -Infinity;
     this.lastChosen = -Infinity;
-    this.travelPx = 0;
+    this.travelTotals = [];
+    this.travelSinceChosenFrom = 0;
+    this.pointerOffset = 0;
     this.chosenRun = undefined;
   }
 
@@ -53,9 +61,13 @@ export class CoverageTracker {
     while (samples[this.pointerIndex] && samples[this.pointerIndex]!.sourceUs <= pointerUs) {
       const sample = samples[this.pointerIndex++]!;
       const prior = samples[this.pointerIndex - 2];
-      if (prior && sample.x !== null && sample.y !== null && prior.x !== null && prior.y !== null)
-        this.travelPx += Math.hypot(sample.x - prior.x, sample.y - prior.y);
+      const step =
+        prior && sample.x !== null && sample.y !== null && prior.x !== null && prior.y !== null
+          ? Math.hypot(sample.x - prior.x, sample.y - prior.y)
+          : 0;
+      this.travelTotals.push((this.travelTotals.at(-1) ?? 0) + step);
     }
+    this.pointerOffset = pointerUs - at;
     this.position = at;
     this.settle();
   }
@@ -65,7 +77,8 @@ export class CoverageTracker {
     return (
       Number.isFinite(this.lastChosen) &&
       run !== this.chosenRun &&
-      (this.position - this.lastChosen >= coverageQuietUs || this.travelPx >= pictureLongEdgePx)
+      (this.position - this.lastChosen >= coverageQuietUs ||
+        (this.travelTotals.at(-1) ?? 0) - this.travelSinceChosenFrom >= pictureLongEdgePx)
     );
   }
 
@@ -76,13 +89,26 @@ export class CoverageTracker {
     else if (this.lastChosen === this.position) this.chosenRun = run;
   }
 
-  // A newer choice at or before the scan restarts travel and forgets the chosen picture.
+  // A newer choice at or before the scan restarts travel from its own time and forgets the chosen
+  // picture.
   private settle(): void {
     const latest = this.choices[this.search(this.position) - 1] ?? -Infinity;
     if (latest === this.lastChosen) return;
     this.lastChosen = latest;
-    this.travelPx = 0;
+    this.travelSinceChosenFrom = this.travelThrough(latest + this.pointerOffset);
     this.chosenRun = undefined;
+  }
+
+  // Travel through the last passed sample at or before pointer time `pointerUs`.
+  private travelThrough(pointerUs: number): number {
+    let low = 0,
+      high = this.travelTotals.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (this.pointer[middle]!.sourceUs <= pointerUs) low = middle + 1;
+      else high = middle;
+    }
+    return low === 0 ? 0 : this.travelTotals[low - 1]!;
   }
 
   // The index of the first choice after `at`.

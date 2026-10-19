@@ -296,7 +296,9 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             guard let target = recordedMarks.last(where: { !retractedMarkIDs.contains($0.id) })
             else { return }
             let hostUs = CaptureHostTime.nowUs()
-            guard let sourceUs = clock.sourceTime(for: hostUs) else { return }
+            // A paused take has no source time now; its undo lands where the pause began.
+            guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs)
+            else { return }
             let mark = JournalMark(
                 hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
                 id: UUID().uuidString, kind: target.kind, pin: target.pin, points: [], retracts: target.id)

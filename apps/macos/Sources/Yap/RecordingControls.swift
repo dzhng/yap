@@ -894,7 +894,7 @@ final class RecordingControls: NSObject {
         capturePopover.update(captureInput())
         libraryWindow.update(state: state, exports: exports.state)
         overlay.update(RecordingOverlay.presentation(for: state) ?? observedOverlay)
-        inkOverlay.update(active: observedInk || state.device?.state == .recording || state.device?.state == .paused)
+        inkOverlay.update(active: observedInk || state.showsInk)
         let camera = RecordingOverlay.camera(for: state)
         // A camera that is off forgets its last picture, so turning it on again never shows it.
         if !camera.recording { cameraPreviewImage = nil }
