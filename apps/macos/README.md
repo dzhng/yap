@@ -30,10 +30,7 @@ countdown is off unless someone turns it on.
 Marks are drawn and recorded without any new permission: ⇧ is read with the pointer, and clicks
 come from a global mouse monitor, which needs no Accessibility. The recognizer and the journal
 live in [native capture](../../helpers/mac/Sources/YapCapture/README.md); the app only draws what
-it is told and hides that ink from every capture. Pasting is the one place Accessibility helps:
-with it, `⌥⇧V` posts ⌘V into the front app; without it, the prompt is copied and the person
-presses ⌘V. The prompt text comes from the service's `recording.prompt`, so the app never writes
-its own.
+it is told and hides that ink from every capture.
 
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
@@ -61,7 +58,8 @@ Permission denial remains actionable without choosing another device.
 Accessibility is optional and only ever granted in System Settings: with it the paste shortcut
 presses ⌘V in the front app, with Command alone whatever the person is still holding; without it
 the prompt is copied and a non-activating notice says to press ⌘V. Every prompt copy, button or
-shortcut, goes through one [paster](Sources/YapControls/Paster.swift).
+shortcut, goes through one [paster](Sources/YapControls/Paster.swift), and its text comes from the
+service's `recording.prompt`, so the app never writes a prompt of its own.
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves
