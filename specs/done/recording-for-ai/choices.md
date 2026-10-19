@@ -2319,6 +2319,8 @@ export controls. The choices below are the ones that change behavior or format.
 
 ### Native app
 
+- **D10 overrides the earlier source-routing choice at this ledger entry.** The ⌥⇧S hotkey
+  records the display under the pointer; the menu's selected source remains the menu path.
 - **A repeated lost start that returns an ended take asks for a new take.** The
   menu used to replay a lost start request forever. After that take had been
   stopped, pressing Start again silently "succeeded" without recording. Now the

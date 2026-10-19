@@ -38,6 +38,8 @@ final class RecordingControls: NSObject {
     private var shortcutsRecording = false
     private var shortcutsSuspended = false
     private weak var host: ServiceHost?
+    private weak var captureController: CaptureController?
+    private var lastHotkeyStart = Date.distantPast
     var updateProgress: (() -> Void)?
     private var updateFenced = false
     private var permissionRequests = 0
@@ -135,7 +137,7 @@ final class RecordingControls: NSObject {
                 _, replacement in replacement
             }
         do {
-            let outcome = try shortcuts.apply(bindings, perform: { [weak self] action in self?.perform(action) })
+            let outcome = try shortcuts.apply(bindings, perform: { [weak self] action in self?.performShortcut(action) })
             held = outcome.held
             state.unavailableShortcuts = outcome.unavailable
         } catch let error {
@@ -192,7 +194,7 @@ final class RecordingControls: NSObject {
         do {
             let outcome = try shortcuts.apply(
                 decoded, recording: shortcutsRecording,
-                perform: { [weak self] action in self?.perform(action) })
+                perform: { [weak self] action in self?.performShortcut(action) })
             bindings = decoded
             held = shortcutsSuspended ? [] : outcome.held
             state.unavailableShortcuts = outcome.unavailable
@@ -245,7 +247,7 @@ final class RecordingControls: NSObject {
             let recording = state.isLive || state.counting
             let outcome = try shortcuts.apply(
                 bindings, recording: recording,
-                perform: { [weak self] action in self?.perform(action) })
+                perform: { [weak self] action in self?.performShortcut(action) })
             held = outcome.held
             state.unavailableShortcuts = outcome.unavailable
             shortcutsRecording = recording
@@ -293,6 +295,10 @@ final class RecordingControls: NSObject {
     func attach(to host: ServiceHost) {
         self.host = host
         refresh()
+    }
+
+    func attach(to captureController: CaptureController) {
+        self.captureController = captureController
     }
 
     /// The service's own lifetime, as the app already observes it. A service that is not ready
@@ -378,7 +384,18 @@ final class RecordingControls: NSObject {
         }
     }
 
-    func perform(_ action: ControlsAction) {
+    private func performShortcut(_ action: ControlsAction) {
+        let origin: ControlsState.StartOrigin? = action == .startOrStop
+            ? .hotkey(pointer: NSEvent.mouseLocation) : nil
+        perform(action, origin: origin)
+    }
+
+    func perform(_ action: ControlsAction, origin: ControlsState.StartOrigin? = nil) {
+        // A second press within 0.4 s of a hotkey start is the same press bouncing, not a request
+        // to finish: ignoring it means a double tap never leaves an empty take behind.
+        if action == .startOrStop, case .hotkey = origin,
+            Date().timeIntervalSince(lastHotkeyStart) < 0.4
+        { return }
         if updateFenced {
             switch action {
             case .quit, .openSettings, .openLibrary: break
@@ -449,13 +466,19 @@ final class RecordingControls: NSObject {
         case .setCamera(let on):
             if let request = state.setCamera(on) { setCamera(request) }
         case .startOrStop:
-            state.isLive ? send("capture.stop", live()) : countThenStart()
-        case .pastePrompt, .undoMark:
-            break // Placeholders until the prompt and mark behavior slices land.
+            state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
+        case .pastePrompt:
+            break // Prompt behavior lands in its own slice.
+        case .undoMark:
+            guard state.isLive else { return render() }
+            do { try captureController?.undoMark() }
+            catch { state.failure = error.localizedDescription }
         case .pauseOrResume:
+            guard state.isLive else { return render() }
             send(state.device?.state == .paused ? "capture.resume" : "capture.pause", live())
         case .cancel:
-            send("capture.cancel", live())
+            if countdown.isCounting { countdown.abandon() }
+            else if state.isLive { send("capture.cancel", live()) }
         case .restart:
             restart()
         case .playRecording(let recordingId):
@@ -520,7 +543,7 @@ final class RecordingControls: NSObject {
     /// count leaves no take behind. A start with nothing to record, no service to record through,
     /// or the count turned off goes straight to the service, which is what says why it could not:
     /// counting three seconds down before saying no is three seconds nobody asked for.
-    private func countThenStart() {
+    private func countThenStart(origin: ControlsState.StartOrigin) {
         // Asking to start while the count runs is asking to stop it: the menu says so, and this is
         // the only way to abandon a count for somebody whose Escape key this app could not hold.
         if countdown.isCounting { return countdown.abandon() }
@@ -529,24 +552,26 @@ final class RecordingControls: NSObject {
             showCaptureIfClosed()
             return
         }
-        guard state.start() != nil, state.service == .ready,
+        guard let resolvedStart = state.start(origin: origin) else { return start(origin: origin) }
+        if case .hotkey = origin { lastHotkeyStart = Date() }
+        guard state.service == .ready,
             let counting = preferences.countdown
-        else { return start() }
+        else { return start(origin: origin) }
         state.counting = true
         // The menu hangs from the menu bar, right where the count and then the controls appear.
         // A refused start shows it again to explain.
         capturePopover.close()
         render()
-        countdown.run(counting, on: NSScreen.recording(state.selection.source) ?? statusItem.button?.window?.screen) { [weak self] began in
+        countdown.run(counting, on: screen(for: resolvedStart) ?? statusItem.button?.window?.screen) { [weak self] began in
             guard let self else { return }
             state.counting = false
-            if began { start() }
+            if began { start(origin: origin) }
             render()
         }
     }
 
-    private func start() {
-        guard let request = state.beginStart(newRequestId: UUID().uuidString) else { return }
+    private func start(origin: ControlsState.StartOrigin) {
+        guard let request = state.beginStart(newRequestId: UUID().uuidString, origin: origin) else { return }
         capturePopover.close()
         render()
         send("capture.start", parameters(of: request.start, requestId: request.requestId)) {
@@ -563,16 +588,29 @@ final class RecordingControls: NSObject {
                 }
             case .failure(let failure): answer = .init(failureCode: failure.code)
             }
-            if state.finishStart(request, answer) { return start() }
+            if state.finishStart(request, answer) { return start(origin: request.origin) }
             if case .failure(let failure) = result,
                 PermissionKind.missing(fromStartFailure: failure.code) != nil { readPermissions() }
             if case .failure = result { showCaptureIfClosed() }
         }
     }
 
+    private func screen(for start: ControlsState.CaptureSelection.Start) -> NSScreen? {
+        switch start.source {
+        case .display(let id):
+            return state.sources.displays.first { $0.id == id }.flatMap { NSScreen.recording(.display($0)) }
+        case .window(let id):
+            return NSScreen.recording(.window(.init(id: id, title: "", application: "")))
+        case .region(let id, _, _, _, _):
+            return NSScreen.recording(.region(.init(
+                displayId: id, displayName: "Display \(id)", x: 0, y: 0, width: 0, height: 0)))
+        case .camera: return nil
+        }
+    }
+
     private func restart() {
         guard let recordingId = state.device?.recordingId else { return }
-        guard let start = state.start() else {
+        guard let start = state.restartStart else {
             state.failure = "Choose a source before recording."
             return
         }
@@ -799,8 +837,10 @@ final class RecordingControls: NSObject {
             emptySourceMode = sourceMode
             state.observeSources(
                 ControlsState.SourceCatalog(
-                    displays: answer.displays.map {
-                        ControlsState.Display(id: $0.displayId, name: $0.name, width: $0.width, height: $0.height)
+                    displays: answer.displays.map { source in
+                        ControlsState.Display(
+                            id: source.displayId, name: source.name, width: source.width, height: source.height,
+                            frame: NSScreen.screens.first { $0.captureDisplayID == source.displayId }?.frame)
                     },
                     windows: answer.windows.map {
                         ControlsState.Window(id: $0.windowId, title: $0.title, application: $0.application)
@@ -857,7 +897,7 @@ final class RecordingControls: NSObject {
         do {
             let outcome = try shortcuts.apply(
                 bindings, recording: recording,
-                perform: { [weak self] action in self?.perform(action) })
+                perform: { [weak self] action in self?.performShortcut(action) })
             held = outcome.held
             state.unavailableShortcuts = outcome.unavailable
             shortcutsRecording = recording

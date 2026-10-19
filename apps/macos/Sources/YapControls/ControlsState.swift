@@ -49,6 +49,7 @@ public struct ControlsState: Equatable, Sendable {
     public private(set) var unansweredStart: StartRequest?
     /// Whether any source was ever selected. Only before then is a display offered by default.
     private var sourceWasSelected = false
+    private var activeStart: CaptureSelection.Start?
 
     public enum ServiceState: Equatable, Sendable {
         case starting
@@ -122,16 +123,21 @@ public struct ControlsState: Equatable, Sendable {
     }
 
     public struct Display: Equatable, Sendable {
-        public init(id: Int, name: String, width: Int, height: Int) {
+        public init(id: Int, name: String, width: Int, height: Int, frame: CGRect? = nil) {
             self.id = id
             self.name = name
             self.width = width
             self.height = height
+            self.frame = frame
         }
         public let id: Int
         public let name: String
         public let width: Int
         public let height: Int
+        /// The display's global AppKit frame, when the native app has observed it. Source
+        /// discovery supplies identity and dimensions; the app adds this geometry for pointer
+        /// routed starts, while controls tests can inject it deterministically.
+        public let frame: CGRect?
     }
 
     public struct Window: Equatable, Sendable {
@@ -320,6 +326,10 @@ public struct ControlsState: Equatable, Sendable {
         guard let device else { return false }
         return device.state == .recording || device.state == .paused || device.state == .selecting || device.state == .finalizing
     }
+
+    /// The source owned by the live take, retained before the next catalog poll can refresh the
+    /// menu selection. A restart must use this identity when a hotkey chose another display.
+    public var restartStart: CaptureSelection.Start? { activeStart ?? start() }
 }
 
 extension ControlsState.CaptureSelection {
@@ -404,14 +414,26 @@ extension ControlsState.CaptureSelection {
 }
 
 extension ControlsState {
+    public enum StartOrigin: Equatable, Sendable {
+        case menu
+        case hotkey(pointer: CGPoint)
+    }
+
     /// What a start of the current selection asks for; nil until a source is selected.
     ///
     /// A screen take reserves a companion camera whenever camera access is granted: the picked
     /// camera, or the system default. It starts on or off as the switch says, and can be turned
     /// on later either way. Without access nothing is reserved, unless the switch is on: a camera
     /// a person asked for is still asked for, so the refusal names the missing permission.
-    public func start() -> CaptureSelection.Start? {
-        guard let source = selection.source else { return nil }
+    public func start(origin: StartOrigin = .menu) -> CaptureSelection.Start? {
+        let selectedSource: SelectedSource?
+        switch origin {
+        case .menu:
+            selectedSource = selection.source
+        case .hotkey(let pointer):
+            selectedSource = display(under: pointer).map { .display($0) }
+        }
+        guard let source = selectedSource else { return nil }
         let chosen: CaptureSelection.Start.Source
         switch source {
         case .display(let display): chosen = .display(id: display.id)
@@ -431,6 +453,27 @@ extension ControlsState {
         return .init(
             source: chosen, microphone: selection.microphone != .off, microphoneDeviceId: microphoneDeviceId,
             systemAudio: selection.systemAudio, cameraDeviceId: companion, cameraAtStart: cameraAtStart)
+    }
+
+    /// Picks the display containing a pointer, falling back to the nearest display when the
+    /// pointer is on a boundary or in the gap between displays. Catalog order is the final tie
+    /// break, keeping an injected catalog deterministic.
+    private func display(under pointer: CGPoint) -> Display? {
+        sources.displays.enumerated().min { left, right in
+            let leftContains = left.element.frame?.contains(pointer) == true
+            let rightContains = right.element.frame?.contains(pointer) == true
+            if leftContains != rightContains { return leftContains }
+            let leftDistance = left.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            let rightDistance = right.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            if leftDistance != rightDistance { return leftDistance < rightDistance }
+            return left.offset < right.offset
+        }?.element
+    }
+
+    private func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return hypot(dx, dy)
     }
 
     /// The camera the system prefers, or the first listed.
@@ -556,6 +599,7 @@ extension ControlsState {
     public struct StartRequest: Equatable, Sendable {
         public let requestId: String
         public let start: CaptureSelection.Start
+        public let origin: StartOrigin
         /// Whether this asks again for a start whose answer had not arrived.
         public let repeatsUnanswered: Bool
     }
@@ -584,13 +628,17 @@ extension ControlsState {
     /// The request for a start of the current selection, or nil with the reason when there is none.
     /// A start whose answer has not arrived is asked for again under its own request ID, so the
     /// service resolves the take it already allocated instead of allocating another.
-    public mutating func beginStart(newRequestId: String) -> StartRequest? {
-        guard let start = self.start() else {
+    public mutating func beginStart(
+        newRequestId: String, origin: StartOrigin = .menu
+    ) -> StartRequest? {
+        guard let start = self.start(origin: origin) else {
             failure = "Choose a source before recording."
             return nil
         }
         if let unansweredStart, unansweredStart.start == start {
-            let replay = StartRequest(requestId: unansweredStart.requestId, start: start, repeatsUnanswered: true)
+            let replay = StartRequest(
+                requestId: unansweredStart.requestId, start: start, origin: unansweredStart.origin,
+                repeatsUnanswered: true)
             self.unansweredStart = replay
             return replay
         }
@@ -601,7 +649,8 @@ extension ControlsState {
                 return nil
             }
         }
-        let request = StartRequest(requestId: newRequestId, start: start, repeatsUnanswered: false)
+        let request = StartRequest(
+            requestId: newRequestId, start: start, origin: origin, repeatsUnanswered: false)
         unansweredStart = request
         return request
     }
@@ -612,6 +661,8 @@ extension ControlsState {
     public mutating func finishStart(_ request: StartRequest, _ answer: StartAnswer) -> Bool {
         guard answer != .unanswered else { return false }
         if unansweredStart?.requestId == request.requestId { unansweredStart = nil }
+        if answer == .live { activeStart = request.start }
+        else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }
         return answer == .ended && request.repeatsUnanswered
     }
 }
