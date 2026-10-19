@@ -9,8 +9,8 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-18:* slice 00 passed (both probes). Messaging copy is on `main` and live;
-the images still show the old tagline. Next: slices 01, 06 and 09 in parallel.
+*Status, 2026-10-18:* slices 00 and 09 done. Messaging copy is on `main` and live; the images
+still show the old tagline. In flight: 01, 03, 06. Next after them: 02, 04, 07, 08, 10.
 
 You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
 the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
@@ -33,7 +33,7 @@ Global TODO (each item is owned by its slice):
 - [ ] 06 Shortcut bindings model, live registration, `shortcuts.get`/`shortcuts.set`
 - [ ] 07 Settings click-to-record field (visual)
 - [ ] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
-- [ ] 09 Background job priority
+- [x] 09 Background job priority
 - [ ] 10 Transcript backlog: automatic transcription of recordings and imports
 - [ ] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
 - [ ] 12 `recording.prompt` operation; replaces Copy agent prompt

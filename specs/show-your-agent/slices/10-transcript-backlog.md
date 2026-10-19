@@ -23,5 +23,8 @@ restart drains; an empty transcript completes cleanly; an explicit `transcript.t
 joins; non-audio and conversion outputs are never enqueued. Use the fixture model
 (`project-service.fixture.ts:94`), no real transcription.
 
+- A background job an app update interrupted (slice 09 lets updates proceed past background
+  work) ends failed and retryable; the backlog resubmits it on the next drain.
+
 **Delegated:** table shape.
 **Firewall:** no new job queue; the backlog only decides when to submit.
