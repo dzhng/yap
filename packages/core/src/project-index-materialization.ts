@@ -1,6 +1,7 @@
 import { setImmediate } from "node:timers/promises";
 import type { Issue } from "@yap/composition";
 import { CatalogError, dependencyRefusal } from "./catalog.js";
+import { indexCaptureEvidence, type IndexCaptureOwners } from "./index-capture-evidence.js";
 import { JobDependencyLost, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import {
@@ -86,6 +87,7 @@ export async function materializeProjectIndex(
     records: SceneEvidenceStore;
     acquisitions: AcquisitionStore;
     evidence?: SourceEvidenceReader;
+    capture?: IndexCaptureOwners["capture"];
     frames: MediaFrameInspection;
     cache: DerivedCache;
     jobs: JobQueue;
@@ -119,61 +121,12 @@ export async function materializeProjectIndex(
     streamId: string;
     acquisitionId?: string;
   }) => {
-    if (!selection.acquisitionId || !owners.evidence) return { moments: [], pointerSamples: [] };
-    const key = JSON.stringify(selection),
+    if (!selection.acquisitionId) return { moments: [], pointerSamples: [] };
+    // Keyed only by the source identity: the occurrence itself carries more than a key needs.
+    const key = JSON.stringify([selection.assetId, selection.streamId, selection.acquisitionId]),
       cached = momentCache.get(key);
     if (cached) return cached;
-    const acquisition = owners.acquisitions.get(selection.acquisitionId);
-    const offset =
-      acquisition.bindings.find((binding) => binding.streamId === selection.streamId)
-        ?.sourceToAssetOffsetUs ?? 0;
-    const offsetUs =
-      typeof offset === "number" ? offset : Number(offset.numerator) / Number(offset.denominator);
-    const toAssetUs = (sourceUs: number) => sourceUs + offsetUs;
-    const rows: { sourceUs: number; data: Record<string, unknown> }[] = [];
-    let after: [number, number] | null = null;
-    for (;;) {
-      const page = owners.evidence.eventRecords(acquisition.evidence, "marks", after, 256);
-      if (!page.length) break;
-      rows.push(...page.map((row) => ({ sourceUs: row.sourceUs!, data: JSON.parse(row.content) })));
-      after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
-    }
-    const retracted = new Set(
-      rows.map((row) => row.data.retracts).filter((id): id is string => typeof id === "string"),
-    );
-    const moments: IndexMoment[] = rows
-      .filter((row) => row.data.retracts == null && !retracted.has(row.data.id as string))
-      .flatMap((row) => {
-        const kind = row.data.kind === "stroke" ? "mark" : row.data.kind;
-        return kind === "mark" || kind === "pin" || kind === "click"
-          ? [
-              {
-                sourceUs: toAssetUs(row.sourceUs),
-                kind: kind as IndexMoment["kind"],
-                markId: row.data.id as string,
-              },
-            ]
-          : [];
-      });
-    const pointerSamples: IndexPointerSample[] = [];
-    let afterSequence: number | undefined;
-    for (;;) {
-      const page = owners.evidence.page({
-        ...acquisition.evidence,
-        range: { startUs: 0, endUs: Number.MAX_SAFE_INTEGER },
-        ...(afterSequence === undefined ? {} : { afterSequence }),
-        limit: 5000,
-      });
-      pointerSamples.push(
-        ...page.samples.map((sample) => ({
-          sourceUs: toAssetUs(sample.sourceUs),
-          x: typeof sample.x === "number" ? sample.x : null,
-          y: typeof sample.y === "number" ? sample.y : null,
-        })),
-      );
-      if (page.nextSequence === null) break;
-      afterSequence = page.nextSequence;
-    }
+    const { moments, pointerSamples } = indexCaptureEvidence(selection, owners);
     const result = { moments, pointerSamples };
     momentCache.set(key, result);
     return result;

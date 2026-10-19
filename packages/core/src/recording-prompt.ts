@@ -31,7 +31,7 @@ export type RecordingPromptSources = {
   recordings: Pick<CaptureStore, "get" | "latest">;
   acquisitions: Pick<AcquisitionStore, "captureIntent" | "get">;
   assets: Pick<AssetStore, "get">;
-  capture: Pick<CaptureSourceRead, "captureMarks">;
+  capture: Pick<CaptureSourceRead, "marks">;
   backlog: Pick<TranscriptBacklog, "state">;
   transcripts: Pick<TranscriptProcessing, "sourceStatus">;
 };
@@ -203,7 +203,7 @@ export async function recordingPromptFacts(
   if (screen) {
     const offset = fromTime(screen.binding.sourceToAssetOffsetUs);
     const offsetUs = Number(offset.numerator) / Number(offset.denominator);
-    for await (const mark of sources.capture.captureMarks(screen.selection)) {
+    for (const mark of sources.capture.marks(screen.selection)) {
       const window = promptWindow(mark);
       const timeUs = mark.sourceUs + offsetUs;
       if (mark.kind === "click") clicks.push({ timeUs, ...(window ? { window } : {}) });

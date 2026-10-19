@@ -1730,8 +1730,7 @@ test("timeline events expose active marks with projected points and stable pagin
     captureAtUs: 700,
     observation: { id: "pin-1", points: [{ hostUs: 4, x: 16, y: 28 }] },
   });
-  const direct = [];
-  for await (const mark of f.captureRead.captureMarks(selection)) direct.push(mark);
+  const direct = f.captureRead.marks(selection);
   expect(direct).toHaveLength(1);
   expect(direct[0]).toMatchObject({ id: "pin-1", points: [{ x: 16, y: 28 }] });
   expect(f.sourceEvents.events({ assetId: f.asset.id, streamId: "video" })).toMatchObject({

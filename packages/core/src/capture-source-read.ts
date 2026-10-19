@@ -117,14 +117,15 @@ export class CaptureSourceRead {
     const sources = new SourceSelectionRead(this.assets, this.acquisitions, selections);
     return selections.map((selection) => this.resolve(selection, domain, sources));
   }
-  async *captureMarks(selection: SourceSelection): AsyncIterable<CaptureMark> {
+  /** A take's live marks in capture order, retractions applied: the one reader of marks. */
+  marks(selection: SourceSelection): CaptureMark[] {
     const context = this.resolve(selection, "events");
     if (
-      context.evidence &&
-      context.coverage.some((item) => item.kind === "mark" && item.state === "ready")
+      !context.evidence ||
+      !context.coverage.some((item) => item.kind === "mark" && item.state === "ready")
     )
-      context.marks = this.readMarks(context.evidence);
-    for (const { sequence: _sequence, ...mark } of context.marks) yield mark;
+      return [];
+    return this.readMarks(context.evidence).map(({ sequence: _sequence, ...mark }) => mark);
   }
   private context(
     selected: ReturnType<SourceSelectionRead["get"]>,

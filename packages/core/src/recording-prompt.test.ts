@@ -213,9 +213,7 @@ function sources(
       }),
     } as never,
     capture: {
-      captureMarks: async function* () {
-        yield* options.marks ?? [];
-      },
+      marks: () => options.marks ?? [],
     },
     backlog: { state: () => options.backlog ?? "none" },
     transcripts: {

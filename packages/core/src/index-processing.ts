@@ -31,6 +31,7 @@ import { type SourceSelection } from "./source-selection.js";
 import type { SourceIndexIdentity, SourceIndexRecords } from "./source-index.js";
 import { sourceIndexPolicy } from "./source-index-selection.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
+import type { IndexCaptureOwners } from "./index-capture-evidence.js";
 import { materializeSourceIndex } from "./source-index-materialization.js";
 import { RetainedIndexRead, type IndexCoverageCursor, type IndexReadCursor } from "./index-read.js";
 import { setImmediate } from "node:timers/promises";
@@ -87,6 +88,7 @@ type MediaIndexOwners = {
   scenes: SceneProcessing;
   records: SceneEvidenceStore;
   evidence?: SourceEvidenceReader;
+  capture?: IndexCaptureOwners["capture"];
   frames: MediaFrameInspection;
   cache: DerivedCache;
 };
