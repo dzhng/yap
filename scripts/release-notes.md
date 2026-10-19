@@ -2,6 +2,26 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.60
+
+You can now delete anything that takes up space, and see what it frees first. The
+Library's Recordings tab also lists the videos you imported, and deleting a recording,
+an imported video or a project asks once before anything goes. When a video is still
+used by a project, Yap names the project and the space a delete would free, and deletes
+the project too only if you say so. Downloaded models can be removed as well, and
+storage now shows how much they take. A force-quit while recording a still screen no
+longer loses the take.
+
+For scripts and agents that call Yap, this release changes the interface. Every
+identity is now `<noun>Id` and every quantity carries its unit (for example
+`revisionId`, `sizeBytes`, `frameCount`). Every operation that changes something takes a
+`requestId`, and repeating a request returns its first result. `recording.latest`,
+`inspect` and the `*.retry` operations are gone (use `job.retry`), and asynchronous work
+reports one set of states. New operations: `asset.delete`, `project.duplicate`,
+`model.remove` and `media.list`. A delete refuses with `IN_USE`, naming the projects
+that use the item; `cascade: true` deletes exactly what the refusal listed. Run
+`yap <operation> --help` for the current schema; the bundled skill is already updated.
+
 ## 0.1.59
 
 Clear recording controls are fully see-through again. The milky surface added in 0.1.58
