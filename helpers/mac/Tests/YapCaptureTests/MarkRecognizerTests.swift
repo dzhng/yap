@@ -3,19 +3,19 @@ import Foundation
 import YapCapture
 
 private struct TestWindowSource: WindowUnderPoint {
-    let result: MarkWindow?
+    let result: JournalMarkWindow?
 
-    func windowUnderPoint(_ point: CGPoint) -> MarkWindow? { result }
+    func windowUnderPoint(_ point: CGPoint) -> JournalMarkWindow? { result }
 }
 
 private func markRecognizer(
-    paused: Bool = false, hasFirstFrame: Bool = true, cameraOnly: Bool = false
+    paused: Bool = false, hasFirstFrame: Bool = true
 ) -> MarkRecognizer {
     MarkRecognizer(
         windowUnderPoint: TestWindowSource(
-            result: MarkWindow(
+            result: JournalMarkWindow(
                 app: "Safari", title: "Deploys", bounds: GeometryRect(x: 10, y: 20, width: 800, height: 600))),
-        paused: paused, hasFirstFrame: hasFirstFrame, cameraOnly: cameraOnly)
+        paused: paused, hasFirstFrame: hasFirstFrame)
 }
 
 private func sample(
@@ -36,7 +36,7 @@ private func release(_ hostUs: Int64, _ x: Double, _ y: Double) -> MarkRelease {
 }
 
 func runMarkRecognizerTests() {
-    let window = MarkWindow(
+    let window = JournalMarkWindow(
         app: "Safari", title: "Deploys", bounds: GeometryRect(x: 10, y: 20, width: 800, height: 600))
 
     let table: [(String, () -> Bool)] = [
@@ -117,12 +117,6 @@ func runMarkRecognizerTests() {
         }),
         ("a take without its first frame emits nothing", {
             var recognizer = markRecognizer(hasFirstFrame: false)
-            _ = recognizer.feed(sample: sample(10, 100, 100))
-            _ = recognizer.feed(press: press(20, 100, 100))
-            return recognizer.feed(release: release(30, 100, 100)).isEmpty
-        }),
-        ("camera-only takes emit nothing", {
-            var recognizer = markRecognizer(cameraOnly: true)
             _ = recognizer.feed(sample: sample(10, 100, 100))
             _ = recognizer.feed(press: press(20, 100, 100))
             return recognizer.feed(release: release(30, 100, 100)).isEmpty

@@ -6,7 +6,7 @@ import CoreGraphics
 public struct LiveWindowSource: WindowUnderPoint, Sendable {
     public init() {}
 
-    public func windowUnderPoint(_ point: CGPoint) -> MarkWindow? {
+    public func windowUnderPoint(_ point: CGPoint) -> JournalMarkWindow? {
         let ownPIDs = Set(
             NSRunningApplication.runningApplications(
                 withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").map(\.processIdentifier))
@@ -22,7 +22,7 @@ public struct LiveWindowSource: WindowUnderPoint, Sendable {
                 let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary),
                 rect.contains(point)
             else { continue }
-            return MarkWindow(app: app, title: title, bounds: GeometryRect(rect))
+            return JournalMarkWindow(app: app, title: title, bounds: GeometryRect(rect))
         }
         return nil
     }

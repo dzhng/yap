@@ -80,7 +80,7 @@ package struct SourceEvidenceExport: Encodable {
         // Staged imports supply a closed set of immutable descriptor locators. Recording-owned
         // reads resolve canonical members under the existing journal lease.
         let hasCameraProof = FileManager.default.fileExists(atPath: source.appendingPathComponent("camera.publication.json").path)
-        let lease = layout == 2 || layout == 3 || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
+        let lease = CaptureJournal.isPacked(layout) || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
         defer { lease?.release() }
         let verifiedSourceAuthority: CapturePublishedSource?
         if let sourceAuthority {
@@ -88,7 +88,7 @@ package struct SourceEvidenceExport: Encodable {
             verifiedSourceAuthority = try await CaptureSourcePublication.verifyStaged(sourceAuthority, lease: lease, canonical: canonical)
         } else { verifiedSourceAuthority = nil }
         if let lease {
-            for role in layout == 2 || layout == 3 ? ["narration", "system"] : [] {
+            for role in CaptureJournal.isPacked(layout) ? ["narration", "system"] : [] {
                 let receipt = source.appendingPathComponent("\(role).publication.json")
                 let audio = canonical.map { $0[role] } ??
                     (FileManager.default.fileExists(atPath: source.appendingPathComponent("\(role).mov").path)
@@ -148,7 +148,7 @@ package struct SourceEvidenceExport: Encodable {
                 try emit("mark", $0)
                 markEvents += 1
             },
-            pcmAppend: layout == 2 || layout == 3 ? { _ in } : nil,
+            pcmAppend: CaptureJournal.isPacked(layout) ? { _ in } : nil,
             descriptor: lease?.descriptor, layout: layout)
         for interval in acquired {
             try emit("audioAcquired", interval)
@@ -186,7 +186,7 @@ package struct SourceEvidenceExport: Encodable {
             lastCursorSourceUs: summary.lastCursorSourceUs, lastSequence: summary.lastSequence,
             incompleteTail: summary.incompleteTail, invalidAtSequence: summary.invalidAtSequence,
             finished: summary.finished, lastLifecycle: summary.lastLifecycle,
-            completion: summary.completion, publications: layout == 2 || layout == 3 || hasCameraProof ? publications : nil, bytes: bytes,
+            completion: summary.completion, publications: CaptureJournal.isPacked(layout) || hasCameraProof ? publications : nil, bytes: bytes,
             verifiedSourceAuthority: verifiedSourceAuthority)
     }
 }

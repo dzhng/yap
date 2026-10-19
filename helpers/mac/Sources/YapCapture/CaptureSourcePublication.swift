@@ -140,8 +140,7 @@ package enum CaptureSourcePublication {
             facts.header?.sessionID == authority.sourceId,
             facts.header?.cameraBinding == authority.binding,
             authority.kind != .camera || facts.header?.source.kind == "camera",
-            layout == (authority.kind == .camera ? 1 : 2) ||
-                (authority.kind != .camera && layout == 3) else {
+            authority.kind == .camera ? layout == 1 : CaptureJournal.isPacked(layout) else {
             throw invalid("Recovery differs from allocated source/device authority.")
         }
     }
@@ -250,8 +249,7 @@ package enum CaptureSourcePublication {
             : ["video.mov", "narration.mov", "system.mov", "narration.publication.json", "system.publication.json"]
         guard whole == basis.original, whole.bytes == source.journal.bytes, whole.sha256 == source.journal.sha256,
             source.journal.file == (source.kind == .primary ? "source.journal.jsonl" : "capture.journal.jsonl"),
-            source.journal.layout == (source.kind == .primary ? 2 : 1) ||
-                (source.kind == .primary && source.journal.layout == 3),
+            source.kind == .primary ? CaptureJournal.isPacked(source.journal.layout) : source.journal.layout == 1,
             facts.validatedPrefix == basis.prefix, facts.lastSequence == basis.lastSequence,
             facts.lastSequence == source.journal.lastSequence, facts.finished == basis.finished,
             facts.incompleteTail == basis.incompleteTail, facts.invalidAtSequence == basis.invalidAtSequence,

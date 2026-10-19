@@ -96,6 +96,15 @@ public final class CaptureJournal {
     private var sequence = 0
     private let header: CaptureJournalHeader
     package var schemaVersion: Int { header.schemaVersion }
+    /// Schema 1 is the legacy layout. Every later schema is packed: the journal maps accepted PCM
+    /// and the video track, and media is written per role. This is the one place that says which
+    /// schemas those are.
+    package static func isPacked(_ schema: Int?) -> Bool {
+        switch schema {
+        case 2, 3: true
+        default: false
+        }
+    }
     private var pcmState = JournalPCMState()
 
     public init(directory: String, header: CaptureJournalHeader) throws {
@@ -107,8 +116,8 @@ public final class CaptureJournal {
 
     package func recordPCMOrigin(_ origin: JournalPCMOrigin, placedPauses: [PauseEvent] = []) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
+        guard Self.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.origin(origin)
         try append("pcmOrigin", data: origin, durable: true)
@@ -117,8 +126,8 @@ public final class CaptureJournal {
     }
     package func recordPCMTrack(_ track: JournalPCMTrack) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
+        guard Self.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.track(track, header: header)
         try append("pcmTrack", data: track, durable: true)
@@ -126,8 +135,8 @@ public final class CaptureJournal {
     }
     package func recordPCMAppend(_ accepted: JournalPCMAppend) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
+        guard Self.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.append(accepted)
         try append("pcmAppend", data: accepted)
@@ -414,17 +423,17 @@ public final class CaptureJournal {
                 }
                 switch record.event {
                 case .pcmOrigin(let origin):
-                    guard schema == 2 || schema == 3 else {
+                    guard isPacked(schema) else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM origin.")
                     }
                     try pcm.origin(origin)
                 case .pcmTrack(let track):
-                    guard (schema == 2 || schema == 3), let header = summary.header else {
+                    guard isPacked(schema), let header = summary.header else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM track.")
                     }
                     try pcm.track(track, header: header)
                 case .pcmAppend(let append):
-                    guard schema == 2 || schema == 3 else {
+                    guard isPacked(schema) else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM append.")
                     }
                     try pcm.append(append)
@@ -612,10 +621,10 @@ private struct JournalEntry: Decodable {
         case "pcmOrigin": event = .pcmOrigin(try payload(JournalPCMOrigin.self))
         case "pcmTrack": event = .pcmTrack(try payload(JournalPCMTrack.self))
         case "pcmAppend": event = .pcmAppend(try payload(JournalPCMAppend.self))
-        case "trackStarted" where decoder.userInfo[.journalSchema] as? Int == 2 || decoder.userInfo[.journalSchema] as? Int == 3:
+        case "trackStarted" where CaptureJournal.isPacked(decoder.userInfo[.journalSchema] as? Int):
             let track = try payload(JournalTrackStart.self)
             guard track.role == "video", track.file == "video.mov", track.firstSourceUs >= 0 else {
-                throw invalid("Invalid schema2 video track.")
+                throw invalid("Invalid packed video track.")
             }
             event = .videoTrack
         case "origin": event = .origin(try payload(JournalHostTime.self).hostUs)

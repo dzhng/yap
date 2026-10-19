@@ -1,22 +1,10 @@
 import CoreGraphics
 import Foundation
 
-/// The window evidence attached to a mark. The resolver is supplied by the caller so gesture
-/// recognition remains independent of AppKit and ScreenCaptureKit.
-public struct MarkWindow: Codable, Equatable, Sendable {
-    public let app: String
-    public let title: String
-    public let bounds: GeometryRect
-
-    public init(app: String, title: String, bounds: GeometryRect) {
-        self.app = app
-        self.title = title
-        self.bounds = bounds
-    }
-}
-
+/// Resolves the window evidence attached to a mark. The caller supplies it so gesture recognition
+/// remains independent of AppKit and ScreenCaptureKit.
 public protocol WindowUnderPoint {
-    func windowUnderPoint(_ point: CGPoint) -> MarkWindow?
+    func windowUnderPoint(_ point: CGPoint) -> JournalMarkWindow?
 }
 
 public struct MarkPoint: Codable, Equatable, Sendable {
@@ -83,9 +71,9 @@ public struct MarkEvent: Codable, Equatable, Sendable {
     public let kind: Kind
     public let pin: Int?
     public let points: [MarkPoint]
-    public let window: MarkWindow?
+    public let window: JournalMarkWindow?
 
-    public init(kind: Kind, pin: Int?, points: [MarkPoint], window: MarkWindow?) {
+    public init(kind: Kind, pin: Int?, points: [MarkPoint], window: JournalMarkWindow?) {
         self.kind = kind
         self.pin = pin
         self.points = points
@@ -99,13 +87,11 @@ public struct MarkRecognizer {
     public init(
         windowUnderPoint: any WindowUnderPoint,
         paused: Bool = false,
-        hasFirstFrame: Bool = false,
-        cameraOnly: Bool = false
+        hasFirstFrame: Bool = false
     ) {
         self.windowUnderPoint = windowUnderPoint
         self.paused = paused
         self.hasFirstFrame = hasFirstFrame
-        self.cameraOnly = cameraOnly
     }
 
     private let windowUnderPoint: any WindowUnderPoint
@@ -118,20 +104,16 @@ public struct MarkRecognizer {
 
     public var paused: Bool
     public var hasFirstFrame: Bool
-    public var cameraOnly: Bool
 
     /// The stroke while ⇧ is still held, before it is a mark: what the overlay draws under the
     /// pointer. It empties when the stroke ends, recorded or not.
     public var activeStroke: [MarkPoint] { stroke }
 
     /// Updates the capture facts supplied by the owner. Blocking state clears an in-progress
-    /// gesture so evidence from before a pause or source transition cannot leak afterward.
-    public mutating func updateCaptureState(
-        paused: Bool, hasFirstFrame: Bool, cameraOnly: Bool
-    ) {
+    /// gesture so evidence from before a pause or the first frame cannot leak afterward.
+    public mutating func updateCaptureState(paused: Bool, hasFirstFrame: Bool) {
         self.paused = paused
         self.hasFirstFrame = hasFirstFrame
-        self.cameraOnly = cameraOnly
         if blocked {
             clearTransientGesture()
         }
@@ -200,7 +182,7 @@ public struct MarkRecognizer {
         ]
     }
 
-    private var blocked: Bool { paused || !hasFirstFrame || cameraOnly }
+    private var blocked: Bool { paused || !hasFirstFrame }
 
     private mutating func finishStroke() -> [MarkEvent] {
         guard !stroke.isEmpty else { return [] }

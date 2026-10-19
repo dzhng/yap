@@ -74,7 +74,7 @@ public enum CaptureMarkUpdate: Equatable, Sendable {
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
     private let journal: CaptureJournal
-    package var packedJournalLease: CaptureJournalLease? { (journal.schemaVersion == 2 || journal.schemaVersion == 3) ? journal.lease : nil }
+    package var packedJournalLease: CaptureJournalLease? { CaptureJournal.isPacked(journal.schemaVersion) ? journal.lease : nil }
     package var journalSchemaVersion: Int { journal.schemaVersion }
     package var requestedAudioRoles: [String] {
         (request.microphone ? ["narration"] : []) + (request.systemAudio ? ["system"] : [])
@@ -172,7 +172,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             clock.pause(at: hostUs)
             publishClock()
             markRecognizer?.updateCaptureState(
-                paused: true, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
+                paused: true, hasFirstFrame: clock.originUs != nil)
             _ = record { try self.journal.recordPauseBegan(hostUs: hostUs) }
         }
     }
@@ -188,7 +188,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         clock.resume(at: hostUs)
         publishClock()
         markRecognizer?.updateCaptureState(
-            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
         if paused {
             let pause = clock.pauses.count > count ? clock.pauses.last : nil
             _ = record { try self.journal.recordPauseEnded(hostUs: hostUs, pause: pause) }
@@ -274,16 +274,16 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         if let batch = cursor.accept(reading, sourceUs: sourceUs) {
             _ = record { try self.journal.recordCursorSamples(batch) }
         }
-        guard let markRecognizer, let sourceUs else { return }
+        guard let markRecognizer, sourceUs != nil else { return }
         var recognizer = markRecognizer
         recognizer.updateCaptureState(
-            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
         let events = recognizer.feed(
             sample: MarkSample(
                 hostUs: reading.hostUs, shift: reading.shift, otherModifiers: reading.otherModifiers,
                 point: reading.global, buttonDown: reading.buttons != 0))
         self.markRecognizer = recognizer
-        append(events, fallbackSourceUs: sourceUs)
+        append(events)
         publishActiveStroke(recognizer)
     }
 
@@ -319,11 +319,9 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 let hostUs = CaptureHostTime.nowUs()
                 self.queue.async {
                     guard !self.finishing, self.failure == nil, var recognizer = self.markRecognizer else { return }
-                    let sourceUs = self.clock.sourceTime(for: hostUs)
-                    guard let sourceUs else { return }
+                    guard self.clock.sourceTime(for: hostUs) != nil else { return }
                     recognizer.updateCaptureState(
-                        paused: self.clock.isPaused, hasFirstFrame: self.clock.originUs != nil,
-                        cameraOnly: false)
+                        paused: self.clock.isPaused, hasFirstFrame: self.clock.originUs != nil)
                     let events: [MarkEvent]
                     if isDown {
                         events = recognizer.feed(
@@ -333,7 +331,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                         events = recognizer.feed(release: MarkRelease(hostUs: hostUs, point: point))
                     }
                     self.markRecognizer = recognizer
-                    self.append(events, fallbackSourceUs: sourceUs)
+                    self.append(events)
                     self.publishActiveStroke(recognizer)
                 }
             }
@@ -349,11 +347,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         markMonitorTokens.removeAll()
     }
 
-    private func append(_ events: [MarkEvent], fallbackSourceUs: Int64) {
+    private func append(_ events: [MarkEvent]) {
         for event in events {
             guard let first = event.points.first else { continue }
-            guard let sourceUs = clock.sourceTime(for: first.hostUs) ?? (event.points.isEmpty ? fallbackSourceUs : nil)
-            else { continue }
+            guard let sourceUs = clock.sourceTime(for: first.hostUs) else { continue }
             let mark = JournalMark(
                 hostUs: first.hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
                 id: UUID().uuidString, kind: event.kind.rawValue, pin: event.pin,
@@ -366,9 +363,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                         x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
                         hostUs: point.hostUs)
                 },
-                window: event.window.map {
-                    JournalMarkWindow(app: $0.app, title: $0.title, bounds: $0.bounds)
-                })
+                window: event.window)
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
             recordedMarks.append((mark.id, mark.kind, mark.pin))

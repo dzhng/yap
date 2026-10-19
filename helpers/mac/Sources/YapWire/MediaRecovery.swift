@@ -183,7 +183,7 @@ package enum MediaRecovery {
         if layout == 1 && FileManager.default.fileExists(atPath: cameraReceipt.path) {
             return try await recoverCamera(directory: directory, leased: leased)
         }
-        guard layout == 2 || layout == 3 else {
+        guard CaptureJournal.isPacked(layout) else {
             let result = await inspect(directory: directory)
             try Task.checkCancellation()
             if layout == 1 && (result.journal?.header?.source.kind == "camera" || result.journal?.header?.cameraBinding != nil) {
