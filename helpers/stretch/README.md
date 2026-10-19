@@ -24,9 +24,8 @@ not individual channel samples. Cancellation at page transfers bounds adapter wo
 between checks, not every upstream loop or operating-system IO latency.
 
 The [native retime owner](../mac/Sources/YapAudio/CompositionRetime.swift)
-uses this seam through existing prepared-audio, job and asset lifetimes. The
-[reference guide](../../packages/test-harness/editing/stretch/README.md) locates parity
-and acoustic experiments; [bounded](../../specs/done/agent-editing/assets/14-bounded-stretch/README.md)
+uses this seam through existing prepared-audio, job and asset lifetimes.
+[Bounded](../../specs/done/agent-editing/assets/14-bounded-stretch/README.md)
 and [stereo evidence](../../specs/done/agent-editing/assets/14c-stereo-stretch/README.md)
 retain measured scope. Numerical parity cannot establish natural speech or a general
 cancellation latency guarantee.

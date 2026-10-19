@@ -8,7 +8,5 @@ LFS rule owns these files. Full originals and full-domain search vectors stay ex
 
 [The research checkpoint](../../../../specs/done/video-editing-feedback/assets/20-synchronization/bridge/README.md)
 owns frozen recipes, captured recognition and evidence limits.
-[Replay](../../../../packages/test-harness/editing/synchronization/bridge-replay.py)
-checks retained bytes and numerical/lexical observations without native decoding or
-model inference. Cropped operands cannot reproduce the original full-domain candidate
+Cropped operands cannot reproduce the original full-domain candidate
 selection or its coarse alternatives.
