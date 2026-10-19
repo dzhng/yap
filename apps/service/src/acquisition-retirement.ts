@@ -71,7 +71,6 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
       }
     },
     cascadeMembersWithoutCascade: true,
-    result: (subject) => ({ acquisitionId: subject.id, deleted: true }),
     freedBytes: () => 0,
   } satisfies DeletionRegistration;
 }

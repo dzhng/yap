@@ -21,9 +21,9 @@ function fixture(durationUs = 20_000_000, sparse = false) {
   const store = new CaptureStore(path, providers);
   stores.push(store);
   const recording = store.allocate().recording;
-  store.registerSource(recording.recordingId, durationUs);
+  store.registerSource(recording.id, durationUs);
   const identity = {
-    owner: { kind: "recording" as const, id: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
     generation: "attempt-1",
     policy: scenePolicy.id,
@@ -208,10 +208,10 @@ test("restart leaves partial attempts unreadable and separates source generation
   expect(() => evidence.page({ identity: f.identity })).toThrow("complete");
   evidence.finish(f.identity);
   const recording = reopened.allocate().recording;
-  reopened.registerSource(recording.recordingId, 10_000_000);
+  reopened.registerSource(recording.id, 10_000_000);
   const sourceIdentity = {
     ...f.identity,
-    owner: { kind: "recording" as const, id: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
   };
   evidence.append(sourceIdentity, f.source, chunk);
@@ -221,11 +221,7 @@ test("restart leaves partial attempts unreadable and separates source generation
   const controller = new AbortController();
   controller.abort();
   await expect(
-    evidence.reclaim(
-      { kind: "recording", id: recording.recordingId },
-      () => false,
-      controller.signal,
-    ),
+    evidence.reclaim({ kind: "recording", id: recording.id }, () => false, controller.signal),
   ).rejects.toThrow();
   expect(evidence.page({ identity: sourceIdentity }).chunks).toEqual([chunk]);
 });

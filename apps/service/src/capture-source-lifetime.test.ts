@@ -27,7 +27,7 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
     source: { kind: "display", displayId: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId } = started.data as { recordingId: string };
+  const { id: recordingId } = started.data as { id: string };
   const directory = join(f.home, "library", "recordings", recordingId);
   const sibling = join(f.home, "library", "recordings", randomUUID());
   await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -38,7 +38,7 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
   const deleted = await f.call("recording.delete", { requestId: "test-delete", recordingId });
   expect(deleted).toMatchObject({
     ok: true,
-    data: { recordingId, deleted: true },
+    data: { id: recordingId, deleted: true },
   });
   if (deleted.ok) expect((deleted.data as { freedBytes: number }).freedBytes).toBe(removedBytes);
   expect(f.nativeCalls.slice(-2)).toEqual(["capture.cancel", "capture.status"]);
@@ -51,7 +51,7 @@ test("fresh public deletion joins capture quiescence and removes only its donor"
   expect(await f.call("recording.delete", { requestId: "test-delete", recordingId })).toMatchObject(
     {
       ok: true,
-      data: { recordingId, deleted: true },
+      data: { id: recordingId, deleted: true },
     },
   );
   expect(
@@ -119,7 +119,7 @@ test("deletion fences retries and joins an acquisition borrowing the donor befor
     error: { code: "NOT_FOUND" },
   });
   release.resolve();
-  expect(await deletion).toMatchObject({ ok: true, data: { recordingId, deleted: true } });
+  expect(await deletion).toMatchObject({ ok: true, data: { id: recordingId, deleted: true } });
   expect(await f.call("acquisition.get", { acquisitionId })).toMatchObject({ ok: false });
   await expect(readFile(join(directory, "video.mov"))).rejects.toMatchObject({ code: "ENOENT" });
 });
@@ -366,7 +366,7 @@ test("cancel losing to completed capture releases admission without discarding t
     source: { kind: "display", displayId: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const directory = join(f.home, "library", "recordings", recordingId, "source");
   await writeFile(
     join(directory, "capture.journal.jsonl"),
@@ -412,7 +412,7 @@ test("a recording used by a project refuses until cascade retires its copies and
     await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),
   );
   const binding = acquisition.bindings[0]!;
-  const created = data<{ project: { projectId: string }; revision: { revisionId: string } }>(
+  const created = data<{ project: { id: string }; revision: { id: string } }>(
     await f.call("project.create", {
       requestId: "authored-project",
       canvas: {
@@ -423,12 +423,12 @@ test("a recording used by a project refuses until cascade retires its copies and
       },
     }),
   );
-  const projectId = created.project.projectId;
-  data<{ revision: { revisionId: string } }>(
+  const projectId = created.project.id;
+  data<{ revision: { id: string } }>(
     await f.call("edit.apply", {
       projectId,
       requestId: "authored-placement",
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       operations: [
         { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
         {
@@ -479,7 +479,7 @@ test("a recording used by a project refuses until cascade retires its copies and
   });
   expect(deleted).toMatchObject({
     ok: true,
-    data: { recordingId: take.recordingId, deleted: true, freedBytes: details.cascadeFreesBytes },
+    data: { id: take.recordingId, deleted: true, freedBytes: details.cascadeFreesBytes },
   });
   await expect(readFile(join(take.directory, "video.mov"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -598,7 +598,7 @@ test("a recording refuses when a copy asset has a derived asset user", async () 
   });
   expect(deleted).toMatchObject({
     ok: true,
-    data: { recordingId: take.recordingId, deleted: true, freedBytes: details.cascadeFreesBytes },
+    data: { id: take.recordingId, deleted: true, freedBytes: details.cascadeFreesBytes },
   });
   expect(await f.call("acquisition.get", { acquisitionId: take.acquisitionId })).toMatchObject({
     ok: false,
@@ -620,7 +620,7 @@ test("a recording refuses when a copy asset has a derived asset user", async () 
 
 test("public discard fences and drains queued managed imports before native cancellation", async () => {
   const f = await fixture(undefined, sourceWorker, "capture.cancel");
-  const { recordingId, sourceId } = data<{ recordingId: string; sourceId: string }>(
+  const { id: recordingId, sourceId } = data<{ id: string; sourceId: string }>(
     await f.call("capture.start", {
       requestId: "discard-borrower",
       source: { kind: "display", displayId: 1 },

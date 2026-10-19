@@ -41,7 +41,7 @@ async function fixture() {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   let index = new ScreenshotIndexStore(
     catalog,
     home,
@@ -648,14 +648,14 @@ test("staged project indexes validate adopted revisions before atomic publicatio
   });
   const adopted = {
     ...metadata,
-    projectId: adoption.project.projectId,
+    projectId: adoption.project.id,
     revisionId: adoption.revisionIds[metadata.revisionId]!,
   };
   const validation = projectIndexDomain(
     {
       composition: (identity) =>
         projectCompositionFromRevision(
-          adoption.revisions.find((r) => r.revisionId === identity.revisionId)!,
+          adoption.revisions.find((r) => r.id === identity.revisionId)!,
           receiver.assets,
           [],
         ),

@@ -157,18 +157,18 @@ async function fixture() {
   }
   const state = await reopen();
   const recording = state.captures.allocate().recording;
-  donor = join(root, "recordings", recording.recordingId, "source");
+  donor = join(root, "recordings", recording.id, "source");
   await mkdir(donor, { recursive: true, mode: 0o700 });
   await writeFile(
     join(donor, "source.publication.json"),
     JSON.stringify(publication(recording.sourceId).primary.source),
   );
-  state.captures.ingestLifecycle(recording.recordingId, {
+  state.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "finalizing",
   });
-  state.captures.ingestLifecycle(recording.recordingId, {
+  state.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 2,
     state: "complete",
@@ -181,19 +181,19 @@ async function fixture() {
 test("settled capture reserves one acquisition and job atomically before source files are opened", async () => {
   const f = await fixture();
   expect(() =>
-    f.admit(f.recording.recordingId, () => {
+    f.admit(f.recording.id, () => {
       throw new CatalogError("REFUSED", "Refused");
     }),
   ).toThrow("Refused");
   expect(f.captures.catalog.prepare("SELECT id FROM acquisitions").all()).toEqual([]);
   expect(f.captures.catalog.prepare("SELECT jobId FROM jobs").all()).toEqual([]);
-  const job = f.admit(f.recording.recordingId);
-  expect(f.admit(f.recording.recordingId)).toEqual(job);
+  const job = f.admit(f.recording.id);
+  expect(f.admit(f.recording.id)).toEqual(job);
   expect(job.state).toBe("queued");
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
   expect(f.acquisitions.intent(job.target.id)).toMatchObject({
     kind: "capture",
-    recordingId: f.recording.recordingId,
+    recordingId: f.recording.id,
     sourceId: f.recording.sourceId,
     path: f.donor,
     files: {},
@@ -233,7 +233,7 @@ test("capture admission stages its complete private authority and strips it befo
     });
     return { ...(await ordinary(...args)), verifiedSourceAuthority: source };
   };
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "ready" });
@@ -268,7 +268,7 @@ test.each(["missing", "different"])(
             },
           };
     };
-    const job = f.admit(f.recording.recordingId);
+    const job = f.admit(f.recording.id);
     f.queue.start();
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -287,7 +287,7 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
     join(f.donor, "source.journal.jsonl"),
     JSON.stringify({ sessionID: f.recording.sourceId }),
   );
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -305,7 +305,7 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
   const reopened = await f.reopen();
   expect(reopened.acquisitions.intent(job.target.id)).toEqual(frozen);
   await writeFile(join(f.donor, "video.mov"), "video");
-  expect(reopened.admit(f.recording.recordingId)).toMatchObject({
+  expect(reopened.admit(f.recording.id)).toMatchObject({
     jobId: job.jobId,
     state: "failed",
   });
@@ -322,7 +322,7 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
   expect(value.sourceId).toBe(f.recording.sourceId);
   expect(value.bindings.map((binding) => binding.sourceRoles)).toEqual([["video"]]);
   await rm(f.donor, { recursive: true });
-  expect(reopened.admit(f.recording.recordingId)).toMatchObject({
+  expect(reopened.admit(f.recording.id)).toMatchObject({
     jobId: job.jobId,
     state: "ready",
   });
@@ -335,7 +335,7 @@ test("a changed frozen journal refuses before observing newly available video", 
   const f = await fixture();
   const journal = join(f.donor, "source.journal.jsonl");
   await writeFile(journal, JSON.stringify({ sessionID: f.recording.sourceId }));
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -368,7 +368,7 @@ test("observed optional absence cannot be replaced after a failed native attempt
   f.native.exportSource = async () => {
     throw new Error("Native unavailable");
   };
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "failed", retryable: true });
@@ -394,7 +394,7 @@ test("a foreign source journal fails before publishing evidence or assets", asyn
     JSON.stringify({ sessionID: "foreign-source" }),
   );
   await writeFile(join(f.donor, "video.mov"), "video");
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -414,20 +414,20 @@ test("capture authority refuses live, canceled, no-video and foreign-connection 
   for (const state of ["preparing", "canceled", "interrupted"] as const) {
     const recording = f.captures.allocate().recording;
     if (state === "canceled")
-      f.captures.ingestLifecycle(recording.recordingId, {
+      f.captures.ingestLifecycle(recording.id, {
         sourceId: recording.sourceId,
         sequence: 1,
         state,
       });
     if (state === "interrupted")
-      f.captures.ingestLifecycle(recording.recordingId, {
+      f.captures.ingestLifecycle(recording.id, {
         sourceId: recording.sourceId,
         sequence: 1,
         state,
         reason: "no-video",
         sourceDurationUs: null,
       });
-    expect(() => f.admit(recording.recordingId)).toThrow(
+    expect(() => f.admit(recording.id)).toThrow(
       expect.objectContaining({
         code: state === "preparing" ? "NOT_READY" : "UNAVAILABLE",
       }),
@@ -436,7 +436,7 @@ test("capture authority refuses live, canceled, no-video and foreign-connection 
   const other = await fixture();
   expect(() =>
     f.captures.transaction(() =>
-      f.acquisitions.admitCapture(other.captures, other.recording.recordingId, other.donor),
+      f.acquisitions.admitCapture(other.captures, other.recording.id, other.donor),
     ),
   ).toThrow("shared catalog connection");
   expect(f.captures.catalog.prepare("SELECT id FROM acquisitions").all()).toEqual([]);
@@ -446,7 +446,7 @@ test("capture authority refuses live, canceled, no-video and foreign-connection 
 test("an interrupted take with video retains canceled work and refuses a changed path", async () => {
   const f = await fixture();
   const recording = f.captures.allocate().recording;
-  f.captures.ingestLifecycle(recording.recordingId, {
+  f.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -454,12 +454,12 @@ test("an interrupted take with video retains canceled work and refuses a changed
     sourceDurationUs: 100,
     publication: publication(recording.sourceId),
   });
-  const job = f.admit(recording.recordingId);
+  const job = f.admit(recording.id);
   f.queue.cancel(job.jobId);
-  expect(f.admit(recording.recordingId)).toMatchObject({ jobId: job.jobId, state: "canceled" });
+  expect(f.admit(recording.id)).toMatchObject({ jobId: job.jobId, state: "canceled" });
   expect(() =>
     f.captures.transaction(() =>
-      f.acquisitions.admitCapture(f.captures, recording.recordingId, join(f.root, "other")),
+      f.acquisitions.admitCapture(f.captures, recording.id, join(f.root, "other")),
     ),
   ).toThrow("already names another input");
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -481,7 +481,7 @@ test.each(["source", "parent"])(
       join(f.donor, "source.journal.jsonl"),
       JSON.stringify({ sessionID: f.recording.sourceId }),
     );
-    const job = f.admit(f.recording.recordingId);
+    const job = f.admit(f.recording.id);
     f.queue.start();
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -505,7 +505,7 @@ test.each(["source", "parent"])(
     } finally {
       await chmod(refusedDirectory, 0o700);
     }
-    expect(f.admit(f.recording.recordingId)).toMatchObject({ jobId: job.jobId, state: "failed" });
+    expect(f.admit(f.recording.id)).toMatchObject({ jobId: job.jobId, state: "failed" });
     f.queue.retry(job.jobId);
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
@@ -529,7 +529,7 @@ test("post-freeze donor copy access failure preserves the acquisition for explic
     await chmod(f.donor, 0);
     return receipt;
   };
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   let frozen;
   try {
@@ -551,7 +551,7 @@ test("post-freeze donor copy access failure preserves the acquisition for explic
     await chmod(f.donor, 0o700);
     f.native.exportSource = exportSource;
   }
-  expect(f.admit(f.recording.recordingId)).toMatchObject({ jobId: job.jobId, state: "failed" });
+  expect(f.admit(f.recording.id)).toMatchObject({ jobId: job.jobId, state: "failed" });
   f.queue.retry(job.jobId);
   await f.queue.idle();
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -593,7 +593,7 @@ test("a busy donor lease preserves frozen capture identity for explicit retry", 
     join(f.donor, "source.journal.jsonl"),
     JSON.stringify({ sessionID: f.recording.sourceId }),
   );
-  const job = f.admit(f.recording.recordingId);
+  const job = f.admit(f.recording.id);
   f.queue.start();
   await f.queue.idle();
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -633,8 +633,8 @@ async function cameraTake(f: Awaited<ReturnType<typeof fixture>>) {
     cameraDeviceId: "camera-a",
   }).recording;
   const camera = recording.camera!;
-  const binding = { recordingId: recording.recordingId, ...camera };
-  const donor = join(f.root, "recordings", recording.recordingId, "camera");
+  const binding = { recordingId: recording.id, ...camera };
+  const donor = join(f.root, "recordings", recording.id, "camera");
   await mkdir(donor, { recursive: true, mode: 0o700 });
   const bodies = {
     "capture.journal.jsonl": JSON.stringify({
@@ -669,7 +669,7 @@ async function cameraTake(f: Awaited<ReturnType<typeof fixture>>) {
     },
   };
   await writeFile(join(donor, "source.publication.json"), JSON.stringify(source));
-  f.captures.ingestLifecycle(recording.recordingId, {
+  f.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "finalizing",
@@ -696,12 +696,7 @@ async function cameraTake(f: Awaited<ReturnType<typeof fixture>>) {
     },
   });
   const job = f.queue.submit(() => {
-    const intent = f.acquisitions.admitCapture(
-      f.captures,
-      recording.recordingId,
-      donor,
-      camera.sourceId,
-    );
+    const intent = f.acquisitions.admitCapture(f.captures, recording.id, donor, camera.sourceId);
     return {
       target: { kind: "acquisition", id: intent.acquisitionId },
       artifact: "acquisition.import",

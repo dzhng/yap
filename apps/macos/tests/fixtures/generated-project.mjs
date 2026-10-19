@@ -44,9 +44,9 @@ export async function generatedVideoProject(home, path, { width, height, duratio
       requestId: "native-media-project",
       canvas: { width, height, fps: { numerator: 1, denominator: 1 }, background: "#000000ff" },
     });
-    const authored = projects.apply(created.project.projectId, {
+    const authored = projects.apply(created.project.id, {
       requestId: "native-media-video",
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
         {
@@ -63,8 +63,8 @@ export async function generatedVideoProject(home, path, { width, height, duratio
       ],
     });
     return {
-      projectId: created.project.projectId,
-      revisionId: authored.revision.revisionId,
+      projectId: created.project.id,
+      revisionId: authored.revision.id,
       clipId: authored.edit.labels.clip,
       trackId: authored.edit.labels.video,
     };

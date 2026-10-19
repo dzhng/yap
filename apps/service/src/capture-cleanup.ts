@@ -65,12 +65,12 @@ export class CaptureCleanup {
     if (
       !isSettled(recording.state) ||
       recording.state === "canceled" ||
-      this.store.isDeleting(recording.recordingId)
+      this.store.isDeleting(recording.id)
     )
       throw new CatalogError("INVALID_STATE", "Cleanup requires a settled available recording");
     if (recording.sourceId !== job.input)
       throw new CatalogError("SOURCE_CHANGED", "Cleanup source differs from its pinned recording");
-    const root = join(this.home, "recordings", recording.recordingId);
+    const root = join(this.home, "recordings", recording.id);
     let lease: FileHandle | undefined;
     try {
       lease = await openDirectoryLease(root, "shared");
@@ -105,7 +105,7 @@ export class CaptureCleanup {
       );
       signal.throwIfAborted();
       return JSON.stringify({
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         roles: value,
       });

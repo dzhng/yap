@@ -13,7 +13,7 @@ export async function killExportOwner(f, gap, extra = {}) {
     output: f.output,
     projectId: f.projectId,
     asset: { id: f.asset.id },
-    placed: { revision: { revisionId: f.placed.revision.revisionId } },
+    placed: { revision: { id: f.placed.revision.id } },
     ...extra,
   };
   const child = fork(fileURLToPath(import.meta.url), [JSON.stringify(existing), gap], {

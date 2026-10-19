@@ -16,7 +16,7 @@ export type RecordingState =
   | "canceled";
 export type FinalizationError = Readonly<{ code: string; message: string; retryable: boolean }>;
 export type Recording = Readonly<{
-  recordingId: string;
+  id: string;
   sourceId: string;
   camera: Readonly<{ sourceId: string; deviceId: string }> | null;
   publication: CapturePublication | null;
@@ -56,7 +56,7 @@ const nextStates: Readonly<Record<RecordingState, readonly RecordingState[]>> = 
   canceled: ["canceled"],
 };
 const recordingColumns =
-  "recordingId,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
+  "recordingId AS id,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
 type RecordingRow = Omit<Recording, "finalizationError" | "camera" | "publication"> & {
   finalizationError: string | null;
   publication: string | null;
@@ -150,7 +150,7 @@ export class CaptureStore extends Catalog {
               "REQUEST_CONFLICT",
               "Request ID was already used with different arguments",
             );
-          return { recording: this.get(recording.recordingId), replay: true };
+          return { recording: this.get(recording.id), replay: true };
         }
       }
       const recordingId = this.providers.newId();
@@ -243,7 +243,7 @@ export class CaptureStore extends Catalog {
       .all(afterId, limit + 1) as RecordingRow[];
     return {
       recordings: rows.slice(0, limit).map(readRecording),
-      nextAfterId: rows.length > limit ? rows[limit - 1]!.recordingId : null,
+      nextAfterId: rows.length > limit ? rows[limit - 1]!.id : null,
     };
   }
   /** Finalize only after each resource owner has reclaimed its rows and files. Foreign keys keep
@@ -306,7 +306,7 @@ export class CaptureStore extends Catalog {
    */
   async forEachRecording(
     signal: AbortSignal,
-    visit: (recording: Pick<Recording, "recordingId" | "sourceId">) => Promise<void>,
+    visit: (recording: Pick<Recording, "id" | "sourceId">) => Promise<void>,
   ): Promise<void> {
     let after = "";
     let failed = false;
@@ -315,11 +315,11 @@ export class CaptureStore extends Catalog {
       signal.throwIfAborted();
       const recording = this.catalog
         .prepare(
-          "SELECT recordingId,sourceId FROM recordings WHERE recordingId>? ORDER BY recordingId LIMIT 1",
+          "SELECT recordingId AS id,sourceId FROM recordings WHERE recordingId>? ORDER BY recordingId LIMIT 1",
         )
-        .get(after) as Pick<Recording, "recordingId" | "sourceId"> | undefined;
+        .get(after) as Pick<Recording, "id" | "sourceId"> | undefined;
       if (!recording) break;
-      after = recording.recordingId;
+      after = recording.id;
       try {
         await visit(recording);
       } catch (error) {
@@ -514,7 +514,7 @@ export class CaptureStore extends Catalog {
         state: recording.state,
         interruptionReason: recording.interruptionReason,
       });
-    this.storeSource(recording.recordingId, sourceDurationUs);
+    this.storeSource(recording.id, sourceDurationUs);
   }
   /** Runs inside the lifecycle/registration transaction, including an editing specialization. */
   protected storeSource(recordingId: string, sourceDurationUs: number): void {

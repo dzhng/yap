@@ -87,7 +87,7 @@ async function importAsset(f: Service, requestId: string, path = f.path) {
   return (await f.job(imported.jobId, "ready")).published!.output.assetId;
 }
 async function createProject(f: Service, requestId: string) {
-  return data<{ project: { projectId: string }; revision: { revisionId: string } }>(
+  return data<{ project: { id: string }; revision: { id: string } }>(
     await f.call("project.create", { requestId, canvas }),
   );
 }
@@ -125,13 +125,13 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
     const created: string[] = [];
     for (const title of ["one", "two", "three", "four"]) {
       const { project } = await createProject(f, `paging-${title}`);
-      created.push(project.projectId);
+      created.push(project.id);
     }
     return {
       call: f.call,
       params: {},
       plural: "projects",
-      ids: (value) => (value as { projectId: string }).projectId,
+      ids: (value) => (value as { id: string }).id,
       expectedOrder: created.reverse(),
     };
   },
@@ -147,7 +147,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "assets",
-      ids: (value) => (value as { assetId: string }).assetId,
+      ids: (value) => (value as { id: string }).id,
       expectedOrder: assetIds.reverse(),
     };
   },
@@ -203,7 +203,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "models",
-      ids: (value) => (value as { modelId: string }).modelId,
+      ids: (value) => (value as { id: string }).id,
     };
   },
   "preset.list": async () => {
@@ -214,30 +214,30 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "presets",
-      ids: (value) => (value as { presetId: string }).presetId,
+      ids: (value) => (value as { id: string }).id,
     };
   },
   "revision.history": async () => {
     const f = await service();
     const projects = [await createProject(f, "history"), await createProject(f, "other")];
-    let revisionId = projects[0]!.revision.revisionId;
+    let revisionId = projects[0]!.revision.id;
     for (const width of [32, 48, 64]) {
-      const edited = data<{ revision: { revisionId: string } }>(
+      const edited = data<{ revision: { id: string } }>(
         await f.call("edit.apply", {
-          projectId: projects[0]!.project.projectId,
+          projectId: projects[0]!.project.id,
           requestId: `resize-${width}`,
           expectedRevisionId: revisionId,
           operations: [{ operation: "canvas.set", canvas: { ...canvas, width } }],
         }),
       );
-      revisionId = edited.revision.revisionId;
+      revisionId = edited.revision.id;
     }
     return {
       call: f.call,
-      params: { projectId: projects[0]!.project.projectId },
+      params: { projectId: projects[0]!.project.id },
       plural: "revisions",
-      ids: (value) => (value as { revisionId: string }).revisionId,
-      otherFilters: [{ projectId: projects[1]!.project.projectId }],
+      ids: (value) => (value as { id: string }).id,
+      otherFilters: [{ projectId: projects[1]!.project.id }],
     };
   },
   "recording.list": async () => {
@@ -249,8 +249,8 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: {},
       plural: "recordings",
-      ids: (value) => (value as { recordingId: string }).recordingId,
-      expectedOrder: [unfinished, failed, complete].map((take) => take.recordingId),
+      ids: (value) => (value as { id: string }).id,
+      expectedOrder: [unfinished, failed, complete].map((take) => take.id),
     };
   },
   "media.list": async () => {
@@ -282,9 +282,9 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       const { project, revision } = await createProject(f, name);
       data(
         await f.call("edit.apply", {
-          projectId: project.projectId,
+          projectId: project.id,
           requestId: `${name}-place`,
-          expectedRevisionId: revision.revisionId,
+          expectedRevisionId: revision.id,
           operations: [
             { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
             {
@@ -300,7 +300,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
           ],
         }),
       );
-      projectIds.push(project.projectId);
+      projectIds.push(project.id);
     }
     const exportIds: string[] = [];
     for (const [index, projectId] of [0, 0, 1, 0].map((at) => [at, projectIds[at]!] as const)) {
@@ -320,7 +320,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       call: f.call,
       params: { projectId: projectIds[0] },
       plural: "exports",
-      ids: (value) => (value as { exportId: string }).exportId,
+      ids: (value) => (value as { id: string }).id,
       expectedOrder: exportIds.reverse(),
       otherFilters: [
         {},
@@ -512,10 +512,10 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       },
     }));
     const { project, revision } = await createProject(f, "events");
-    const placed = data<{ revision: { revisionId: string } }>(
+    const placed = data<{ revision: { id: string } }>(
       await f.call("edit.apply", {
-        projectId: project.projectId,
-        expectedRevisionId: revision.revisionId,
+        projectId: project.id,
+        expectedRevisionId: revision.id,
         requestId: "events-place",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -534,8 +534,8 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       }),
     );
     const params = {
-      projectId: project.projectId,
-      revisionId: placed.revision.revisionId,
+      projectId: project.id,
+      revisionId: placed.revision.id,
       range: { startUs: 0, endUs: 1_000_000 },
     };
     await ready(f, "timeline.events", params);

@@ -162,7 +162,7 @@ export async function deletionFixture(name) {
             assetDeleted = true;
             return deletionReply(request, {
               ok: true,
-              data: { assetId, deleted: true, freedBytes },
+              data: { id: assetId, deleted: true, freedBytes },
             });
           }
           return deletionReply(request, {
@@ -177,7 +177,7 @@ export async function deletionFixture(name) {
         }
         return deletionReply(request, {
           ok: true,
-          data: { assetId, deleted: true, freedBytes },
+          data: { id: assetId, deleted: true, freedBytes },
         });
       }
       if (request.operation === "asset.get")
@@ -246,7 +246,7 @@ export async function deletionFixture(name) {
         originalDeleted = true;
         return deletionReply(request, {
           ok: true,
-          data: { projectId: sourceProjectId, deleted: true, freedBytes: 0 },
+          data: { id: sourceProjectId, deleted: true, freedBytes: 0 },
         });
       }
       if (request.operation === "asset.origins")

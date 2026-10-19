@@ -32,13 +32,13 @@ test("join review refuses a foreign prepared tap without inference or authoring 
   });
   if (!result.ok) throw Error(JSON.stringify(result));
   const { project, revision } = result.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   expect(
     await f.call("join.verify", {
-      projectId: project.projectId,
-      revisionId: revision.revisionId,
+      projectId: project.id,
+      revisionId: revision.id,
       preparedResourceId: "foreign",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
       boundary: { trackId: "audio", projectAtUs: 0 },
@@ -48,8 +48,8 @@ test("join review refuses a foreign prepared tap without inference or authoring 
     }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
-    await f.call("revision.get", { projectId: project.projectId, revisionId: revision.revisionId }),
-  ).toMatchObject({ ok: true, data: { revision: { revisionId: revision.revisionId } } });
+    await f.call("revision.get", { projectId: project.id, revisionId: revision.id }),
+  ).toMatchObject({ ok: true, data: { revision: { id: revision.id } } });
 });
 
 test.runIf(process.platform === "darwin")(
@@ -88,8 +88,8 @@ test.runIf(process.platform === "darwin")(
       return reply.data as T;
     }
     const created = await call<{
-      project: { projectId: string };
-      revision: { revisionId: string };
+      project: { id: string };
+      revision: { id: string };
     }>("project.create", {
       requestId: "prepared-join-project",
       canvas: {
@@ -99,10 +99,10 @@ test.runIf(process.platform === "darwin")(
         background: "#000000ff",
       },
     });
-    const projectId = created.project.projectId;
-    const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
+    const projectId = created.project.id;
+    const edited = await call<{ revision: { id: string } }>("edit.apply", {
       projectId,
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       requestId: "join-silence",
       operations: [
         { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -116,7 +116,7 @@ test.runIf(process.platform === "darwin")(
         },
       ],
     });
-    const revisionId = edited.revision.revisionId;
+    const revisionId = edited.revision.id;
     const selection = {
       projectId,
       revisionId,
@@ -246,7 +246,7 @@ test.runIf(process.platform === "darwin")(
         phoneticCompleteness: "unknown",
       },
     });
-    const placed = await call<{ revision: { revisionId: string } }>("edit.apply", {
+    const placed = await call<{ revision: { id: string } }>("edit.apply", {
       projectId,
       expectedRevisionId: revisionId,
       requestId: "join-source",
@@ -264,7 +264,7 @@ test.runIf(process.platform === "darwin")(
         },
       ],
     });
-    const revised = { ...selection, revisionId: placed.revision.revisionId };
+    const revised = { ...selection, revisionId: placed.revision.id };
     expect(await f.call("join.verify", { ...input, revisionId: revised.revisionId })).toMatchObject(
       { ok: false, error: { code: "ARTIFACT_CHANGED" } },
     );

@@ -221,8 +221,8 @@ test("lost result publication releases capacity without rolling back or repeatin
     id: "lost",
     operation: "edit.apply",
     params: {
-      projectId: made.project.projectId,
-      expectedRevisionId: made.revision.revisionId,
+      projectId: made.project.id,
+      expectedRevisionId: made.revision.id,
       requestId: "one-edit",
       operations: [{ operation: "track.add", track: { kind: "video", order: 0 } }],
     },
@@ -241,7 +241,7 @@ test("lost result publication releases capacity without rolling back or repeatin
   );
   expect(result.data.revision.ordinal).toBe(1);
   expect(result.data.revision.document.tracks).toMatchObject([{ kind: "video", order: 0 }]);
-  expect(projects.history(made.project.projectId).revisions.map((r) => r.ordinal)).toEqual([0, 1]);
+  expect(projects.history(made.project.id).revisions.map((r) => r.ordinal)).toEqual([0, 1]);
   f.delivery.close(replay.resultDelivery.token);
   const releases: (() => void)[] = [];
   for (let n = 0; n < 32; n++) releases.push(f.delivery.reserve());

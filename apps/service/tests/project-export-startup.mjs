@@ -116,7 +116,7 @@ test(
         );
         return result.data.state === "ready" && result.data;
       });
-      assert.equal(status.snapshot.revisionId, f.placed.revision.revisionId);
+      assert.equal(status.snapshot.revisionId, f.placed.revision.id);
       const output = await readFile(join(f.output, request.leaf));
       assert.deepEqual(output, cached);
       assert.equal(status.receipt.sha256, createHash("sha256").update(cached).digest("hex"));

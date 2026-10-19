@@ -29,7 +29,7 @@ async function fixture() {
   stores.add(store);
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, id: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
     generation: "source-1",
   };

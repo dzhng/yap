@@ -84,7 +84,7 @@ export async function fixture(
       fps: { numerator: 5, denominator: 1 },
       background: "#000000ff",
     },
-  }).project.projectId;
+  }).project.id;
   let frames!: MediaFrameInspection,
     scenes!: SceneProcessing,
     index!: IndexProcessing,
@@ -102,7 +102,7 @@ export async function fixture(
       targets: {
         pin: (t) => {
           if (t.kind === "project")
-            return { ...t, revisionId: projects.revision(t.id, t.revisionId).revisionId };
+            return { ...t, revisionId: projects.revision(t.id, t.revisionId).id };
           if (t.kind !== "asset") throw new Error("asset only");
           assets.get(t.id);
           return t;

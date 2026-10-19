@@ -153,7 +153,7 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   assert.equal(f.store.catalog.prepare("SELECT COUNT(*) AS n FROM recordings").get().n, 0);
   assert.deepEqual(context.manifest.snapshot, f.snapshot);
   assert.deepEqual(
-    JSON.parse(JSON.stringify(f.projects.snapshot(f.snapshot.project.projectId))),
+    JSON.parse(JSON.stringify(f.projects.snapshot(f.snapshot.project.id))),
     f.snapshot,
   );
   assert.deepEqual(f.assets.get(f.asset.id), f.asset);
@@ -319,7 +319,7 @@ test("same-provenance project deletion and package close revoke only their own d
     import("../dist/managed-files.js"),
   ]);
   const f = await fixture(t),
-    projectId = f.snapshot.project.projectId;
+    projectId = f.snapshot.project.id;
   const acquisitions = f.acquisitions;
   const scenes = new SceneEvidenceStore(f.store, assetSceneOwner(f.assets, acquisitions));
   const index = new ScreenshotIndexStore(
@@ -407,14 +407,14 @@ test("startup remains blocked by a killed owner's actual native child while libr
     );
     const recording = f.store.allocate().recording;
     for (const [i, state] of ["recording", "finalizing", "complete"].entries())
-      f.store.ingestLifecycle(recording.recordingId, {
+      f.store.ingestLifecycle(recording.id, {
         sourceId: recording.sourceId,
         sequence: i + 1,
         state,
         sourceDurationUs: 100,
       });
     const job = f.jobs.submit({
-      target: { kind: "recording", id: recording.recordingId, revisionId: null },
+      target: { kind: "recording", id: recording.id, revisionId: null },
       artifact: "library",
       lane: "heavy",
       input: "{}",
@@ -607,7 +607,7 @@ test("correctly hashed malformed project resource metadata fails before readines
   assert.equal(f.registry.usage().budgetBytes, 0);
   assert.deepEqual(await readdir(f.directory), []);
   assert.deepEqual(
-    JSON.parse(JSON.stringify(f.projects.snapshot(f.snapshot.project.projectId))),
+    JSON.parse(JSON.stringify(f.projects.snapshot(f.snapshot.project.id))),
     f.snapshot,
   );
 });
@@ -620,7 +620,7 @@ test("default peak reservations block a fourth pending open but validated steady
   for (let i = 0; i < 3; i++) admissions.push(await f.registry.open(f.input));
   assert.equal(f.registry.usage().budgetBytes, 3 * ((await stat(f.input)).size + 16 * 1024 ** 3));
   await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
-  f.store.ingestLifecycle(capture.recordingId, {
+  f.store.ingestLifecycle(capture.id, {
     sourceId: capture.sourceId,
     sequence: 1,
     state: "canceled",

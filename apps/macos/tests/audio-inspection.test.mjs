@@ -137,11 +137,11 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
         background: "#000000ff",
       },
     });
-    const projectId = created.project.projectId;
+    const projectId = created.project.id;
     const placed = await call("edit.apply", {
       projectId,
       requestId: "audio-tracks",
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       operations: [
         ...["narration", "system"].map((role, order) => ({
           operation: "track.add",
@@ -170,7 +170,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     const edited = await call("edit.apply", {
       projectId,
       requestId: "cut",
-      expectedRevisionId: placed.revision.revisionId,
+      expectedRevisionId: placed.revision.id,
       operations: [
         {
           operation: "remove",
@@ -182,7 +182,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     });
     const params = {
       projectId,
-      revisionId: edited.revision.revisionId,
+      revisionId: edited.revision.id,
       range: { startUs: 500000, endUs: 2500000 },
     };
     const ready = await audio(params),
@@ -251,9 +251,9 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     assert.ok(amplitude(1.7, 1000) > 0.055);
 
     assert.deepEqual((await audio(params)).published, ready.published);
-    const historical = await audio({ ...params, revisionId: placed.revision.revisionId });
+    const historical = await audio({ ...params, revisionId: placed.revision.id });
     assert.notEqual(historical.jobId, ready.jobId);
-    assert.equal(historical.published.output.revisionId, placed.revision.revisionId);
+    assert.equal(historical.published.output.revisionId, placed.revision.id);
     assert.deepEqual(
       historical.published.output.unavailable.filter((item) => item.ranges.length),
       [],
@@ -292,7 +292,7 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
     });
     assert.equal(regenerated.jobId, ready.jobId);
     assert.equal(Number(regenerated.published.generation), Number(ready.published.generation) + 1);
-    assert.equal(regenerated.revisionId, edited.revision.revisionId);
+    assert.equal(regenerated.revisionId, edited.revision.id);
     assert.deepEqual(await hashes(), original);
   } finally {
     await service.close();
@@ -378,8 +378,8 @@ test("public source audio keeps native failure until explicit retry after restor
     hidden = registered + ".held";
     await rename(registered, hidden);
     const params = {
-      assetId: asset.assetId,
-      streamId: stream.streamId,
+      assetId: asset.id,
+      streamId: stream.id,
       sourceRange: { startUs: 0, endUs: 1000000 },
     };
     const failed = await waitFor(async () => {

@@ -365,7 +365,7 @@ test("asset.delete removes the asset file and every owned catalog row", async ()
     });
     expect(deleted).toMatchObject({
       ok: true,
-      data: { assetId, deleted: true, freedBytes: expect.any(Number) },
+      data: { id: assetId, deleted: true, freedBytes: expect.any(Number) },
     });
     if (!deleted.ok) throw new Error(JSON.stringify(deleted));
     catalog.exec("PRAGMA wal_checkpoint(TRUNCATE); VACUUM");
@@ -444,8 +444,8 @@ test("asset.delete refuses a live project user with structured IN_USE details", 
       },
     });
     if (!created.ok) throw new Error(JSON.stringify(created));
-    const revisionId = (created.data as { revision: { revisionId: string } }).revision.revisionId;
-    const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+    const revisionId = (created.data as { revision: { id: string } }).revision.id;
+    const projectId = (created.data as { project: { id: string } }).project.id;
     const catalog = fixture.service.captures.catalog;
     catalog
       .prepare(
@@ -510,21 +510,21 @@ test("asset.delete cascade retires the recorded project and resumes from its pla
     });
     if (!created.ok) throw new Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
-      revision: { revisionId: string };
+      project: { id: string };
+      revision: { id: string };
     };
     fixture.service.captures.catalog
       .prepare(
         "INSERT INTO resource_references(resourceKind,resourceId,ownerKind,ownerId) VALUES(?,?,?,?)",
       )
-      .run("asset", assetId, "revision", revision.revisionId);
+      .run("asset", assetId, "revision", revision.id);
     const deleted = await fixture.call("asset.delete", {
       requestId: "asset-cascade-delete",
       assetId,
       cascade: true,
     });
-    expect(deleted).toMatchObject({ ok: true, data: { assetId, deleted: true } });
-    expect(await fixture.call("project.get", { projectId: project.projectId })).toMatchObject({
+    expect(deleted).toMatchObject({ ok: true, data: { id: assetId, deleted: true } });
+    expect(await fixture.call("project.get", { projectId: project.id })).toMatchObject({
       ok: false,
       error: { code: "NOT_FOUND" },
     });
@@ -593,12 +593,12 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
     });
     if (!created.ok) throw new Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
-      revision: { revisionId: string };
+      project: { id: string };
+      revision: { id: string };
     };
     const placed = await fixture.call("edit.apply", {
-      projectId: project.projectId,
-      expectedRevisionId: revision.revisionId,
+      projectId: project.id,
+      expectedRevisionId: revision.id,
       requestId: "derived-chain-place",
       operations: [
         { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -650,7 +650,7 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
         code: "IN_USE",
         details: {
           derivedAssets: [{ kind: "asset", id: derivedId }],
-          usedBy: [{ kind: "project", id: project.projectId, revisions: 2 }],
+          usedBy: [{ kind: "project", id: project.id, revisions: 2 }],
         },
       },
     });
@@ -663,7 +663,7 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
     });
     expect(deleted).toMatchObject({
       ok: true,
-      data: { assetId: sourceId, deleted: true, freedBytes: details.cascadeFreesBytes },
+      data: { id: sourceId, deleted: true, freedBytes: details.cascadeFreesBytes },
     });
     expect(catalog.prepare("SELECT COUNT(*) AS count FROM assets").get()).toEqual({ count: 0 });
     expect(
@@ -672,7 +672,7 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
     expect(catalog.prepare("SELECT COUNT(*) AS count FROM resource_references").get()).toEqual({
       count: 0,
     });
-    expect(await fixture.call("project.get", { projectId: project.projectId })).toMatchObject({
+    expect(await fixture.call("project.get", { projectId: project.id })).toMatchObject({
       ok: false,
       error: { code: "NOT_FOUND" },
     });
@@ -748,7 +748,7 @@ test("asset.delete cascade retires an acquisition and its managed evidence", asy
       assetId,
       cascade: true,
     });
-    expect(deleted).toMatchObject({ ok: true, data: { assetId, deleted: true } });
+    expect(deleted).toMatchObject({ ok: true, data: { id: assetId, deleted: true } });
     expect(
       catalog.prepare("SELECT COUNT(*) AS count FROM acquisitions WHERE id=?").get(acquisitionId),
     ).toEqual({ count: 0 });
@@ -850,12 +850,12 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
       });
       if (!project.ok) throw new Error(JSON.stringify(project));
       const { project: projectData, revision } = project.data as {
-        project: { projectId: string };
-        revision: { revisionId: string };
+        project: { id: string };
+        revision: { id: string };
       };
       const placed = await fixture.call("edit.apply", {
-        projectId: projectData.projectId,
-        expectedRevisionId: revision.revisionId,
+        projectId: projectData.id,
+        expectedRevisionId: revision.id,
         requestId: `boundary-place-${boundary}-${timing}`,
         operations: [
           { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -921,10 +921,10 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
         derivedCacheIds,
       );
       const projectFiles = [
-        join(fixture.home, "library", "evidence", "index", "project", projectData.projectId),
+        join(fixture.home, "library", "evidence", "index", "project", projectData.id),
         ...catalog
           .prepare("SELECT id FROM derived_cache WHERE ownerKind='project' AND ownerId=?")
-          .all(projectData.projectId)
+          .all(projectData.id)
           .map((row) =>
             join(
               fixture.home,
@@ -942,7 +942,7 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
           (
             countCatalog
               .prepare("SELECT COUNT(*) AS count FROM project_revisions WHERE projectId=?")
-              .get(projectData.projectId) as { count: number }
+              .get(projectData.id) as { count: number }
           ).count,
         ),
         Number(
@@ -951,7 +951,7 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
               .prepare(
                 "SELECT COUNT(*) AS count FROM resource_references WHERE ownerKind='revision' AND ownerId IN (SELECT id FROM project_revisions WHERE projectId=?)",
               )
-              .get(projectData.projectId) as { count: number }
+              .get(projectData.id) as { count: number }
           ).count,
         ),
       ];
@@ -1047,7 +1047,7 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
       });
       expect(resumed, `${boundary}/${timing}: ${JSON.stringify(resumed)}`).toMatchObject({
         ok: true,
-        data: { assetId, deleted: true, freedBytes: expectedFreedBytes },
+        data: { id: assetId, deleted: true, freedBytes: expectedFreedBytes },
       });
       expect(
         await reopened.call("asset.delete", {

@@ -71,7 +71,7 @@ async function fixture(home, transformRows = (rows) => rows, frameStepUs = 6_000
     sourceId: randomUUID(),
     sourceDurationUs: 18_000_000,
   });
-  const source = join(home, "library", "recordings", take.recordingId, "source");
+  const source = join(home, "library", "recordings", take.id, "source");
   await mkdir(source, { recursive: true });
   const frameCount = 18_000_000 / frameStepUs;
   for (let index = 0; index < frameCount; index++)
@@ -173,7 +173,7 @@ async function inspector(home, source, service) {
   };
   const { acquisition } = await importAcquisition(
     service,
-    join(home, "library", "recordings", source.take.recordingId, "source"),
+    join(home, "library", "recordings", source.take.id, "source"),
   );
   const binding = acquisition.bindings.find((value) => value.sourceRoles.includes("video"));
   assert.ok(binding);
@@ -181,10 +181,10 @@ async function inspector(home, source, service) {
     requestId: randomUUID(),
     canvas: { width, height, fps: { numerator: 30, denominator: 1 }, background: "#000000ff" },
   });
-  const projectId = initial.project.projectId;
+  const projectId = initial.project.id;
   let authored = await call("edit.apply", {
     projectId,
-    expectedRevisionId: initial.revision.revisionId,
+    expectedRevisionId: initial.revision.id,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -208,11 +208,11 @@ async function inspector(home, source, service) {
   const edit = async (operations) => {
     authored = await call("edit.apply", {
       projectId,
-      expectedRevisionId: authored.revision.revisionId,
+      expectedRevisionId: authored.revision.id,
       requestId: randomUUID(),
       operations,
     });
-    return authored.revision.revisionId;
+    return authored.revision.id;
   };
   async function request(options = {}) {
     const { clean = false, trailUs = 2_000_000, revisionId, atUs = 2_000_000 } = options;

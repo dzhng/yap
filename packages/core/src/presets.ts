@@ -261,7 +261,7 @@ export class Presets {
   async delete(
     id: string,
     requestId?: string,
-  ): Promise<{ presetId: string; trashed: true; trashedPaths: string[]; instructions: string[] }> {
+  ): Promise<{ id: string; trashed: true; trashedPaths: string[]; instructions: string[] }> {
     const input = JSON.stringify({ operation: "preset.delete", presetId: id });
     const prior = this.priorRequest(requestId, input);
     if (prior)
@@ -269,7 +269,7 @@ export class Presets {
         Awaited<ReturnType<Presets["delete"]>>
       >;
     const run = async (): Promise<{
-      presetId: string;
+      id: string;
       trashed: true;
       trashedPaths: string[];
       instructions: string[];
@@ -280,7 +280,7 @@ export class Presets {
       await this.trash(path);
       await this.store.removeLocal(id);
       return {
-        presetId: id,
+        id,
         trashed: true,
         trashedPaths: [path],
         instructions: [`Preset ${id} is in the Trash. It can be restored from Finder.`],

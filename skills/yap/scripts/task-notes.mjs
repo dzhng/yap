@@ -134,11 +134,11 @@ export async function resumeTaskNotes(request, invoke = createCli(request.cli)) 
       revisionId: notes.revisionId,
     });
     if (
-      pinned.revision?.revisionId !== notes.revisionId ||
+      pinned.revision?.id !== notes.revisionId ||
       (pinned.projectId && pinned.projectId !== notes.projectId)
     )
       throw failure("ARTIFACT_CHANGED", "Historical revision is unavailable");
-    const { revisionId, ordinal, createdAt } = pinned.revision;
+    const { id: revisionId, ordinal, createdAt } = pinned.revision;
     result.pinnedRevision = {
       state: "available",
       revisionId,

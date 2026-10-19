@@ -129,10 +129,29 @@ describe("retained production receipt", () => {
   test("production project service replays the retained receipt through default MCP without new clip authoring", async () => {
     const { raw, params, service, db, client } = fixture;
     const delivered = await client.callTool({ name: "edit.apply", arguments: params });
-    const complete = responseSchema.parse(delivered.structuredContent);
-    expect(complete.ok).toBe(false);
-    if (complete.ok) throw Error("obsolete retained result unexpectedly replayed");
-    expect(complete.error.code).toBe("ARTIFACT_CHANGED");
+    const descriptor = deliveredResponseSchema.parse(delivered.structuredContent);
+    const chunks: Buffer[] = [];
+    for (let offsetBytes = 0; offsetBytes < descriptor.resultDelivery.sizeBytes;) {
+      const read = responseSchema.parse(
+        (
+          await client.callTool({
+            name: "artifact.read",
+            arguments: { token: descriptor.resultDelivery.token, offsetBytes },
+          })
+        ).structuredContent,
+      );
+      if (!read.ok) throw Error(read.error.message);
+      const chunk = z.object({ data: z.string(), nextOffsetBytes: z.int() }).parse(read.data);
+      chunks.push(Buffer.from(chunk.data, "base64"));
+      expect(chunk.nextOffsetBytes).toBeGreaterThan(offsetBytes);
+      offsetBytes = chunk.nextOffsetBytes;
+    }
+    const bytes = Buffer.concat(chunks);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(descriptor.resultDelivery.sha256);
+    const complete = responseSchema.parse(JSON.parse(bytes.toString()));
+    expect({ id: complete.id, ok: complete.ok }).toEqual({ id: descriptor.id, ok: true });
+    if (!complete.ok) throw Error(complete.error.message);
+    expect(Buffer.from(JSON.stringify(complete.data)).equals(raw)).toBe(true);
     expect(db.prepare("SELECT COUNT(*) AS n FROM project_requests").get()).toEqual({ n: 1 });
     expect(db.prepare("SELECT COUNT(*) AS n FROM project_revisions").get()).toEqual({ n: 0 });
     const cli = promisify(execFile)(
@@ -150,16 +169,14 @@ describe("retained production receipt", () => {
       { maxBuffer: RESPONSE_FRAME_BYTES },
     );
     cli.child.stdin?.end(JSON.stringify(params));
-    let cliStdout: string;
-    try {
-      cliStdout = (await cli).stdout;
-    } catch (error) {
-      cliStdout = (error as { stdout: string }).stdout;
-    }
-    const ordinary = responseSchema.parse(JSON.parse(cliStdout));
-    expect({ id: ordinary.id, ok: ordinary.ok }).toEqual({ id: "cli", ok: false });
-    if (ordinary.ok) throw Error("obsolete retained result unexpectedly replayed through CLI");
-    expect(ordinary.error.code).toBe("ARTIFACT_CHANGED");
+    const ordinary = responseSchema.parse(JSON.parse((await cli).stdout));
+    expect({ id: ordinary.id, ok: ordinary.ok }).toEqual({ id: "cli", ok: true });
+    if (!ordinary.ok) throw Error(ordinary.error.message);
+    expect(Buffer.from(JSON.stringify(ordinary.data)).equals(raw)).toBe(true);
+    await client.callTool({
+      name: "artifact.close",
+      arguments: { token: descriptor.resultDelivery.token },
+    });
     console.info(
       JSON.stringify({
         authority: "24y/place-9500.json",
@@ -169,7 +186,9 @@ describe("retained production receipt", () => {
         receiptSha256: createHash("sha256").update(raw).digest("hex"),
         defaultSdk: true,
         mcpResultBytes: Buffer.byteLength(JSON.stringify(delivered)),
-        exactReceiptBytes: false,
+        descriptor,
+        reconstructedBytes: bytes.length,
+        exactReceiptBytes: true,
         replayRows: 1,
         authoredRevisions: 0,
       }),

@@ -131,7 +131,7 @@ export type CorrespondenceMeasurement = z.infer<typeof correspondenceMeasurement
 
 export const correspondenceReceiptSchema = z
   .strictObject({
-    evidenceId: id,
+    id,
     generation: id,
     recipe: z.literal("temporal-correspondence-v1"),
     left: correspondenceEndpointSchema,

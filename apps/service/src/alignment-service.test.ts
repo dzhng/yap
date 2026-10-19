@@ -103,14 +103,14 @@ test.runIf(process.platform === "darwin")(
     });
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
-      revision: { revisionId: string };
+      project: { id: string };
+      revision: { id: string };
     };
     expect(
       await f.call("edit.apply", {
-        projectId: project.projectId,
+        projectId: project.id,
         requestId: "place",
-        expectedRevisionId: revision.revisionId,
+        expectedRevisionId: revision.id,
         operations: [
           { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
           {
@@ -128,8 +128,8 @@ test.runIf(process.platform === "darwin")(
     ).toMatchObject({ ok: true });
     expect(
       await f.call("alignment.get", {
-        projectId: project.projectId,
-        revisionId: revision.revisionId,
+        projectId: project.id,
+        revisionId: revision.id,
         preparedResourceId: "prepared-project-tap",
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
         assetId,
@@ -163,7 +163,7 @@ test.runIf(process.platform === "darwin")(
     const exportId = randomUUID();
     expect(
       await f.call("export.create", {
-        projectId: project.projectId,
+        projectId: project.id,
         requestId: exportId,
         kind: "processed-package",
         directory: f.home,
@@ -180,7 +180,7 @@ test.runIf(process.platform === "darwin")(
       path: await realpath(join(f.home, "alignment.zip")),
     });
     if (!opened.ok) throw Error(JSON.stringify(opened));
-    const admissionId = (opened.data as { packageId: string }).packageId,
+    const admissionId = (opened.data as { id: string }).id,
       packageHandle = (await wait(target, "package.status", { admissionId }, "ready"))
         .packageHandle;
     const packaged = await target.call("alignment.get", { ...query, packageHandle });
@@ -305,13 +305,13 @@ test("a project alignment range past the revision is admitted clamped; one wholl
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const placed = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "place",
-    expectedRevisionId: revision.revisionId,
+    expectedRevisionId: revision.id,
     operations: [
       { operation: "track.add", label: "sound", track: { kind: "audio", order: 0 } },
       {
@@ -329,7 +329,7 @@ test("a project alignment range past the revision is admitted clamped; one wholl
   if (!placed.ok) throw new Error(JSON.stringify(placed));
   const request = (range: { startUs: number; endUs: number }) =>
     f.call("alignment.observe", {
-      projectId: project.projectId,
+      projectId: project.id,
       preparedResourceId: "prepared-project-tap",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
       sourceRange: range,

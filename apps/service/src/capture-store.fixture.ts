@@ -15,24 +15,24 @@ export async function seedRecordingStates(home: string) {
   });
   try {
     const complete = store.allocate().recording;
-    store.ingestLifecycle(complete.recordingId, {
+    store.ingestLifecycle(complete.id, {
       sourceId: complete.sourceId,
       sequence: 1,
       state: "recording",
     });
-    store.ingestLifecycle(complete.recordingId, {
+    store.ingestLifecycle(complete.id, {
       sourceId: complete.sourceId,
       sequence: 2,
       state: "finalizing",
     });
-    store.ingestLifecycle(complete.recordingId, {
+    store.ingestLifecycle(complete.id, {
       sourceId: complete.sourceId,
       sequence: 3,
       state: "complete",
       sourceDurationUs: 10_000_000,
     });
     const failed = store.allocate().recording;
-    store.ingestLifecycle(failed.recordingId, {
+    store.ingestLifecycle(failed.id, {
       sourceId: failed.sourceId,
       sequence: 1,
       state: "interrupted",
@@ -41,7 +41,7 @@ export async function seedRecordingStates(home: string) {
     });
     const unfinished = store.allocate().recording;
     const canceled = store.allocate().recording;
-    store.ingestLifecycle(canceled.recordingId, {
+    store.ingestLifecycle(canceled.id, {
       sourceId: canceled.sourceId,
       sequence: 1,
       state: "canceled",

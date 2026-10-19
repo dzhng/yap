@@ -184,10 +184,10 @@ test("same media keeps explicit contexts through project replay, replacement, un
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const request = {
     requestId: "place",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
       ...[a.id, b.id, undefined].map((acquisitionId, index) => ({
@@ -218,10 +218,10 @@ test("same media keeps explicit contexts through project replay, replacement, un
       .all({ assetId, streamId: "track:1", range: { startUs: 30, endUs: 70 } })
       .map((row) => row.completeness);
   };
-  expect(completeness(placed.revision.revisionId)).toEqual(["partial", "whole", "whole"]);
+  expect(completeness(placed.revision.id)).toEqual(["partial", "whole", "whole"]);
   const replaced = projects.apply(projectId, {
     requestId: "replace",
-    expectedRevisionId: placed.revision.revisionId,
+    expectedRevisionId: placed.revision.id,
     operations: [
       {
         operation: "replace",
@@ -235,17 +235,17 @@ test("same media keeps explicit contexts through project replay, replacement, un
       },
     ],
   });
-  expect(completeness(replaced.revision.revisionId)).toEqual(["whole", "whole", "whole"]);
-  expect(completeness(placed.revision.revisionId)).toEqual(["partial", "whole", "whole"]);
+  expect(completeness(replaced.revision.id)).toEqual(["whole", "whole", "whole"]);
+  expect(completeness(placed.revision.id)).toEqual(["partial", "whole", "whole"]);
   const undone = projects.undo(projectId, {
     requestId: "undo",
-    expectedRevisionId: replaced.revision.revisionId,
+    expectedRevisionId: replaced.revision.id,
   });
-  expect(completeness(undone.revisionId)).toEqual(["partial", "whole", "whole"]);
+  expect(completeness(undone.id)).toEqual(["partial", "whole", "whole"]);
   expect(f.acquisitions.references(a.id)).toEqual(
     expect.arrayContaining([
-      { kind: "revision", id: placed.revision.revisionId },
-      { kind: "revision", id: undone.revisionId },
+      { kind: "revision", id: placed.revision.id },
+      { kind: "revision", id: undone.id },
     ]),
   );
   const reopenedCatalog = new Catalog(join(f.root, "catalog.sqlite"));

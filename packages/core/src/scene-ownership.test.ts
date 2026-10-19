@@ -101,7 +101,7 @@ async function fixture() {
   const asset = await assets.import(file, { kind: "import" }, probe);
   id = asset.id;
   const recording = catalog.allocate().recording;
-  catalog.registerSource(recording.recordingId, 1000000);
+  catalog.registerSource(recording.id, 1000000);
   const recordingCheck = recordingSceneOwner(catalog),
     assetCheck = assetSceneOwner(assets, acquisitions);
   const evidence = new SceneEvidenceStore(catalog, (identity, source) =>
@@ -125,7 +125,7 @@ async function fixture() {
       durationUs: selected.durationUs,
     };
   };
-  const recordingChunk = await analysisFor(recording.recordingId, file).analyze(
+  const recordingChunk = await analysisFor(recording.id, file).analyze(
     { startUs: 0, endUs: 1000000 },
     new AbortController().signal,
   );
@@ -150,7 +150,7 @@ async function fixture() {
 }
 test("real recording and asset owners with identical IDs and attempts retain their distinct scene policies", async () => {
   const f = await fixture();
-  expect(f.recording.recordingId).toBe(f.asset.id);
+  expect(f.recording.id).toBe(f.asset.id);
   expect(f.recording.sourceId).toBe(f.asset.id);
   const recording: SceneEvidenceIdentity = {
     ...f.identity,

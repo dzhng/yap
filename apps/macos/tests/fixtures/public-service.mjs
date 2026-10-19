@@ -127,8 +127,8 @@ export async function seedCapture(home, facts) {
   let take;
   try {
     take = store.allocate().recording;
-    assert.equal(take.recordingId, facts.recordingId);
-    store.ingestLifecycle(take.recordingId, {
+    assert.equal(take.id, facts.recordingId);
+    store.ingestLifecycle(take.id, {
       sourceId: take.sourceId,
       sequence: 1,
       state: "interrupted",
@@ -138,7 +138,7 @@ export async function seedCapture(home, facts) {
   } finally {
     store.close();
   }
-  await mkdir(join(library, "recordings", take.recordingId, "source"), {
+  await mkdir(join(library, "recordings", take.id, "source"), {
     recursive: true,
     mode: 0o700,
   });

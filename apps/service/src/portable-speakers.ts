@@ -56,7 +56,7 @@ export function portableProjectSpeakers(
   previous?: PortableSpeakerCheckpoint,
 ): PortableSpeakerCheckpoint {
   const { manifest: archive, files } = context;
-  if (archive.snapshot.project.projectId !== input.projectId)
+  if (archive.snapshot.project.id !== input.projectId)
     throw new CatalogError("NOT_FOUND", "Project is outside this package");
   const cursor = input.cursor as ProjectEvidenceCursor | undefined;
   if (
@@ -68,7 +68,7 @@ export function portableProjectSpeakers(
     throw changed();
   const revisionId =
     input.revisionId ?? cursor?.revisionId ?? archive.snapshot.project.currentRevisionId;
-  const revision = archive.snapshot.revisions.find((value) => value.revisionId === revisionId);
+  const revision = archive.snapshot.revisions.find((value) => value.id === revisionId);
   if (!revision) throw new CatalogError("NOT_FOUND", "Revision is outside this package");
   const assets = new Map(
     archive.resources.flatMap((value) =>

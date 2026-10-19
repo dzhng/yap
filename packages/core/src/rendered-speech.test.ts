@@ -273,8 +273,8 @@ async function fixture() {
       background: "#000000ff",
     },
   });
-  const placed = projects.apply(created.project.projectId, {
-    expectedRevisionId: created.revision.revisionId,
+  const placed = projects.apply(created.project.id, {
+    expectedRevisionId: created.revision.id,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -291,8 +291,8 @@ async function fixture() {
     ],
   });
   const selection = {
-    projectId: created.project.projectId,
-    revisionId: placed.revision.revisionId,
+    projectId: created.project.id,
+    revisionId: placed.revision.id,
     tap: { target: { kind: "output" as const }, point: { kind: "processed" as const } },
     range: { startUs: 1000001, endUs: 2000001 },
     rendition: { sampleRate: 16000, channels: 1 as const },
@@ -508,7 +508,7 @@ test("model absence is retryable and retained output reads refuse foreign revisi
     ],
   });
   expect(f.rendered.get(read).page.rows[0]).toMatchObject({ text: "rendered" });
-  expect(() => f.rendered.get({ ...read, revisionId: changed.revision.revisionId })).toThrow(
+  expect(() => f.rendered.get({ ...read, revisionId: changed.revision.id })).toThrow(
     "another revision",
   );
   const first = f.rendered.get({ ...read, limit: 1 });
@@ -559,18 +559,18 @@ test("a retained rendered publication without the current transcript policy cann
     expectedRevisionId: f.selection.revisionId,
     targetRevisionId: f.selection.revisionId,
   });
-  const selection = { ...f.selection, revisionId: restored.revisionId };
+  const selection = { ...f.selection, revisionId: restored.id };
   const historicalInput = JSON.parse(retained.input);
-  historicalInput.request.revisionId = restored.revisionId;
+  historicalInput.request.revisionId = restored.id;
   delete historicalInput.execution.policy;
   const historical = JSON.parse(retained.result);
-  historical.selection.revisionId = restored.revisionId;
-  historical.pcm.origin.selection.revisionId = restored.revisionId;
+  historical.selection.revisionId = restored.id;
+  historical.pcm.origin.selection.revisionId = restored.id;
   historical.transcript.engine.policy = "historical-policy";
   f.jobs.adoptArtifact(
     {
       ...retained,
-      target: { kind: "project", id: selection.projectId, revisionId: restored.revisionId },
+      target: { kind: "project", id: selection.projectId, revisionId: restored.id },
       attemptId: randomUUID(),
       input: JSON.stringify(historicalInput),
       result: JSON.stringify(historical),

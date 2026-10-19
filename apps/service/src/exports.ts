@@ -829,7 +829,7 @@ export class MediaExports {
       .slice(0, limit)
       .map(
         ({ rowid: _rowid, exportId, targetId, kind, revisionId, state, jobId, ...lifecycle }) => ({
-          exportId,
+          id: exportId,
           projectId: targetId,
           kind,
           revisionId,
@@ -885,7 +885,7 @@ export class MediaExports {
       ? this.owners.jobs.status(this.recoveryIdentity(intent, current.attemptId))
       : null;
     return {
-      exportId,
+      id: exportId,
       kind: intent.kind,
       ...summarize(intent, current),
       recovery,

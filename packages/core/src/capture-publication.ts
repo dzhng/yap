@@ -136,7 +136,7 @@ export type CapturePublicationState = {
 export function readCapturePublication(
   value: unknown,
   allocation: {
-    recordingId: string;
+    id: string;
     sourceId: string;
     camera: { sourceId: string; deviceId: string } | null;
   },
@@ -176,9 +176,7 @@ export function readCapturePublication(
       throw new CatalogError("INVALID_STATE", "Published source authority is immutable");
     const expectedId = kind === "primary" ? allocation.sourceId : allocation.camera?.sourceId;
     const expectedBinding =
-      kind === "primary"
-        ? undefined
-        : { recordingId: allocation.recordingId, ...allocation.camera! };
+      kind === "primary" ? undefined : { recordingId: allocation.id, ...allocation.camera! };
     if (
       receipt.kind !== kind ||
       receipt.sourceId !== expectedId ||

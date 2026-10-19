@@ -47,7 +47,7 @@ async function fixture(outputFrames = 6000) {
     const assets = new AssetStore(catalog, home);
     await assets.recover();
     const registry = new Models(home, globalThis.fetch, undefined, catalog);
-    const model = registry.list().find((m) => m.modelId === voiceProfile.id)!;
+    const model = registry.list().find((m) => m.id === voiceProfile.id)!;
     const ready = async () => {
       reads++;
       if (!available)
@@ -116,7 +116,7 @@ async function fixture(outputFrames = 6000) {
       probe,
       staging: join(home, "staging", "voice"),
       generate: async (modelId, request, signal) => {
-        expect(modelId).toBe(model.modelId);
+        expect(modelId).toBe(model.id);
         await ready();
         signal.throwIfAborted();
         executions++;
@@ -186,7 +186,7 @@ async function fixture(outputFrames = 6000) {
     current.probe,
   );
   const input: VoiceGenerationInput = {
-    modelId: current.model.modelId,
+    modelId: current.model.id,
     reference: { assetId: reference.id, streamId: "track:1" },
     referenceText: "Reference transcript.",
     text: "Desired sentence.",

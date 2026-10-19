@@ -171,7 +171,7 @@ export function mergeTranscript(
       row.type === "word" && speakerRecords && dependency
         ? applySpeakerCorrections(
             attributeTranscriptWords(
-              [{ id: row.wordId, sourceRange: row.sourceRange }],
+              [{ id: row.id, sourceRange: row.sourceRange }],
               turnsFor(clip),
               speakerLabels ? { labels: speakerLabels(dependency.evidence[0]!) } : {},
             ),

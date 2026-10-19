@@ -176,7 +176,7 @@ export class CaptureService {
           throw new CatalogError(
             "CAPTURE_RECOVERY_PENDING",
             "The previous take is still finalizing; inspect it before restarting",
-            { recordingId: discarded.recordingId },
+            { recordingId: discarded.id },
           );
       } catch (error) {
         // The take this restart named could not be discarded, so its replacement never reached
@@ -200,7 +200,7 @@ export class CaptureService {
       throw new CatalogError(
         "UNRESOLVED_START",
         "This take's start is still unproved; retry the same request",
-        { recordingId: settled.recordingId, state: settled.state },
+        { recordingId: settled.id, state: settled.state },
       );
     return settled;
   }
@@ -295,7 +295,7 @@ export class CaptureService {
     if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
     for (const recording of this.store.unsettled()) {
       if (this.stopping) break;
-      if (this.store.isDeleting(recording.recordingId)) continue;
+      if (this.store.isDeleting(recording.id)) continue;
       try {
         const started = await this.serialize(async () => {
           await this.reconcile(recording);
@@ -303,7 +303,7 @@ export class CaptureService {
         });
         await started.work;
       } catch (error) {
-        this.log(`reconcile failed for ${recording.recordingId}: ${(error as Error).message}`);
+        this.log(`reconcile failed for ${recording.id}: ${(error as Error).message}`);
       }
     }
   }
@@ -313,7 +313,7 @@ export class CaptureService {
       const kinds =
         recording.camera === null ? (["primary"] as const) : (["primary", "camera"] as const);
       for (const kind of kinds) {
-        await mkdir(sourceDirectory(this.home, recording.recordingId, kind), {
+        await mkdir(sourceDirectory(this.home, recording.id, kind), {
           recursive: true,
           mode: 0o700,
         });
@@ -321,28 +321,28 @@ export class CaptureService {
     } catch (error) {
       throw this.refused(recording, error);
     }
-    this.store.get(recording.recordingId);
+    this.store.get(recording.id);
     const answer = await this.native(
       "capture.start",
       nativeStartSchema.parse({
         ...selection,
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         ...(recording.camera === null
           ? {}
           : {
               cameraSourceId: recording.camera.sourceId,
               cameraDeviceId: recording.camera.deviceId,
-              cameraDirectory: sourceDirectory(this.home, recording.recordingId, "camera"),
+              cameraDirectory: sourceDirectory(this.home, recording.id, "camera"),
             }),
-        outputDirectory: sourceDirectory(this.home, recording.recordingId),
+        outputDirectory: sourceDirectory(this.home, recording.id),
       }),
     );
     if (answer.ok) return this.apply(recording, answer.data);
     if (!unanswered(answer.error.code)) throw this.refused(recording, fromNative(answer));
     const failed = await this.abandon(recording);
     throw new CatalogError(answer.error.code, answer.error.message, {
-      recordingId: failed.recordingId,
+      recordingId: failed.id,
       state: failed.state,
     });
   }
@@ -363,7 +363,7 @@ export class CaptureService {
       sourceDurationUs: null,
     });
     return new CatalogError(code, (error as Error).message, {
-      recordingId: failed.recordingId,
+      recordingId: failed.id,
       state: failed.state,
     });
   }
@@ -375,7 +375,7 @@ export class CaptureService {
    * session's own reports and by the next startup's recovery.
    */
   private async abandon(recording: Recording): Promise<Recording> {
-    const stopped = await this.native("capture.stop", { recordingId: recording.recordingId });
+    const stopped = await this.native("capture.stop", { recordingId: recording.id });
     if (stopped.ok) {
       const report = this.readReport(recording, stopped.data);
       // A finalizing acknowledgment still owns live media; only its later terminal report
@@ -388,12 +388,12 @@ export class CaptureService {
       try {
         return await this.reconcile(recording);
       } catch (error) {
-        this.log(`recovery failed for ${recording.recordingId}: ${(error as Error).message}`);
+        this.log(`recovery failed for ${recording.id}: ${(error as Error).message}`);
       }
     }
-    const current = this.store.get(recording.recordingId);
+    const current = this.store.get(recording.id);
     if (!isSettled(current.state))
-      this.log(`unsettled start for ${recording.recordingId}: capture may still be running`);
+      this.log(`unsettled start for ${recording.id}: capture may still be running`);
     return current;
   }
 
@@ -466,7 +466,7 @@ export class CaptureService {
   }
 
   private async endNativeCapture(recording: Recording): Promise<CaptureReport | null> {
-    const answer = await this.native("capture.cancel", { recordingId: recording.recordingId });
+    const answer = await this.native("capture.cancel", { recordingId: recording.id });
     if (answer.ok) return this.readReport(recording, answer.data);
     if (answer.error.code === "INVALID_STATE") return null;
     throw fromNative(answer);
@@ -482,8 +482,7 @@ export class CaptureService {
   }
 
   private async reconcile(recording: Recording, discardIfEmpty = false): Promise<Recording> {
-    if (this.recovery?.recordingId === recording.recordingId)
-      return this.store.get(recording.recordingId);
+    if (this.recovery?.recordingId === recording.id) return this.store.get(recording.id);
     this.requireRecoveryQuiet();
     // The app can outlive its service. Never fence its native sequence merely because this service restarted.
     const device = captureDeviceSchema.parse(await this.ask("capture.status", {}));
@@ -491,9 +490,9 @@ export class CaptureService {
       throw new CatalogError(
         "CAPTURE_NOT_QUIET",
         "Native capture has not proved recovery can begin",
-        { recordingId: recording.recordingId, deviceRecordingId: device.recordingId },
+        { recordingId: recording.id, deviceRecordingId: device.recordingId },
       );
-    const current = this.store.get(recording.recordingId);
+    const current = this.store.get(recording.id);
     if (isSettled(current.state)) return current;
     const finalizing = this.author(current, {
       state: "finalizing",
@@ -507,7 +506,7 @@ export class CaptureService {
       },
     });
     const controller = new AbortController();
-    const attempt = { recordingId: current.recordingId, controller, work: Promise.resolve() };
+    const attempt = { recordingId: current.id, controller, work: Promise.resolve() };
     this.recovery = attempt;
     attempt.work = Promise.resolve()
       .then(async () => {
@@ -515,8 +514,8 @@ export class CaptureService {
           current,
           AbortSignal.any([controller.signal, this.lifetime.signal]),
         );
-        if (this.store.isDeleting(current.recordingId)) return;
-        const selected = this.store.get(current.recordingId);
+        if (this.store.isDeleting(current.id)) return;
+        const selected = this.store.get(current.id);
         if (isSettled(selected.state)) return;
         if (
           discardIfEmpty &&
@@ -524,7 +523,7 @@ export class CaptureService {
           recovered.durationUs === 0 &&
           selected.publication?.camera?.state !== "published"
         ) {
-          const entries = await readdir(sourceDirectory(this.home, current.recordingId)).catch(
+          const entries = await readdir(sourceDirectory(this.home, current.id)).catch(
             (error: NodeJS.ErrnoException) => {
               if (error.code === "ENOENT") return [];
               throw error;
@@ -534,17 +533,17 @@ export class CaptureService {
             throw new CatalogError(
               "CAPTURE_RECOVERY_UNRESOLVED",
               "Source bytes remain but recovery could not prove their outcome",
-              { recordingId: current.recordingId },
+              { recordingId: current.id },
             );
           const canceled = this.author(selected, { state: "canceled" });
           if (this.sourceLifetime)
             await this.sourceLifetime.discard(
-              current.recordingId,
+              current.id,
               this.lifetime.signal,
               async () => canceled,
             );
           else
-            await rm(recordingDirectory(this.home, current.recordingId), {
+            await rm(recordingDirectory(this.home, current.id), {
               recursive: true,
               force: true,
             });
@@ -553,8 +552,8 @@ export class CaptureService {
         }
       })
       .catch((error: unknown) => {
-        if (this.store.isDeleting(current.recordingId)) return;
-        const selected = this.store.get(current.recordingId);
+        if (this.store.isDeleting(current.id)) return;
+        const selected = this.store.get(current.id);
         if (isSettled(selected.state)) return;
         const finalizationError = {
           code:
@@ -573,7 +572,7 @@ export class CaptureService {
         if (finalizationError.code.length > 128) finalizationError.code = "RECOVERY_FAILED";
         this.author(selected, { state: "finalizing", finalizationError });
         this.log(
-          `recovery failed for ${selected.recordingId}: ${finalizationError.code}: ${finalizationError.message}`,
+          `recovery failed for ${selected.id}: ${finalizationError.code}: ${finalizationError.message}`,
         );
       })
       .finally(() => {
@@ -594,8 +593,8 @@ export class CaptureService {
       { inputsClosed: boolean; outcome: CaptureSourceOutcome | null }
     >();
     const publish = () => {
-      if (this.store.isDeleting(recording.recordingId)) return;
-      const current = this.store.get(recording.recordingId);
+      if (this.store.isDeleting(recording.id)) return;
+      const current = this.store.get(recording.id);
       if (isSettled(current.state)) return;
       const previous = current.publication!;
       const inputsClosed =
@@ -624,12 +623,12 @@ export class CaptureService {
               : {
                   kind,
                   sourceId: recording.camera!.sourceId,
-                  binding: { recordingId: recording.recordingId, ...recording.camera! },
+                  binding: { recordingId: recording.id, ...recording.camera! },
                 };
           const recovered = await this.worker(
             "media.recover",
             {
-              directory: sourceDirectory(this.home, recording.recordingId, kind),
+              directory: sourceDirectory(this.home, recording.id, kind),
               sourceAuthority,
             },
             { signal, timeoutMs },
@@ -641,7 +640,7 @@ export class CaptureService {
           publish();
           if (result.cleanupFailure)
             this.log(
-              `cleanup pending for ${recording.recordingId}/${kind}: ${result.cleanupFailure.code}: ${result.cleanupFailure.message}`,
+              `cleanup pending for ${recording.id}/${kind}: ${result.cleanupFailure.code}: ${result.cleanupFailure.message}`,
             );
           return result;
         } catch (error) {
@@ -689,7 +688,7 @@ export class CaptureService {
     recording: Recording,
     kind: "primary" | "camera",
   ): Promise<number> {
-    const directory = sourceDirectory(this.home, recording.recordingId, kind);
+    const directory = sourceDirectory(this.home, recording.id, kind);
     const names = [
       "capture.journal.jsonl",
       "video.mov",
@@ -767,9 +766,9 @@ export class CaptureService {
 
   private readReport(recording: Recording, data: unknown): CaptureReport {
     const report = captureReportSchema.parse(data);
-    if (report.recordingId !== recording.recordingId || report.sourceId !== recording.sourceId)
+    if (report.recordingId !== recording.id || report.sourceId !== recording.sourceId)
       throw new CatalogError("INVALID_STATE", "Native reported another take", {
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         reportedRecordingId: report.recordingId,
       });
     return report;
@@ -782,7 +781,7 @@ export class CaptureService {
    */
   private author(recording: Recording, outcome: AuthoredOutcome): Recording {
     return this.observed(
-      this.store.ingestLifecycle(recording.recordingId, {
+      this.store.ingestLifecycle(recording.id, {
         ...outcome,
         sourceId: recording.sourceId,
         sequence: Math.max(recording.lifecycleSequence + 1, NATIVE_SEQUENCE_LIMIT + 1),
@@ -795,9 +794,7 @@ export class CaptureService {
     try {
       this.changed(recording);
     } catch (error) {
-      this.log(
-        `processing admission failed for ${recording.recordingId}: ${(error as Error).message}`,
-      );
+      this.log(`processing admission failed for ${recording.id}: ${(error as Error).message}`);
     }
     return recording;
   }

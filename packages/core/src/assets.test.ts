@@ -751,7 +751,7 @@ test("public asset headers and immutable ordinal pages preserve complete physica
   const header = omit(asset.streams[0]!, "segments");
   expect(store.describe(asset.id)).toEqual({
     ...asset,
-    streams: [{ ...omit(header, "id"), streamId: header.id, segmentCount: 3 }],
+    streams: [{ ...header, segmentCount: 3 }],
   });
   const first = store.segments(asset.id, "audio:0", { limit: 2 });
   expect(first.segments).toEqual(segments.slice(0, 2).map((row, ordinal) => ({ ordinal, ...row })));

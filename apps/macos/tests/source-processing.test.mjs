@@ -19,7 +19,7 @@ test("explicit source admission supports both spellings of an absolute temporary
       sourceId: randomUUID(),
       sourceDurationUs: 1_000_000,
     });
-    const source = join(home, "library", "recordings", take.recordingId, "source");
+    const source = join(home, "library", "recordings", take.id, "source");
     await mkdir(source, { recursive: true });
     const movie = spawnSync(
       "ffmpeg",

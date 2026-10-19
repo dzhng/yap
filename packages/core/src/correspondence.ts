@@ -44,7 +44,7 @@ export function admitCorrespondence(input: {
       );
   }
   const unsigned = {
-    evidenceId: input.evidenceId,
+    id: input.evidenceId,
     generation: input.generation,
     recipe: "temporal-correspondence-v1" as const,
     left: input.left,

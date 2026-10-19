@@ -88,7 +88,7 @@ async function fixture(render = renderer) {
         if (target.kind !== "project") throw new Error("Expected project");
         return {
           ...target,
-          revisionId: projects.revision(target.id, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).id,
         };
       },
       isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.id),
@@ -144,10 +144,10 @@ async function fixture(render = renderer) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   projects.apply(projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "track" },
       {
@@ -297,7 +297,7 @@ test.each(["complete", "missing", "reordered", "wrong-source"] as const)(
     });
     f.projects.apply(f.projectId, {
       requestId: "second-layer",
-      expectedRevisionId: f.projects.revision(f.projectId).revisionId,
+      expectedRevisionId: f.projects.revision(f.projectId).id,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 1 }, label: "second" },
         {
@@ -385,7 +385,7 @@ test("project frame receipts preserve rational source requests with integer labe
   const revision = f.projects.revision(f.projectId);
   f.projects.apply(f.projectId, {
     requestId: "cfr",
-    expectedRevisionId: revision.revisionId,
+    expectedRevisionId: revision.id,
     operations: [{ operation: "canvas.set", canvas: { fps: { numerator: 30, denominator: 1 } } }],
   });
   const request = { projectId: f.projectId, atUs: 999999 };
@@ -496,7 +496,7 @@ async function fallbackFixture(fallbacks: (clipId: string) => unknown[], fonts?:
   }));
   const placed = f.projects.apply(f.projectId, {
     requestId: "caption",
-    expectedRevisionId: f.projects.revision(f.projectId).revisionId,
+    expectedRevisionId: f.projects.revision(f.projectId).id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 1 }, label: "captions" },
       {

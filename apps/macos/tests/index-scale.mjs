@@ -175,7 +175,7 @@ test("thirty-minute generated native index scale", { timeout: timeoutMs + 150_00
     const asset = await call("asset.get", { assetId: imported.published.output.assetId });
     const streams = asset.streams.filter((stream) => stream.kind === "video");
     assert.equal(streams.length, 1);
-    const selector = { assetId: asset.assetId, streamId: streams[0].streamId };
+    const selector = { assetId: asset.id, streamId: streams[0].id };
     Object.assign(report, selector);
     let ready,
       nextCheckpoint = 0,

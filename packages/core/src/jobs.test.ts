@@ -167,7 +167,7 @@ test("update blocking includes dependency wait and queued work even when idle ha
 
 /** A settled source: no capture of it is still outstanding. */
 function finished(store: CaptureStore, sourceDurationUs = 20): string {
-  const { recordingId, sourceId } = store.allocate().recording;
+  const { id: recordingId, sourceId } = store.allocate().recording;
   store.ingestLifecycle(recordingId, { sourceId, sequence: 1, state: "recording" });
   store.ingestLifecycle(recordingId, { sourceId, sequence: 2, state: "finalizing" });
   store.ingestLifecycle(recordingId, {
@@ -189,7 +189,7 @@ function project(projects: ReturnType<typeof projectStoreFixture>) {
       background: "#000000ff",
     },
   });
-  return { projectId: created.project.projectId, revisionId: created.revision.revisionId };
+  return { projectId: created.project.id, revisionId: created.revision.id };
 }
 
 afterEach(async () => {
@@ -321,7 +321,7 @@ test("an edit during processing does not move the revision the work was admitted
   }).revision;
   attempt.finish("transcript-a");
   await queue.idle();
-  expect(projects.revision(projectId).revisionId).toBe(edited.revisionId);
+  expect(projects.revision(projectId).id).toBe(edited.id);
   expect(
     queue.status({
       target: { kind: "project" as const, id: projectId, revisionId: revisionId },
@@ -337,12 +337,11 @@ test("an edit during processing does not move the revision the work was admitted
     result: "transcript-a",
   });
   expect(
-    queue.submit({ ...request, target: { ...request.target, revisionId: edited.revisionId } })
-      .target,
+    queue.submit({ ...request, target: { ...request.target, revisionId: edited.id } }).target,
   ).toEqual({
     kind: "project",
     id: projectId,
-    revisionId: edited.revisionId,
+    revisionId: edited.id,
   });
 });
 
@@ -385,7 +384,7 @@ test("a new heavy job waits while a take is capturing; frame work does not", asy
   const { store, queue, attempts, started } = fixture();
   const recordingId = finished(store);
   const live = store.allocate().recording;
-  store.ingestLifecycle(live.recordingId, {
+  store.ingestLifecycle(live.id, {
     sourceId: live.sourceId,
     sequence: 1,
     state: "recording",
@@ -418,7 +417,7 @@ test("a new heavy job waits while a take is capturing; frame work does not", asy
     published: null,
   });
 
-  store.ingestLifecycle(live.recordingId, {
+  store.ingestLifecycle(live.id, {
     sourceId: live.sourceId,
     sequence: 2,
     state: "interrupted",
@@ -476,15 +475,15 @@ test("domain-admitted work that outlives a discarded capture publishes nothing a
     return { ...target, revisionId: null };
   };
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  store.registerSource(recording.recordingId, 20);
+  store.registerSource(recording.id, 20);
   const [running, alsoRunning, waiting] = ["5s", "6s", "7s"].map((input) =>
     queue.submit({
-      target: { kind: "recording" as const, id: recording.recordingId, revisionId: null },
+      target: { kind: "recording" as const, id: recording.id, revisionId: null },
       artifact: `frame-${input}`,
       lane: "frame",
       input,
@@ -493,7 +492,7 @@ test("domain-admitted work that outlives a discarded capture publishes nothing a
   const attempt = await started(running!.attemptId);
   const other = await started(alsoRunning!.attemptId);
   expect(attempts.has(waiting!.attemptId)).toBe(false);
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 2,
     state: "canceled",
@@ -502,7 +501,7 @@ test("domain-admitted work that outlives a discarded capture publishes nothing a
   attempt.finish("answer-for-a-discarded-take");
   other.fail(new Error("worker stopped"));
   await queue.idle();
-  expect(store.get(recording.recordingId).state).toBe("canceled");
+  expect(store.get(recording.id).state).toBe("canceled");
   expect(store.list().recordings).toEqual([]);
   expect(attempts.has(waiting!.attemptId)).toBe(false);
   for (const job of [running!, waiting!]) {
@@ -669,12 +668,12 @@ test("the same parameters on an edited revision never reuse the old running job"
   }).revision;
   const second = queue.submit({
     ...request,
-    target: { ...request.target, revisionId: revision.revisionId },
+    target: { ...request.target, revisionId: revision.id },
   });
   expect(second.target).toEqual({
     kind: "project",
     id: projectId,
-    revisionId: revision.revisionId,
+    revisionId: revision.id,
   });
   expect(second.jobId).not.toBe(first.jobId);
 });
@@ -697,7 +696,7 @@ test("out-of-order results retain their own revision and input identities", asyn
   }).revision;
   const current = queue.submit({
     ...request,
-    target: { ...request.target, revisionId: edited.revisionId },
+    target: { ...request.target, revisionId: edited.id },
   });
   (await started(current.attemptId)).finish("new-revision-pixels");
   // An acknowledged next start proves the preceding result was durably settled.
@@ -706,12 +705,12 @@ test("out-of-order results retain their own revision and input identities", asyn
   oldWork.finish("old-revision-pixels");
   await queue.idle();
   expect(queue.status(current).published).toMatchObject({
-    target: { revisionId: edited.revisionId },
+    target: { revisionId: edited.id },
     input: "at=2",
     result: "new-revision-pixels",
   });
   expect(queue.status(alternate).published).toMatchObject({
-    target: { revisionId: edited.revisionId },
+    target: { revisionId: edited.id },
     input: "at=4",
     result: "other-time-pixels",
   });
@@ -1012,7 +1011,7 @@ test("startup skips deletion-marked queued work and runs the next recording", as
     input: "kept",
   });
   first.store.markDeleting(recordingId);
-  first.store.ingestLifecycle(live.recordingId, {
+  first.store.ingestLifecycle(live.id, {
     sourceId: live.sourceId,
     sequence: 1,
     state: "canceled",
@@ -1263,7 +1262,7 @@ test("capture blocks package heavy work while frame work proceeds", async () => 
   await turn();
   expect(a.attempts).toEqual([]);
   expect(b.attempts).toHaveLength(1);
-  store.ingestLifecycle(take.recordingId, {
+  store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "canceled",
@@ -1670,7 +1669,7 @@ test("ready admission respects package capacity, FIFO and capture while frame wo
     lane: "frame",
   });
   (await started(frame.attemptId)).finish("frame");
-  store.ingestLifecycle(capture.recordingId, {
+  store.ingestLifecycle(capture.id, {
     sourceId: capture.sourceId,
     sequence: 1,
     state: "canceled",
@@ -2675,7 +2674,7 @@ test("inspection keeps a previous publication during replacement and hides it af
 test("source-owned recording jobs retain null identity without manufacturing a revision", async () => {
   const { store, queue, started, path } = fixture();
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -2683,7 +2682,7 @@ test("source-owned recording jobs retain null identity without manufacturing a r
     sourceDurationUs: null,
   });
   const request = {
-    target: { kind: "recording" as const, id: recording.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: recording.id, revisionId: null },
     artifact: "capture-cleanup",
     lane: "heavy" as const,
     input: recording.sourceId,
@@ -2742,7 +2741,7 @@ test("source targets stay distinct from explicit project revisions and refuse re
 test("source-owned targets survive reopen, retry, cancellation and owner deletion fencing", async () => {
   const f = fixture();
   const recording = f.store.allocate().recording;
-  f.store.ingestLifecycle(recording.recordingId, {
+  f.store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -2750,7 +2749,7 @@ test("source-owned targets survive reopen, retry, cancellation and owner deletio
     sourceDurationUs: null,
   });
   const request = {
-    target: { kind: "recording" as const, id: recording.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: recording.id, revisionId: null },
     artifact: "capture-cleanup",
     lane: "heavy" as const,
     input: recording.sourceId,
@@ -2777,13 +2776,11 @@ test("source-owned targets survive reopen, retry, cancellation and owner deletio
   expect(reopened.queue.status(request).published).toBeNull();
   const again = reopened.queue.retry(first.jobId);
   const deleting = await reopened.started(again.attemptId);
-  reopened.store.markDeleting(recording.recordingId);
+  reopened.store.markDeleting(recording.id);
   let closed = false;
-  const drained = reopened.queue
-    .drainOwner({ kind: "recording", id: recording.recordingId })
-    .then(() => {
-      closed = true;
-    });
+  const drained = reopened.queue.drainOwner({ kind: "recording", id: recording.id }).then(() => {
+    closed = true;
+  });
   await Promise.resolve();
   expect(deleting.signal.aborted).toBe(true);
   expect(closed).toBe(false);
@@ -2791,7 +2788,7 @@ test("source-owned targets survive reopen, retry, cancellation and owner deletio
   deleting.finish("{}");
   await drained;
   expect(reopened.queue.status(request).published).toBeNull();
-  await reopened.queue.forgetOwner({ kind: "recording", id: recording.recordingId });
+  await reopened.queue.forgetOwner({ kind: "recording", id: recording.id });
   expect(() => reopened.queue.inspect(first.jobId)).toThrow(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
@@ -2801,13 +2798,13 @@ test("source-owned work refuses live or discarded recordings without pinning a r
   const { store, queue } = fixture();
   const take = store.allocate().recording;
   const request = {
-    target: { kind: "recording" as const, id: take.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: take.id, revisionId: null },
     artifact: "capture-cleanup",
     lane: "heavy" as const,
     input: take.sourceId,
   };
   expect(() => queue.submit(request)).toThrow(expect.objectContaining({ code: "INVALID_STATE" }));
-  store.ingestLifecycle(take.recordingId, {
+  store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "canceled",

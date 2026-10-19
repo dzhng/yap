@@ -375,7 +375,7 @@ test("the retained native recording transcript preserves every inherited word an
       "utf8",
     ),
   ) as { id: string; text: string; sourceRange: { startUs: number; endUs: number } }[];
-  const { recordingId, sourceId } = library.allocate().recording;
+  const { id: recordingId, sourceId } = library.allocate().recording;
   library.ingestLifecycle(recordingId, {
     sourceId,
     sequence: 1,

@@ -387,10 +387,7 @@ export class AssetStore {
   }
   /** Public discovery omits physical rows; immutable segment pages retain their full meaning. */
   describe(id: string): Omit<Asset, "streams"> & {
-    streams: (Omit<Asset["streams"][number], "id" | "segments"> & {
-      streamId: string;
-      segmentCount: number;
-    })[];
+    streams: (Omit<Asset["streams"][number], "segments"> & { segmentCount: number })[];
   } {
     const asset = this.header(id);
     const count = this.store.catalog.prepare(
@@ -398,14 +395,10 @@ export class AssetStore {
     );
     return {
       ...asset,
-      streams: asset.streams.map((stream) => {
-        const { id: streamId, segments: _segments, ...rest } = stream;
-        return {
-          ...rest,
-          streamId,
-          segmentCount: count.get(id, streamId)!.count as number,
-        };
-      }),
+      streams: asset.streams.map(({ segments: _segments, ...stream }) => ({
+        ...stream,
+        segmentCount: count.get(id, stream.id)!.count as number,
+      })),
     };
   }
   segments(

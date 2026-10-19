@@ -82,9 +82,9 @@ test("project retirement fences derived files and cannot purge another owner kin
       background: "#000000ff",
     },
   }).project;
-  const owner = { kind: "project" as const, id: project.projectId };
+  const owner = { kind: "project" as const, id: project.id };
   // Equal IDs must remain distinct even when today's generators use different shapes.
-  const other = { kind: "asset" as const, id: project.projectId };
+  const other = { kind: "asset" as const, id: project.id };
   const assertAvailable = (candidate: JobOwner) => {
     if (candidate.kind === "project") projects.get(candidate.id);
     else if (candidate.kind !== "asset" || candidate.id !== other.id)

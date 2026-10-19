@@ -304,7 +304,7 @@ export function recordingTranscriptOwner(store: CaptureStore) {
       throw new CatalogError("INVALID_EVIDENCE", "Recording transcript requires a recording owner");
     const recording = store.get(identity.owner.id);
     if (
-      !store.isAvailable(recording.recordingId) ||
+      !store.isAvailable(recording.id) ||
       recording.sourceId !== identity.sourceId ||
       recording.sourceDurationUs === null ||
       recording.sourceDurationUs !== source.durationUs

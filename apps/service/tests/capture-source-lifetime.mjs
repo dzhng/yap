@@ -80,7 +80,7 @@ async function fixture(t, name) {
     newId: () => (++allocated === 2 ? header.sessionID : randomUUID()),
   });
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -88,7 +88,7 @@ async function fixture(t, name) {
     sourceDurationUs: null,
   });
   store.close();
-  const source = join(library, "recordings", recording.recordingId, "source");
+  const source = join(library, "recordings", recording.id, "source");
   await mkdir(source, { recursive: true, mode: 0o700 });
   await cp(join(root, "take"), source, { recursive: true });
   const report = {
@@ -186,11 +186,11 @@ test(
     const before = await f.hashes();
     await chmod(denied, 0o500);
     await f.start();
-    const recording = await f.call("recording.get", { recordingId: f.recording.recordingId });
-    const admitted = await f.call("recording.cleanup", { recordingId: f.recording.recordingId });
+    const recording = await f.call("recording.get", { recordingId: f.recording.id });
+    const admitted = await f.call("recording.cleanup", { recordingId: f.recording.id });
     assert.deepEqual(admitted.target, {
       kind: "recording",
-      id: f.recording.recordingId,
+      id: f.recording.id,
       revisionId: null,
     });
     const failed = await f.terminal(admitted.jobId);
@@ -215,20 +215,17 @@ test(
       { role: "system", outcome: "alreadyClear", reason: null },
     ]);
     assert.deepEqual(await f.hashes(), before);
-    assert.deepEqual(
-      await f.call("recording.get", { recordingId: f.recording.recordingId }),
-      recording,
-    );
+    assert.deepEqual(await f.call("recording.get", { recordingId: f.recording.id }), recording);
     assert.deepEqual((await f.call("project.list")).projects, []);
     assert.equal(
-      (await f.call("recording.cleanup", { recordingId: f.recording.recordingId })).attemptId,
+      (await f.call("recording.cleanup", { recordingId: f.recording.id })).attemptId,
       ready.attemptId,
     );
     f.report.before = before;
     f.report.after = await f.hashes();
-    await f.call("recording.delete", { recordingId: f.recording.recordingId });
+    await f.call("recording.delete", { recordingId: f.recording.id });
     await assert.rejects(readFile(join(f.source, "video.mov")), { code: "ENOENT" });
-    await f.call("recording.delete", { recordingId: f.recording.recordingId });
+    await f.call("recording.delete", { recordingId: f.recording.id });
     f.report.passed = true;
   },
 );
@@ -255,7 +252,7 @@ test(
     ];
     const before = await f.hashes(names);
     await f.start();
-    const admitted = await f.call("recording.cleanup", { recordingId: f.recording.recordingId });
+    const admitted = await f.call("recording.cleanup", { recordingId: f.recording.id });
     const ready = await f.terminal(admitted.jobId);
     assert.equal(ready.state, "ready", JSON.stringify(ready));
     assert.deepEqual(ready.published.output.roles, [

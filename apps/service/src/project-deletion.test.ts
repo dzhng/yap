@@ -156,17 +156,17 @@ test("deletion drains canceled executors before releasing shared media; interrup
       generation,
       scenes: [],
     });
-    const interruptedIndex = indexIdentity(one.project.projectId, "unfinished");
+    const interruptedIndex = indexIdentity(one.project.id, "unfinished");
     index.begin(interruptedIndex);
     const unfinishedPicture = index.outputPath(interruptedIndex, 0);
     await writeFile(unfinishedPicture, "unpublished worker output");
-    const siblingIndex = indexIdentity(two.project.projectId, "ready-empty");
+    const siblingIndex = indexIdentity(two.project.id, "ready-empty");
     index.begin(siblingIndex);
     const siblingMetadata = await index.finish(siblingIndex);
     const place = (project: typeof one) =>
-      projects.apply(project.project.projectId, {
+      projects.apply(project.project.id, {
         requestId: "place",
-        expectedRevisionId: project.revision.revisionId,
+        expectedRevisionId: project.revision.id,
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
           {
@@ -185,19 +185,19 @@ test("deletion drains canceled executors before releasing shared media; interrup
       second = place(two);
     const target = {
       kind: "project" as const,
-      id: one.project.projectId,
-      revisionId: first.revision.revisionId,
+      id: one.project.id,
+      revisionId: first.revision.id,
     };
     const cached = cache.reserve(target);
     await writeFile(cached.path, "cached first project");
     await cache.publish(cached.id);
-    const sibling = cache.reserve({ kind: "project", id: two.project.projectId });
+    const sibling = cache.reserve({ kind: "project", id: two.project.id });
     await writeFile(sibling.path, "cached second project");
     await cache.publish(sibling.id);
     const delivered = delivery.open({ kind: "project", id: target.id }, () =>
       cache.acquire(cached.id),
     );
-    const siblingDelivery = delivery.open({ kind: "project", id: two.project.projectId }, () =>
+    const siblingDelivery = delivery.open({ kind: "project", id: two.project.id }, () =>
       cache.acquire(sibling.id),
     );
     const read = cache.acquire(cached.id)!;
@@ -219,7 +219,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
         .references(asset.id)
         .map((r) => r.id)
         .sort(),
-    ).toEqual([first.revision.revisionId, second.revision.revisionId].sort());
+    ).toEqual([first.revision.id, second.revision.id].sort());
     expect(() => projects.get(target.id)).toThrow(/does not exist/);
     expect(() => queue.retry(job.jobId)).toThrow();
     const failed = expect(removing).rejects.toMatchObject({
@@ -257,7 +257,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
           .references(asset.id)
           .map((ref) => ref.id)
           .sort(),
-      ).toEqual([first.revision.revisionId, second.revision.revisionId].sort());
+      ).toEqual([first.revision.id, second.revision.id].sort());
       expect(await readFile(cached.path, "utf8")).toBe("cached first project");
       expect(() => cache.acquire(cached.id)).toThrow(/does not exist/);
       releaseRead();
@@ -279,14 +279,12 @@ test("deletion drains canceled executors before releasing shared media; interrup
           )
           .all(target.id),
       ).toEqual([]);
-      expect(assets.references(asset.id)).toEqual([
-        { kind: "revision", id: second.revision.revisionId },
-      ]);
+      expect(assets.references(asset.id)).toEqual([{ kind: "revision", id: second.revision.id }]);
       expect(assets.get(asset.id)).toEqual(asset);
       expect(() => queue.job(job.jobId)).toThrow(/not found|does not exist/i);
-      expect(projects.revision(two.project.projectId)).toEqual(second.revision);
+      expect(projects.revision(two.project.id)).toEqual(second.revision);
       expect(await resumed.delete({ kind: "project", id: target.id })).toEqual({
-        projectId: target.id,
+        id: target.id,
         deleted: true,
         freedBytes: 0,
       });
@@ -337,9 +335,7 @@ test("project plans resume every phase boundary with the real retirement registr
         background: "#000000ff",
       },
     }).project;
-    await expect(
-      first.deletion.delete({ kind: "project", id: project.projectId }),
-    ).rejects.toMatchObject({
+    await expect(first.deletion.delete({ kind: "project", id: project.id })).rejects.toMatchObject({
       code: "DELETE_FAILED",
     });
     await first.close();
@@ -348,15 +344,15 @@ test("project plans resume every phase boundary with the real retirement registr
     await resumed.deletion.resume((error) => failures.push(error));
     if (failedPhase === "plan")
       await expect(
-        resumed.deletion.delete({ kind: "project", id: project.projectId }),
-      ).resolves.toMatchObject({ projectId: project.projectId, deleted: true });
+        resumed.deletion.delete({ kind: "project", id: project.id }),
+      ).resolves.toMatchObject({ id: project.id, deleted: true });
     expect(failures, `${failedPhase}:${failedTiming}`).toEqual([]);
     expect(resumed.projects.deletionsPage().projectIds).toEqual([]);
     expect(resumed.catalog.catalog.prepare("SELECT * FROM deletion_plans").all()).toEqual([]);
     expect(
       resumed.catalog.catalog
         .prepare("SELECT * FROM project_revisions WHERE projectId=?")
-        .all(project.projectId),
+        .all(project.id),
     ).toEqual([]);
     await resumed.close();
     await rm(home, { recursive: true, force: true });

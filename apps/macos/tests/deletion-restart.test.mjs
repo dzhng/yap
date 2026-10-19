@@ -58,14 +58,14 @@ test(
     await cache.reconcile();
     async function seed(label) {
       const take = store.allocate().recording;
-      store.ingestLifecycle(take.recordingId, {
+      store.ingestLifecycle(take.id, {
         sourceId: take.sourceId,
         sequence: 1,
         state: "interrupted",
         reason: "generated leftover fixture",
         sourceDurationUs: 1_000_000,
       });
-      const directory = join(library, "recordings", take.recordingId);
+      const directory = join(library, "recordings", take.id);
       const source = file(
         join(directory, "source", "video.mov"),
         `${label}: generated source leftover`,
@@ -140,7 +140,7 @@ test(
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
       for (const recordingId of [target.recordingId, missingId])
         assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
-          recordingId,
+          id: recordingId,
           deleted: true,
           freedBytes: recordingId === missingId ? 16 : 0,
         });
@@ -148,7 +148,7 @@ test(
       ({ instance } = await launchReady(home));
       for (const recordingId of [target.recordingId, missingId])
         assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
-          recordingId,
+          id: recordingId,
           deleted: true,
           freedBytes: recordingId === missingId ? 16 : 0,
         });

@@ -114,7 +114,7 @@ export async function reviewBundle(request, invoke = createCli(request.cli), art
       projectId: request.projectId,
       ...(selection.revisionId ? { revisionId: selection.revisionId } : {}),
     });
-    const revisionId = resolved.revision?.revisionId;
+    const revisionId = resolved.revision?.id;
     if (!revisionId || (selection.revisionId && selection.revisionId !== revisionId))
       throw failure("ARTIFACT_CHANGED", "Requested revision is unavailable");
     const identity = { projectId: request.projectId, revisionId };

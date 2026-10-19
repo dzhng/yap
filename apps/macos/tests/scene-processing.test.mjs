@@ -75,8 +75,8 @@ test("selected-source scenes retain sparse actual-time transitions across transp
     const streams = asset.data.streams.filter((stream) => stream.kind === "video");
     assert.equal(streams.length, 1);
     const params = {
-      assetId: asset.data.assetId,
-      streamId: streams[0].streamId,
+      assetId: asset.data.id,
+      streamId: streams[0].id,
       sourceRange: { startUs: 0, endUs: 120_000_000 },
       limit: 2,
     };

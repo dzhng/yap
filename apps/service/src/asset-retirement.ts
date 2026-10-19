@@ -105,7 +105,6 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
         await deleteMember({ kind: member.memberKind, id: member.memberId });
       }
     },
-    result: (subject) => ({ assetId: subject.id, deleted: true }),
     freedBytes: (subject, cascade) => {
       const users = owners.users.usersOf({ kind: "asset", id: subject.id });
       return cascade ? users.cascadeFreesBytes : users.freesBytes;

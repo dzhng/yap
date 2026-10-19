@@ -37,16 +37,16 @@ async function emptyProject() {
   expect(created.ok).toBe(true);
   if (!created.ok) throw new Error(created.error.message);
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const request = {
     id: "resize",
     operation: "edit.apply",
     params: {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: "resize",
-      expectedRevisionId: revision.revisionId,
+      expectedRevisionId: revision.id,
       operations: [{ operation: "canvas.set", canvas: { ...canvas, width: 32 } }],
     },
   };
@@ -54,11 +54,11 @@ async function emptyProject() {
   cleanups.push(async () => db.close());
   async function state() {
     return {
-      project: await f.call("project.get", { projectId: project.projectId }),
-      history: await f.call("revision.history", { projectId: project.projectId }),
+      project: await f.call("project.get", { projectId: project.id }),
+      history: await f.call("revision.history", { projectId: project.id }),
       requests: db
         .prepare("SELECT * FROM project_requests WHERE projectId=? ORDER BY requestId")
-        .all(project.projectId),
+        .all(project.id),
     };
   }
   return { ...f, project, revision, request, state };
@@ -68,23 +68,23 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   const f = await emptyProject();
   const before = await f.state();
   const opened = await f.call("inspect.open", {
-    projectId: f.project.projectId,
-    revisionId: f.revision.revisionId,
+    projectId: f.project.id,
+    revisionId: f.revision.id,
     range: { startUs: 0, endUs: 1 },
   });
   expect(opened).toMatchObject({
     ok: true,
     data: {
-      projectId: f.project.projectId,
-      headRevisionId: f.revision.revisionId,
-      revision: { revisionId: f.revision.revisionId },
-      history: [{ revisionId: f.revision.revisionId, ordinal: 0 }],
+      projectId: f.project.id,
+      headRevisionId: f.revision.id,
+      revision: { id: f.revision.id },
+      history: [{ id: f.revision.id, ordinal: 0 }],
       native: { opened: false },
     },
   });
   const proposed = await f.call("caption.propose", {
-    projectId: f.project.projectId,
-    revisionId: f.revision.revisionId,
+    projectId: f.project.id,
+    revisionId: f.revision.id,
     trackId: "captions",
     canvas: { width: 100, height: 100 },
     style: {
@@ -110,8 +110,8 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   });
   expect(proposed).toMatchObject({ ok: false, error: { code: "NOT_READY" } });
   const diagnostics = await f.call("layout.diagnostics", {
-    projectId: f.project.projectId,
-    revisionId: f.revision.revisionId,
+    projectId: f.project.id,
+    revisionId: f.revision.id,
     samples: [
       {
         atUs: 0,
@@ -122,13 +122,13 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   });
   expect(diagnostics.ok).toBe(true);
   if (diagnostics.ok) {
-    expect(diagnostics.data).toMatchObject({ revisionId: f.revision.revisionId });
+    expect(diagnostics.data).toMatchObject({ revisionId: f.revision.id });
     const data = diagnostics.data as { issues: { code: string }[] };
     expect(data.issues.map((issue) => issue.code)).toContain("text-off-canvas");
   }
   expect(await f.state()).toEqual(before);
   expect(
-    await f.call("inspect.open", { projectId: f.project.projectId, revisionId: "missing" }),
+    await f.call("inspect.open", { projectId: f.project.id, revisionId: "missing" }),
   ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
 });
 async function sendRaw(socketPath: string, bytes: Buffer) {
@@ -148,7 +148,7 @@ async function sendRaw(socketPath: string, bytes: Buffer) {
 }
 test("public rendered recognition rejects absent generations and refuses a range wholly outside the project before any job", async () => {
   const f = await emptyProject();
-  const selector = { projectId: f.project.projectId, revisionId: f.revision.revisionId };
+  const selector = { projectId: f.project.id, revisionId: f.revision.id };
   expect(
     await f.call("transcript.render.get", {
       ...selector,
@@ -304,12 +304,12 @@ async function renderedRecognition(fail: "media.mixCompositionAudio" | "speech.t
   const created = await f.call("project.create", { requestId: "rendered", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const initial = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
-    expectedRevisionId: initial.revision.revisionId,
+    projectId: initial.project.id,
+    expectedRevisionId: initial.revision.id,
     requestId: "place",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "dialogue" },
@@ -327,8 +327,8 @@ async function renderedRecognition(fail: "media.mixCompositionAudio" | "speech.t
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const request = {
-    projectId: initial.project.projectId,
-    revisionId: (edited.data as { revision: { revisionId: string } }).revision.revisionId,
+    projectId: initial.project.id,
+    revisionId: (edited.data as { revision: { id: string } }).revision.id,
     range: { startUs: 0, endUs: 1_000_000 },
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
     rendition: { sampleRate: 16000, channels: 1 },
@@ -490,17 +490,17 @@ test("client TIMEOUT after a real committed reply preserves same-ID replay and h
   expect(after.history).toMatchObject({
     ok: true,
     data: {
-      revisions: [{ revisionId: f.revision.revisionId }, { document: { canvas: { width: 32 } } }],
+      revisions: [{ id: f.revision.id }, { document: { canvas: { width: 32 } } }],
     },
   });
   expect(after.requests).toHaveLength(1);
-  expect(after.requests[0]).toMatchObject({ projectId: f.project.projectId, requestId: "resize" });
+  expect(after.requests[0]).toMatchObject({ projectId: f.project.id, requestId: "resize" });
   expect(JSON.parse(after.requests[0]!.result as string)).toEqual(
     success.response.ok ? success.response.data : null,
   );
   expect(JSON.parse(after.requests[0]!.arguments as string)).toEqual({
     operation: "apply",
-    expectedRevisionId: f.revision.revisionId,
+    expectedRevisionId: f.revision.id,
     operations: f.request.params.operations,
   });
   const stale = await callLocal(f.service.socketPath, {
@@ -513,9 +513,9 @@ test("client TIMEOUT after a real committed reply preserves same-ID replay and h
       code: "STALE_REVISION",
       details: {
         currentRevisionId: (success.response.ok
-          ? (success.response.data as { revision: { revisionId: string } })
+          ? (success.response.data as { revision: { id: string } })
           : null
-        )?.revision.revisionId,
+        )?.revision.id,
       },
     },
   });
@@ -536,9 +536,9 @@ test("package-root refusal does not revoke unrelated canonical project dispatch"
     ok: true,
     data: { usage: null, admissions: [] },
   });
-  expect(await f.call("project.get", { projectId: f.project.projectId })).toMatchObject({
+  expect(await f.call("project.get", { projectId: f.project.id })).toMatchObject({
     ok: true,
-    data: { projectId: f.project.projectId, currentRevisionId: f.revision.revisionId },
+    data: { id: f.project.id, currentRevisionId: f.revision.id },
   });
   expect((await callLocal(f.service.socketPath, f.request)).ok).toBe(true);
 });
@@ -581,12 +581,12 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const created = await f.call("project.create", { requestId: "cached-read", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const initial = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
-    expectedRevisionId: initial.revision.revisionId,
+    projectId: initial.project.id,
+    expectedRevisionId: initial.revision.id,
     requestId: "cached-place",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "dialogue" },
@@ -603,8 +603,8 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const projectSelection = {
-    projectId: initial.project.projectId,
-    revisionId: (edited.data as { revision: { revisionId: string } }).revision.revisionId,
+    projectId: initial.project.id,
+    revisionId: (edited.data as { revision: { id: string } }).revision.id,
   };
   expect(await f.call("transcript.get", projectSelection)).toMatchObject({
     ok: true,
@@ -666,10 +666,10 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     ok: true,
     data: {
       rows: [
-        { wordId: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
-        { wordId: "w1", speaker: { state: "overlap", slots: [0, 1] } },
-        { wordId: "w2", speaker: { state: "overlap", slots: [0, 1] } },
-        { wordId: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
+        { id: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
+        { id: "w1", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w2", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
       ],
       nextCursor: expect.any(String),
     },
@@ -766,7 +766,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   } while (cursor);
   await save("source-transcript", { requests, rows, generation });
   expect(
-    rows.map((row) => (row.type === "word" ? `${row.wordId}:${row.text}` : `gap:${row.reason}`)),
+    rows.map((row) => (row.type === "word" ? `${row.id}:${row.text}` : `gap:${row.reason}`)),
   ).toEqual([
     "w0:Open",
     "w1:the",
@@ -861,7 +861,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     ok: true,
     data: {
       projects: [
-        { projectId: projectSelection.projectId, currentRevisionId: projectSelection.revisionId },
+        { id: projectSelection.projectId, currentRevisionId: projectSelection.revisionId },
       ],
     },
   });
@@ -913,12 +913,12 @@ test("ready source transcript reads carry the issues published with the transcri
   const created = await f.call("project.create", { requestId: "issues", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const initial = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
-    expectedRevisionId: initial.revision.revisionId,
+    projectId: initial.project.id,
+    expectedRevisionId: initial.revision.id,
     requestId: "place",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "dialogue" },
@@ -934,7 +934,7 @@ test("ready source transcript reads carry the issues published with the transcri
     ],
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
-  const project = { projectId: initial.project.projectId };
+  const project = { projectId: initial.project.id };
   let read = await f.call("transcript.get", project);
   for (let poll = 0; read.ok && (read.data as { state: string }).state !== "ready"; poll++) {
     if (poll > 300) throw new Error(JSON.stringify(read));

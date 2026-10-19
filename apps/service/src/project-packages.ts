@@ -660,7 +660,7 @@ export class ProjectPackages {
       undefined,
       snapshot.project.currentRevisionId === this.owners.projects.get(projectId).currentRevisionId
         ? undefined
-        : snapshot.revisions.map((revision) => revision.revisionId),
+        : snapshot.revisions.map((revision) => revision.id),
     )) {
       const resource: Extract<PortableDependency, { kind: "project-index-generation" }> = {
         kind: "project-index-generation",
@@ -860,7 +860,7 @@ export class ProjectPackages {
               return [
                 [
                   resourceIdentity(resource).id,
-                  preparedAudioResource(adoption.project.projectId, resource.publication.attemptId),
+                  preparedAudioResource(adoption.project.id, resource.publication.attemptId),
                 ] as const,
               ];
             if (resource.kind === "project-index-generation")
@@ -868,7 +868,7 @@ export class ProjectPackages {
                 [
                   resourceIdentity(resource).id,
                   indexGenerationResource(
-                    { kind: "project", id: adoption.project.projectId },
+                    { kind: "project", id: adoption.project.id },
                     resource.metadata.generation,
                   ),
                 ] as const,
@@ -1183,10 +1183,10 @@ export class ProjectPackages {
             const revisionId = adoption.revisionIds[resource.metadata.revisionId]!;
             const metadata = {
               ...resource.metadata,
-              projectId: adoption.project.projectId,
+              projectId: adoption.project.id,
               revisionId,
             };
-            const revision = adoption.revisions.find((value) => value.revisionId === revisionId)!;
+            const revision = adoption.revisions.find((value) => value.id === revisionId)!;
             const validation = projectIndexDomain(
               {
                 composition: () =>
@@ -1248,7 +1248,7 @@ export class ProjectPackages {
           for (const resource of manifest.resources) {
             if (resource.kind !== "prepared-audio") continue;
             const revisionId = adoption.revisionIds[resource.revisionId]!;
-            const revision = adoption.revisions.find((value) => value.revisionId === revisionId)!;
+            const revision = adoption.revisions.find((value) => value.id === revisionId)!;
             preparedAudio.push(
               await this.owners.preparedAudio.stagePortable(
                 omit(resource, "kind"),
@@ -1324,8 +1324,8 @@ export class ProjectPackages {
             );
           }
           return JSON.stringify({
-            projectId: result.project.projectId,
-            revisionId: result.revision.revisionId,
+            projectId: result.project.id,
+            revisionId: result.revision.id,
           });
         } finally {
           await Promise.all(speakers.map(({ stage }) => stage.close()));

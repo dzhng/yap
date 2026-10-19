@@ -737,8 +737,8 @@ export class Models {
     return model;
   }
   list() {
-    return [...this.preparations].map(([modelId, model]) => ({
-      modelId,
+    return [...this.preparations].map(([id, model]) => ({
+      id,
       purpose: model.manifest.purpose,
       platform: model.manifest.platform,
       descriptorDigest: model.descriptorDigest,
@@ -817,8 +817,8 @@ export class Models {
    * full hash grows with the installed runtime and would make health as slow as the largest one.
    */
   statuses() {
-    return [...this.preparations].map(([modelId, model]) => ({
-      modelId,
+    return [...this.preparations].map(([id, model]) => ({
+      id,
       purpose: model.manifest.purpose,
       status: model.snapshot(),
     }));
@@ -859,7 +859,7 @@ export class Models {
           if (prior.modelId !== modelId)
             throw new CatalogError("REQUEST_CONFLICT", "Removal request ID names another model");
           if (prior.completedAtMs !== null)
-            return { modelId, deleted: true as const, freedBytes: prior.freedBytes };
+            return { id: modelId, deleted: true as const, freedBytes: prior.freedBytes };
           return this.finishRemoval(model, requestId);
         }
         if (inUse(model.modelDigest))
@@ -894,7 +894,7 @@ export class Models {
         "UPDATE model_removals SET completedAtMs=? WHERE requestId=? AND completedAtMs IS NULL",
       )
       .run(Date.now(), requestId);
-    return { modelId: model.manifest.name, deleted: true as const, freedBytes };
+    return { id: model.manifest.name, deleted: true as const, freedBytes };
   }
   private removed(modelId: string): boolean {
     return !!this.catalog.catalog

@@ -100,7 +100,7 @@ async function fixture(t, wrap = (worker) => worker) {
       background: "#000000ff",
     },
   });
-  const projectId = initial.project.projectId;
+  const projectId = initial.project.id;
   const textSource = (text) => ({
     kind: "text",
     text,
@@ -115,7 +115,7 @@ async function fixture(t, wrap = (worker) => worker) {
   let edited = await good("edit.apply", {
     projectId,
     requestId: "first-text",
-    expectedRevisionId: initial.revision.revisionId,
+    expectedRevisionId: initial.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "captions" },
       {
@@ -145,7 +145,7 @@ async function fixture(t, wrap = (worker) => worker) {
       const requestId = randomUUID();
       const request = {
         projectId,
-        revisionId: edited.revision.revisionId,
+        revisionId: edited.revision.id,
         placementIds: [placementId],
         kind: "srt",
         directory: output,
@@ -159,7 +159,7 @@ async function fixture(t, wrap = (worker) => worker) {
       edited = await good("edit.apply", {
         projectId,
         requestId: randomUUID(),
-        expectedRevisionId: edited.revision.revisionId,
+        expectedRevisionId: edited.revision.id,
         operations: [{ operation: "text.set", clipId: placementId, source: textSource(text) }],
       });
       return edited;
@@ -282,8 +282,8 @@ test(
     const canceled = await f.call("export.status", { exportId: request.requestId });
     assert.equal(canceled.code, 0, JSON.stringify(canceled));
     assert.equal(canceled.response.ok, true, JSON.stringify(canceled));
-    assert.equal(canceled.response.data.exportId, request.requestId);
-    assert.equal(canceledRecord.exportId, request.requestId);
+    assert.equal(canceled.response.data.id, request.requestId);
+    assert.equal(canceledRecord.id, request.requestId);
     assert.equal(canceledRecord.state, "canceled");
     assert.equal(canceledRecord.jobId, pending.jobId);
     assert.equal(canceledRecord.snapshot.revisionId, request.revisionId);
@@ -572,9 +572,9 @@ async function silentProject(f, requestId) {
     },
   });
   const silent = await f.good("edit.apply", {
-    projectId: created.project.projectId,
+    projectId: created.project.id,
     requestId: `${requestId}-silence`,
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
       {
@@ -587,7 +587,7 @@ async function silentProject(f, requestId) {
       },
     ],
   });
-  return { projectId: created.project.projectId, revisionId: silent.revision.revisionId };
+  return { projectId: created.project.id, revisionId: silent.revision.id };
 }
 
 test("job.retry on a failed export also retries the export's own failed audio render", async (t) => {

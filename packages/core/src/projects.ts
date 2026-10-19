@@ -25,13 +25,13 @@ import { speakerCorrectionSchema, type SpeakerCorrection } from "./speaker-attri
 import { pageCursor } from "./page-cursor.js";
 
 export type Project = {
-  projectId: string;
+  id: string;
   title: string;
   createdAt: string;
   currentRevisionId: string;
 };
 export type ProjectRevision = {
-  revisionId: string;
+  id: string;
   projectId: string;
   ordinal: number;
   createdAt: string;
@@ -58,7 +58,7 @@ export const projectSnapshotReferencesSchema = z
   .refine((values) => values.reduce((sum, value) => sum + value.resources.length, 0) <= 25000);
 const projectSnapshotSchema = z.strictObject({
   project: z.strictObject({
-    projectId: z.string().min(1),
+    id: z.string().min(1),
     title: z.string(),
     createdAt: z.string().min(1),
     currentRevisionId: z.string().min(1),
@@ -66,7 +66,7 @@ const projectSnapshotSchema = z.strictObject({
   revisions: z
     .array(
       z.strictObject({
-        revisionId: z.string().min(1),
+        id: z.string().min(1),
         projectId: z.string().min(1),
         ordinal: z.number().int().nonnegative(),
         createdAt: z.string().min(1),
@@ -89,14 +89,14 @@ export function validateProjectSnapshot(value: unknown): ProjectSnapshot {
   for (const [ordinal, revision] of snapshot.revisions.entries()) {
     if (
       revision.ordinal !== ordinal ||
-      revision.projectId !== snapshot.project.projectId ||
-      ids.has(revision.revisionId)
+      revision.projectId !== snapshot.project.id ||
+      ids.has(revision.id)
     )
       throw new CatalogError("INVALID_PACKAGE", "Project history is incomplete or ambiguous");
-    ids.add(revision.revisionId);
+    ids.add(revision.id);
   }
   if (
-    snapshot.project.currentRevisionId !== snapshot.revisions.at(-1)!.revisionId ||
+    snapshot.project.currentRevisionId !== snapshot.revisions.at(-1)!.id ||
     snapshot.undo.some((id) => !ids.has(id))
   )
     throw new CatalogError("INVALID_PACKAGE", "Project head or undo target is missing");
@@ -127,8 +127,7 @@ export type ProjectEditResult = {
 function editResult(
   result: ProjectEditResult & { edit: { document?: EditBatchResult["document"] } },
 ): ProjectEditResult {
-  // Historical request receipts may contain the same document inside edit.
-  const edit = omit(result.edit, "document");
+  // The revision already carries the document; the edit reports only what changed.
   const clean = (value: any): any =>
     Array.isArray(value)
       ? value.map(clean)
@@ -139,35 +138,11 @@ function editResult(
               .map(([key, child]) => [key, clean(child)]),
           )
         : value;
-  return clean({
-    revision: result.revision,
-    edit: {
-      ...edit,
-      createdIds: edit.createdIds.map(({ id, ...entry }: any) => ({ ...entry, entityId: id })),
-      normalized: edit.normalized.map((step: any) => ({
-        ...step,
-        changes: step.changes.map((change: any) => {
-          const { id, value, ...entry } = change as any;
-          const mappedValue =
-            value && typeof value === "object"
-              ? (() => {
-                  const { id: valueId, ...rest } = value as Record<string, unknown>;
-                  return valueId === undefined ? value : { ...rest, entityId: valueId };
-                })()
-              : value;
-          return {
-            ...entry,
-            changeId: id,
-            ...(mappedValue === undefined ? {} : { value: mappedValue }),
-          };
-        }),
-      })),
-    },
-  }) as ProjectEditResult;
+  return clean({ revision: result.revision, edit: omit(result.edit, "document") });
 }
 export type ProjectHistoryCursor = string;
 export type DuplicateStep = "project" | "references" | "revision" | "result";
-const projectColumns = "projectId,title,createdAt,currentRevisionId";
+const projectColumns = "projectId AS id,title,createdAt,currentRevisionId";
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>
     item && typeof item === "object" && !Array.isArray(item)
@@ -252,14 +227,14 @@ export class ProjectStore {
         processing: [],
       };
       const revision: ProjectRevision = {
-        revisionId: id,
+        id,
         projectId,
         ordinal: 0,
         createdAt,
         operation: "create",
         document,
       };
-      const project: Project = { projectId, title, createdAt, currentRevisionId: id };
+      const project: Project = { id: projectId, title, createdAt, currentRevisionId: id };
       const result = { project, revision };
       this.store.catalog
         .prepare(
@@ -310,7 +285,7 @@ export class ProjectStore {
       const createdAt = new Date().toISOString();
       const revision: ProjectRevision = {
         ...selected,
-        revisionId,
+        id: revisionId,
         projectId,
         ordinal: 0,
         createdAt,
@@ -321,7 +296,7 @@ export class ProjectStore {
           : { speakerCorrections: structuredClone(selected.speakerCorrections) }),
       };
       const project: Project = {
-        projectId,
+        id: projectId,
         title: input.title ?? `${source.title} copy`,
         createdAt,
         currentRevisionId: revisionId,
@@ -520,13 +495,13 @@ export class ProjectStore {
         const current = this.current(projectId, request.expectedRevisionId);
         const revision: ProjectRevision = {
           ...current,
-          revisionId: randomUUID(),
+          id: randomUUID(),
           ordinal: current.ordinal + 1,
           createdAt: new Date().toISOString(),
           operation: "apply",
           speakerCorrections: [...(current.speakerCorrections ?? []), ...request.corrections],
         };
-        this.pushUndo(projectId, current.revisionId);
+        this.pushUndo(projectId, current.id);
         this.insertRevision(revision);
         this.publishHead(revision);
         return revision;
@@ -593,9 +568,9 @@ export class ProjectStore {
       acquisitions: [...contextIds].map((id) => this.acquisitions.context(id)),
     });
     if (!edit.changed) return editResult({ revision: current, edit });
-    this.pushUndo(projectId, current.revisionId);
+    this.pushUndo(projectId, current.id);
     const revision: ProjectRevision = {
-      revisionId: randomUUID(),
+      id: randomUUID(),
       projectId,
       ordinal: current.ordinal + 1,
       createdAt: new Date().toISOString(),
@@ -635,7 +610,7 @@ export class ProjectStore {
     );
     return {
       projectId,
-      revisionId: revision.revisionId,
+      revisionId: revision.id,
       target,
       steps: getProcessing(model, target),
     };
@@ -715,7 +690,7 @@ export class ProjectStore {
         "Project history exceeds the portable snapshot limit",
       );
     const undo: string[] =
-      selected.revisionId === project.currentRevisionId
+      selected.id === project.currentRevisionId
         ? this.store.catalog
             .prepare(
               "SELECT targetId FROM project_undo WHERE projectId=? ORDER BY position LIMIT 1001",
@@ -723,27 +698,27 @@ export class ProjectStore {
             .all(projectId)
             .map((row) => row.targetId as string)
         : [];
-    if (selected.revisionId !== project.currentRevisionId)
+    if (selected.id !== project.currentRevisionId)
       for (let index = 1; index < history.revisions.length; index++) {
         const revision = history.revisions[index]!;
         if (revision.operation === "undo") undo.pop();
-        else undo.push(history.revisions[index - 1]!.revisionId);
+        else undo.push(history.revisions[index - 1]!.id);
       }
     if (undo.length > archiveLimits.history)
       throw new CatalogError("LIMIT_EXCEEDED", "Project undo exceeds the portable snapshot limit");
     let edges = 0;
     const references = history.revisions.map((revision) => {
-      const resources = this.references.dependencies({ kind: "revision", id: revision.revisionId });
+      const resources = this.references.dependencies({ kind: "revision", id: revision.id });
       edges += resources.length;
       if (edges > 25000)
         throw new CatalogError(
           "LIMIT_EXCEEDED",
           "Project revision dependencies exceed package budget",
         );
-      return { revisionId: revision.revisionId, resources };
+      return { revisionId: revision.id, resources };
     });
     return {
-      project: { ...project, currentRevisionId: selected.revisionId },
+      project: { ...project, currentRevisionId: selected.id },
       revisions: history.revisions,
       undo,
       references,
@@ -770,18 +745,18 @@ export class ProjectStore {
       };
     };
     const prior = replay();
-    const projectId = prior?.project.projectId ?? randomUUID();
+    const projectId = prior?.project.id ?? randomUUID();
     const revisionIds =
       prior?.revisionIds ??
-      Object.fromEntries(snapshot.revisions.map((revision) => [revision.revisionId, randomUUID()]));
+      Object.fromEntries(snapshot.revisions.map((revision) => [revision.id, randomUUID()]));
     const revisions = snapshot.revisions.map((revision) => ({
       ...revision,
-      revisionId: revisionIds[revision.revisionId]!,
+      id: revisionIds[revision.id]!,
       projectId,
     }));
     const project = {
       ...snapshot.project,
-      projectId,
+      id: projectId,
       currentRevisionId: revisionIds[snapshot.project.currentRevisionId]!,
     };
     const result = { project, revision: revisions.at(-1)!, revisionIds };
@@ -858,33 +833,7 @@ export class ProjectStore {
             "REQUEST_CONFLICT",
             "Request ID was already used with different arguments",
           );
-        const retained = JSON.parse(replay.result as string) as T;
-        if (
-          retained &&
-          typeof retained === "object" &&
-          "revision" in retained &&
-          retained.revision &&
-          typeof retained.revision === "object" &&
-          "id" in retained.revision &&
-          !("revisionId" in retained.revision)
-        )
-          throw new CatalogError(
-            "ARTIFACT_CHANGED",
-            "Retained project result uses an obsolete revision shape",
-          );
-        if (
-          retained &&
-          typeof retained === "object" &&
-          "edit" in retained &&
-          retained.edit &&
-          typeof retained.edit === "object" &&
-          "document" in retained.edit
-        )
-          return {
-            ...retained,
-            edit: omit(retained.edit as Record<string, unknown>, "document"),
-          } as T;
-        return retained;
+        return JSON.parse(replay.result as string) as T;
       }
       const result = run();
       const retained = retain(result);
@@ -896,9 +845,9 @@ export class ProjectStore {
   }
   private current(projectId: string, expected: string) {
     const current = this.revision(projectId);
-    if (current.revisionId !== expected)
+    if (current.id !== expected)
       throw new CatalogError("STALE_REVISION", "Current revision has changed", {
-        currentRevisionId: current.revisionId,
+        currentRevisionId: current.id,
       });
     return current;
   }
@@ -937,11 +886,11 @@ export class ProjectStore {
           this.store.catalog
             .prepare("DELETE FROM project_undo WHERE projectId=? AND position=?")
             .run(projectId, entry.position!);
-        } else this.pushUndo(projectId, current.revisionId);
+        } else this.pushUndo(projectId, current.id);
         const target = this.revision(projectId, targetId);
         const revision: ProjectRevision = {
           ...target,
-          revisionId: randomUUID(),
+          id: randomUUID(),
           ordinal: current.ordinal + 1,
           createdAt: new Date().toISOString(),
           operation,
@@ -949,14 +898,10 @@ export class ProjectStore {
         this.insertRevision(revision);
         this.publishHead(revision);
         const prepared = this.references
-          .dependencies({ kind: "revision", id: target.revisionId })
+          .dependencies({ kind: "revision", id: target.id })
           .filter((reference) => reference.kind === "prepared-audio")
           .map((reference) => reference.id);
-        this.references.retain(
-          "prepared-audio",
-          { kind: "revision", id: revision.revisionId },
-          prepared,
-        );
+        this.references.retain("prepared-audio", { kind: "revision", id: revision.id }, prepared);
         return revision;
       },
     );
@@ -974,23 +919,21 @@ export class ProjectStore {
   ) {
     const resources = validateTextSeeds(revision.document, this.transcripts, seedOrigins);
     for (const resource of resources)
-      this.references.retain(resource.kind, { kind: "revision", id: revision.revisionId }, [
-        resource.id,
-      ]);
+      this.references.retain(resource.kind, { kind: "revision", id: revision.id }, [resource.id]);
     const ids = documentAssetIds(revision.document);
-    this.assets.retain({ kind: "revision", id: revision.revisionId }, ids);
+    this.assets.retain({ kind: "revision", id: revision.id }, ids);
     this.acquisitions.retain(
-      { kind: "revision", id: revision.revisionId },
+      { kind: "revision", id: revision.id },
       documentAcquisitionIds(revision.document),
     );
     this.duplicateFault?.("revision");
     this.store.catalog
       .prepare("INSERT INTO project_revisions VALUES(?,?,?,?)")
-      .run(revision.revisionId, revision.projectId, revision.ordinal, JSON.stringify(revision));
+      .run(revision.id, revision.projectId, revision.ordinal, JSON.stringify(revision));
   }
   private publishHead(revision: ProjectRevision) {
     this.store.catalog
       .prepare("UPDATE projects SET currentRevisionId=? WHERE projectId=?")
-      .run(revision.revisionId, revision.projectId);
+      .run(revision.id, revision.projectId);
   }
 }

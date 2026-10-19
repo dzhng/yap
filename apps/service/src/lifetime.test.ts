@@ -307,7 +307,7 @@ it("startup reconciliation is a blocker while its existing native observation is
       id: "settled-report",
       operation: "capture.report",
       params: {
-        recordingId: take.recordingId,
+        recordingId: take.id,
         sourceId: take.sourceId,
         sequence: 1,
         state: "interrupted",
@@ -370,10 +370,9 @@ it("validates project composition requests at the canonical wire boundary", asyn
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const project = (created.data as { project: { projectId: string; currentRevisionId: string } })
-    .project;
+  const project = (created.data as { project: { id: string; currentRevisionId: string } }).project;
   const responses = {
-    project: await call("revision.get", { projectId: project.projectId }),
+    project: await call("revision.get", { projectId: project.id }),
     recording: await call("revision.get", { recordingId: "same-id" }),
     package: await call("preview.get", { packageHandle: "open" }),
     removed: await call("edit.cut", {
@@ -389,14 +388,14 @@ it("validates project composition requests at the canonical wire boundary", asyn
     await writeFile(output, JSON.stringify({ pid: service.pid, project, responses }, null, 2));
   expect(responses.project).toMatchObject({
     ok: true,
-    data: { projectId: project.projectId, revision: { revisionId: project.currentRevisionId } },
+    data: { projectId: project.id, revision: { id: project.currentRevisionId } },
   });
   expect(responses.recording).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(responses.package).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(responses.removed).toMatchObject({ ok: false, error: { code: "UNKNOWN_OPERATION" } });
   expect(responses.deletion).toMatchObject({
     ok: true,
-    data: { recordingId: "same-id", deleted: true },
+    data: { id: "same-id", deleted: true },
   });
   service.closeInput();
   const exit = await service.exit;

@@ -104,13 +104,12 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
           (recording) =>
             ({
               kind: "recording",
-              id: recording.recordingId,
+              id: recording.id,
             }) satisfies LibrarySubject,
         ),
         nextAfterId: page.nextAfterId,
       };
     },
-    result: (subject) => ({ recordingId: subject.id, deleted: true }),
     freedBytes: (subject, cascade) => owners.freedBytes(subject.id, cascade),
   };
 }

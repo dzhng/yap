@@ -31,8 +31,8 @@ async function fixture(data = Buffer.from("screen evidence")) {
   });
   const cache = new DerivedCache(store, home, recordingCacheOwnerCheck(store));
   await cache.reconcile();
-  const recordingId = store.allocate().recording.recordingId;
-  const otherRecordingId = store.allocate().recording.recordingId;
+  const recordingId = store.allocate().recording.id;
+  const otherRecordingId = store.allocate().recording.id;
   const reservation = cache.reserve({ kind: "recording", id: recordingId });
   writeFileSync(reservation.path, data);
   const file = await cache.publish(reservation.id);

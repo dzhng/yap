@@ -40,7 +40,7 @@ test("camera allocation is durable and cannot change on a replay", () => {
   expect(() => reopened.allocate({ ...request, cameraDeviceId: "camera-b" })).toThrowError(
     expect.objectContaining({ code: "REQUEST_CONFLICT" }),
   );
-  expect(reopened.get(allocated.recordingId)).toEqual(allocated);
+  expect(reopened.get(allocated.id)).toEqual(allocated);
   expect(reopened.allocate().recording.camera).toBeNull();
 });
 
@@ -51,7 +51,7 @@ test("physical closure makes a published camera eligible while primary publicati
     arguments: "camera-a",
     cameraDeviceId: "camera-a",
   }).recording;
-  const { recordingId, sourceId, camera } = recording;
+  const { id: recordingId, sourceId, camera } = recording;
   if (!camera) throw new Error("Missing camera allocation");
   const identity = { bytes: 10, sha256: "a".repeat(64) };
   const receipt = {
@@ -170,7 +170,7 @@ test("fresh capture settles and reopens without creating a revision or project",
   const { store, path, providers } = fixture();
   const request = { requestId: "capture-one", arguments: "selected-screen-and-audio" };
   const allocated = store.allocate(request).recording;
-  const { recordingId, sourceId } = allocated;
+  const { id: recordingId, sourceId } = allocated;
   const journal = [
     { sourceId, sequence: 1, state: "recording" as const },
     { sourceId, sequence: 2, state: "paused" as const },
@@ -228,12 +228,12 @@ test("invalid source durations leave capture facts unchanged and no-video remain
   const { store } = fixture();
   const recording = store.allocate().recording;
   for (const duration of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-    expect(() => store.registerSource(recording.recordingId, duration)).toThrowError(
+    expect(() => store.registerSource(recording.id, duration)).toThrowError(
       expect.objectContaining({ code: "INVALID_RANGE" }),
     );
-    expect(store.get(recording.recordingId)).toEqual(recording);
+    expect(store.get(recording.id)).toEqual(recording);
   }
-  const terminal = store.ingestLifecycle(recording.recordingId, {
+  const terminal = store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -252,9 +252,9 @@ test("invalid source durations leave capture facts unchanged and no-video remain
     code: "INVALID_STATE",
     details: { state: "interrupted", interruptionReason: "NO_VIDEO" },
   });
-  expect(() => store.registerSource(recording.recordingId, 1200)).toThrowError(contradicted);
+  expect(() => store.registerSource(recording.id, 1200)).toThrowError(contradicted);
   expect(() =>
-    store.ingestLifecycle(recording.recordingId, {
+    store.ingestLifecycle(recording.id, {
       sourceId: recording.sourceId,
       sequence: 2,
       state: "interrupted",
@@ -262,7 +262,7 @@ test("invalid source durations leave capture facts unchanged and no-video remain
       sourceDurationUs: 8,
     }),
   ).toThrowError(contradicted);
-  expect(store.get(recording.recordingId)).toEqual(terminal);
+  expect(store.get(recording.id)).toEqual(terminal);
 });
 
 test("fresh deletion fences replay across reopen and removes only the named capture", () => {
@@ -270,26 +270,26 @@ test("fresh deletion fences replay across reopen and removes only the named capt
   const sibling = store.allocate().recording;
   const request = { requestId: "discard-one", arguments: "screen" };
   const take = store.allocate(request).recording;
-  expect(() => store.finishDeletion(take.recordingId)).toThrowError(
+  expect(() => store.finishDeletion(take.id)).toThrowError(
     expect.objectContaining({ code: "INVALID_STATE" }),
   );
-  expect(store.markDeleting(take.recordingId)).toEqual(take);
-  const canceled = store.settleDeletingCapture(take.recordingId);
+  expect(store.markDeleting(take.id)).toEqual(take);
+  const canceled = store.settleDeletingCapture(take.id);
   expect(canceled).toEqual({ ...take, state: "canceled" });
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
-  expect(reopened.deleting(take.recordingId)).toEqual(canceled);
+  expect(reopened.deleting(take.id)).toEqual(canceled);
   expect(reopened.unsettled()).toEqual([sibling]);
   expect(reopened.list()).toEqual({ recordings: [sibling], nextCursor: null });
   expect(() => reopened.allocate(request)).toThrowError(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
-  reopened.finishDeletion(take.recordingId);
-  reopened.finishDeletion(take.recordingId);
-  expect(reopened.deleting(take.recordingId)).toBeNull();
+  reopened.finishDeletion(take.id);
+  reopened.finishDeletion(take.id);
+  expect(reopened.deleting(take.id)).toBeNull();
   expect(reopened.deletionsPage()).toEqual({ recordings: [], nextAfterId: null });
-  expect(reopened.get(sibling.recordingId)).toEqual(sibling);
+  expect(reopened.get(sibling.id)).toEqual(sibling);
 });
 
 test("terminal diagnostics survive reopen and duplicate journal delivery", () => {
@@ -303,7 +303,7 @@ test("terminal diagnostics survive reopen and duplicate journal delivery", () =>
     message: "Narration stopped after a disk write failed.",
     sourceDurationUs: null,
   };
-  store.ingestLifecycle(take.recordingId, event);
+  store.ingestLifecycle(take.id, event);
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
@@ -312,19 +312,19 @@ test("terminal diagnostics survive reopen and duplicate journal delivery", () =>
     interruptionMessage: event.message,
     sourceDurationUs: null,
   };
-  expect(reopened.get(take.recordingId)).toMatchObject(expected);
+  expect(reopened.get(take.id)).toMatchObject(expected);
   expect(reopened.latest()).toMatchObject(expected);
   expect(reopened.list().recordings[0]).toMatchObject(expected);
-  expect(
-    reopened.ingestLifecycle(take.recordingId, { ...event, message: "duplicate" }),
-  ).toMatchObject(expected);
+  expect(reopened.ingestLifecycle(take.id, { ...event, message: "duplicate" })).toMatchObject(
+    expected,
+  );
   const withVideo = reopened.allocate().recording;
-  reopened.ingestLifecycle(withVideo.recordingId, {
+  reopened.ingestLifecycle(withVideo.id, {
     ...event,
     sourceId: withVideo.sourceId,
     sourceDurationUs: 100,
   });
-  expect(reopened.get(withVideo.recordingId)).toMatchObject({
+  expect(reopened.get(withVideo.id)).toMatchObject({
     interruptionReason: event.reason,
     interruptionMessage: event.message,
   });
@@ -332,10 +332,10 @@ test("terminal diagnostics survive reopen and duplicate journal delivery", () =>
 test("new incomplete allocation remains latest ahead of a finalized older take", () => {
   const { store } = fixture();
   const first = store.allocate().recording;
-  store.registerSource(first.recordingId, 20);
+  store.registerSource(first.id, 20);
   const second = store.allocate().recording;
   expect(store.latest()).toEqual({ ...second, sourceDurationUs: null });
-  expect(store.get(first.recordingId)).toEqual({
+  expect(store.get(first.id)).toEqual({
     ...first,
     sourceDurationUs: 20,
   });
@@ -346,7 +346,7 @@ test("new incomplete allocation remains latest ahead of a finalized older take",
 
 test("a settled take keeps its outcome when late or contradicting reports arrive", () => {
   const { store } = fixture();
-  const { recordingId, sourceId } = store.allocate().recording;
+  const { id: recordingId, sourceId } = store.allocate().recording;
   store.ingestLifecycle(recordingId, { sourceId, sequence: 4, state: "recording" });
   store.ingestLifecycle(recordingId, {
     sourceId,
@@ -399,7 +399,7 @@ test("a settled take keeps its outcome when late or contradicting reports arrive
 
 test("a discarded take refuses a source registered after the fact", () => {
   const { store } = fixture();
-  const { recordingId, sourceId } = store.allocate().recording;
+  const { id: recordingId, sourceId } = store.allocate().recording;
   store.ingestLifecycle(recordingId, { sourceId, sequence: 1, state: "canceled" });
   expect(() => store.registerSource(recordingId, 20)).toThrow(
     expect.objectContaining({ code: "INVALID_STATE", details: { state: "canceled" } }),
@@ -412,7 +412,7 @@ test("an event stamped with another capture session leaves the recording untouch
   const first = store.allocate().recording;
   const second = store.allocate().recording;
   expect(() =>
-    store.ingestLifecycle(first.recordingId, {
+    store.ingestLifecycle(first.id, {
       sourceId: second.sourceId,
       sequence: 1,
       state: "recording",
@@ -423,12 +423,12 @@ test("an event stamped with another capture session leaves the recording untouch
       details: { sourceId: first.sourceId, reportedSourceId: second.sourceId },
     }),
   );
-  expect(store.get(first.recordingId)).toEqual(first);
+  expect(store.get(first.id)).toEqual(first);
 });
 
 test("a completion for a take that never started capturing leaves all source facts unchanged", () => {
   const { store } = fixture();
-  const { recordingId, sourceId } = store.allocate().recording;
+  const { id: recordingId, sourceId } = store.allocate().recording;
   expect(() =>
     store.ingestLifecycle(recordingId, {
       sourceId,
@@ -450,9 +450,9 @@ test("a completion for a take that never started capturing leaves all source fac
 test("recording pages keep newest-first identity across new takes, source updates and relaunch", () => {
   const { store, path, providers } = fixture();
   const oldest = store.allocate().recording;
-  store.registerSource(oldest.recordingId, 20);
+  store.registerSource(oldest.id, 20);
   const canceled = store.allocate().recording;
-  store.ingestLifecycle(canceled.recordingId, {
+  store.ingestLifecycle(canceled.id, {
     sourceId: canceled.sourceId,
     sequence: 1,
     state: "canceled",
@@ -463,7 +463,7 @@ test("recording pages keep newest-first identity across new takes, source update
   expect(first.recordings).toEqual([newest]);
   expect(first.nextCursor).not.toBeNull();
   const added = store.allocate().recording;
-  store.ingestLifecycle(oldest.recordingId, {
+  store.ingestLifecycle(oldest.id, {
     sourceId: oldest.sourceId,
     sequence: 1,
     state: "interrupted",
@@ -474,10 +474,7 @@ test("recording pages keep newest-first identity across new takes, source update
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
   const rest = reopened.list(first.nextCursor, 2);
-  expect(rest.recordings.map((recording) => recording.recordingId)).toEqual([
-    middle.recordingId,
-    oldest.recordingId,
-  ]);
+  expect(rest.recordings.map((recording) => recording.id)).toEqual([middle.id, oldest.id]);
   expect(rest.recordings[1]).toMatchObject({
     state: "interrupted",
     sourceDurationUs: 20,
@@ -500,11 +497,9 @@ test("recording discovery uses the shared default page bound", () => {
 test("listable hides a recording once its deletion marker exists", () => {
   const { store } = fixture();
   const recording = store.allocate().recording;
-  expect(store.listable(recording.recordingId)).toBe(true);
-  store.catalog
-    .prepare("INSERT INTO recording_deletions(recordingId) VALUES(?)")
-    .run(recording.recordingId);
-  expect(store.listable(recording.recordingId)).toBe(false);
+  expect(store.listable(recording.id)).toBe(true);
+  store.catalog.prepare("INSERT INTO recording_deletions(recordingId) VALUES(?)").run(recording.id);
+  expect(store.listable(recording.id)).toBe(false);
   expect(store.list().recordings).toEqual([]);
 });
 
@@ -540,10 +535,10 @@ test("an allocation request is a durable receipt that replays and refuses differ
 test("a pre-launch catalog is refused without mutating its bytes", () => {
   const { store, path, providers } = fixture();
   const { recording } = store.allocate();
-  store.registerSource(recording.recordingId, 20);
+  store.registerSource(recording.id, 20);
   store.close();
   const reopened = new CaptureStore(path, providers);
-  expect(reopened.get(recording.recordingId).sourceDurationUs).toBe(20);
+  expect(reopened.get(recording.id).sourceDurationUs).toBe(20);
   reopened.close();
   const prior = join(roots.at(-1)!, "prior.sqlite");
   const old = new DatabaseSync(prior);
@@ -577,39 +572,35 @@ test("deletion intent hides a take and fences replay and late source publication
   const older = store.allocate().recording;
   const request = { requestId: "delete-me", arguments: "capture" };
   const recording = store.allocate(request).recording;
-  store.registerSource(recording.recordingId, 20);
-  expect(store.markDeleting(recording.recordingId)?.recordingId).toBe(recording.recordingId);
-  expect(store.markDeleting(recording.recordingId)?.sourceId).toBe(recording.sourceId);
+  store.registerSource(recording.id, 20);
+  expect(store.markDeleting(recording.id)?.id).toBe(recording.id);
+  expect(store.markDeleting(recording.id)?.sourceId).toBe(recording.sourceId);
   expect(store.markDeleting("absent")).toBeNull();
   expect(store.latest()).toEqual(older);
   expect(store.list().recordings).toEqual([older]);
-  expect(() => store.get(recording.recordingId)).toThrow(
-    expect.objectContaining({ code: "NOT_FOUND" }),
-  );
+  expect(() => store.get(recording.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
   expect(() => store.allocate(request)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
-  expect(() => store.registerSource(recording.recordingId, 20)).toThrow(
+  expect(() => store.registerSource(recording.id, 20)).toThrow(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
   expect(() =>
-    store.ingestLifecycle(recording.recordingId, {
+    store.ingestLifecycle(recording.id, {
       sourceId: recording.sourceId,
       sequence: 1,
       state: "recording",
     }),
   ).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
-  expect(store.settleDeletingCapture(recording.recordingId)).toMatchObject({
+  expect(store.settleDeletingCapture(recording.id)).toMatchObject({
     state: "canceled",
     sourceDurationUs: 20,
   });
-  expect(store.isDeleting(recording.recordingId)).toBe(true);
+  expect(store.isDeleting(recording.id)).toBe(true);
   expect(store.unsettled()).toEqual([older]);
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
-  expect(reopened.deleting(recording.recordingId)?.sourceId).toBe(recording.sourceId);
-  expect(() => reopened.get(recording.recordingId)).toThrow(
-    expect.objectContaining({ code: "NOT_FOUND" }),
-  );
+  expect(reopened.deleting(recording.id)?.sourceId).toBe(recording.sourceId);
+  expect(() => reopened.get(recording.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
   expect(reopened.latest()).toEqual(older);
 });
 
@@ -617,49 +608,44 @@ test("final deletion requires intent and rolls back if another owner retains a r
   const { store } = fixture();
   const first = store.allocate().recording,
     sibling = store.allocate().recording;
-  store.registerSource(first.recordingId, 20);
-  expect(() => store.finishDeletion(first.recordingId)).toThrowError(
+  store.registerSource(first.id, 20);
+  expect(() => store.finishDeletion(first.id)).toThrowError(
     expect.objectContaining({ code: "INVALID_STATE" }),
   );
   store.catalog.exec(
     "CREATE TABLE deletion_sentinel(recordingId TEXT REFERENCES recordings(recordingId))",
   );
-  store.catalog.prepare("INSERT INTO deletion_sentinel VALUES(?)").run(first.recordingId);
-  store.markDeleting(first.recordingId);
-  expect(() => store.finishDeletion(first.recordingId)).toThrow();
-  expect(store.deleting(first.recordingId)?.sourceId).toBe(first.sourceId);
-  expect(store.deleting(first.recordingId)?.sourceDurationUs).toBe(20);
+  store.catalog.prepare("INSERT INTO deletion_sentinel VALUES(?)").run(first.id);
+  store.markDeleting(first.id);
+  expect(() => store.finishDeletion(first.id)).toThrow();
+  expect(store.deleting(first.id)?.sourceId).toBe(first.sourceId);
+  expect(store.deleting(first.id)?.sourceDurationUs).toBe(20);
   store.catalog.exec("DELETE FROM deletion_sentinel");
-  store.finishDeletion(first.recordingId);
-  store.finishDeletion(first.recordingId);
-  expect(store.deleting(first.recordingId)).toBeNull();
-  expect(store.isDeleting(first.recordingId)).toBe(false);
-  expect(store.get(sibling.recordingId)).toEqual(sibling);
+  store.finishDeletion(first.id);
+  store.finishDeletion(first.id);
+  expect(store.deleting(first.id)).toBeNull();
+  expect(store.isDeleting(first.id)).toBe(false);
+  expect(store.get(sibling.id)).toEqual(sibling);
   for (const table of ["recordings", "recording_deletions"])
     expect(
-      store.catalog
-        .prepare(`SELECT count(*) AS n FROM ${table} WHERE recordingId=?`)
-        .get(first.recordingId),
+      store.catalog.prepare(`SELECT count(*) AS n FROM ${table} WHERE recordingId=?`).get(first.id),
     ).toEqual({ n: 0 });
 });
 
 test("deletion replay pages use stable recording IDs and survive restart", () => {
   const { store, path, providers } = fixture();
   const records = Array.from({ length: 5 }, () => store.allocate().recording);
-  for (const recording of [records[3]!, records[0]!, records[4]!])
-    store.markDeleting(recording.recordingId);
-  const expected = [records[0]!, records[3]!, records[4]!].sort((a, b) =>
-    a.recordingId.localeCompare(b.recordingId),
-  );
+  for (const recording of [records[3]!, records[0]!, records[4]!]) store.markDeleting(recording.id);
+  const expected = [records[0]!, records[3]!, records[4]!].sort((a, b) => a.id.localeCompare(b.id));
   const first = store.deletionsPage(undefined, 2);
   expect(first).toEqual({
     recordings: expected.slice(0, 2),
-    nextAfterId: expected[1]!.recordingId,
+    nextAfterId: expected[1]!.id,
   });
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
-  reopened.finishDeletion(expected[0]!.recordingId);
+  reopened.finishDeletion(expected[0]!.id);
   expect(reopened.deletionsPage(first.nextAfterId!, 2)).toEqual({
     recordings: [expected[2]],
     nextAfterId: null,
@@ -673,7 +659,7 @@ test("finalization failure survives reopen and reads until an explicit attempt o
   const { store, path, providers } = fixture();
   const take = store.allocate().recording;
   const failure = { code: "RECOVERY_IO", message: "Retained media needs a retry", retryable: true };
-  store.ingestLifecycle(take.recordingId, {
+  store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "finalizing",
@@ -682,36 +668,36 @@ test("finalization failure survives reopen and reads until an explicit attempt o
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
-  expect(reopened.get(take.recordingId).finalizationError).toEqual(failure);
+  expect(reopened.get(take.id).finalizationError).toEqual(failure);
   expect(reopened.latest()!.finalizationError).toEqual(failure);
   expect(reopened.list().recordings[0]!.finalizationError).toEqual(failure);
-  reopened.ingestLifecycle(take.recordingId, {
+  reopened.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 2,
     state: "finalizing",
   });
-  expect(reopened.get(take.recordingId).finalizationError).toEqual(failure);
-  reopened.ingestLifecycle(take.recordingId, {
+  expect(reopened.get(take.id).finalizationError).toEqual(failure);
+  reopened.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 3,
     state: "finalizing",
     finalizationError: null,
   });
-  expect(reopened.get(take.recordingId).finalizationError).toBeNull();
-  reopened.ingestLifecycle(take.recordingId, {
+  expect(reopened.get(take.id).finalizationError).toBeNull();
+  reopened.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 4,
     state: "finalizing",
     finalizationError: failure,
   });
-  reopened.ingestLifecycle(take.recordingId, {
+  reopened.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 5,
     state: "interrupted",
     reason: "NO_SOURCE_MEDIA",
     sourceDurationUs: null,
   });
-  expect(reopened.get(take.recordingId)).toMatchObject({
+  expect(reopened.get(take.id)).toMatchObject({
     finalizationError: null,
     interruptionReason: "NO_SOURCE_MEDIA",
   });
@@ -719,7 +705,7 @@ test("finalization failure survives reopen and reads until an explicit attempt o
 
 test("a lifecycle write that fails after attaching the source rolls back all capture facts", () => {
   const { store } = fixture();
-  const { recordingId, sourceId } = store.allocate().recording;
+  const { id: recordingId, sourceId } = store.allocate().recording;
   const capturing = store.ingestLifecycle(recordingId, {
     sourceId,
     sequence: 1,
@@ -750,32 +736,32 @@ test("a lifecycle write that fails after attaching the source rolls back all cap
 test("a discarded take leaves discovery while its restart request still names one new take", () => {
   const { store } = fixture();
   const older = store.allocate().recording;
-  store.registerSource(older.recordingId, 20);
+  store.registerSource(older.id, 20);
   const abandoned = store.allocate({ requestId: "start-1", arguments: "{}" }).recording;
-  store.ingestLifecycle(abandoned.recordingId, {
+  store.ingestLifecycle(abandoned.id, {
     sourceId: abandoned.sourceId,
     sequence: 1,
     state: "recording",
   });
-  store.registerSource(abandoned.recordingId, 12);
-  store.ingestLifecycle(abandoned.recordingId, {
+  store.registerSource(abandoned.id, 12);
+  store.ingestLifecycle(abandoned.id, {
     sourceId: abandoned.sourceId,
     sequence: 2,
     state: "canceled",
   });
-  expect(store.latest()!.recordingId).toBe(older.recordingId);
+  expect(store.latest()!.id).toBe(older.id);
   const restarted = store.allocate({ requestId: "restart-1", arguments: "{}" }).recording;
-  expect(restarted.recordingId).not.toBe(abandoned.recordingId);
+  expect(restarted.id).not.toBe(abandoned.id);
   expect(store.latest()).toEqual(restarted);
   expect(store.allocate({ requestId: "restart-1", arguments: "{}" })).toEqual({
     recording: restarted,
     replay: true,
   });
-  expect(store.get(abandoned.recordingId)).toMatchObject({
+  expect(store.get(abandoned.id)).toMatchObject({
     state: "canceled",
     sourceDurationUs: 12,
   });
-  expect(store.isAvailable(abandoned.recordingId)).toBe(false);
+  expect(store.isAvailable(abandoned.id)).toBe(false);
 });
 
 test("the catalog stays at the format 0.1.33 libraries use, so their recordings keep opening", () => {
@@ -787,7 +773,7 @@ test("the catalog stays at the format 0.1.33 libraries use, so their recordings 
 
 test("a take whose recovery failed stops holding back an update; a take still in progress holds it", () => {
   const { store } = fixture();
-  const { recordingId, sourceId } = store.allocate({
+  const { id: recordingId, sourceId } = store.allocate({
     requestId: "stranded",
     arguments: "screen",
   }).recording;

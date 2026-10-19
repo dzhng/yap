@@ -614,16 +614,14 @@ export function resolveProjectPackage(
       invalid("Screenshot index members differ from its counts");
     if (
       resource.kind === "project-index-generation" &&
-      (resource.metadata.projectId !== snapshot.project.projectId ||
-        !snapshot.revisions.some(
-          (revision) => revision.revisionId === resource.metadata.revisionId,
-        ))
+      (resource.metadata.projectId !== snapshot.project.id ||
+        !snapshot.revisions.some((revision) => revision.id === resource.metadata.revisionId))
     )
       invalid("Project screenshot index belongs to another history");
     if (
       resource.kind === "prepared-audio" &&
-      (resource.projectId !== snapshot.project.projectId ||
-        !snapshot.revisions.some((revision) => revision.revisionId === resource.revisionId))
+      (resource.projectId !== snapshot.project.id ||
+        !snapshot.revisions.some((revision) => revision.id === resource.revisionId))
     )
       invalid("Prepared audio belongs to another project history");
     const identity = key(resourceIdentity(resource));

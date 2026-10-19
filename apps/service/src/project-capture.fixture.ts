@@ -351,7 +351,7 @@ export async function settleCapture(
     source: { kind: "display", displayId: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const directory = join(f.home, "library", "recordings", recordingId, "source");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await writeFile(

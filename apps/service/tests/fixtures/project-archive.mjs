@@ -55,9 +55,9 @@ export async function projectArchiveContents(store, home, contents = ["generated
       background: "#000000ff",
     },
   });
-  projects.apply(created.project.projectId, {
+  projects.apply(created.project.id, {
     requestId: "place",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       ...imported.map((asset, index) => ({
@@ -72,7 +72,7 @@ export async function projectArchiveContents(store, home, contents = ["generated
       })),
     ],
   });
-  const snapshot = JSON.parse(JSON.stringify(projects.snapshot(created.project.projectId)));
+  const snapshot = JSON.parse(JSON.stringify(projects.snapshot(created.project.id)));
   const resources = imported.map((value) => ({ kind: "asset", ...assets.portable(value.id) }));
   const mediaPath = `assets/${asset.fileName}`;
   const files = {};

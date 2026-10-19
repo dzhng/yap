@@ -1240,7 +1240,7 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
   ]);
   expect(rows[1]).toEqual({
     type: "word",
-    wordId: "w0",
+    id: "w0",
     ordinal: 0,
     text: "Um,",
     kind: "filler",
@@ -1249,9 +1249,9 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
     sourceRange: { startUs: 1000000, endUs: 1300000 },
     partial: false,
   });
-  expect(rows[4]).toMatchObject({ wordId: "w3", kind: "vocalization", confidence: 0.75 });
+  expect(rows[4]).toMatchObject({ id: "w3", kind: "vocalization", confidence: 0.75 });
   expect(rows[8]).toMatchObject({
-    wordId: "w6",
+    id: "w6",
     text: "Uhm.",
     kind: "filler",
     instant: true,

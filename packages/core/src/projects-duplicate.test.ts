@@ -37,22 +37,22 @@ test("duplicates the selected document into a one-revision project", async () =>
     background: "#000000ff",
   };
   const source = projects.create({ requestId: "source-create", title: "Demo", canvas });
-  const edited = projects.apply(source.project.projectId, {
+  const edited = projects.apply(source.project.id, {
     requestId: "source-edit",
-    expectedRevisionId: source.revision.revisionId,
+    expectedRevisionId: source.revision.id,
     operations: [{ operation: "canvas.set", canvas: { ...canvas, width: 320 } }],
   });
 
   const copy = projects.duplicate({
     requestId: "duplicate",
-    projectId: source.project.projectId,
-    revisionId: edited.revision.revisionId,
+    projectId: source.project.id,
+    revisionId: edited.revision.id,
   });
 
   expect(copy.project.title).toBe("Demo copy");
-  expect(copy.revision.projectId).toBe(copy.project.projectId);
+  expect(copy.revision.projectId).toBe(copy.project.id);
   expect(copy.revision.document).toEqual(edited.revision.document);
-  expect(projects.history(copy.project.projectId)).toEqual({
+  expect(projects.history(copy.project.id)).toEqual({
     revisions: [copy.revision],
     nextCursor: null,
   });
@@ -81,7 +81,7 @@ test("duplicate replays the same request and rejects changed arguments", async (
     background: "#000000ff",
   };
   const source = projects.create({ requestId: "source-create", title: "Demo", canvas });
-  const request = { requestId: "duplicate", projectId: source.project.projectId };
+  const request = { requestId: "duplicate", projectId: source.project.id };
   const first = projects.duplicate(request);
   expect(projects.duplicate(request)).toEqual(first);
   expect(() => projects.duplicate({ ...request, title: "Other" })).toThrowError(
@@ -132,9 +132,9 @@ test("duplicate retains only the assets in the copied document", async () => {
     background: "#000000ff",
   };
   const source = projects.create({ requestId: "source-create", canvas });
-  const placed = projects.apply(source.project.projectId, {
+  const placed = projects.apply(source.project.id, {
     requestId: "place",
-    expectedRevisionId: source.revision.revisionId,
+    expectedRevisionId: source.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
       {
@@ -150,9 +150,9 @@ test("duplicate retains only the assets in the copied document", async () => {
       },
     ],
   });
-  const withBoth = projects.apply(source.project.projectId, {
+  const withBoth = projects.apply(source.project.id, {
     requestId: "place-second",
-    expectedRevisionId: placed.revision.revisionId,
+    expectedRevisionId: placed.revision.id,
     operations: [
       {
         operation: "place",
@@ -166,15 +166,15 @@ test("duplicate retains only the assets in the copied document", async () => {
       },
     ],
   });
-  const current = projects.apply(source.project.projectId, {
+  const current = projects.apply(source.project.id, {
     requestId: "remove-first",
-    expectedRevisionId: withBoth.revision.revisionId,
+    expectedRevisionId: withBoth.revision.id,
     operations: [{ operation: "remove", clipIds: [placed.edit.labels.first!], ripple: "none" }],
   });
   const copy = projects.duplicate({
     requestId: "duplicate-users",
-    projectId: source.project.projectId,
-    revisionId: current.revision.revisionId,
+    projectId: source.project.id,
+    revisionId: current.revision.id,
   });
   const files = {
     asset: (id: string) => [assets.path(id)],
@@ -190,9 +190,9 @@ test("duplicate retains only the assets in the copied document", async () => {
     kind: "asset",
     id: secondAsset.id,
   });
-  expect(firstUsers.usedBy.map(({ id }) => id)).toEqual([source.project.projectId]);
+  expect(firstUsers.usedBy.map(({ id }) => id)).toEqual([source.project.id]);
   expect(secondUsers.usedBy.map(({ id }) => id).sort()).toEqual(
-    [source.project.projectId, copy.project.projectId].sort(),
+    [source.project.id, copy.project.id].sort(),
   );
 });
 
@@ -238,9 +238,9 @@ test("duplicate rolls back every catalog and reference write after an injected f
     ],
   }));
   const source = projects.create({ requestId: "source-create", canvas });
-  projects.apply(source.project.projectId, {
+  projects.apply(source.project.id, {
     requestId: "source-place",
-    expectedRevisionId: source.revision.revisionId,
+    expectedRevisionId: source.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "track" },
       {
@@ -278,7 +278,7 @@ test("duplicate rolls back every catalog and reference write after an injected f
     expect(() =>
       projects.duplicate({
         requestId: `duplicate-failure-${index}`,
-        projectId: source.project.projectId,
+        projectId: source.project.id,
       }),
     ).toThrow(`duplicate failure at ${step}`);
     expect(

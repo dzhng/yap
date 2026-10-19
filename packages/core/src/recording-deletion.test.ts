@@ -20,8 +20,8 @@ test("deletion intent fences derivative access before selective cleanup", async 
       rmSync(join(home, "cache", "derived", `${id}.cache`), { force: true });
     }
   };
-  const target = store.allocate().recording.recordingId;
-  const sibling = store.allocate().recording.recordingId;
+  const target = store.allocate().recording.id;
+  const sibling = store.allocate().recording.id;
   const ready = cache.reserve({ kind: "recording", id: target });
   const pending = cache.reserve({ kind: "recording", id: target });
   const other = cache.reserve({ kind: "recording", id: sibling });
@@ -48,7 +48,7 @@ test("deletion intent fences derivative access before selective cleanup", async 
     held.release();
     await cache.purgeOwner({ kind: "recording", id: target }, removeFiles);
     expect(existsSync(ready.path)).toBe(false);
-    expect(store.deleting(target)?.recordingId).toBe(target);
+    expect(store.deleting(target)?.id).toBe(target);
     const read = cache.acquire(other.id)!;
     try {
       const bytes = Buffer.alloc(read.bytes);

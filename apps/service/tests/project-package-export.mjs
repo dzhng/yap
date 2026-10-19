@@ -33,7 +33,7 @@ test("project package export owns resource pins until commit and reopens retaine
   await f.jobs.idle();
   const opened = f.packages.status(admission.id);
   assert.equal(opened.state, "ready", JSON.stringify(opened));
-  assert.equal(opened.project.projectId, f.projectId);
+  assert.equal(opened.project.id, f.projectId);
   f.packages.adopt(opened.packageHandle, "adopt");
   await f.jobs.idle();
   const adopted = f.packages.adopt(opened.packageHandle, "adopt");
@@ -68,7 +68,7 @@ test("committed project package retains counted private cleanup until retry with
   assert.deepEqual(
     f.exports
       .list({ unfinishedOnly: true })
-      .exports.map((row) => [row.exportId, row.state, row.cleanupPending]),
+      .exports.map((row) => [row.id, row.state, row.cleanupPending]),
     [[request.exportId, "committed", true]],
   );
   const original = await readFile(committed.output);
@@ -229,7 +229,7 @@ test("canceled package keeps admitted scene generation through regeneration and 
   const old = first.published.evidence;
   const original = f.scenes.sourcePage({ identity: old, limit: 10 }).chunks;
   const request = { ...f.request(), kind: "processed-package", leaf: "scene.zip" };
-  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
+  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
   await previewEntered.promise;
   shade = 128;
   f.jobs.regenerate(first.jobId, first.published.generation);
@@ -324,7 +324,7 @@ test("canceled package keeps admitted transcript bytes through regeneration and 
     ["original"],
   );
   const request = { ...f.request(), kind: "processed-package", leaf: "transcript.zip" };
-  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
+  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
   await previewEntered.promise;
   word = "active-newer";
   f.jobs.regenerate(first.jobId, first.published.generation);
@@ -460,7 +460,7 @@ async function placeVoice(f) {
   }));
   f.projects.apply(f.projectId, {
     requestId: "voice",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
       {
@@ -666,7 +666,7 @@ for (const kind of ["source", "project"])
     const original = await readFile(records.portableImage(old, 0).path);
     assert.deepEqual(original, png);
     const request = { ...f.request(), kind: "processed-package", leaf: `${kind}-index.zip` };
-    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
+    await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
     await previewEntered.promise;
     png = grayPNG(255);
     for (const { frame } of records.page({ identity: old, limit: 200 }).entries) {

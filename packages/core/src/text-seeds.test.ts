@@ -117,10 +117,10 @@ async function fixture(
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = store.apply(projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
       { operation: "track.add", label: "text", track: { kind: "video", order: 0 } },
@@ -162,7 +162,7 @@ test("seeding keeps repeated occurrence identity, mutable display and transcript
   const f = await fixture();
   const request = {
     requestId: "seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0), f.cue(1, "clip")],
   };
   const seeded = f.store.seedText(f.projectId, request);
@@ -212,7 +212,7 @@ test("seeding keeps repeated occurrence identity, mutable display and transcript
   if (first.source.kind !== "text") throw new Error("text");
   const changed = f.store.apply(f.projectId, {
     requestId: "correct",
-    expectedRevisionId: seeded.revision.revisionId,
+    expectedRevisionId: seeded.revision.id,
     operations: [
       {
         operation: "text.set",
@@ -229,18 +229,18 @@ test("seeding keeps repeated occurrence identity, mutable display and transcript
     "Hello,",
     "world!",
   ]);
-  expect(f.store.revisionDependencies(f.projectId, changed.revision.revisionId)).toContainEqual({
+  expect(f.store.revisionDependencies(f.projectId, changed.revision.id)).toContainEqual({
     kind: "transcript-generation",
     id: transcriptGenerationResource(f.identity),
   });
   const split = f.store.apply(f.projectId, {
     requestId: "split",
-    expectedRevisionId: changed.revision.revisionId,
+    expectedRevisionId: changed.revision.id,
     operations: [{ operation: "split", clipIds: [f.authored.edit.labels.speech0], atUs: 625000 }],
   });
   const removed = f.store.apply(f.projectId, {
     requestId: "remove-origin",
-    expectedRevisionId: split.revision.revisionId,
+    expectedRevisionId: split.revision.id,
     operations: [
       { operation: "remove", clipIds: [f.authored.edit.labels.speech0], ripple: "none" },
     ],
@@ -258,7 +258,7 @@ test("seeding keeps repeated occurrence identity, mutable display and transcript
   );
   const captionOnly = f.store.apply(f.projectId, {
     requestId: "caption-only",
-    expectedRevisionId: removed.revision.revisionId,
+    expectedRevisionId: removed.revision.id,
     operations: [
       {
         operation: "detach",
@@ -275,12 +275,10 @@ test("seeding keeps repeated occurrence identity, mutable display and transcript
       },
     ],
   });
-  expect(f.store.revisionDependencies(f.projectId, captionOnly.revision.revisionId)).toContainEqual(
-    {
-      kind: "asset",
-      id: f.media.id,
-    },
-  );
+  expect(f.store.revisionDependencies(f.projectId, captionOnly.revision.id)).toContainEqual({
+    kind: "asset",
+    id: f.media.id,
+  });
   await f.records.reclaim(f.identity.owner, () => false, new AbortController().signal);
   expect(f.records.retainedGeneration(f.identity).generation).toBe("words");
   const adopted = f.store.prepareAdoption({
@@ -299,7 +297,7 @@ test("a stale generation seeds no new captions, while captions an existing revis
   const f = await fixture();
   const seeded = f.store.seedText(f.projectId, {
     requestId: "seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0)],
   });
   const row = f.catalog.catalog
@@ -311,7 +309,7 @@ test("a stale generation seeds no new captions, while captions an existing revis
   expect(() =>
     f.store.seedText(f.projectId, {
       requestId: "seed-stale",
-      expectedRevisionId: seeded.revision.revisionId,
+      expectedRevisionId: seeded.revision.id,
       cues: [f.cue(1)],
     }),
   ).toThrow(
@@ -324,12 +322,12 @@ test("a stale generation seeds no new captions, while captions an existing revis
   if (caption.source.kind !== "text") throw new Error("text");
   const edited = f.store.apply(f.projectId, {
     requestId: "edit-pinned",
-    expectedRevisionId: seeded.revision.revisionId,
+    expectedRevisionId: seeded.revision.id,
     operations: [
       { operation: "text.set", clipId: caption.id, source: { ...caption.source, text: "Kept" } },
     ],
   });
-  expect(f.store.revisionDependencies(f.projectId, edited.revision.revisionId)).toContainEqual({
+  expect(f.store.revisionDependencies(f.projectId, edited.revision.id)).toContainEqual({
     kind: "transcript-generation",
     id: transcriptGenerationResource(f.identity),
   });
@@ -345,18 +343,18 @@ test("missing or false generation/word/origin pins refuse atomically, including 
     expect(() =>
       f.store.seedText(f.projectId, {
         requestId: name,
-        expectedRevisionId: f.authored.revision.revisionId,
+        expectedRevisionId: f.authored.revision.id,
         cues: [{ ...f.cue(0), ...patch }],
       }),
     ).toThrow();
-    expect(f.store.get(f.projectId).currentRevisionId).toBe(f.authored.revision.revisionId);
+    expect(f.store.get(f.projectId).currentRevisionId).toBe(f.authored.revision.id);
   }
   const cue = f.cue(0),
     { style, trackId, ...pins } = omit(cue, "anchor", "separator", "label");
   expect(() =>
     f.store.apply(f.projectId, {
       requestId: "forged",
-      expectedRevisionId: f.authored.revision.revisionId,
+      expectedRevisionId: f.authored.revision.id,
       operations: [
         {
           operation: "place",
@@ -379,12 +377,12 @@ test.each(["content", "clip", "project"] as const)(
     const f = await fixture();
     const seeded = f.store.seedText(f.projectId, {
       requestId: "seed",
-      expectedRevisionId: f.authored.revision.revisionId,
+      expectedRevisionId: f.authored.revision.id,
       cues: [f.cue(0, anchor)],
     });
     const edited = f.store.apply(f.projectId, {
       requestId: "retime",
-      expectedRevisionId: seeded.revision.revisionId,
+      expectedRevisionId: seeded.revision.id,
       operations: [
         {
           operation: "retime",
@@ -410,7 +408,7 @@ test("adoption keeps captions seeded from a generation that has since gone stale
   const f = await fixture();
   f.store.seedText(f.projectId, {
     requestId: "seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0)],
   });
   const row = f.catalog.catalog
@@ -434,7 +432,7 @@ test("adoption rejects rewritten seed word pins before publishing a project", as
   const f = await fixture();
   f.store.seedText(f.projectId, {
     requestId: "seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0)],
   });
   const snapshot = f.store.snapshot(f.projectId);
@@ -471,7 +469,7 @@ test("seeding after retime preserves fractional project and partial-content boun
   const f = await fixture();
   const retimed = f.store.apply(f.projectId, {
     requestId: "retime-first",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     operations: [
       {
         operation: "retime",
@@ -483,7 +481,7 @@ test("seeding after retime preserves fractional project and partial-content boun
   });
   const seeded = f.store.seedText(f.projectId, {
     requestId: "project-seed",
-    expectedRevisionId: retimed.revision.revisionId,
+    expectedRevisionId: retimed.revision.id,
     cues: [f.cue(0, "project")],
   });
   expect(
@@ -497,7 +495,7 @@ test("seeding after retime preserves fractional project and partial-content boun
   });
   const split = f.store.apply(f.projectId, {
     requestId: "split-fraction",
-    expectedRevisionId: seeded.revision.revisionId,
+    expectedRevisionId: seeded.revision.id,
     operations: [{ operation: "split", clipIds: [f.authored.edit.labels.speech0], atUs: 187501 }],
   });
   const tail = split.revision.document.clips.find(
@@ -505,12 +503,12 @@ test("seeding after retime preserves fractional project and partial-content boun
   )!;
   const extraTrack = f.store.apply(f.projectId, {
     requestId: "extra-track",
-    expectedRevisionId: split.revision.revisionId,
+    expectedRevisionId: split.revision.id,
     operations: [{ operation: "track.add", label: "extra", track: { kind: "video", order: 1 } }],
   });
   const partial = f.store.seedText(f.projectId, {
     requestId: "partial-seed",
-    expectedRevisionId: extraTrack.revision.revisionId,
+    expectedRevisionId: extraTrack.revision.id,
     cues: [{ ...f.cue(0), occurrenceClipId: tail.id, trackId: extraTrack.edit.labels.extra }],
   });
   expect(partial.revision.document.clips.at(-1)!.placement).toEqual({
@@ -527,13 +525,13 @@ test("trimming keeps immutable cue origin even when a selected word is no longer
   const f = await fixture();
   const seeded = f.store.seedText(f.projectId, {
     requestId: "seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0)],
   });
   const caption = seeded.revision.document.clips.find((clip) => "seed" in clip)!;
   const trimmed = f.store.apply(f.projectId, {
     requestId: "trim",
-    expectedRevisionId: seeded.revision.revisionId,
+    expectedRevisionId: seeded.revision.id,
     operations: [
       {
         operation: "trim",
@@ -565,7 +563,7 @@ test("text seeds retain instant pins at the occurrence start and overlapping wor
   const f = await fixture(sourceWords);
   const seeded = f.store.seedText(f.projectId, {
     requestId: "overlap-seed",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     cues: [f.cue(0)],
   });
   const caption = seeded.revision.document.clips.at(-1)!;
@@ -574,7 +572,7 @@ test("text seeds retain instant pins at the occurrence start and overlapping wor
     placement: { kind: "content", sourceRange: { startUs: 0, endUs: 1000000 } },
     source: { text: "point long short another point" },
   });
-  const revision = seeded.revision.revisionId;
+  const revision = seeded.revision.id;
   expect(() =>
     f.store.seedText(f.projectId, {
       requestId: "point-only",

@@ -55,7 +55,7 @@ export const cliStatusSchema = asyncWorkSchema
   .passthrough();
 export const modelStatusSchema = asyncWorkSchema
   .extend({
-    modelId: z.string().min(1),
+    id: z.string().min(1),
     presence: modelPresenceSchema,
   })
   .passthrough();

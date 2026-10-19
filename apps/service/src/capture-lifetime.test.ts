@@ -63,7 +63,7 @@ test("closing capture aborts recovery and waits for its worker before releasing 
     });
     await closing;
     await recovery;
-    expect(store.get(recording.recordingId)).toMatchObject({
+    expect(store.get(recording.id)).toMatchObject({
       state: "finalizing",
       finalizationError: { code: "RECOVERY_CANCELED" },
     });
@@ -140,11 +140,11 @@ test("deletion quiescence waits behind a held start and keeps source files", asy
     const startResult = start.catch((error: unknown) => error);
     await entering;
     const recording = store.latest()!;
-    const path = join(home, "recordings", recording.recordingId, "source", "sentinel");
+    const path = join(home, "recordings", recording.id, "source", "sentinel");
     await writeFile(path, "keep until coordinator owns deletion");
-    store.markDeleting(recording.recordingId);
+    store.markDeleting(recording.id);
     let quiet = false;
-    const quiescing = service.quiesce(recording.recordingId).then(() => {
+    const quiescing = service.quiesce(recording.id).then(() => {
       quiet = true;
     });
     await Promise.resolve();
@@ -153,7 +153,7 @@ test("deletion quiescence waits behind a held start and keeps source files", asy
     releaseStart({
       ok: true,
       data: {
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         sequence: 1,
         state: "recording",
@@ -165,7 +165,7 @@ test("deletion quiescence waits behind a held start and keeps source files", asy
     releaseCancel({
       ok: true,
       data: {
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         sequence: 2,
         state: "finalizing",
@@ -196,7 +196,7 @@ test.each(["TIMEOUT", "SERVICE_STOPPED", "INVALID_STATE"])(
       newId: randomUUID,
     });
     const recording = store.allocate().recording;
-    store.markDeleting(recording.recordingId);
+    store.markDeleting(recording.id);
     const service = new CaptureService(
       store,
       home,
@@ -207,7 +207,7 @@ test.each(["TIMEOUT", "SERVICE_STOPPED", "INVALID_STATE"])(
               ok: true,
               data: {
                 state: "finalizing",
-                recordingId: recording.recordingId,
+                recordingId: recording.id,
                 sourceId: recording.sourceId,
                 elapsedUs: 1,
                 selection: null,
@@ -220,11 +220,11 @@ test.each(["TIMEOUT", "SERVICE_STOPPED", "INVALID_STATE"])(
       },
     );
     try {
-      await expect(service.quiesce(recording.recordingId)).rejects.toMatchObject({
+      await expect(service.quiesce(recording.id)).rejects.toMatchObject({
         code: code === "INVALID_STATE" ? "CAPTURE_NOT_QUIET" : code,
         retryable: true,
       });
-      expect(store.deleting(recording.recordingId)?.sourceId).toBe(recording.sourceId);
+      expect(store.deleting(recording.id)?.sourceId).toBe(recording.sourceId);
     } finally {
       await service.close();
       store.close();
@@ -240,8 +240,8 @@ test("deletion retains a take when idle status still names its native source", a
     newId: randomUUID,
   });
   const recording = store.allocate().recording;
-  store.markDeleting(recording.recordingId);
-  const directory = join(home, "recordings", recording.recordingId, "source");
+  store.markDeleting(recording.id);
+  const directory = join(home, "recordings", recording.id, "source");
   await mkdir(directory, { recursive: true });
   const path = join(directory, "sentinel");
   await writeFile(path, "unconfirmed native bytes");
@@ -258,7 +258,7 @@ test("deletion retains a take when idle status still names its native source", a
             ...idleNative,
             data: {
               ...(idleNative as { data: object }).data,
-              recordingId: recording.recordingId,
+              recordingId: recording.id,
               sourceId: recording.sourceId,
             },
           },
@@ -267,11 +267,11 @@ test("deletion retains a take when idle status still names its native source", a
     },
   );
   try {
-    await expect(service.quiesce(recording.recordingId)).rejects.toMatchObject({
+    await expect(service.quiesce(recording.id)).rejects.toMatchObject({
       code: "CAPTURE_NOT_QUIET",
       retryable: true,
     });
-    expect(store.deleting(recording.recordingId)?.state).toBe("preparing");
+    expect(store.deleting(recording.id)?.state).toBe("preparing");
     expect(await readFile(path, "utf8")).toBe("unconfirmed native bytes");
   } finally {
     await service.close();
@@ -334,9 +334,9 @@ test("deletion waits for running recovery and does not admit recovery for anothe
   try {
     const recovering = service.reconcileStranded();
     await started;
-    store.markDeleting(recording.recordingId);
-    store.markDeleting(other.recordingId);
-    const quiet = service.quiesce(recording.recordingId);
+    store.markDeleting(recording.id);
+    store.markDeleting(other.id);
+    const quiet = service.quiesce(recording.id);
     await Promise.resolve();
     expect(nativeCalls).toBe(1); // Authoritative idle inspection preceded recovery.
     finish({ ok: true, data: { durationUs: 100, journal: { header: {} } } });
@@ -362,14 +362,14 @@ test("a marked finished take neither starts replacement capture nor touches nati
     newId: randomUUID,
   });
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "interrupted",
     sourceDurationUs: null,
     reason: "NO_SOURCE_MEDIA",
   });
-  store.markDeleting(recording.recordingId);
+  store.markDeleting(recording.id);
   const service = new CaptureService(
     store,
     home,
@@ -381,10 +381,10 @@ test("a marked finished take neither starts replacement capture nor touches nati
     },
   );
   try {
-    await service.quiesce(recording.recordingId);
+    await service.quiesce(recording.id);
     await expect(
       service.restart({
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         requestId: "replacement",
         source: { kind: "window", windowId: 1 },
         microphone: false,
@@ -408,15 +408,15 @@ test("proved native closure releases heavy work while deletion files and intent 
   });
   const recording = store.allocate().recording;
   const other = store.allocate().recording;
-  store.ingestLifecycle(other.recordingId, {
+  store.ingestLifecycle(other.id, {
     sourceId: other.sourceId,
     sequence: 1,
     state: "interrupted",
     sourceDurationUs: 10,
     reason: "fixture",
   });
-  store.markDeleting(recording.recordingId);
-  const source = join(home, "recordings", recording.recordingId, "source");
+  store.markDeleting(recording.id);
+  const source = join(home, "recordings", recording.id, "source");
   await mkdir(source, { recursive: true });
   await writeFile(join(source, "sentinel"), "cleanup still pending");
   let entered!: () => void;
@@ -441,7 +441,7 @@ test("proved native closure releases heavy work while deletion files and intent 
     execute: async () => "other recording processed",
   });
   const job = queue.submit({
-    target: { kind: "recording" as const, id: other.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: other.id, revisionId: null },
     artifact: "source",
     input: "other",
     lane: "heavy",
@@ -476,7 +476,7 @@ test("proved native closure releases heavy work while deletion files and intent 
     () => queue.schedule(),
   );
   try {
-    const quiet = service.quiesce(recording.recordingId);
+    const quiet = service.quiesce(recording.id);
     await cancelEntered;
     expect(queue.job(job.jobId).state).toBe("queued");
     finish({
@@ -486,11 +486,9 @@ test("proved native closure releases heavy work while deletion files and intent 
     await quiet;
     await queue.idle();
     expect(queue.status(job).published?.result).toBe("other recording processed");
-    expect(store.deleting(recording.recordingId)?.state).toBe("canceled");
+    expect(store.deleting(recording.id)?.state).toBe("canceled");
     expect(await readFile(join(source, "sentinel"), "utf8")).toBe("cleanup still pending");
-    expect(() => store.get(recording.recordingId)).toThrow(
-      expect.objectContaining({ code: "NOT_FOUND" }),
-    );
+    expect(() => store.get(recording.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
   } finally {
     finish?.({
       ok: false,
@@ -512,12 +510,12 @@ test.each(["complete", "interrupted"] as const)(
       newId: randomUUID,
     });
     const recording = store.allocate().recording;
-    store.ingestLifecycle(recording.recordingId, {
+    store.ingestLifecycle(recording.id, {
       sourceId: recording.sourceId,
       sequence: 1,
       state: "recording",
     });
-    const source = join(home, "recordings", recording.recordingId, "source");
+    const source = join(home, "recordings", recording.id, "source");
     await mkdir(source, { recursive: true });
     await writeFile(join(source, "sentinel"), "finished media stays");
     let entered!: () => void;
@@ -539,16 +537,16 @@ test.each(["complete", "interrupted"] as const)(
       },
     );
     try {
-      const canceled = service.cancel(recording.recordingId).catch((error: unknown) => error);
+      const canceled = service.cancel(recording.id).catch((error: unknown) => error);
       await called;
       service.report({
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         sequence: 2,
         state: "finalizing",
       });
       const terminal = {
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         sequence: 3,
         state,
@@ -558,7 +556,7 @@ test.each(["complete", "interrupted"] as const)(
       service.report(terminal);
       finish({ ok: true, data: terminal });
       expect(await canceled).toMatchObject({ code: "INVALID_STATE" });
-      expect(store.get(recording.recordingId)).toMatchObject({
+      expect(store.get(recording.id)).toMatchObject({
         state,
         sourceDurationUs: 20,
       });
@@ -586,12 +584,12 @@ test.each(["media", "empty", "failed", "ambiguous"] as const)(
     });
     const recording = store.allocate().recording;
     if (finished)
-      store.ingestLifecycle(recording.recordingId, {
+      store.ingestLifecycle(recording.id, {
         sourceId: recording.sourceId,
         sequence: 1,
         state: "finalizing",
       });
-    const source = join(home, "recordings", recording.recordingId, "source");
+    const source = join(home, "recordings", recording.id, "source");
     await mkdir(source, { recursive: true });
     const sentinel = join(source, "sentinel");
     if (finished) await writeFile(sentinel, "canonical media whose terminal report was lost");
@@ -666,15 +664,15 @@ test.each(["media", "empty", "failed", "ambiguous"] as const)(
       },
     );
     try {
-      expect(await service.cancel(recording.recordingId)).toMatchObject({ state: "finalizing" });
+      expect(await service.cancel(recording.id)).toMatchObject({ state: "finalizing" });
       if (finished) {
         if (mode === "media") {
           await expect
-            .poll(() => store.get(recording.recordingId))
+            .poll(() => store.get(recording.id))
             .toMatchObject({ state: "interrupted", sourceDurationUs: 1234 });
         } else {
           await expect
-            .poll(() => store.get(recording.recordingId))
+            .poll(() => store.get(recording.id))
             .toMatchObject({
               state: "finalizing",
               sourceDurationUs: null,
@@ -687,7 +685,7 @@ test.each(["media", "empty", "failed", "ambiguous"] as const)(
           "canonical media whose terminal report was lost",
         );
       } else {
-        await expect.poll(() => store.get(recording.recordingId).state).toBe("canceled");
+        await expect.poll(() => store.get(recording.id).state).toBe("canceled");
       }
     } finally {
       await service.close();

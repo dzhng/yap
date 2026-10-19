@@ -104,15 +104,14 @@ export class ManagedStorage {
       throw new CatalogError("NOT_FOUND", "Recording does not exist", { recordingId });
     if (
       recording &&
-      (basename(recording.recordingId) !== recording.recordingId ||
-        [".", "..", ""].includes(recording.recordingId))
+      (basename(recording.id) !== recording.id || [".", "..", ""].includes(recording.id))
     )
       throw new CatalogError(
         "INVALID_CATALOG",
         "Recording identity is not a storage directory name",
       );
     const usage: StorageUsage = {
-      recordingId: recording?.recordingId ?? null,
+      recordingId: recording?.id ?? null,
       observedAt: "",
       measurement: "live",
       sourceBytes: 0,
@@ -242,7 +241,7 @@ export class ManagedStorage {
           const stat = await lstat(parent, { bigint: true });
           if (stat.isDirectory())
             await walk(
-              join(parent, recording.recordingId),
+              join(parent, recording.id),
               {
                 area: "recording",
                 category: "otherBytes",
@@ -254,7 +253,7 @@ export class ManagedStorage {
         }
         for (const path of this.cache.usageFiles({
           kind: "recording",
-          id: recording.recordingId,
+          id: recording.id,
         }))
           await count(path, "cacheBytes", [this.homeIdentity]);
       } else {

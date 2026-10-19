@@ -58,7 +58,6 @@ export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegi
         nextAfterId: page.nextAfterId,
       };
     },
-    result: (subject) => ({ projectId: subject.id, deleted: true }),
     freedBytes: (subject) => owners.freedBytes(subject.id),
   };
 }

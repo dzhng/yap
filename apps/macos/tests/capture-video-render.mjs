@@ -91,11 +91,11 @@ test(
             background: "#000000ff",
           },
         });
-        const projectId = created.project.projectId;
+        const projectId = created.project.id;
         const authored = await call("edit.apply", {
           projectId,
           requestId: randomUUID(),
-          expectedRevisionId: created.revision.revisionId,
+          expectedRevisionId: created.revision.id,
           operations: [
             { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
             ...plan.map(({ source, playback }) => ({
@@ -111,7 +111,7 @@ test(
             })),
           ],
         });
-        const params = { projectId, revisionId: authored.revision.revisionId };
+        const params = { projectId, revisionId: authored.revision.id };
         const ready = await until(async () => {
           const status = await call("preview.get", params);
           assert.ok(!["failed", "unavailable"].includes(status.state), JSON.stringify(status));

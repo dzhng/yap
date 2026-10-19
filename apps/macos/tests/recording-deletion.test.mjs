@@ -59,7 +59,7 @@ test(
         systemAudio: false,
       });
     const take = await start();
-    const directory = join(home, "library", "recordings", take.recordingId);
+    const directory = join(home, "library", "recordings", take.id);
     await waitFor(() => existsSync(join(directory, "source", "capture.journal.jsonl")), 5_000);
     const cliCall = async (operation, params) => {
       try {
@@ -74,13 +74,13 @@ test(
         return JSON.parse(error.stdout);
       }
     };
-    const reference = { recordingId: take.recordingId };
+    const reference = { recordingId: take.id };
     const before = await cliCall("storage.usage", {});
     assert.equal(before.ok, true, JSON.stringify(before));
     assert.equal(before.data.recordingId, null);
     const identityBefore = await cliCall("recording.get", reference);
     assert.equal(identityBefore.ok, true, JSON.stringify(identityBefore));
-    assert.equal(identityBefore.data.recordingId, take.recordingId);
+    assert.equal(identityBefore.data.recordingId, take.id);
     assert.ok(before.data.totalBytes > 0);
     const directoryBytes = sizeTree(directory);
     const filesBeforeDelete = snapshotFiles(join(home, "library"));
@@ -91,20 +91,17 @@ test(
       (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
       0,
     );
-    assert.equal(cliResult.data.recordingId, take.recordingId);
+    assert.equal(cliResult.data.recordingId, take.id);
     assert.equal(cliResult.data.deleted, true);
     assert.ok(cliResult.data.freedBytes >= directoryBytes);
     assert.ok(freedMeasured <= cliResult.data.freedBytes);
     assert.equal(existsSync(directory), false);
     assert.equal((await cliCall("recording.get", reference)).error.code, "NOT_FOUND");
-    assert.equal(
-      (await call("recording.get", { recordingId: take.recordingId })).error.code,
-      "NOT_FOUND",
-    );
+    assert.equal((await call("recording.get", { recordingId: take.id })).error.code, "NOT_FOUND");
     assert.equal(
       (
         await succeeds("recording.delete", {
-          recordingId: take.recordingId,
+          recordingId: take.id,
           requestId: randomUUID(),
         })
       ).deleted,
@@ -112,7 +109,7 @@ test(
     );
     // Native capture capacity and the service's durable capture priority must both be released.
     const replacement = await start();
-    assert.notEqual(replacement.recordingId, take.recordingId);
+    assert.notEqual(replacement.recordingId, take.id);
     assert.equal(replacement.state, "recording");
     const client = new Client({ name: "recording-deletion-test", version: "1" });
     try {
@@ -144,7 +141,7 @@ test(
       });
       assert.equal(result.structuredContent.ok, true);
       assert.deepEqual(result.structuredContent.data, {
-        recordingId: replacement.recordingId,
+        id: replacement.recordingId,
         deleted: true,
         freedBytes: replacementFreedBytes,
       });

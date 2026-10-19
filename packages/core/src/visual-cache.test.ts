@@ -312,7 +312,7 @@ test("partial hits stay usable when publishing missing samples evicts their old 
 
 test("same-path visual requests retain independent recording ownership and purge only their own lookup", async () => {
   const f = await fixture();
-  const sibling = f.store.allocate().recording.recordingId;
+  const sibling = f.store.allocate().recording.id;
   const observations = new VisualObservationCache(f.store, f.cache, f.decode);
   const expected = await observations.sample(request, signal());
   expect(await observations.sample({ ...request, recordingId: sibling }, signal())).toEqual(

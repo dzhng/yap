@@ -73,10 +73,10 @@ async function fixture(fps = { numerator: 24, denominator: 1 }) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = store.apply(projectId, {
     requestId: "place",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", label: "picture", track: { kind: "video", order: 0 } },
       { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
@@ -152,7 +152,7 @@ test("one exact 24fps ripple frame preserves retimed source, linked captions and
   const f = await fixture();
   const request = {
     requestId: "remove-frame",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     operations: [
       {
         operation: "remove",
@@ -220,7 +220,7 @@ test("one exact 24fps ripple frame preserves retimed source, linked captions and
       },
     },
   ]);
-  const compiler = createCompiler(model, removed.revision.revisionId);
+  const compiler = createCompiler(model, removed.revision.id);
   const joinFrame = [...compiler.frames({ startUs: 41666, endUs: 83334 })].find(
     (frame) => frame.index === 1,
   )!;
@@ -258,7 +258,7 @@ test("one exact 24fps ripple frame preserves retimed source, linked captions and
     expect(
       restarted.undo(f.projectId, {
         requestId: "undo",
-        expectedRevisionId: removed.revision.revisionId,
+        expectedRevisionId: removed.revision.id,
       }).document,
     ).toEqual(f.authored.revision.document);
   } finally {
@@ -270,7 +270,7 @@ test("adjacent and overlapping 30000/1001 selections collapse their exact union 
   const f = await fixture({ numerator: 30000, denominator: 1001 });
   const removed = f.store.apply(f.projectId, {
     requestId: "remove-union",
-    expectedRevisionId: f.authored.revision.revisionId,
+    expectedRevisionId: f.authored.revision.id,
     operations: [
       {
         operation: "remove",
@@ -317,7 +317,7 @@ test("adjacent and overlapping 30000/1001 selections collapse their exact union 
       },
     ]);
   const frames = [
-    ...createCompiler(model, removed.revision.revisionId).frames({ startUs: 0, endUs: 100100 }),
+    ...createCompiler(model, removed.revision.id).frames({ startUs: 0, endUs: 100100 }),
   ];
   expect(
     frames.map((frame) => frame.layers.find((layer) => layer.kind === "video")?.sourceUs),
@@ -341,7 +341,7 @@ test("fractional removal refuses changed synchronization and malformed intervals
   expect(() =>
     f.store.apply(f.projectId, {
       requestId: "refused",
-      expectedRevisionId: f.authored.revision.revisionId,
+      expectedRevisionId: f.authored.revision.id,
       operations: [{ operation: "canvas.set", canvas: { width: 32 } }, operation],
     }),
   ).toThrow(/synchronization/);
@@ -365,7 +365,7 @@ test("fractional removal refuses changed synchronization and malformed intervals
     expect(() =>
       f.store.apply(f.projectId, {
         requestId: "malformed",
-        expectedRevisionId: f.authored.revision.revisionId,
+        expectedRevisionId: f.authored.revision.id,
         operations: [{ ...operation, ranges }],
       }),
     ).toThrow();
@@ -375,7 +375,7 @@ test("fractional removal refuses changed synchronization and malformed intervals
   expect(
     f.store.apply(f.projectId, {
       requestId: "refused",
-      expectedRevisionId: f.authored.revision.revisionId,
+      expectedRevisionId: f.authored.revision.id,
       operations: [
         {
           ...operation,

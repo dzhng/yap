@@ -169,9 +169,9 @@ export class CaptureSources {
   }
 
   describe(
-    snapshot: Pick<Recording, "recordingId">,
+    snapshot: Pick<Recording, "id">,
   ): Recording & { sourceAdmissions: CaptureSourceAdmission[] } {
-    const recording = this.captures.get(snapshot.recordingId);
+    const recording = this.captures.get(snapshot.id);
     if (!recording.publication?.inputsClosed || recording.state === "canceled")
       return { ...recording, sourceAdmissions: [] };
     return {

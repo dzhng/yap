@@ -243,7 +243,7 @@ test("reopening the catalog retains cache content and LRU, removing only owned o
 
 test("recording purge removes published and pending files, preserving sibling readers", async () => {
   const { cache, store, removeFiles } = await fixture(100);
-  const sibling = store.allocate().recording.recordingId;
+  const sibling = store.allocate().recording.id;
   const a = await add(cache, "deleted");
   const pending = cache.reserve({ kind: "recording", id: "recording-1" });
   writeFileSync(pending.path, "unfinished");
@@ -267,7 +267,7 @@ test("recording purge removes published and pending files, preserving sibling re
 
 test("purge refuses pinned recording bytes and retries without releasing unrelated pins", async () => {
   const { cache, store, removeFiles } = await fixture(100);
-  const sibling = store.allocate().recording.recordingId;
+  const sibling = store.allocate().recording.id;
   const a = await add(cache, "target");
   const b = cache.reserve({ kind: "recording", id: sibling });
   writeFileSync(b.path, "sibling");
@@ -317,7 +317,7 @@ test("reservations reject missing owners and retain their owner after reopening"
   expect(() => cache.reserve({ kind: "recording", id: "missing" })).toThrowError(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
-  const owner = store.allocate().recording.recordingId;
+  const owner = store.allocate().recording.id;
   const first = await add(cache, "first");
   const second = cache.reserve({ kind: "recording", id: owner });
   writeFileSync(second.path, "second");

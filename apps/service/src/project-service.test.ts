@@ -63,9 +63,9 @@ test("recording.get without an id resolves the latest take and removed recording
   });
   expect(await f.call("recording.get", {})).toMatchObject({
     ok: true,
-    data: { recordingId: latest.recordingId },
+    data: { id: latest.id },
   });
-  expect(latest.recordingId).not.toBe(older.recordingId);
+  expect(latest.id).not.toBe(older.id);
 });
 
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
@@ -84,12 +84,12 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   expect(created).toMatchObject({ ok: true });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const source = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string; document: unknown };
+    project: { id: string };
+    revision: { id: string; document: unknown };
   };
   const duplicated = await f.call("project.duplicate", {
     requestId: "duplicate-project",
-    projectId: source.project.projectId,
+    projectId: source.project.id,
   });
   expect(duplicated).toMatchObject({
     ok: true,
@@ -97,48 +97,46 @@ test("project.duplicate copies a revision, replays, and survives source deletion
   });
   if (!duplicated.ok) throw new Error(JSON.stringify(duplicated));
   const copy = duplicated.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   expect(
     await f.call("project.duplicate", {
       requestId: "duplicate-project",
-      projectId: source.project.projectId,
+      projectId: source.project.id,
     }),
   ).toEqual(duplicated);
   expect(
     await f.call("project.duplicate", {
       requestId: "duplicate-project",
-      projectId: source.project.projectId,
+      projectId: source.project.id,
       title: "Different",
     }),
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
-  expect(await f.call("revision.history", { projectId: copy.project.projectId })).toMatchObject({
+  expect(await f.call("revision.history", { projectId: copy.project.id })).toMatchObject({
     ok: true,
-    data: { revisions: [{ revisionId: copy.revision.revisionId, ordinal: 0 }], nextCursor: null },
+    data: { revisions: [{ id: copy.revision.id, ordinal: 0 }], nextCursor: null },
   });
   expect(
     await f.call("project.delete", {
       requestId: "delete-duplicate-source",
-      projectId: source.project.projectId,
+      projectId: source.project.id,
     }),
-  ).toMatchObject({ ok: true, data: { projectId: source.project.projectId, deleted: true } });
-  expect(await f.call("revision.get", { projectId: copy.project.projectId })).toMatchObject({
+  ).toMatchObject({ ok: true, data: { id: source.project.id, deleted: true } });
+  expect(await f.call("revision.get", { projectId: copy.project.id })).toMatchObject({
     ok: true,
-    data: { projectId: copy.project.projectId, revision: { revisionId: copy.revision.revisionId } },
+    data: { projectId: copy.project.id, revision: { id: copy.revision.id } },
   });
-  expect(await f.call("inspect.open", { projectId: copy.project.projectId })).toMatchObject({
+  expect(await f.call("inspect.open", { projectId: copy.project.id })).toMatchObject({
     ok: true,
-    data: { projectId: copy.project.projectId, revision: { revisionId: copy.revision.revisionId } },
+    data: { projectId: copy.project.id, revision: { id: copy.revision.id } },
   });
-  expect(
-    f.service.libraryUsers!.usersOf({ kind: "project", id: copy.project.projectId }),
-  ).toMatchObject({
+  expect(f.service.libraryUsers!.usersOf({ kind: "project", id: copy.project.id })).toMatchObject({
     usedBy: [],
   });
 });
 
-test("asset.list rows expose assetId and sizeBytes without legacy id or bytes", async () => {
+test("asset.list rows name themselves id and carry sizeBytes, not bytes", async () => {
   const f = await projectServiceFixture(cleanups, async (operation) =>
     operation === "media.probe"
       ? {
@@ -159,9 +157,8 @@ test("asset.list rows expose assetId and sizeBytes without legacy id or bytes", 
   expect(listed).toMatchObject({ ok: true, data: { assets: expect.any(Array) } });
   if (listed.ok) {
     const row = (listed.data as { assets: Record<string, unknown>[] }).assets[0]!;
-    expect(row).toHaveProperty("assetId");
+    expect(row).toHaveProperty("id");
     expect(row).toHaveProperty("sizeBytes");
-    expect(row).not.toHaveProperty("id");
     expect(row).not.toHaveProperty("bytes");
   }
 });
@@ -231,30 +228,30 @@ test("media.list sizeBytes uses the same measured bytes as deletion", async () =
     requestId: "media-size-recording",
     arguments: "{}",
   }).recording;
-  f.service.captures.ingestLifecycle(recording.recordingId, {
+  f.service.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  f.service.captures.ingestLifecycle(recording.recordingId, {
+  f.service.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 2,
     state: "finalizing",
   });
-  f.service.captures.ingestLifecycle(recording.recordingId, {
+  f.service.captures.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 3,
     state: "complete",
     sourceDurationUs: 1,
   });
-  const recordingPath = join(f.home, "library", "recordings", recording.recordingId, "source");
+  const recordingPath = join(f.home, "library", "recordings", recording.id, "source");
   await mkdir(recordingPath, { recursive: true, mode: 0o700 });
   await writeFile(join(recordingPath, "measured.bin"), "recording bytes on disk");
 
   const assetMeasured = f.service.libraryUsers!.usersOf({ kind: "asset", id: assetId }).freesBytes;
   const recordingMeasured = f.service.libraryUsers!.usersOf({
     kind: "recording",
-    id: recording.recordingId,
+    id: recording.id,
   }).freesBytes;
   const listed = await f.call("media.list", { limit: 100 });
   if (!listed.ok) throw new Error(JSON.stringify(listed));
@@ -264,7 +261,7 @@ test("media.list sizeBytes uses the same measured bytes as deletion", async () =
     }
   ).media;
   expect(media.find((row) => row.id === assetId)?.sizeBytes).toBe(assetMeasured);
-  expect(media.find((row) => row.id === recording.recordingId)?.sizeBytes).toBe(recordingMeasured);
+  expect(media.find((row) => row.id === recording.id)?.sizeBytes).toBe(recordingMeasured);
 
   const assetDeleted = await f.call("asset.delete", {
     requestId: "media-size-delete-asset",
@@ -273,7 +270,7 @@ test("media.list sizeBytes uses the same measured bytes as deletion", async () =
   expect(assetDeleted).toMatchObject({ ok: true, data: { freedBytes: assetMeasured } });
   const recordingDeleted = await f.call("recording.delete", {
     requestId: "media-size-delete-recording",
-    recordingId: recording.recordingId,
+    recordingId: recording.id,
   });
   if (!recordingDeleted.ok) throw new Error(JSON.stringify(recordingDeleted));
   expect(recordingDeleted).toMatchObject({ ok: true, data: { freedBytes: recordingMeasured } });
@@ -298,7 +295,7 @@ test("export.create replays by requestId and refuses a conflicting request", asy
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const request = {
     requestId: "export-replay",
     projectId,
@@ -312,7 +309,7 @@ test("export.create replays by requestId and refuses a conflicting request", asy
   const replay = await f.call("export.create", request);
   expect(replay).toMatchObject({
     ok: true,
-    data: { exportId: (first.data as { exportId: string }).exportId },
+    data: { id: (first.data as { id: string }).id },
   });
   expect(await f.call("export.create", { ...request, leaf: "different.zip" })).toMatchObject({
     ok: false,
@@ -339,7 +336,7 @@ test("export.recover replays by requestId and refuses a different export", async
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const exported = await f.call("export.create", {
     requestId: "recover-replay-export",
     projectId,
@@ -348,10 +345,10 @@ test("export.recover replays by requestId and refuses a different export", async
     leaf: "recover-replay.zip",
   });
   if (!exported.ok) throw new Error(JSON.stringify(exported));
-  const exportId = (exported.data as { exportId: string }).exportId;
+  const exportId = (exported.data as { id: string }).id;
   const request = { requestId: "recover-replay", exportId };
   const first = await f.call("export.recover", request);
-  expect(first).toMatchObject({ ok: true, data: { exportId } });
+  expect(first).toMatchObject({ ok: true, data: { id: exportId } });
   expect(await f.call("export.recover", request)).toEqual(first);
   expect(await f.call("export.recover", { ...request, exportId: "other-export" })).toMatchObject({
     ok: false,
@@ -399,8 +396,8 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const catalog = new Catalog(join(home, "library/catalog.sqlite"));
   const cacheId = randomUUID();
@@ -415,12 +412,12 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
       );
     catalog.catalog
       .prepare("INSERT INTO resource_references VALUES(?,?,?,?)")
-      .run("acquisition", "acquisition-capture", "revision", revision.revisionId);
+      .run("acquisition", "acquisition-capture", "revision", revision.id);
     catalog.catalog
       .prepare(
         "INSERT INTO derived_cache(id,ownerKind,ownerId,touched,bytes) VALUES (?,'project',?,1,?)",
       )
-      .run(cacheId, project.projectId, 1);
+      .run(cacheId, project.id, 1);
   } finally {
     catalog.close();
   }
@@ -429,21 +426,21 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
   const before = Number((await stat(cachePath)).size);
   const details = f.service.libraryUsers!.usersOf({ kind: "recording", id: "recording-1" });
   expect(details.usedBy).toEqual([
-    { kind: "project", id: project.projectId, title: "Untitled", revisions: 1 },
+    { kind: "project", id: project.id, title: "Untitled", revisions: 1 },
   ]);
   expect(details.cascadeFreesBytes).toBe(before);
   const totalBefore = Number((await stat(cachePath)).size);
   const deleted = await f.call("project.delete", {
     requestId: "test-delete",
-    projectId: project.projectId,
+    projectId: project.id,
   });
   expect(deleted).toMatchObject({
     ok: true,
-    data: { projectId: project.projectId, deleted: true },
+    data: { id: project.id, deleted: true },
   });
   if (deleted.ok) expect((deleted.data as { freedBytes: number }).freedBytes).toBe(totalBefore);
   expect(
-    await f.call("project.delete", { requestId: "test-delete", projectId: project.projectId }),
+    await f.call("project.delete", { requestId: "test-delete", projectId: project.id }),
   ).toEqual(deleted);
   expect(
     await f.call("project.delete", { requestId: "test-delete", projectId: "different-project" }),
@@ -504,7 +501,7 @@ test("correspondence receipts are admitted and paged without declaring an edit",
   });
   expect(prepared).toMatchObject({
     ok: true,
-    data: { state: "ready", published: { output: { evidenceId: "e1" } } },
+    data: { state: "ready", published: { output: { id: "e1" } } },
   });
   expect(
     await f.call("correspondence.get", { evidenceId: "e1", generation: "g1", limit: 1 }),
@@ -810,7 +807,7 @@ test("complete socket frames racing a private fence either commit owned work or 
     expect(creation).toMatchObject({
       id: "racing-creation",
       ok: true,
-      data: { project: { projectId: expect.any(String) } },
+      data: { project: { id: expect.any(String) } },
     });
   }
 });
@@ -920,7 +917,7 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   await writeFile(archive, "x");
   const opened = await f.control("package.open", { path: archive });
   if (!opened.ok) throw new Error(JSON.stringify(opened));
-  const id = (opened.data as { packageId: string }).packageId;
+  const id = (opened.data as { id: string }).id;
   await expect
     .poll(() => f.control("package.status", { admissionId: id }))
     .toMatchObject({ ok: true, data: { state: "ready", packageHandle: expect.any(String) } });
@@ -975,7 +972,7 @@ test("observing export admission never cancels its held publication owner", asyn
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const exporting = f.control("export.create", {
     projectId,
     requestId: randomUUID(),
@@ -1020,7 +1017,7 @@ test("deletion cleanup remains owned through disconnect until its storage worker
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   const cacheId = randomUUID();
   catalog.catalog
@@ -1325,12 +1322,12 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const initial = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
-    expectedRevisionId: initial.revision.revisionId,
+    projectId: initial.project.id,
+    expectedRevisionId: initial.revision.id,
     requestId: "silence",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1346,8 +1343,8 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const selection = {
-    projectId: initial.project.projectId,
-    revisionId: (edited.data as { revision: { revisionId: string } }).revision.revisionId,
+    projectId: initial.project.id,
+    revisionId: (edited.data as { revision: { id: string } }).revision.id,
   };
   const pending = await f.call("audio.prepare", selection);
   expect(pending.ok).toBe(true);
@@ -1377,7 +1374,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   expect(attempts).toBe(2);
   expect(await f.call("revision.get", selection)).toMatchObject({
     ok: true,
-    data: { revision: { revisionId: selection.revisionId } },
+    data: { revision: { id: selection.revisionId } },
   });
   expect(await f.call("audio.prepare", { projectId: selection.projectId })).toMatchObject({
     ok: false,
@@ -1602,8 +1599,8 @@ test("large provenance history cannot hide metadata and every origin remains pag
   expect(get).toMatchObject({
     ok: true,
     data: {
-      assetId,
-      streams: metadata.streams.map(({ id, ...stream }) => ({ ...stream, streamId: id })),
+      id: assetId,
+      streams: metadata.streams,
     },
   });
   expect(Buffer.byteLength(JSON.stringify(get))).toBeLessThan(1024);
@@ -1644,7 +1641,7 @@ test("startup resumes a committed project deletion marker before serving request
   const created = await f.call("project.create", creation);
   expect(created.ok).toBe(true);
   if (!created.ok) return;
-  const { project } = created.data as { project: { projectId: string } };
+  const { project } = created.data as { project: { id: string } };
   await f.service.close();
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   const projects = projectStoreFixture(
@@ -1652,7 +1649,7 @@ test("startup resumes a committed project deletion marker before serving request
     new AssetStore(catalog, join(f.home, "library")),
     join(f.home, "library"),
   );
-  expect(projects.markDeleting(project.projectId)).toBe(true);
+  expect(projects.markDeleting(project.id)).toBe(true);
   catalog.close();
   const restarted = await startProjectService({ home: f.home });
   cleanups.push(() => restarted.close());
@@ -1660,7 +1657,7 @@ test("startup resumes a committed project deletion marker before serving request
     await callLocal(restarted.socketPath, {
       id: "get",
       operation: "project.get",
-      params: { projectId: project.projectId },
+      params: { projectId: project.id },
     }),
   ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   await restarted.close();
@@ -1716,14 +1713,14 @@ test("shutdown aborts an in-flight export destination admission before draining 
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   expect(
     await f.call("edit.apply", {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: "place",
-      expectedRevisionId: revision.revisionId,
+      expectedRevisionId: revision.id,
       operations: [
         { operation: "track.add", track: { kind: "video", order: 0 }, label: "picture" },
         {
@@ -1741,7 +1738,7 @@ test("shutdown aborts an in-flight export destination admission before draining 
   ).toMatchObject({ ok: true });
   const pending = f
     .call("export.create", {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
       kind: "video",
       directory: f.home,
@@ -1803,7 +1800,7 @@ test("selected-source transcript reads report unprepared models without download
     await f.call("model.remove", { modelId: "parakeet", requestId: "remove-before-transcribe" }),
   ).toMatchObject({
     ok: true,
-    data: { modelId: "parakeet", deleted: true, freedBytes: 0 },
+    data: { id: "parakeet", deleted: true, freedBytes: 0 },
   });
   expect(await f.call("transcript.transcribe", selection)).toMatchObject({
     ok: true,
@@ -1889,13 +1886,13 @@ test("project transcript review reports a failed default model download as faile
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const placed = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "place",
-    expectedRevisionId: revision.revisionId,
+    expectedRevisionId: revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "speech" },
       {
@@ -1912,8 +1909,8 @@ test("project transcript review reports a failed default model download as faile
   });
   if (!placed.ok) throw new Error(JSON.stringify(placed));
   const review = {
-    projectId: project.projectId,
-    revisionId: (placed.data as { revision: { revisionId: string } }).revision.revisionId,
+    projectId: project.id,
+    revisionId: (placed.data as { revision: { id: string } }).revision.id,
   };
   // The default model is fetched without asking; here the fetch fails.
   expect(await f.call("transcript.review", review)).toMatchObject({
@@ -1952,10 +1949,10 @@ test("project transcript paging uses shared jobs and returns an empty historical
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
-  const params = { projectId: project.projectId, revisionId: revision.revisionId, limit: 1 };
+  const params = { projectId: project.id, revisionId: revision.id, limit: 1 };
   const pending = await f.call("transcript.get", params);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
@@ -1963,8 +1960,8 @@ test("project transcript paging uses shared jobs and returns an empty historical
   expect(await f.call("transcript.get", params)).toMatchObject({
     ok: true,
     data: {
-      projectId: project.projectId,
-      revisionId: revision.revisionId,
+      projectId: project.id,
+      revisionId: revision.id,
       state: "ready",
       dependencies: [],
       rows: [],
@@ -1977,8 +1974,8 @@ test("project transcript paging uses shared jobs and returns an empty historical
   expect(await f.call("transcript.search", { ...params, text: "missing words" })).toMatchObject({
     ok: true,
     data: {
-      projectId: project.projectId,
-      revisionId: revision.revisionId,
+      projectId: project.id,
+      revisionId: revision.id,
       state: "ready",
       entries: [],
       nextCursor: null,
@@ -2096,16 +2093,14 @@ test("project export refuses a dangling prepared audio reference before native w
   });
   if (!created.ok) throw Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   await f.service.close();
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
-  new ResourceReferences(catalog).retain(
-    "prepared-audio",
-    { kind: "revision", id: revision.revisionId },
-    [JSON.stringify([project.projectId, "prepared-attempt"])],
-  );
+  new ResourceReferences(catalog).retain("prepared-audio", { kind: "revision", id: revision.id }, [
+    JSON.stringify([project.id, "prepared-attempt"]),
+  ]);
   catalog.close();
   const service = await startProjectService({
     home: f.home,
@@ -2120,7 +2115,7 @@ test("project export refuses a dangling prepared audio reference before native w
     operation: "export.create",
     params: {
       requestId: "dangling-prepared-export",
-      projectId: project.projectId,
+      projectId: project.id,
       kind: "processed-package",
       directory: f.home,
       leaf: "prepared.zip",
@@ -2420,12 +2415,12 @@ test("model discovery crosses the public wire before either model is prepared", 
     data: {
       models: expect.arrayContaining([
         expect.objectContaining({
-          modelId: "parakeet",
+          id: "parakeet",
           purpose: "transcription",
           descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
         }),
         expect.objectContaining({
-          modelId: "qwen3-tts-icl-v1",
+          id: "qwen3-tts-icl-v1",
           purpose: "voice",
           preparation: expect.objectContaining({ runtimeSourceRequired: true }),
         }),
@@ -2456,9 +2451,8 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   const listed = await f.call("model.list", { limit: 1000 });
   if (!listed.ok) throw new Error(JSON.stringify(listed));
-  const { models } = listed.data as { models: { modelId: string; modelDigest: string }[] };
-  const digestOf = (modelId: string) =>
-    models.find((model) => model.modelId === modelId)!.modelDigest;
+  const { models } = listed.data as { models: { id: string; modelDigest: string }[] };
+  const digestOf = (modelId: string) => models.find((model) => model.id === modelId)!.modelDigest;
   // Stored the way transcription stores its job input: the model by content digest and repo pin.
   const input = JSON.stringify({
     selection: { assetId: "asset" },
@@ -2504,7 +2498,7 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
   expect(removed).toEqual({
     id: "test",
     ok: true,
-    data: { modelId: "parakeet", deleted: true, freedBytes: 49 },
+    data: { id: "parakeet", deleted: true, freedBytes: 49 },
   });
   catalog.catalog
     .prepare(
@@ -2539,7 +2533,7 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
   expect(await f.call("storage.usage", {})).toMatchObject({ ok: true, data: { modelBytes: 0 } });
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,
-    data: { modelId: "parakeet", presence: "absent" },
+    data: { id: "parakeet", presence: "absent" },
   });
   expect(
     await f.call("model.remove", { requestId: "unknown-model", modelId: "missing" }),
@@ -2559,9 +2553,9 @@ test("preset reads cross the public wire without changing the catalog format", a
     ok: true,
     data: {
       presets: expect.arrayContaining([
-        expect.objectContaining({ presetId: "studio-podcast", source: "bundled" }),
-        expect.objectContaining({ presetId: "on-location-conversation", source: "bundled" }),
-        expect.objectContaining({ presetId: "tactile-launch-film", source: "bundled" }),
+        expect.objectContaining({ id: "studio-podcast", source: "bundled" }),
+        expect.objectContaining({ id: "on-location-conversation", source: "bundled" }),
+        expect.objectContaining({ id: "tactile-launch-film", source: "bundled" }),
       ]),
       refresh: { checkedAt: null, commit: null, error: null, available: [] },
       instructions: expect.any(Array),
@@ -2570,7 +2564,7 @@ test("preset reads cross the public wire without changing the catalog format", a
   expect(await f.call("preset.get", { presetId: "tactile-launch-film" })).toMatchObject({
     ok: true,
     data: {
-      presetId: "tactile-launch-film",
+      id: "tactile-launch-film",
       text: expect.stringContaining("## Shoot"),
       path: expect.stringContaining("tactile-launch-film"),
       kitPath: expect.stringContaining("presets/kit"),
@@ -2635,7 +2629,7 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
-    data: { presets: [expect.objectContaining({ presetId: "wire-demo", source: "downloaded" })] },
+    data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
   });
   expect(
     requested
@@ -2660,7 +2654,7 @@ test("a local preset is created, read and trashed over the public wire", async (
   expect(created).toMatchObject({
     ok: true,
     data: {
-      presetId: "vertical-explainer",
+      id: "vertical-explainer",
       path: expect.stringContaining("presets/vertical-explainer"),
       instructions: expect.any(Array),
     },
@@ -2677,13 +2671,13 @@ test("a local preset is created, read and trashed over the public wire", async (
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({
     ok: true,
-    data: { presetId: "vertical-explainer-2" },
+    data: { id: "vertical-explainer-2" },
   });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
     data: {
       presets: expect.arrayContaining([
-        expect.objectContaining({ presetId: "vertical-explainer", source: "local" }),
+        expect.objectContaining({ id: "vertical-explainer", source: "local" }),
       ]),
     },
   });
@@ -2729,7 +2723,7 @@ test("a persisted queued voice request reaches its initialized owner after start
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
     registry = new Models(library, globalThis.fetch, undefined, catalog);
-  const model = registry.list().find((value) => value.modelId === voiceProfile.id)!;
+  const model = registry.list().find((value) => value.id === voiceProfile.id)!;
   const bytes = Buffer.alloc(44 + 24000 * 4);
   bytes.write("RIFF");
   bytes.writeUInt32LE(bytes.length - 8, 4);
@@ -2804,7 +2798,7 @@ test("a persisted queued voice request reaches its initialized owner after start
     },
   });
   const request = await owner.request({
-    modelId: model.modelId,
+    modelId: model.id,
     reference: { assetId: reference.id, streamId: "track:1" },
     referenceText: "A complete reference sentence.",
     text: "A complete desired sentence.",
@@ -2861,7 +2855,7 @@ test("an agent's inspect.open hands the app the project's name for its preview w
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   expect(await f.call("inspect.open", { projectId })).toMatchObject({
     ok: true,
     data: { native: { opened: true } },

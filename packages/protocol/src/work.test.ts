@@ -82,7 +82,7 @@ test("status facts stay separate from WorkState", () => {
     modelStatusSchema.parse({
       state: "unavailable",
       jobId: null,
-      modelId: "parakeet",
+      id: "parakeet",
       presence: "absent",
     }).presence,
   ).toBe("absent");

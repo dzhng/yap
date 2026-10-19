@@ -750,7 +750,7 @@ export class IndexProcessing {
       for (;;) {
         signal.throwIfAborted();
         const page = this.project.projects.list({ ...(cursor ? { cursor } : {}), limit: 100 });
-        for (const project of page.projects) await this.cleanupProject(project.projectId, signal);
+        for (const project of page.projects) await this.cleanupProject(project.id, signal);
         if (!page.nextCursor) break;
         cursor = page.nextCursor;
         await setImmediate(undefined, { signal });

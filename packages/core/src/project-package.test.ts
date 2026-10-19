@@ -53,10 +53,10 @@ test("portable inventory follows generated reference chains and rejects missing 
 
 function snapshotFixture(): ProjectSnapshot {
   return {
-    project: { projectId: "donor", title: "Editable", createdAt: "now", currentRevisionId: "r0" },
+    project: { id: "donor", title: "Editable", createdAt: "now", currentRevisionId: "r0" },
     revisions: [
       {
-        revisionId: "r0",
+        id: "r0",
         projectId: "donor",
         ordinal: 0,
         createdAt: "now",
@@ -102,7 +102,7 @@ test("portable manifest validates complete history bytes, undo targets, paths an
   expect(validate(manifest).snapshot).toEqual(snapshot);
   const second = {
     ...snapshot.revisions[0]!,
-    revisionId: "r1",
+    id: "r1",
     ordinal: 1,
     operation: "apply" as const,
   };

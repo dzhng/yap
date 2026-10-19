@@ -39,9 +39,9 @@ async function fixture() {
   const asset = await assets.import(input, { kind: "import" }, probe);
   const projects = projectStoreFixture(catalog, assets, root);
   const project = projects.create({ requestId: "create", canvas });
-  projects.apply(project.project.projectId, {
+  projects.apply(project.project.id, {
     requestId: "place",
-    expectedRevisionId: project.revision.revisionId,
+    expectedRevisionId: project.revision.id,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
       {
@@ -57,7 +57,7 @@ async function fixture() {
       },
     ],
   });
-  return { root, catalog, assets, projects, asset, projectId: project.project.projectId };
+  return { root, catalog, assets, projects, asset, projectId: project.project.id };
 }
 function tombstone(catalog: Catalog, id: string) {
   const plans = new DeletionPlans(catalog);
@@ -74,7 +74,7 @@ test("revision publication refuses a tombstoned asset and succeeds after clearin
     expect(() =>
       f.projects.apply(f.projectId, {
         requestId: "late",
-        expectedRevisionId: current.revisionId,
+        expectedRevisionId: current.id,
         operations: [{ operation: "canvas.set", canvas: { width: 161 } }],
       }),
     ).toThrowError(expect.objectContaining({ code: "DELETE_IN_PROGRESS" }));
@@ -82,7 +82,7 @@ test("revision publication refuses a tombstoned asset and succeeds after clearin
     expect(
       f.projects.apply(f.projectId, {
         requestId: "late-2",
-        expectedRevisionId: current.revisionId,
+        expectedRevisionId: current.id,
         operations: [{ operation: "canvas.set", canvas: { width: 161 } }],
       }).revision,
     ).toBeTruthy();
@@ -273,7 +273,7 @@ test("package adoption refuses a tombstoned asset and succeeds after clearing", 
       packageIdentity: "pkg",
       snapshot,
     });
-    expect(retry.publish(() => {}).project.projectId).toBeTruthy();
+    expect(retry.publish(() => {}).project.id).toBeTruthy();
   } finally {
     f.catalog.close();
     await rm(f.root, { recursive: true, force: true });

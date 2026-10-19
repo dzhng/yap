@@ -6,7 +6,7 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* slices 01 and 02 landed; next is 03. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01–03 landed; next is 04. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
@@ -18,7 +18,7 @@ section and the TODO list before you end a pass.
 
 - [x] 01 Owner references are `{kind, id}` everywhere (core `JobOwner`/`JobTarget`, evidence owners)
 - [x] 02 Jobs: `JobQueue.inspect` is the one public job record; `JobQueue.work` is what an operation that started a job reports
-- [ ] 03 Library records name themselves `id`
+- [x] 03 Library records name themselves `id`
 - [ ] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows
 - [ ] 05 Catalog format 30 and package version 7, each with a tested migration
 - [ ] 06 macOS app decoders
@@ -189,5 +189,11 @@ service node suites ran:
 - Owners in evidence tables are already stored as `ownerKind`/`ownerId` columns; only the
   JSON metadata copies (strictly validated: transcript, scene, speaker, alignment evidence)
   need rewriting.
+- Slice 07b of library deletion left two read-time shims in `ProjectStore`'s replay: one
+  refused a stored revision named by `id`, the other stripped an `edit.document` older replays
+  carried. Slice 03 removed both; the migration rewrites `project_requests.result` (revision
+  identity, no `edit.document`) so no reader needs them.
+- Preset request receipts (`<presets>/.request-receipts.json`) store raw results; a
+  `preset.delete` receipt names its preset `presetId`. Slice 05 rewrites that file too.
 - Completeness check for slice 05: build catalogs with the format-29 code through the
   suites, migrate them, and assert that no JSON column anywhere still holds an old shape.

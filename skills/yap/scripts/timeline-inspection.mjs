@@ -276,9 +276,9 @@ export async function inspectTimeline(
       projectId: target.projectId,
       ...(target.revisionId ? { revisionId: target.revisionId } : {}),
     });
-    if (!result.revision?.revisionId || (target.revisionId && result.revision.revisionId !== target.revisionId))
+    if (!result.revision?.id || (target.revisionId && result.revision.id !== target.revisionId))
       throw failure("ARTIFACT_CHANGED", "Requested project revision is unavailable");
-    identity = { projectId: target.projectId, revisionId: result.revision.revisionId };
+    identity = { projectId: target.projectId, revisionId: result.revision.id };
   } else {
     asset = await invoke("asset.get", { assetId: target.assetId });
     identity = {

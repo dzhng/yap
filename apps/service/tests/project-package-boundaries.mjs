@@ -129,7 +129,7 @@ test(
       output: original.output,
       projectId: original.projectId,
       asset: { id: original.asset.id },
-      placed: { revision: { revisionId: original.placed.revision.revisionId } },
+      placed: { revision: { id: original.placed.revision.id } },
       library,
       marker,
     };
@@ -293,7 +293,7 @@ test("project package refuses a normalized acquisition member changed after its 
   assert.ok(video);
   f.projects.apply(f.projectId, {
     requestId: "capture-context",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 1 }, label: "capture" },
       {
@@ -315,7 +315,7 @@ test("project package refuses a normalized acquisition member changed after its 
   assert.equal(Buffer.byteLength(original), acquired.evidence.receipt.bytes);
   assert.equal(Buffer.byteLength(altered), acquired.evidence.receipt.bytes + 1);
   await chmod(normalized, 0o600);
-  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.revisionId });
+  await f.preview.request({ projectId: f.projectId, revisionId: f.placed.revision.id });
   await entered.promise;
   const request = { ...f.request(), kind: "processed-package", leaf: "changed-normalized.zip" };
   await f.exports.create(request);

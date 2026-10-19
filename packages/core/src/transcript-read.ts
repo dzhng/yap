@@ -194,7 +194,7 @@ export type SourceTranscriptRow = {
 } & (
   | {
       type: "word";
-      wordId: string;
+      id: string;
       ordinal: number;
       text: string;
       kind: WordKind;
@@ -278,7 +278,7 @@ export class SourceTranscriptRead {
       return "ordinal" in row
         ? {
             type: "word",
-            wordId: wordId(row.ordinal),
+            id: wordId(row.ordinal),
             ordinal: row.ordinal,
             text: row.text,
             kind: row.kind,

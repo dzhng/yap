@@ -71,7 +71,7 @@ test("accepted evidence requires a complete mapping and selected anchors", () =>
   ).toBe(false);
   expect(
     correspondenceReceiptSchema.safeParse({
-      evidenceId: "e1",
+      id: "e1",
       generation: "g1",
       recipe: "temporal-correspondence-v1",
       left: endpoint("a"),

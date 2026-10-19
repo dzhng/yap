@@ -33,11 +33,11 @@ test("public revision review distinguishes a pure silence split from a moved joi
       fps: { numerator: 30, denominator: 1 },
       background: "#000000ff",
     },
-  })) as { project: { projectId: string }; revision: { revisionId: string } };
-  const projectId = created.project.projectId;
+  })) as { project: { id: string }; revision: { id: string } };
+  const projectId = created.project.id;
   const placed = (await invoke("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     requestId: "review-place",
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -51,10 +51,10 @@ test("public revision review distinguishes a pure silence split from a moved joi
         },
       },
     ],
-  })) as { revision: { revisionId: string; document: { clips: { id: string }[] } } };
+  })) as { revision: { id: string; document: { clips: { id: string }[] } } };
   const split = (await invoke("edit.apply", {
     projectId,
-    expectedRevisionId: placed.revision.revisionId,
+    expectedRevisionId: placed.revision.id,
     requestId: "review-split",
     operations: [
       {
@@ -68,7 +68,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
   for (const revision of [placed.revision, split.revision]) {
     const pending = (await invoke("timeline.events", {
       projectId,
-      revisionId: revision.revisionId,
+      revisionId: revision.id,
       range: { startUs: 0, endUs: 1000000 },
     })) as { state: string; jobId: string };
     if (pending.state !== "ready") await f.job(pending.jobId, "ready");
@@ -77,7 +77,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
   const request = {
     projectId,
     revisions: [placed.revision, split.revision].map((revision) => ({
-      revisionId: revision.revisionId,
+      revisionId: revision.id,
       range: { startUs: 0, endUs: 1000000 },
       extentProvenance: "Explicit controlled silence fixture",
       windows: [
@@ -90,7 +90,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
   const identical = await reviewBundle(request, invoke);
   const moved = (await invoke("edit.apply", {
     projectId,
-    expectedRevisionId: split.revision.revisionId,
+    expectedRevisionId: split.revision.id,
     requestId: "review-move",
     operations: [
       {
@@ -104,14 +104,14 @@ test("public revision review distinguishes a pure silence split from a moved joi
   })) as typeof placed;
   const pending = (await invoke("timeline.events", {
     projectId,
-    revisionId: moved.revision.revisionId,
+    revisionId: moved.revision.id,
     range: { startUs: 0, endUs: 1000000 },
   })) as { state: string; jobId: string };
   if (pending.state !== "ready") await f.job(pending.jobId, "ready");
   for (const revision of [split.revision, moved.revision]) {
     const selected = (await invoke("timeline.events", {
       projectId,
-      revisionId: revision.revisionId,
+      revisionId: revision.id,
       range: { startUs: 400000, endUs: 800000 },
     })) as { state: string; jobId: string };
     if (selected.state !== "ready") await f.job(selected.jobId, "ready");
@@ -121,7 +121,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
     {
       ...request,
       revisions: [split.revision, moved.revision].map((revision) => ({
-        revisionId: revision.revisionId,
+        revisionId: revision.id,
         range: { startUs: 0, endUs: 1000000 },
         extentProvenance: "Explicit controlled silence fixture",
         windows: [

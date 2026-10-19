@@ -305,7 +305,7 @@ test("asset and project indexes with equal fixture IDs and attempts reclaim inde
         fps: { numerator: 1, denominator: 1 },
         background: "#000000ff",
       },
-    }).project.projectId;
+    }).project.id;
   } finally {
     namespaceEntropy.id = null;
   }

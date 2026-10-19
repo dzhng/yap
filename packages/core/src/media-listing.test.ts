@@ -68,13 +68,13 @@ test("media listing merges imports and recordings newest first and continues acr
   const second = catalog.allocate().recording;
   catalog.catalog
     .prepare("UPDATE recordings SET createdAt=? WHERE recordingId=?")
-    .run("2026-01-03T00:00:00.000Z", first.recordingId);
+    .run("2026-01-03T00:00:00.000Z", first.id);
   catalog.catalog
     .prepare("UPDATE recordings SET createdAt=? WHERE recordingId=?")
-    .run("2026-01-02T00:00:00.000Z", second.recordingId);
+    .run("2026-01-02T00:00:00.000Z", second.id);
   for (const [recordingId, sourceId, duration] of [
-    [first.recordingId, first.sourceId, 100],
-    [second.recordingId, second.sourceId, 200],
+    [first.id, first.sourceId, 100],
+    [second.id, second.sourceId, 200],
   ] as const) {
     catalog.ingestLifecycle(recordingId, { sourceId, sequence: 1, state: "recording" });
     catalog.ingestLifecycle(recordingId, { sourceId, sequence: 2, state: "finalizing" });
@@ -95,11 +95,7 @@ test("media listing merges imports and recordings newest first and continues acr
     if (!page.nextCursor) break;
     cursor = page.nextCursor;
   }
-  expect(all).toEqual([
-    `recording:${first.recordingId}`,
-    `asset:asset-1`,
-    `recording:${second.recordingId}`,
-  ]);
+  expect(all).toEqual([`recording:${first.id}`, `asset:asset-1`, `recording:${second.id}`]);
 
   const pair = listing.list({ limit: 2 });
   expect(pair.media).toHaveLength(2);
@@ -116,29 +112,29 @@ test("media listing merges imports and recordings newest first and continues acr
 test("media listing excludes copies, derivatives, canceled takes and tombstoned rows while preferring import provenance", async () => {
   const { catalog, listing, plans } = await fixture();
   const canceled = catalog.allocate().recording;
-  catalog.ingestLifecycle(canceled.recordingId, {
+  catalog.ingestLifecycle(canceled.id, {
     sourceId: canceled.sourceId,
     sequence: 1,
     state: "canceled",
   });
   const tombstonedRecording = catalog.allocate().recording;
-  catalog.ingestLifecycle(tombstonedRecording.recordingId, {
+  catalog.ingestLifecycle(tombstonedRecording.id, {
     sourceId: tombstonedRecording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  catalog.ingestLifecycle(tombstonedRecording.recordingId, {
+  catalog.ingestLifecycle(tombstonedRecording.id, {
     sourceId: tombstonedRecording.sourceId,
     sequence: 2,
     state: "finalizing",
   });
-  catalog.ingestLifecycle(tombstonedRecording.recordingId, {
+  catalog.ingestLifecycle(tombstonedRecording.id, {
     sourceId: tombstonedRecording.sourceId,
     sequence: 3,
     state: "complete",
     sourceDurationUs: 1,
   });
-  plans.adopt("recording", tombstonedRecording.recordingId);
+  plans.adopt("recording", tombstonedRecording.id);
 
   const insert = (assetId: string, origins: unknown[]) => {
     insertAsset(catalog, assetId, "2026-01-05T00:00:00.000Z", `/imports/${assetId}.mov`);

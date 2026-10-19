@@ -1241,12 +1241,12 @@ export async function startProjectService(options: {
         switch (operation.operation) {
           case "correspondence.prepare": {
             const receipt = admitCorrespondence(operation.params);
-            correspondenceReceipts.set(`${receipt.evidenceId}:${receipt.generation}`, receipt);
+            correspondenceReceipts.set(`${receipt.id}:${receipt.generation}`, receipt);
             return {
               ok: true,
               data: {
                 state: "ready",
-                evidenceId: receipt.evidenceId,
+                evidenceId: receipt.id,
                 generation: receipt.generation,
                 published: { generation: receipt.generation, output: receipt },
               },
@@ -1291,7 +1291,7 @@ export async function startProjectService(options: {
               ok: true,
               data: {
                 state: "ready",
-                evidenceId: checked.evidenceId,
+                evidenceId: checked.id,
                 generation: checked.generation,
                 verdict: checked.measurement.verdict,
                 anchors,
@@ -1628,33 +1628,12 @@ export async function startProjectService(options: {
           case "model.list":
             return {
               ok: true,
-              data: (() => {
-                const page = models.page({
-                  ...(operation.params.cursor === undefined
-                    ? {}
-                    : { cursor: operation.params.cursor }),
-                  ...(operation.params.limit === undefined
-                    ? {}
-                    : { limit: operation.params.limit }),
-                });
-                return {
-                  ...page,
-                  models: page.models.map((model) => ({
-                    ...model,
-                    ...(model.generationProfile && typeof model.generationProfile === "object"
-                      ? {
-                          generationProfile: (() => {
-                            const { id: profileId, ...profile } = model.generationProfile;
-                            return {
-                              ...profile,
-                              ...(profileId === undefined ? {} : { profileId }),
-                            };
-                          })(),
-                        }
-                      : {}),
-                  })),
-                };
-              })(),
+              data: models.page({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
             };
           case "preset.list":
             return {
@@ -1670,7 +1649,6 @@ export async function startProjectService(options: {
                 });
                 return {
                   ...page,
-                  presets: page.presets.map(({ id, ...preset }) => ({ ...preset, presetId: id })),
                   refresh: {
                     ...page.refresh,
                     state: page.refresh.error
@@ -1687,11 +1665,10 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: (() => {
-                const { id, ...details } = presets.get(operation.params.presetId);
+                const details = presets.get(operation.params.presetId);
                 return {
                   ...details,
                   files: details.files.map(({ bytes, ...file }) => ({ ...file, sizeBytes: bytes })),
-                  presetId: id,
                 };
               })(),
             };
@@ -1703,36 +1680,20 @@ export async function startProjectService(options: {
                   operation.params.presetId,
                   operation.params.requestId,
                 );
-                return {
-                  ...result,
-                  ...(result.report
-                    ? {
-                        report: {
-                          ...result.report,
-                          skipped: result.report.skipped.map(({ id, ...item }) => ({
-                            ...item,
-                            presetId: id,
-                          })),
-                        },
-                      }
-                    : {}),
-                  state: "ready",
-                  jobId: null,
-                };
+                return { ...result, state: "ready", jobId: null };
               })(),
             };
           case "preset.create":
             return {
               ok: true,
               data: await (async () => {
-                const { id, ...result } = await presets.create({
+                return await presets.create({
                   requestId: operation.params.requestId,
                   name: operation.params.name,
                   ...(operation.params.references === undefined
                     ? {}
                     : { references: operation.params.references }),
                 });
-                return { ...result, presetId: id };
               })(),
             };
           case "preset.delete":
@@ -1745,8 +1706,8 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: {
-                modelId: operation.params.modelId,
-                purpose: models.list().find((entry) => entry.modelId === operation.params.modelId)
+                id: operation.params.modelId,
+                purpose: models.list().find((entry) => entry.id === operation.params.modelId)
                   ?.purpose,
                 presence: modelPresence(operation.params.modelId, model.state),
                 jobId: null,
@@ -1772,7 +1733,12 @@ export async function startProjectService(options: {
             const model = await models.status(modelId);
             return {
               ok: true,
-              data: { jobId: null, presence: modelPresence(modelId, model.state), ...model },
+              data: {
+                id: modelId,
+                jobId: null,
+                presence: modelPresence(modelId, model.state),
+                ...model,
+              },
             };
           }
           case "model.remove": {
@@ -2657,15 +2623,13 @@ export async function startProjectService(options: {
                 );
                 speakerCursor = speakerPage.nextCursor ?? undefined;
               } while (speakerCursor);
-              const words = page.rows
-                .filter((row) => row.type === "word")
-                .map((row) => ({ ...row, id: row.wordId }));
+              const words = page.rows.filter((row) => row.type === "word");
               const decorated = attributeTranscriptWords(words, turns, { labels });
               const byId = new Map(decorated.map((word) => [word.id, word.speaker]));
               attributedPage = {
                 ...page,
                 rows: page.rows.map((row) =>
-                  row.type === "word" ? { ...row, speaker: byId.get(row.wordId)! } : row,
+                  row.type === "word" ? { ...row, speaker: byId.get(row.id)! } : row,
                 ),
               };
             }
@@ -2879,7 +2843,7 @@ export async function startProjectService(options: {
               "projectId" in params
                 ? {
                     projectId: params.projectId,
-                    revisionId: projects.revision(params.projectId, params.revisionId).revisionId,
+                    revisionId: projects.revision(params.projectId, params.revisionId).id,
                   }
                 : {
                     assetId: params.assetId,
@@ -2918,7 +2882,7 @@ export async function startProjectService(options: {
               "projectId" in params
                 ? {
                     projectId: params.projectId,
-                    revisionId: projects.revision(params.projectId, params.revisionId).revisionId,
+                    revisionId: projects.revision(params.projectId, params.revisionId).id,
                   }
                 : {
                     assetId: params.assetId,
@@ -3113,7 +3077,7 @@ export async function startProjectService(options: {
                 projectId: params.projectId,
                 // The preview window is titled by the project's name, not its identifier.
                 title: project.title,
-                revisionId: revision.revisionId,
+                revisionId: revision.id,
                 ...(params.range === undefined ? {} : { range: params.range }),
               });
               native = answer.ok ? answer.data : { opened: false, error: answer.error };
@@ -3121,11 +3085,11 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: {
-                projectId: project.projectId,
+                projectId: project.id,
                 headRevisionId: project.currentRevisionId,
                 revision,
                 history: history.revisions.map((item) => ({
-                  revisionId: item.revisionId,
+                  id: item.id,
                   ordinal: item.ordinal,
                   createdAt: item.createdAt,
                   operation: item.operation,
@@ -3429,8 +3393,8 @@ export async function startProjectService(options: {
             };
           }
           case "asset.get": {
-            const { id, bytes, ...asset } = assets.describe(operation.params.assetId);
-            return { ok: true, data: { ...asset, assetId: id, sizeBytes: bytes } };
+            const { bytes, ...asset } = assets.describe(operation.params.assetId);
+            return { ok: true, data: { ...asset, sizeBytes: bytes } };
           }
           case "asset.segments":
             return {
@@ -3462,9 +3426,8 @@ export async function startProjectService(options: {
                 });
                 return {
                   ...page,
-                  assets: page.assets.map(({ id, bytes, ...asset }) => ({
+                  assets: page.assets.map(({ bytes, ...asset }) => ({
                     ...asset,
-                    assetId: id,
                     sizeBytes: bytes,
                   })),
                 };
@@ -3489,54 +3452,17 @@ export async function startProjectService(options: {
           case "package.open":
             return {
               ok: true,
-              data: await (async () => {
-                const result = await projectPackages.open(
-                  operation.params.path,
-                  operation.params.requestId,
-                );
-                const { id, ...rest } = result as { id?: string } & Record<string, unknown>;
-                return { ...rest, ...(id === undefined ? {} : { packageId: id }) };
-              })(),
+              data: await projectPackages.open(operation.params.path, operation.params.requestId),
             };
           case "package.status":
             return {
               ok: true,
-              data: (() => {
-                const result = projectPackages.status(operation.params.admissionId) as Record<
-                  string,
-                  unknown
-                >;
-                const { id, admissions, ...rest } = result;
-                return {
-                  ...rest,
-                  ...(typeof id === "string" ? { packageId: id } : {}),
-                  ...(Array.isArray(admissions)
-                    ? {
-                        admissions: admissions.map((entry) => {
-                          const { id: admissionId, ...admission } = entry as Record<
-                            string,
-                            unknown
-                          >;
-                          return {
-                            ...admission,
-                            ...(typeof admissionId === "string" ? { packageId: admissionId } : {}),
-                          };
-                        }),
-                      }
-                    : {}),
-                };
-              })(),
+              data: projectPackages.status(operation.params.admissionId),
             };
           case "package.close":
             return {
               ok: true,
-              data: await (async () => {
-                const result = (await projectPackages.closeAdmission(
-                  operation.params.admissionId,
-                )) as Record<string, unknown>;
-                const { id, ...rest } = result;
-                return { ...rest, ...(typeof id === "string" ? { packageId: id } : {}) };
-              })(),
+              data: await projectPackages.closeAdmission(operation.params.admissionId),
             };
           case "package.adopt":
             return {
@@ -3574,7 +3500,7 @@ export async function startProjectService(options: {
             return { ok: true, data: mediaExports.status(operation.params.exportId) };
           case "export.abandon":
             await mediaExports.abandon(operation.params.exportId);
-            return { ok: true, data: { exportId: operation.params.exportId, abandoned: true } };
+            return { ok: true, data: { id: operation.params.exportId, abandoned: true } };
           case "artifact.read":
             return {
               ok: true,

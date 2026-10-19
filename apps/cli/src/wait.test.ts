@@ -1515,7 +1515,7 @@ test.each(["export.create", "export.status", "export.recover"])(
       if (request.operation === operation && admissions++ === 0)
         return {
           ok: true,
-          data: { exportId: "550e8400-e29b-41d4-a716-446655440000", state: "queued", jobId: "job" },
+          data: { id: "550e8400-e29b-41d4-a716-446655440000", state: "queued", jobId: "job" },
         };
       if (request.operation === "job.get")
         return { ok: true, data: { ...job("ready"), target: { kind: "project", id: "p" } } };
@@ -1523,7 +1523,7 @@ test.each(["export.create", "export.status", "export.recover"])(
       return {
         ok: true,
         data: {
-          exportId: "550e8400-e29b-41d4-a716-446655440000",
+          id: "550e8400-e29b-41d4-a716-446655440000",
           state: "ready",
           output: "/tmp/final.mp4",
         },
@@ -1557,7 +1557,7 @@ test.each(["export.recover", "export.status"])(
       polls = 0;
     const exportId = "550e8400-e29b-41d4-a716-446655440000";
     const base = {
-      exportId,
+      id: exportId,
       projectId: "p",
       jobId: "publication-job",
       snapshot: { revisionId: "r5" },
@@ -1637,7 +1637,7 @@ test.each([
     const exportId = "550e8400-e29b-41d4-a716-446655440000";
     const receipt = { leaf: "final.mp4", sizeBytes: 2, sha256: "a".repeat(64) };
     const base = {
-      exportId,
+      id: exportId,
       projectId: "p",
       jobId: "publication-job",
       state: "ready",
@@ -1700,7 +1700,7 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
   const exportId = "550e8400-e29b-41d4-a716-446655440000";
   let inspections = 0;
   const base = {
-    exportId,
+    id: exportId,
     projectId: "p",
     jobId: "publication-job",
     state: "failed",

@@ -390,7 +390,7 @@ test("removing a model wins an in-flight prepare and persists until explicit pre
   held[0]!.end(contents["Model.mlmodelc/weights/weight.bin"]!.subarray(1024));
   await expect(preparing).rejects.toBeTruthy();
   await expect(removed).resolves.toEqual({
-    modelId: "tiny",
+    id: "tiny",
     deleted: true,
     freedBytes: expect.any(Number),
   });
@@ -430,7 +430,7 @@ test("replaying an incomplete removal resumes deletion and measures the bytes", 
   const restarted = new Models(f.home, f.network, [manifest], restartedCatalog);
 
   await expect(restarted.remove("tiny", "crash", () => false)).resolves.toEqual({
-    modelId: "tiny",
+    id: "tiny",
     deleted: true,
     freedBytes: manifest.files.reduce((total, file) => total + file.bytes, 0) + receiptBytes + 7,
   });
@@ -457,7 +457,7 @@ test("a removal interrupted before its files are gone finishes on restart, not o
   expect(restarted.presence("tiny")).toBe("absent");
   await restarted.prepare("tiny", new AbortController().signal);
   const replayed = await restarted.remove("tiny", "crash", () => false);
-  expect(replayed).toMatchObject({ modelId: "tiny", deleted: true });
+  expect(replayed).toMatchObject({ id: "tiny", deleted: true });
   expect(replayed.freedBytes).toBeGreaterThan(0);
   expect(restarted.presence("tiny")).toBe("ready");
 });
@@ -551,7 +551,7 @@ async function voiceFixture() {
 test("local runtime and model adoption survives restart and detects changed executable bytes", async () => {
   const f = await voiceFixture(),
     models = f.owner();
-  const descriptor = models.list().find((entry) => entry.modelId === "voice")!;
+  const descriptor = models.list().find((entry) => entry.id === "voice")!;
   expect(descriptor.preparation.runtimeSourceRequired).toBe(true);
   expect(await models.status("voice")).toEqual({ state: "absent" });
   await models.prepare("voice", new AbortController().signal, f.sources);
@@ -597,7 +597,7 @@ test("a changed source or escaping runtime link never publishes a prepared model
 test("runtime source and registered identity are explicit, and discovery needs no installed bytes", async () => {
   const f = await voiceFixture(),
     models = f.owner();
-  expect(models.list().map((entry) => entry.modelId)).toEqual(["tiny", "voice"]);
+  expect(models.list().map((entry) => entry.id)).toEqual(["tiny", "voice"]);
   await expect(models.status("unknown")).rejects.toMatchObject({
     code: "NOT_FOUND",
     details: { kind: "model" },
@@ -624,7 +624,7 @@ test("concurrent verification waits for current bytes while other model requests
   const second = models.status("voice");
   expect(await models.status("tiny")).toEqual({ state: "absent" });
   expect(complete).toBe(false);
-  expect(models.list().find((entry) => entry.modelId === "voice")?.purpose).toBe("voice");
+  expect(models.list().find((entry) => entry.id === "voice")?.purpose).toBe("voice");
   expect(await first).toEqual({ state: "ready" });
   expect(await second).toEqual({ state: "ready" });
   const receipt = await models.runtime("voice", "voice");
@@ -644,8 +644,8 @@ test("service readiness answers from preparation receipts without waiting on run
     return value;
   });
   expect(models.statuses()).toEqual([
-    { modelId: "tiny", purpose: "transcription", status: { state: "absent" } },
-    { modelId: "voice", purpose: "voice", status: { state: "ready" } },
+    { id: "tiny", purpose: "transcription", status: { state: "absent" } },
+    { id: "voice", purpose: "voice", status: { state: "ready" } },
   ]);
   expect(verified).toBe(false);
   expect(await explicit).toEqual({ state: "ready" });
@@ -668,7 +668,7 @@ test("startup trusts an intact preparation receipt while execution still verifie
   const restarted = new Models(f.home, offline, [f.voice], catalogFor(f.home));
   await restarted.prepareAuto(new AbortController().signal);
   expect(restarted.statuses()).toEqual([
-    { modelId: "voice", purpose: "voice", status: { state: "ready" } },
+    { id: "voice", purpose: "voice", status: { state: "ready" } },
   ]);
   expect(restarted.updateBlocked).toBe(false);
 
@@ -834,12 +834,12 @@ test("a locally sourced model refuses network acquisition before preparation and
     catalogFor(f.home),
   );
   const listed = models.list();
-  expect(
-    listed.find((value) => value.modelId === speaker.name)?.preparation.modelSourceRequired,
-  ).toBe(true);
-  expect(
-    listed.find((value) => value.modelId === f.voice.name)?.preparation.modelSourceRequired,
-  ).toBe(false);
+  expect(listed.find((value) => value.id === speaker.name)?.preparation.modelSourceRequired).toBe(
+    true,
+  );
+  expect(listed.find((value) => value.id === f.voice.name)?.preparation.modelSourceRequired).toBe(
+    false,
+  );
   await expect(
     models.prepare(speaker.name, new AbortController().signal, { runtimeSource: f.runtime }),
   ).rejects.toMatchObject({ code: "MODEL_SOURCE_REQUIRED", retryable: false });
@@ -1155,7 +1155,7 @@ test("the registered original speaker requires explicit preparation", async () =
     },
   });
   expect(speakerModel.autoPrepare).toBeUndefined();
-  expect(models.list().find((entry) => entry.modelId === "speaker-runtime-control")).toMatchObject({
+  expect(models.list().find((entry) => entry.id === "speaker-runtime-control")).toMatchObject({
     purpose: "speaker",
     descriptorDigest: "0616f0f01006fbaa76ebaaffc169da816b2f9afdb9288ae17d37e7357bdaf8a6",
     runtimeDigest: "42c54f575cb3c0ce6a469ea39182b64e33f35a5ab30eceb593ec055dcda61df2",

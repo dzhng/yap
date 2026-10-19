@@ -70,14 +70,14 @@ test(
         return job.state === "ready" ? job.published.output : false;
       }, 20_000);
       const asset = await call("asset.get", { assetId: imported.assetId });
-      assert.equal(asset.assetId, originalHash);
+      assert.equal(asset.id, originalHash);
       const videoStreams = asset.streams.filter(
         (stream) => stream.kind === "video" && stream.decodable,
       );
       assert.equal(videoStreams.length, 1, "The preserved generated fixture has one video stream");
       const params = {
-        assetId: asset.assetId,
-        streamId: videoStreams[0].streamId,
+        assetId: asset.id,
+        streamId: videoStreams[0].id,
         atUs: 1_200_000_000,
       };
       const ready = () =>
@@ -117,13 +117,13 @@ test(
       const assets = new AssetStore(catalog, library);
       let states, video;
       try {
-        video = assets.path(asset.assetId);
+        video = assets.path(asset.id);
         assert.equal(await hash(video), originalHash);
         states = catalog.catalog
           .prepare(
             "SELECT artifact,state FROM jobs WHERE targetKind='asset' AND targetId=? ORDER BY artifact",
           )
-          .all(asset.assetId)
+          .all(asset.id)
           .map((row) => ({ ...row }));
         assert.deepEqual(states, [{ artifact: "frame", state: "ready" }]);
         assert.deepEqual(catalog.catalog.prepare("SELECT * FROM recordings").all(), []);

@@ -81,7 +81,7 @@ export class VoiceGenerationJobs {
     await mkdir(this.owners.staging, { recursive: true, mode: 0o700 });
   }
   private model(modelId: string): ModelIdentity {
-    const registered = this.owners.models.list().find((model) => model.modelId === modelId);
+    const registered = this.owners.models.list().find((model) => model.id === modelId);
     if (!registered || registered.purpose !== "voice" || !registered.runtimeDigest)
       throw new CatalogError("NOT_FOUND", "Model is not a registered voice model", {
         modelId,

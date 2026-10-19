@@ -59,7 +59,7 @@ async function fixture({
         if (target.kind !== "project") throw Error("No model work expected");
         return {
           ...target,
-          revisionId: projects.revision(target.id, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).id,
         };
       },
       isAvailable: () => true,
@@ -189,14 +189,14 @@ async function fixture({
         background: "#000000ff",
       },
     });
-    const applied = projects.apply(created.project.projectId, {
+    const applied = projects.apply(created.project.id, {
       requestId: randomUUID(),
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       operations,
     });
     return {
-      projectId: created.project.projectId,
-      revisionId: applied.revision.revisionId,
+      projectId: created.project.id,
+      revisionId: applied.revision.id,
       labels: applied.edit.labels,
     };
   }

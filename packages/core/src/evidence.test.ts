@@ -21,7 +21,7 @@ function fixture(times = [0, 10, 10, 20]) {
   stores.push(store);
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, id: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
     generation: "attempt-1",
   };
@@ -769,7 +769,7 @@ test("recording purge reclaims complete and unfinished generations across restar
     .run(f.identity.owner.id, f.identity.sourceId, "unfinished");
   f.store.catalog
     .prepare("INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)")
-    .run(sibling.recordingId, sibling.sourceId, "sibling");
+    .run(sibling.id, sibling.sourceId, "sibling");
   f.store.markDeleting(f.identity.owner.id);
   f.store.close();
   const reopened = new CaptureStore(join(dirname(f.file), "library.sqlite"), {
@@ -784,7 +784,7 @@ test("recording purge reclaims complete and unfinished generations across restar
     reopened.catalog
       .prepare("SELECT ownerId AS recordingId,generation FROM source_evidence_generations")
       .all(),
-  ).toEqual([{ recordingId: sibling.recordingId, generation: "sibling" }]);
+  ).toEqual([{ recordingId: sibling.id, generation: "sibling" }]);
   expect(reopened.catalog.prepare("SELECT * FROM source_evidence_records").all()).toEqual([]);
 });
 

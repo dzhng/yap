@@ -154,7 +154,7 @@ test("a committed export remains authoritative when cancellation discards its la
   assert.equal(f.jobs.job(status.jobId).state, "canceled");
   assert.equal(
     f.jobs.status({
-      target: { kind: "project", id: f.projectId, revisionId: f.placed.revision.revisionId },
+      target: { kind: "project", id: f.projectId, revisionId: f.placed.revision.id },
       artifact: "export-media",
       input: exportId,
     }).published,
@@ -255,7 +255,7 @@ test("one unsafe export staging entry does not prevent retiring independent inte
   );
   const discovery = f.exports.list({}).exports;
   assert.deepEqual(
-    discovery.map((row) => row.exportId),
+    discovery.map((row) => row.id),
     [ids[0]],
   );
   const [discovered] = discovery;
@@ -527,7 +527,7 @@ test(
         leaf: "other.mp4",
       });
       assert.equal(other.state, "queued", "an unrelated admission must remain independent");
-      await f.exports.abandon(other.exportId);
+      await f.exports.abandon(other.id);
     } finally {
       release();
       await removing;
@@ -602,7 +602,7 @@ test("late package commit releases resource pins while failed abandonment keeps 
   assert.equal(admitted(), 0);
   assert.deepEqual(await readdir(f.output), [request.leaf]);
   assert.deepEqual(await readFile(join(f.output, request.leaf)), output);
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
 });
 
@@ -634,7 +634,7 @@ test("unsafe package staging keeps abandonment fence resource pins and capacity 
   assert.deepEqual(
     f.exports
       .list({ unfinishedOnly: true })
-      .exports.map((row) => [row.exportId, row.abandoning, row.cleanupPending]),
+      .exports.map((row) => [row.id, row.abandoning, row.cleanupPending]),
     [[request.exportId, true, true]],
   );
   const unfinished = f.exports.status(request.exportId);
@@ -657,7 +657,7 @@ test("unsafe package staging keeps abandonment fence resource pins and capacity 
   assert.equal(await readFile(join(substitute, "foreign"), "utf8"), "preserve substitute");
   assert.equal(await readFile(join(f.output, request.leaf), "utf8"), "foreign output");
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
 });
 
 test("package abandonment forgets failed identity and permits clean export-id reuse without stale publication", async (t) => {
@@ -682,7 +682,7 @@ test("package abandonment forgets failed identity and permits clean export-id re
   assert.throws(() => f.jobs.job(failed.jobId), { code: "NOT_FOUND" });
   assert.equal(f.jobs.status(identity).published, null);
   assert.deepEqual(pins(), []);
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
   assert.equal(await readFile(join(f.output, request.leaf), "utf8"), "foreign output");
   assert.deepEqual(await readdir(f.output), [request.leaf]);

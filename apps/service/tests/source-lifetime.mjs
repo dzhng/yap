@@ -133,11 +133,11 @@ if (process.argv[2] === "--child") {
         sourceDurationUs: 3000000,
       });
       const library = join(home, "library"),
-        root = join(library, "recordings", take.recordingId),
+        root = join(library, "recordings", take.id),
         source = join(root, "source");
       await writeCanonicalCapture(source);
       const journal = await readFile(join(source, "capture.journal.jsonl"));
-      child = fork(fileURLToPath(import.meta.url), ["--child", home, take.recordingId, mode], {
+      child = fork(fileURLToPath(import.meta.url), ["--child", home, take.id, mode], {
         detached: true,
         stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
@@ -194,7 +194,7 @@ if (process.argv[2] === "--child") {
       }
       if (mode !== "cleanup") {
         const files = new ManagedFiles(library, mediaWorker({ YAP_NATIVE: native }));
-        await assert.rejects(files.recordingDirectory(take.recordingId), {
+        await assert.rejects(files.recordingDirectory(take.id), {
           code: "RECORDING_BUSY",
           retryable: true,
         });
@@ -231,7 +231,7 @@ if (process.argv[2] === "--child") {
       if (mode !== "cleanup") {
         report.after = await service.call("recording.delete", {
           requestId: `recording-delete-${mode}`,
-          recordingId: take.recordingId,
+          recordingId: take.id,
         });
         assert.equal(report.after.ok, true, JSON.stringify(report.after));
         assert.equal(report.after.data.deleted, true);

@@ -265,10 +265,10 @@ export function projectCompositionFromRevision(
     [...metadata.values()].map(compositionAsset),
     contexts,
   );
-  const compiler = createCompiler(model, revision.revisionId);
+  const compiler = createCompiler(model, revision.id);
   return {
     projectId: revision.projectId,
-    revisionId: revision.revisionId,
+    revisionId: revision.id,
     model,
     compiler,
     window(

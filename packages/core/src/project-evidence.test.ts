@@ -211,7 +211,7 @@ async function fixture({
         if (target.kind === "project")
           return {
             ...target,
-            revisionId: projects.revision(target.id, target.revisionId).revisionId,
+            revisionId: projects.revision(target.id, target.revisionId).id,
           };
         throw new Error("Wrong job owner");
       },
@@ -495,12 +495,12 @@ async function fixture({
         background: "#000000ff",
       },
     });
-    const revision = projects.apply(created.project.projectId, {
+    const revision = projects.apply(created.project.id, {
       requestId: randomUUID(),
-      expectedRevisionId: created.revision.revisionId,
+      expectedRevisionId: created.revision.id,
       operations,
     }).revision;
-    return { projectId: created.project.projectId, revisionId: revision.revisionId };
+    return { projectId: created.project.id, revisionId: revision.id };
   }
   async function ready(input: Parameters<ProjectEvidenceInspection["request"]>[0]) {
     for (let n = 0; n < 8; n++) {
@@ -801,7 +801,7 @@ test("empty projects, ready zero-word sources and unavailable models remain dist
       background: "#000000ff",
     },
   });
-  const emptyInput = { projectId: empty.project.projectId };
+  const emptyInput = { projectId: empty.project.id };
   await f.ready(emptyInput);
   expect((await f.evidence.get(emptyInput)).page).toEqual({ rows: [], nextCursor: null });
   expect(() => f.evidence.request({ ...emptyInput, range: { startUs: 0, endUs: 0 } })).toThrow(

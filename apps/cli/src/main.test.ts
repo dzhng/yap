@@ -36,17 +36,17 @@ async function serviceFixture(peer?: (operation: string) => OperationResult) {
     newId: randomUUID,
   });
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 2,
     state: "finalizing",
   });
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 3,
     state: "complete",
@@ -108,7 +108,7 @@ async function serviceFixture(peer?: (operation: string) => OperationResult) {
   return {
     home,
     socket: join(home, "run/service.sock"),
-    recordingId: recording.recordingId,
+    recordingId: recording.id,
     asked,
   };
 }
@@ -364,7 +364,7 @@ it("CLI and MCP return the same recording list", async () => {
   );
   const listed = cli(socket, "recording.list", { limit: 1 });
   expect(listed.exitCode).toBe(0);
-  expect(listed.result.data).toMatchObject({ recordings: [{ recordingId }], nextCursor: null });
+  expect(listed.result.data).toMatchObject({ recordings: [{ id: recordingId }], nextCursor: null });
   const mcpList = await client.callTool({ name: "recording.list", arguments: { limit: 1 } });
   expect(mcpList.isError).toBe(false);
   expect(mcpList.structuredContent).toMatchObject({ ok: true, data: listed.result.data });
@@ -435,8 +435,8 @@ it("CLI and real MCP transport share project edits, replay, history and structur
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
-  const initial = (created.data as { revision: { revisionId: string } }).revision.revisionId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  const initial = (created.data as { revision: { id: string } }).revision.id;
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [entry, "mcp", "--socket", socket],
@@ -465,13 +465,13 @@ it("CLI and real MCP transport share project edits, replay, history and structur
   const seeded = await call("edit.apply", seedParams);
   if (!seeded.ok) throw new Error(JSON.stringify(seeded));
   const source = seeded.data as {
-    revision: { revisionId: string; document: unknown };
+    revision: { id: string; document: unknown };
     edit: { labels: { silence: string; voice: string } };
   };
   const params = {
     projectId,
     requestId: "cut-one",
-    expectedRevisionId: source.revision.revisionId,
+    expectedRevisionId: source.revision.id,
     operations: [
       {
         operation: "remove",
@@ -508,7 +508,7 @@ it("CLI and real MCP transport share project edits, replay, history and structur
     arguments: {
       projectId,
       requestId: "undo-one",
-      expectedRevisionId: first.result.data.revision.revisionId,
+      expectedRevisionId: first.result.data.revision.id,
     },
   });
   expect(undo.structuredContent).toMatchObject({
@@ -619,7 +619,7 @@ it("default discovery reaches the actual service layout from outside the checkou
     expect(JSON.parse(result.stdout)).toMatchObject({
       id: ["first", "second"][index],
       ok: true,
-      data: { recordingId },
+      data: { id: recordingId },
     });
   });
 });

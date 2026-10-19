@@ -49,7 +49,6 @@ export type DeletionRegistration = {
   ) => boolean | Promise<boolean>;
   clearTombstone?: (subject: LibrarySubject) => void | Promise<void>;
   markersPage?: (afterId?: string) => { subjects: LibrarySubject[]; nextAfterId: string | null };
-  result?: (subject: LibrarySubject) => Record<string, unknown>;
   freedBytes: (subject: LibrarySubject, cascade: boolean) => number;
 };
 
@@ -209,13 +208,7 @@ export class LibraryDeletion {
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
-          const result = {
-            ...(registration.result?.(subject) ?? {
-              [subject.kind + "Id"]: subject.id,
-              deleted: true,
-            }),
-            freedBytes,
-          };
+          const result = { id: subject.id, deleted: true, freedBytes };
           this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
           return result;
         }
@@ -225,10 +218,7 @@ export class LibraryDeletion {
       if (requestId && !storedRequest)
         this.plans.recordRequest(requestId, subject.kind, subject.id, cascade, freedBytes);
       await this.resumePlan(subject, registration, plan);
-      const result = {
-        ...(registration.result?.(subject) ?? { [subject.kind + "Id"]: subject.id, deleted: true }),
-        freedBytes,
-      };
+      const result = { id: subject.id, deleted: true, freedBytes };
       this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
       return result;
     } catch (error) {

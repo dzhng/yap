@@ -100,7 +100,7 @@ async function fixture(
         if (target.kind !== "project") throw new Error("project expected");
         return {
           ...target,
-          revisionId: projects.revision(target.id, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).id,
         };
       },
       isAvailable: (owner) => owner.kind === "project" && !projects.isDeleting(owner.id),
@@ -195,9 +195,9 @@ async function fixture(
     },
   });
   const ref = (label: string) => ({ label });
-  const placed = projects.apply(created.project.projectId, {
+  const placed = projects.apply(created.project.id, {
     requestId: "clips",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "group.add", label: "outer", group: { kind: "audio", order: 0 } },
       {
@@ -250,7 +250,7 @@ async function fixture(
     asset,
     source,
     placed,
-    projectId: created.project.projectId,
+    projectId: created.project.id,
   };
 }
 
@@ -258,7 +258,7 @@ test("surrounding project audio preserves the pinned revision and requested proc
   const f = await fixture();
   const input = {
     projectId: f.projectId,
-    revisionId: f.placed.revision.revisionId,
+    revisionId: f.placed.revision.id,
     range: { startUs: 500000, endUs: 999999 },
     tap: {
       target: { kind: "track" as const, id: f.placed.edit.labels.voice! },
@@ -402,7 +402,7 @@ test("an unmeetable output normalization never blocks reads; only reads that inc
   );
   const mastered = f.projects.apply(f.projectId, {
     requestId: "master",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       {
         operation: "processing.set",
@@ -423,7 +423,7 @@ test("an unmeetable output normalization never blocks reads; only reads that inc
     ],
   });
   const read = async (tap: ProcessingTap, range = { startUs: 0, endUs: 4000000 }) => {
-    const input = { projectId: f.projectId, revisionId: mastered.revision.revisionId, range, tap };
+    const input = { projectId: f.projectId, revisionId: mastered.revision.id, range, tap };
     await f.inspection.request(input);
     await f.jobs.idle();
     const status = await f.inspection.request(input);
@@ -528,7 +528,7 @@ test("audio taps reject a picture target, retiming and sub-sample output before 
   ).rejects.toThrow(expect.objectContaining({ code: "INVALID_RANGE" }));
   f.projects.apply(f.projectId, {
     requestId: "retime",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       {
         operation: "retime",
@@ -701,7 +701,7 @@ test("cancel and retry discard unpublished project WAV bytes and retire deletion
     }
     return result;
   });
-  const input = { projectId: f.projectId, revisionId: f.placed.revision.revisionId };
+  const input = { projectId: f.projectId, revisionId: f.placed.revision.id };
   const pending = await f.inspection.request(input);
   await started;
   f.jobs.cancel(pending.jobId!);
@@ -726,7 +726,7 @@ test("RNNoise metadata stays unavailable before job admission while dry inspecti
   const clipId = f.placed.edit.labels["voice-clip"]!;
   f.projects.apply(f.projectId, {
     requestId: "noise-state",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       {
         operation: "processing.set",
@@ -756,13 +756,13 @@ test("parent RNNoise inside an internal audio gap refuses before renderer admiss
   const clipId = f.placed.edit.labels["voice-clip"]!;
   const split = f.projects.apply(f.projectId, {
     requestId: "gap-split",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [{ operation: "split", clipIds: [clipId], atUs: 500000, scope: "selected" }],
   });
   const right = split.edit.clipLineage[0]!.clipIds[1]!;
   f.projects.apply(f.projectId, {
     requestId: "gap-state",
-    expectedRevisionId: split.revision.revisionId,
+    expectedRevisionId: split.revision.id,
     operations: [
       {
         operation: "move",
@@ -807,7 +807,7 @@ test("a narrow parent-state plan binds mono sources outside its requested output
   }));
   const added = f.projects.apply(f.projectId, {
     requestId: "state-sources",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       {
         operation: "place",
@@ -836,7 +836,7 @@ test("a narrow parent-state plan binds mono sources outside its requested output
   });
   const plan = projectComposition(f.projects, f.assets, {
     projectId: f.projectId,
-    revisionId: added.revision.revisionId,
+    revisionId: added.revision.id,
   }).window(
     { range: { startUs: 2000000, endUs: 2500000 } },
     { implementationId: "fixture" },
@@ -861,7 +861,7 @@ test("state channel admission refuses wider and unknown probes without blocking 
     const f = await fixture(render, undefined, 1000000, channels);
     const revision = f.projects.apply(f.projectId, {
       requestId: "channel-state",
-      expectedRevisionId: f.placed.revision.revisionId,
+      expectedRevisionId: f.placed.revision.id,
       operations: [
         {
           operation: "processing.set",
@@ -887,7 +887,7 @@ test("state channel admission refuses wider and unknown probes without blocking 
     );
     const retained = projectComposition(f.projects, f.assets, {
       projectId: f.projectId,
-      revisionId: revision.revision.revisionId,
+      revisionId: revision.revision.id,
     }).window({}, { implementationId: "fixture" }, "audio", "retained");
     expect(retained.window.manifest.state!.inputs[0]!.channels ?? null).toBe(channels);
   }
@@ -1028,7 +1028,7 @@ test("stateful processing over a source gap publishes its audio with support-gap
   }));
   const placed = f.projects.apply(f.projectId, {
     requestId: "gapped",
-    expectedRevisionId: f.placed.revision.revisionId,
+    expectedRevisionId: f.placed.revision.id,
     operations: [
       {
         operation: "place",
@@ -1048,7 +1048,7 @@ test("stateful processing over a source gap publishes its audio with support-gap
       },
     ],
   });
-  const input = { projectId: f.projectId, revisionId: placed.revision.revisionId };
+  const input = { projectId: f.projectId, revisionId: placed.revision.id };
   await f.inspection.request(input);
   await f.jobs.idle();
   const status = await f.inspection.request(input);

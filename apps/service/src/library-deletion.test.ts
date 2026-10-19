@@ -44,7 +44,6 @@ test("a failed phase resumes from its durable plan without reporting success ear
         catalog.catalog.prepare("DELETE FROM fixture_tombstones WHERE id=?").run("one");
         return true;
       },
-      result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
       freedBytes: () => 0,
     };
     let fail = true;
@@ -74,7 +73,7 @@ test("a failed phase resumes from its durable plan without reporting success ear
     ).resolves.toBeUndefined();
     if (failedBoundary === "plan")
       await expect(deletion.delete({ kind: "fixture", id: "one" })).resolves.toEqual({
-        fixtureId: "one",
+        id: "one",
         deleted: true,
         freedBytes: 0,
       });
@@ -163,7 +162,6 @@ async function fixtureDeletion(registration: Partial<DeletionRegistration> = {})
     drain: () => {},
     files: async () => {},
     rows: () => true,
-    result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
     freedBytes: () => 0,
     ...registration,
   });
@@ -222,7 +220,7 @@ test("a finished delete's requestId keeps returning its first result after the s
   await expect(
     f.deletion.delete({ kind: "fixture", id: "one" }, { requestId: "kept" }),
   ).resolves.toEqual(first);
-  expect(first).toEqual({ fixtureId: "one", deleted: true, freedBytes: 7 });
+  expect(first).toEqual({ id: "one", deleted: true, freedBytes: 7 });
   expect(runs).toBe(1);
   await f.close();
 });
@@ -242,7 +240,6 @@ test("a crash right after planning still lets the same requestId replay the fini
     drain: () => {},
     files: async () => {},
     rows: () => true,
-    result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
     freedBytes: () => 7,
   };
   let armed = true;
@@ -269,7 +266,7 @@ test("a crash right after planning still lets the same requestId replay the fini
   });
   await expect(
     deletion.delete({ kind: "fixture", id: "one" }, { requestId: "retry-me" }),
-  ).resolves.toEqual({ fixtureId: "one", deleted: true, freedBytes: 7 });
+  ).resolves.toEqual({ id: "one", deleted: true, freedBytes: 7 });
   expect(runs).toBe(1);
   await deletion.close();
   catalog.close();

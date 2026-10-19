@@ -331,13 +331,13 @@ test("project speaker rows carry caller labels for their retained generation", a
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "project-labels-place",
-    expectedRevisionId: revision.revisionId,
+    expectedRevisionId: revision.id,
     operations: [
       { operation: "track.add", track: { kind: "audio", order: 0 }, label: "sound" },
       {
@@ -353,10 +353,10 @@ test("project speaker rows carry caller labels for their retained generation", a
     ],
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
-  const editedData = edited.data as { revision: { revisionId: string } };
+  const editedData = edited.data as { revision: { id: string } };
   const query = {
-    projectId: project.projectId,
-    revisionId: editedData.revision.revisionId,
+    projectId: project.id,
+    revisionId: editedData.revision.id,
     range: { startUs: 0, endUs: 3000000 },
     channel: input.channel,
     modelId: input.modelId,
@@ -442,14 +442,14 @@ test.runIf(process.platform === "darwin")(
     });
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
-      revision: { revisionId: string };
+      project: { id: string };
+      revision: { id: string };
     };
     expect(
       await f.call("edit.apply", {
-        projectId: project.projectId,
+        projectId: project.id,
         requestId: "portable-place",
-        expectedRevisionId: revision.revisionId,
+        expectedRevisionId: revision.id,
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "sound" },
           {
@@ -467,7 +467,7 @@ test.runIf(process.platform === "darwin")(
     ).toMatchObject({ ok: true });
     const exportId = randomUUID();
     const exporting = await f.call("export.create", {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: exportId,
       kind: "processed-package",
       directory: f.home,
@@ -491,7 +491,7 @@ test.runIf(process.platform === "darwin")(
       }
     };
     const projectQuery = {
-      projectId: project.projectId,
+      projectId: project.id,
       channel: input.channel,
       modelId: input.modelId,
       range: { startUs: 750000, endUs: 1250000 },
@@ -516,7 +516,7 @@ test.runIf(process.platform === "darwin")(
       path: await realpath(join(f.home, "speakers.zip")),
     });
     if (!opened.ok) throw Error(JSON.stringify(opened));
-    const admissionId = (opened.data as { packageId: string }).packageId;
+    const admissionId = (opened.data as { id: string }).id;
     expect(
       await target.call("package.open", {
         requestId: "package-open-test",

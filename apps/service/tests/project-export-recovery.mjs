@@ -182,7 +182,7 @@ test("abandonment drains and forgets recovery identities without touching neighb
   assert.throws(() => f.jobs.job(firstRecovery), { code: "NOT_FOUND" });
   assert.equal(f.jobs.job(siblingRecovery).state, "ready");
   assert.equal(f.exports.status(ids[1]).state, "failed");
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
   for (const exportId of ids)
     assert.equal(await readFile(join(f.output, exportId + ".mp4"), "utf8"), "foreign");
 });
@@ -227,19 +227,19 @@ test("recovery failures are isolated and explicit retry observes absence without
     before = calls;
   for (let n = 0; n < 10; n++) {
     assert.deepEqual(f.exports.resumeRecovery(), []);
-    f.exports.status(failed.exportId);
+    f.exports.status(failed.id);
   }
   assert.equal(calls, before);
   assert.equal(f.jobs.job(failed.recovery.jobId).attemptId, attempt);
-  await rm(join(f.output, failed.exportId + ".mp4"));
-  f.exports.recover(failed.exportId);
+  await rm(join(f.output, failed.id + ".mp4"));
+  f.exports.recover(failed.id);
   await f.jobs.idle();
-  const recovered = f.exports.status(failed.exportId);
+  const recovered = f.exports.status(failed.id);
   assert.equal(recovered.receipt, null);
   assert.equal(recovered.state, "failed");
   assert.equal(recovered.recovery.state, "ready");
   assert.equal(JSON.parse(recovered.recovery.published.result).observation, "missing");
-  await assert.rejects(stat(join(f.output, failed.exportId + ".mp4")), { code: "ENOENT" });
+  await assert.rejects(stat(join(f.output, failed.id + ".mp4")), { code: "ENOENT" });
   assert.notEqual(f.jobs.job(recovered.recovery.jobId).attemptId, attempt);
 });
 
@@ -350,7 +350,7 @@ test("abandonment resumes after actual process death following private retiremen
   await reopened.exports.abandon(exportId);
   assert.throws(() => reopened.exports.status(exportId), { code: "NOT_FOUND" });
   assert.throws(() => reopened.jobs.job(requested.jobId), { code: "NOT_FOUND" });
-  assert.equal(reopened.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(reopened.projects.get(f.projectId).id, f.projectId);
   assert.deepEqual(await readdir(f.output), ["survives.mp4"]);
   assert.deepEqual(await readFile(join(f.output, "survives.mp4")), bytes);
 });

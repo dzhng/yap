@@ -97,7 +97,7 @@
         "packages/core/src/prepared-audio.ts": 5,
         "packages/core/src/project-evidence.ts": 1,
         "packages/core/src/project-index-materialization.ts": 1,
-        "packages/core/src/projects.ts": 2,
+        "packages/core/src/projects.ts": 1,
         "packages/core/src/raw-cursor.ts": 1,
         "packages/core/src/rendered-speech.ts": 2,
         "packages/core/src/scene-evidence.ts": 1,

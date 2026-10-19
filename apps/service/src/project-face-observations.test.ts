@@ -89,12 +89,12 @@ test("public project frames publish requested native face evidence through the p
   });
   if (!created.ok) throw Error(JSON.stringify(created));
   const project = created.data as {
-    project: { projectId: string };
-    revision: { revisionId: string };
+    project: { id: string };
+    revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: project.project.projectId,
-    expectedRevisionId: project.revision.revisionId,
+    projectId: project.project.id,
+    expectedRevisionId: project.revision.id,
     requestId: "place",
     operations: [
       { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
@@ -111,10 +111,10 @@ test("public project frames publish requested native face evidence through the p
     ],
   });
   if (!edited.ok) throw Error(JSON.stringify(edited));
-  const revision = edited.data as { revision: { revisionId: string } };
+  const revision = edited.data as { revision: { id: string } };
   const selection = {
-    projectId: project.project.projectId,
-    revisionId: revision.revision.revisionId,
+    projectId: project.project.id,
+    revisionId: revision.revision.id,
     atUs: 0,
     faceObservations: { recipe: "vision-face-rectangles-v1" },
   };

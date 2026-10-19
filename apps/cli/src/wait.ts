@@ -58,6 +58,12 @@ const reads = new Map([
   ["skill.update", "skill.status"],
   ["skill.uninstall", "skill.status"],
 ]);
+/** Getters of a record, and the parameter that names it. */
+const recordGetters = new Map([
+  ["export.status", "exportId"],
+  ["recording.get", "recordingId"],
+  ["package.status", "admissionId"],
+]);
 // Getters used as initial requests must preserve the same domain response while waiting.
 for (const read of reads.values()) reads.set(read, read);
 function record(value: unknown): Record<string, unknown> {
@@ -191,14 +197,9 @@ export async function waitForWork(options: {
   // requested one, so the read carries the preparation's clamp.
   const admission =
     (sourcePreparation || renderPreparation) && Array.isArray(pins.issues) ? pins.issues : [];
-  if (
-    (request.operation === "export.create" || request.operation === "export.recover") &&
-    typeof pins.exportId === "string"
-  )
-    params = { exportId: pins.exportId };
-  if (request.operation === "capture.stop" && typeof pins.recordingId === "string")
-    params = { recordingId: pins.recordingId };
-  if (read === "package.status" && typeof pins.id === "string") params = { admissionId: pins.id };
+  // A mutation that returns its record waits through that record's own getter.
+  const recordParam = read ? recordGetters.get(read) : undefined;
+  if (recordParam && typeof pins.id === "string") params = { [recordParam]: pins.id };
   const selectionKeys = [
     "projectId",
     "revisionId",
@@ -207,7 +208,7 @@ export async function waitForWork(options: {
     "acquisitionId",
     "exportId",
     "recordingId",
-    ...(read === "package.status" ? ["id"] : []),
+    ...(recordParam ? ["id"] : []),
   ];
   if (read && pins.revisionId !== undefined) params.revisionId = pins.revisionId;
   if (read === "index.frames" && typeof pins.generation === "string")

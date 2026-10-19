@@ -38,7 +38,7 @@ async function generated(home, seconds) {
   try {
     take = store.allocate().recording;
     for (const [i, state] of ["recording", "finalizing", "complete"].entries())
-      store.ingestLifecycle(take.recordingId, {
+      store.ingestLifecycle(take.id, {
         sourceId: take.sourceId,
         sequence: i + 1,
         state,
@@ -47,7 +47,7 @@ async function generated(home, seconds) {
   } finally {
     store.close();
   }
-  const directory = join(home, "library", "recordings", take.recordingId),
+  const directory = join(home, "library", "recordings", take.id),
     source = join(directory, "source");
   await mkdir(source, { recursive: true, mode: 0o700 });
   const video = join(source, "video.mov");
@@ -252,14 +252,14 @@ test(
           const filesBeforeDelete = snapshotFiles(join(home, "library"));
 
           const recordingBefore = await succeeds("recording.get", {
-            recordingId: take.recordingId,
+            recordingId: take.id,
           });
-          assert.equal(recordingBefore.recordingId, take.recordingId);
+          assert.equal(recordingBefore.recordingId, take.id);
           let finished = false,
             observations = 0,
             sawDirectoryRemoved = false;
           const deletion = call("recording.delete", {
-            recordingId: take.recordingId,
+            recordingId: take.id,
             requestId: randomUUID(),
           }).finally(() => {
             finished = true;
@@ -286,7 +286,7 @@ test(
             (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
             0,
           );
-          assert.equal(result.data.recordingId, take.recordingId);
+          assert.equal(result.data.recordingId, take.id);
           assert.equal(result.data.deleted, true);
           assert.ok(result.data.freedBytes > 0);
           assert.equal(alive(worker.pid), false);
@@ -298,10 +298,10 @@ test(
             "Deletion must cancel the held native reader before fixture cleanup, rather than wait for its timeout",
           );
           assert.equal(
-            (await call("recording.get", { recordingId: take.recordingId })).error.code,
+            (await call("recording.get", { recordingId: take.id })).error.code,
             "NOT_FOUND",
           );
-          const recordingAfter = await call("recording.get", { recordingId: take.recordingId });
+          const recordingAfter = await call("recording.get", { recordingId: take.id });
           assert.equal(recordingAfter.ok, false);
           assert.equal(recordingAfter.error.code, "NOT_FOUND");
           assert.deepEqual(await readSibling(), siblingImage);

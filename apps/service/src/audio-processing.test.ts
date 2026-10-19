@@ -1323,8 +1323,8 @@ real(
         (value) => value.state === "ready",
       );
       const created = await call<{
-        project: { projectId: string };
-        revision: { revisionId: string };
+        project: { id: string };
+        revision: { id: string };
       }>("project.create", {
         requestId: "project",
         canvas: {
@@ -1334,9 +1334,9 @@ real(
           background: "#000000ff",
         },
       });
-      const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
-        projectId: created.project.projectId,
-        expectedRevisionId: created.revision.revisionId,
+      const edited = await call<{ revision: { id: string } }>("edit.apply", {
+        projectId: created.project.id,
+        expectedRevisionId: created.revision.id,
         requestId: "media",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1368,8 +1368,8 @@ real(
         ],
       });
       const selection = {
-        projectId: created.project.projectId,
-        revisionId: edited.revision.revisionId,
+        projectId: created.project.id,
+        revisionId: edited.revision.id,
       };
       const exportId = randomUUID();
       await call("export.create", {
@@ -1666,8 +1666,8 @@ real(
       const importedJob = await job(imported.jobId);
       const assetId = (importedJob.published!.output as { assetId: string }).assetId;
       const created = await call<{
-        project: { projectId: string };
-        revision: { revisionId: string };
+        project: { id: string };
+        revision: { id: string };
       }>("project.create", {
         requestId: "project",
         canvas: {
@@ -1677,9 +1677,9 @@ real(
           background: "#000000ff",
         },
       });
-      const edited = await call<{ revision: { revisionId: string } }>("edit.apply", {
-        projectId: created.project.projectId,
-        expectedRevisionId: created.revision.revisionId,
+      const edited = await call<{ revision: { id: string } }>("edit.apply", {
+        projectId: created.project.id,
+        expectedRevisionId: created.revision.id,
         requestId: "media",
         operations: [
           { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
@@ -1725,8 +1725,8 @@ real(
         ],
       });
       const selection = {
-        projectId: created.project.projectId,
-        revisionId: edited.revision.revisionId,
+        projectId: created.project.id,
+        revisionId: edited.revision.id,
       };
       type Prepared = {
         state: string;
@@ -1847,7 +1847,7 @@ real(
           throw Error(JSON.stringify(status));
         await delay(10);
       }
-      const admission = await call<{ packageId: string }>("package.open", {
+      const admission = await call<{ id: string }>("package.open", {
         path: join(home, "prepared.zip"),
         requestId: "open-prepared",
       });
@@ -1855,7 +1855,7 @@ real(
       const packageDeadline = performance.now() + 10000;
       for (;;) {
         const status = await call<{ state: string; packageHandle?: string }>("package.status", {
-          admissionId: admission.packageId,
+          admissionId: admission.id,
         });
         if (status.state === "ready") {
           packageHandle = status.packageHandle;
@@ -1886,7 +1886,7 @@ real(
           throw Error(JSON.stringify(status));
         await delay(10);
       }
-      await call("package.close", { admissionId: admission.packageId });
+      await call("package.close", { admissionId: admission.id });
       const adoptedAudio = await call<Prepared>("audio.prepare", adopted!);
       expect(adoptedAudio).toMatchObject({
         state: "ready",
@@ -2070,10 +2070,10 @@ test("a failed 0.1.33 normalization job re-runs after an identity bump", async (
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const revision = old.projects.apply(projectId, {
     requestId: "edit",
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", label: "track", track: { kind: "audio", order: 0 } },
       {
@@ -2103,7 +2103,7 @@ test("a failed 0.1.33 normalization job re-runs after an identity bump", async (
       },
     ],
   }).revision;
-  const input = { projectId, revisionId: revision.revisionId };
+  const input = { projectId, revisionId: revision.id };
   await old.prepared.request(input);
   await old.jobs.idle();
   const failed = await old.prepared.request(input);

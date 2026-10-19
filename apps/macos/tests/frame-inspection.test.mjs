@@ -35,8 +35,8 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
     systemAudio: false,
   });
   await waitFor(async () => (await call("capture.status")).device.elapsedUs >= 1000000, 20000);
-  const finished = await finishCapture(call, take.recordingId);
-  const source = join(home, "library", "recordings", take.recordingId, "source", "video.mov");
+  const finished = await finishCapture(call, take.id);
+  const source = join(home, "library", "recordings", take.id, "source", "video.mov");
   const hash = async () =>
     createHash("sha256")
       .update(await readFile(source))
@@ -44,7 +44,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const originalHash = await hash();
   assert.deepEqual((await call("project.list", {})).projects, []);
   const admitted = await waitFor(async () => {
-    const facts = await call("recording.get", { recordingId: take.recordingId });
+    const facts = await call("recording.get", { recordingId: take.id });
     const primary = facts.sourceAdmissions.find((value) => value.kind === "primary");
     if (["failed", "canceled", "unavailable"].includes(primary?.job?.state))
       throw new Error(JSON.stringify(primary));
@@ -66,10 +66,10 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = await call("edit.apply", {
     projectId,
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     requestId: randomUUID(),
     operations: [
       { operation: "track.add", label: "video", track: { kind: "video", order: 0 } },
@@ -92,7 +92,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   // Keep a full-size reference so the crop oracle compares preceding-image pixels.
   const params = {
     projectId,
-    revisionId: authored.revision.revisionId,
+    revisionId: authored.revision.id,
     atUs: 400000,
     maxLongEdge: 8192,
   };
@@ -159,7 +159,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const crop = { x: 20, y: 30, width: 200, height: 100 };
   const cropEdit = await call("edit.apply", {
     projectId,
-    expectedRevisionId: authored.revision.revisionId,
+    expectedRevisionId: authored.revision.id,
     requestId: randomUUID(),
     operations: [
       { operation: "canvas.set", canvas: { width: 200, height: 100 } },
@@ -182,7 +182,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const cropped = await waitFor(async () => {
     const result = await call("frame.get", {
       projectId,
-      revisionId: cropEdit.revision.revisionId,
+      revisionId: cropEdit.revision.id,
       atUs: 400000,
       maxLongEdge: 8192,
     });
@@ -234,7 +234,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
 
   const revision = await call("edit.apply", {
     projectId,
-    expectedRevisionId: cropEdit.revision.revisionId,
+    expectedRevisionId: cropEdit.revision.id,
     requestId: randomUUID(),
     operations: [
       { operation: "canvas.set", canvas: { width: video.width, height: video.height } },
@@ -250,13 +250,13 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const edited = await waitFor(async () => {
     const result = await call("frame.get", {
       projectId,
-      revisionId: revision.revision.revisionId,
+      revisionId: revision.revision.id,
       atUs: 0,
     });
     if (["failed", "unavailable"].includes(result.state)) throw new Error(JSON.stringify(result));
     return result.state === "ready" && result;
   }, 20000);
-  assert.equal(edited.revisionId, revision.revision.revisionId);
+  assert.equal(edited.revisionId, revision.revision.id);
   assert.equal(edited.published.output.pictures[0].requestedSourceUs, 200000);
   assert.ok(
     edited.published.output.pictures[0].actualSourceUs >= 0 &&

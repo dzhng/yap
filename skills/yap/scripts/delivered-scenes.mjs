@@ -208,11 +208,11 @@ export async function deliveredScenes(request, invoke, { readFile = readBytes } 
     projectId: request.projectId,
     ...(request.revisionId ? { revisionId: request.revisionId } : {}),
   });
-  if (!revision.revision?.revisionId)
+  if (!revision.revision?.id)
     throw failure("ARTIFACT_CHANGED", "Requested revision is unavailable");
   const authoredEvents = await readEvents(
     invoke,
-    { projectId: request.projectId, revisionId: revision.revision.revisionId, range: projectRange },
+    { projectId: request.projectId, revisionId: revision.revision.id, range: projectRange },
     budgets,
     "authored events",
   );
@@ -236,7 +236,7 @@ export async function deliveredScenes(request, invoke, { readFile = readBytes } 
     kind: "delivered-scene-report",
     project: {
       projectId: request.projectId,
-      revisionId: revision.revision.revisionId,
+      revisionId: revision.revision.id,
       range: projectRange,
     },
     export: {
