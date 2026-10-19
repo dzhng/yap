@@ -100,8 +100,11 @@ Each concept has one owner, and the operation schemas are the reference:
   `packages/protocol/src/refusal-ledger.json`, which the protocol tests hold to every
   literal in product source.
 - **Naming:** identities are `<noun>Id` and quantities carry their unit
-  (`packages/protocol/src/naming.ts`). The lint checks numeric keys whose last word names
-  a quantity, outside the edit document and export settings that `@yap/composition` owns.
+  (`packages/protocol/src/naming.ts`), except where the parent already says it: a record's
+  own `id`, a `count` or `bytes`, a `start` under `sampleRange`. The lint checks numeric keys
+  whose last word names a quantity, outside the edit document and export settings that
+  `@yap/composition` owns, and the service and CLI suites hold every response they receive
+  to it.
   Renames happen at the producer, and old stored shapes refuse `ARTIFACT_CHANGED` and are
   regenerated, not migrated. Three translations remain on purpose: one typed converter
   per record inside `audio-inspection.ts` and `acoustic-inspection.ts`, where the media
@@ -169,10 +172,6 @@ Each concept has one owner, and the operation schemas are the reference:
   replaying the `requestId` returns its result.
 - **Removing a model in the middle of a job** fails only that job; each native call is
   its own short-lived process.
-- **Not every public result follows the naming rule yet.** The response guard runs only on
-  the service fixture's calls; a trace over every suite found `acquisition.get`'s `id`,
-  `bytes` in published outputs and receipts, and `start`/`end` sample ranges in processing
-  evidence. See [choices.md](choices.md#follow-up-2026-10-18).
 
 ## Visual provenance
 

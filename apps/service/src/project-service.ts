@@ -104,6 +104,7 @@ import {
   type UpdateBlocker,
   appOperations,
   markedWorkState,
+  valueNamingViolations,
   storedWork,
   type StoredWorkState,
 } from "@yap/protocol";
@@ -3646,9 +3647,18 @@ export async function startProjectService(options: {
       }
     };
     const serve: LocalHandler = (request, signal) => {
-      const task = Promise.resolve(handle(request, signal)).then(
-        (result) => toWire(result) as OperationResult,
-      );
+      const task = Promise.resolve(handle(request, signal)).then((result) => {
+        const wire = toWire(result) as OperationResult;
+        // Test suites set this so every response they receive is held to the naming rule.
+        if (process.env.YAP_NAMING_GUARD && wire.ok) {
+          const violations = valueNamingViolations(wire.data, request.operation);
+          if (violations.length)
+            return operationError("INVALID_RESPONSE", "Response breaks the naming rule", {
+              violations,
+            });
+        }
+        return wire;
+      });
       pending.add(task);
       void task.then(
         () => {

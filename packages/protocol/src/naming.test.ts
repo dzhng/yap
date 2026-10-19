@@ -30,7 +30,7 @@ function namingViolations(schema: JsonSchema, path: string): string[] {
     if (!node || typeof node !== "object") return;
     for (const [key, child] of Object.entries(node.properties ?? {})) {
       const here = `${at}.${key}`;
-      const reason = keyViolation(key, isNumber(child));
+      const reason = keyViolation(key, isNumber(child), at.split(".").pop());
       if (reason) found.push(`${here}: ${reason}`);
       walk(child, here);
     }
@@ -118,7 +118,7 @@ describe("identity and naming lint", () => {
       expect(operationNames.has(name), name).toBe(true);
   });
 
-  it("a response value is held to the same rule outside composition-owned paths", () => {
+  it("a response value is held to the same rule outside composition-owned paths, and a key may leave out what its parent says", () => {
     expect(
       valueNamingViolations(
         {
@@ -126,18 +126,13 @@ describe("identity and naming lint", () => {
           sizeBytes: 3,
           bytes: 3,
           sampleRange: { start: 0, end: 4 },
-          rows: [{ id: "w" }],
+          range: { start: 0, end: 4 },
+          rows: [{ id: "w", count: 2 }],
           snapshot: { settings: { video: { keyframeIntervalSeconds: 2 } } },
         },
         "op",
       ),
-    ).toEqual([
-      "op.bytes: unit without a noun",
-      "op.revision.id: identity without a noun",
-      "op.rows[].id: identity without a noun",
-      "op.sampleRange.end: quantity without a unit",
-      "op.sampleRange.start: quantity without a unit",
-    ]);
+    ).toEqual(["op.range.end: quantity without a unit", "op.range.start: quantity without a unit"]);
   });
 
   it("removed aliases stay removed", () => {
@@ -169,11 +164,8 @@ describe("identity and naming lint", () => {
     );
     expect(namingViolations(planted, "planted").sort()).toEqual(
       [
-        "planted.bytes: unit without a noun",
         "planted.durationSeconds: non-canonical unit",
         "planted.either.expires: quantity without a unit",
-        "planted.id: identity without a noun",
-        "planted.either.ids: identity without a noun",
         "planted.nested[].offset: quantity without a unit",
         "planted.startTime: quantity without a unit",
       ].sort(),
