@@ -505,7 +505,7 @@ test("a failed export recovers through job.retry with the jobId its status retur
   assert.equal(failed.receipt, null);
   await assert.rejects(readFile(join(f.output, request.leaf)), { code: "ENOENT" });
   const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
-  assert.equal(retried.jobId, failed.jobId);
+  assert.equal(retried.id, failed.jobId);
   const ready = await f.good("export.status", { exportId: request.requestId });
   assert.equal(ready.state, "ready", JSON.stringify(ready));
   assert.equal(ready.jobId, failed.jobId);
@@ -624,7 +624,7 @@ test("job.retry on a failed export also retries the export's own failed audio re
   assert.equal(failed.jobId, created.response.data.jobId);
   assert.equal(mixes, 1);
   const retried = await f.good("job.retry", { jobId: failed.jobId }, true);
-  assert.equal(retried.jobId, failed.jobId);
+  assert.equal(retried.id, failed.jobId);
   const ready = await f.good("export.status", { exportId: request.requestId });
   assert.equal(ready.state, "ready", JSON.stringify(ready));
   assert.equal(ready.jobId, failed.jobId);

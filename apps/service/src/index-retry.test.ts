@@ -186,7 +186,7 @@ test("a failed source index recovers through job.retry with the jobId its status
   expect(f.calls.frames).toBe(attempts);
   expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: failed.jobId },
+    data: { id: failed.jobId },
   });
   const ready = await f.until("ready");
   expect(ready.jobId).toBe(failed.jobId);
@@ -206,7 +206,7 @@ test("a failed scene prerequisite recovers through job.retry with the dependency
   expect(f.calls.scenes).toBe(1);
   expect(await f.call("job.retry", { jobId: scenes!.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: scenes!.jobId },
+    data: { id: scenes!.jobId },
   });
   const ready = await f.until("ready");
   expect(f.calls.scenes).toBe(2);

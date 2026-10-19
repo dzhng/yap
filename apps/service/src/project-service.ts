@@ -1185,23 +1185,7 @@ export async function startProjectService(options: {
       }),
     );
     libraryDeletion.register(assetRetirementRegistration);
-    const status = (jobId: string) => {
-      const value = queue.inspect(jobId);
-      const { generation, ...job } = value;
-      return {
-        ...job,
-        published: job.published
-          ? {
-              ...job.published,
-              generation: String(job.published.generation),
-              output: job.published.output,
-              issues: job.published.issues,
-            }
-          : job.published,
-        attemptGeneration: generation,
-        jobId,
-      };
-    };
+    const status = (jobId: string) => queue.inspect(jobId);
     /** A lifecycle word that is not a presence fact asks the installed files instead. */
     const modelPresence = (modelId: string, state: string) =>
       state === "absent" || state === "ready" || state === "invalid"
@@ -3409,7 +3393,7 @@ export async function startProjectService(options: {
                 input: JSON.stringify(intent.files),
               };
             });
-            return { ok: true, data: status(job.jobId) };
+            return { ok: true, data: queue.work(job.jobId) };
           }
           case "acquisition.get":
             return { ok: true, data: acquisitions.get(operation.params.acquisitionId) };
@@ -3428,7 +3412,7 @@ export async function startProjectService(options: {
                 input: JSON.stringify(intent.source),
               };
             });
-            return { ok: true, data: status(job.jobId) };
+            return { ok: true, data: queue.work(job.jobId) };
           }
           case "asset.convert": {
             const converted = await convertedAssets.request(operation.params, requestSignal);

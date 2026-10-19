@@ -1372,7 +1372,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
     data: { ...selection, state: "failed", jobId, retryable: true, published: null },
   });
   expect(attempts).toBe(1);
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   await f.job(jobId, "failed");
   expect(attempts).toBe(2);
   expect(await f.call("revision.get", selection)).toMatchObject({
@@ -1405,7 +1405,7 @@ test("failed probe retries through the shared job and publishes immutable media 
   const { jobId } = accepted.data as { jobId: string };
   expect((await f.job(jobId, "failed")).errorCode).toBe("MEDIA_WORKER_UNAVAILABLE");
   expect(await f.call("asset.list", {})).toMatchObject({ ok: true, data: { assets: [] } });
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   const ready = await f.job(jobId, "ready");
   expect(ready.published?.output.assetId).toMatch(/^[a-f0-9]{64}$/);
   expect(attempts).toBe(2);
@@ -2223,7 +2223,7 @@ test("asset job and cache presence checks preserve source validation without hyd
     if (!frame.ok) throw new Error(JSON.stringify(frame));
     jobId = (frame.data as { jobId: string }).jobId;
     expect(await f.job(jobId, "failed")).toMatchObject({
-      jobId,
+      id: jobId,
       target: { kind: "asset", id: assetId },
       reason: "offline",
       retryable: true,
@@ -2268,10 +2268,10 @@ test("asset job and cache presence checks preserve source validation without hyd
     try {
       expect(await f.call("job.retry", { jobId: jobId! })).toMatchObject({
         ok: true,
-        data: { jobId: jobId! },
+        data: { id: jobId! },
       });
       expect(await f.job(jobId!, "ready")).toMatchObject({
-        jobId: jobId!,
+        id: jobId!,
         target: { kind: "asset", id: assetId },
         published: {
           output: {
@@ -2321,7 +2321,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       .run("not parsed", assetId);
     expect
       .soft(await f.call("job.retry", { jobId: jobId! }))
-      .toMatchObject({ ok: true, data: { jobId: jobId!, state: "ready" } });
+      .toMatchObject({ ok: true, data: { id: jobId!, state: "ready" } });
     expect(await f.call("frame.get", selection)).toMatchObject({
       ok: false,
       error: { code: "INTERNAL_ERROR" },

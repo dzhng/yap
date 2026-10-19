@@ -375,7 +375,7 @@ test("failed rendered recognition recovers through job.retry with the jobId its 
   expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(1);
   expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: pending.jobId },
+    data: { id: pending.jobId },
   });
   const ready = await f.settled();
   expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
@@ -399,7 +399,7 @@ test("a failed rendered PCM dependency recovers through job.retry with the jobId
   // The jobId the item reported is enough: its retry also re-runs the failed extraction.
   expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: pending.jobId },
+    data: { id: pending.jobId },
   });
   const ready = await f.settled();
   expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
@@ -624,7 +624,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
   await f.job(jobId, "failed");
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   await f.job(jobId, "ready");
   const speakerInput = {
     assetId: selection.assetId,
@@ -793,7 +793,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     },
   );
   const first = await f.call("job.get", { jobId });
-  expect(first).toMatchObject({ ok: true, data: { state: "ready", jobId } });
+  expect(first).toMatchObject({ ok: true, data: { state: "ready", id: jobId } });
   expect(await f.call("job.get", { jobId })).toEqual(first);
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
@@ -1027,13 +1027,13 @@ test("ready and canceled source jobs retain identity through public cancel and r
   holdProbe = true;
   expect(await f.call("job.retry", { jobId })).toMatchObject({
     ok: true,
-    data: { jobId, target: (failed.ok ? (failed.data as { target: unknown }) : null)?.target },
+    data: { id: jobId, target: (failed.ok ? (failed.data as { target: unknown }) : null)?.target },
   });
   await probeEntry;
   const canceled = await f.call("job.cancel", { jobId });
   expect(canceled).toMatchObject({
     ok: true,
-    data: { jobId, state: "canceled", target: { kind: "import" }, published: null },
+    data: { id: jobId, state: "canceled", target: { kind: "import" }, published: null },
   });
   const home = f.home;
   await f.service.close();
@@ -1045,7 +1045,10 @@ test("ready and canceled source jobs retain identity through public cancel and r
   const retried = await f.call("job.retry", { jobId });
   expect(retried).toMatchObject({
     ok: true,
-    data: { jobId, target: (canceled.ok ? (canceled.data as { target: unknown }) : null)?.target },
+    data: {
+      id: jobId,
+      target: (canceled.ok ? (canceled.data as { target: unknown }) : null)?.target,
+    },
   });
   if (!retried.ok || !canceled.ok) throw new Error("Job operation failed");
   expect((retried.data as { attemptId: string }).attemptId).not.toBe(
@@ -1055,7 +1058,7 @@ test("ready and canceled source jobs retain identity through public cancel and r
   const stopped = await f.call("job.cancel", { jobId });
   expect(stopped).toMatchObject({
     ok: true,
-    data: { jobId, state: "canceled", target: (canceled.data as { target: unknown }).target },
+    data: { id: jobId, state: "canceled", target: (canceled.data as { target: unknown }).target },
   });
   expect(await f.call("job.get", { jobId })).toEqual(stopped);
   for (const operation of ["job.get", "job.retry", "job.cancel"])

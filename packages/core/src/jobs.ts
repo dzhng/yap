@@ -1,4 +1,5 @@
 import { omit, type Issue } from "@yap/composition";
+import { workState } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ResourceReferences, type ResourceKind } from "./references.js";
@@ -768,13 +769,26 @@ export class JobQueue {
     return generation;
   }
 
-  /** Inspect durable state without decoding or rehashing the execution recipe. */
+  /**
+   * A job's public record: its own `id`, its state in the public vocabulary, and its published
+   * output. Durable state is read without decoding or rehashing the execution recipe.
+   */
   inspect(jobId: string) {
     const row = this.store.catalog
       .prepare(`SELECT ${summaryColumns},inputSha256 FROM jobs WHERE jobId=?`)
       .get(jobId) as (Omit<JobRow, "input"> & { inputSha256: string }) | undefined;
     if (!row) throw new CatalogError("NOT_FOUND", "Job does not exist", { jobId });
-    const { targetKind, targetId, revisionId, retryable, errorDetails, ...summary } = row;
+    const {
+      jobId: id,
+      state,
+      generation,
+      targetKind,
+      targetId,
+      revisionId,
+      retryable,
+      errorDetails,
+      ...summary
+    } = row;
     const target = targetFrom(row);
     const publication = this.targets.isAvailable(target)
       ? (this.store.catalog
@@ -786,19 +800,32 @@ export class JobQueue {
           | undefined)
       : undefined;
     return {
+      id,
+      state: workState(state),
       ...summary,
+      attemptGeneration: generation,
       target,
       retryable: Boolean(retryable),
       errorDetails: errorDetails ? JSON.parse(errorDetails) : null,
       published: publication
         ? {
-            generation: publication.generation,
+            generation: String(publication.generation),
             attemptId: publication.attemptId,
             output: JSON.parse(publication.result) as unknown,
             issues: this.issues(publication),
           }
         : null,
     };
+  }
+
+  /**
+   * The status of the work a job runs, for the operation that started it: what it works on, its
+   * state, and the job that runs it.
+   */
+  work(jobId: string) {
+    const { id, target, state, reason, retryable, attemptId, attemptGeneration, published } =
+      this.inspect(jobId);
+    return { target, state, jobId: id, attemptId, attemptGeneration, reason, retryable, published };
   }
 
   /** Whether a running job's input pins this model content digest, as every model consumer does. */

@@ -395,7 +395,7 @@ test("public source audio keeps native failure until explicit retry after restor
     assert.deepEqual(await readFile(registered), original);
     for (let i = 0; i < 3; i++) assert.deepEqual(await call("audio.get", params), failed);
     const retry = await call("job.retry", { jobId: failed.jobId });
-    assert.equal(retry.jobId, failed.jobId);
+    assert.equal(retry.id, failed.jobId);
     assert.notEqual(retry.state, "failed");
     const samples = (path) =>
       ffmpeg(["-i", path, "-f", "f32le", "-ac", "1", "-ar", "48000", "pipe:1"]);

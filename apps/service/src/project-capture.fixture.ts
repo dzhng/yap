@@ -369,7 +369,7 @@ export async function settleCapture(
   });
   if (!reported.ok) throw new Error(JSON.stringify(reported));
   const { acquisitionId, job } = (
-    reported.data as { sourceAdmissions: { acquisitionId: string; job: { jobId: string } }[] }
+    reported.data as { sourceAdmissions: { acquisitionId: string; job: { id: string } }[] }
   ).sourceAdmissions[0]!;
   return { recordingId, sourceId, directory, acquisitionId, job };
 }

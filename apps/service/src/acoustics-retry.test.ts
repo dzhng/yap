@@ -155,7 +155,7 @@ test("a waveform whose audio prerequisite failed recovers through job.retry on t
   expect(f.calls.filter((call) => call === "media.sourceAudio")).toHaveLength(1);
   expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: failed.jobId },
+    data: { id: failed.jobId },
   });
   const ready = await until(f, "waveform.get", "ready");
   expect(ready).toMatchObject({ dependency: { jobId: failed.jobId, state: "ready" } });
@@ -188,7 +188,7 @@ test("a spectrogram whose image render failed recovers through job.retry and del
   expect(f.calls.filter((call) => call === "media.acousticImage")).toHaveLength(1);
   expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
     ok: true,
-    data: { jobId: failed.jobId },
+    data: { id: failed.jobId },
   });
   const ready = await until(f, "spectrogram.get", "ready");
   expect(ready).toMatchObject({ jobId: failed.jobId, published: { generation: "2" } });

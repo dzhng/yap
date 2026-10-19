@@ -533,7 +533,7 @@ test("explicit source retry publishes the same acquisition and remains ready wit
       result.data as {
         sourceAdmissions: {
           acquisitionId: string;
-          job: { jobId: string; state: string; attemptId: string };
+          job: { id: string; state: string; attemptId: string };
         }[];
       }
     ).sourceAdmissions[0]!;
@@ -548,13 +548,13 @@ test("explicit source retry publishes the same acquisition and remains ready wit
   await writeFile(join(directory, "video.mov"), "scripted source bytes");
   await f.call("capture.stop", { recordingId });
   expect(await inspect()).toEqual(failed);
-  expect(await f.call("job.retry", { jobId: failed.job.jobId })).toMatchObject({ ok: true });
+  expect(await f.call("job.retry", { jobId: failed.job.id })).toMatchObject({ ok: true });
   await expect.poll(async () => (await inspect()).job.state).toBe("ready");
   const ready = await inspect();
   expect(ready).toMatchObject({
     acquisitionId: failed.acquisitionId,
     job: {
-      jobId: failed.job.jobId,
+      id: failed.job.id,
       published: { output: { acquisitionId: failed.acquisitionId } },
     },
   });

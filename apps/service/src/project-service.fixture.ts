@@ -123,10 +123,10 @@ export async function projectServiceFixture(
       operation,
       params: wireParams,
     });
-    if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
+    if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation))
       expect(result.data).not.toHaveProperty("input");
+    if (result.ok && ["job.get", "job.retry", "job.cancel"].includes(operation))
       expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));
-    }
     return result;
   }
   async function job(jobId: string, state: string) {

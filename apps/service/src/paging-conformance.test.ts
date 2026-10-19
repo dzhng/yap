@@ -598,7 +598,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
     });
     const take = await settleCapture(f, "paged-cursor");
     await expect
-      .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+      .poll(() => f.call("job.get", { jobId: take.job.id }))
       .toMatchObject({ ok: true, data: { state: "ready" } });
     const acquisition = data<{ id: string; bindings: { assetId: string; streamId: string }[] }>(
       await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),

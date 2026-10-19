@@ -8,6 +8,28 @@ afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
 });
 
+type JobRecord = Record<string, unknown> & { id: string };
+/** What an operation that started a job reports: the status of its work, naming the job. */
+const workOf = ({
+  id,
+  target,
+  state,
+  attemptId,
+  attemptGeneration,
+  reason,
+  retryable,
+  published,
+}: JobRecord) => ({
+  target,
+  state,
+  jobId: id,
+  attemptId,
+  attemptGeneration,
+  reason,
+  retryable,
+  published,
+});
+
 test("import acknowledgement, exact replay and ready inspection expose one typed publication without internal results", async () => {
   let begin!: () => void, finish!: () => void;
   const entered = new Promise<void>((resolve) => {
@@ -58,13 +80,17 @@ test("import acknowledgement, exact replay and ready inspection expose one typed
     ok: true,
     data: {
       state: "running",
-      jobId: job.jobId,
+      id: job.jobId,
       attemptId: job.attemptId,
       attemptGeneration: 1,
       published: null,
     },
   });
-  expect(await f.call("asset.import", request)).toEqual(pending);
+  // Replaying the import reports the status of the same job's work.
+  expect(await f.call("asset.import", request)).toEqual({
+    ...pending,
+    data: workOf((pending as { data: JobRecord }).data),
+  });
   finish();
   const ready = await f.job(job.jobId, "ready");
   expect(ready).toMatchObject({
@@ -109,6 +135,6 @@ test("a malformed worker result settles failed work in an ok transport reply wit
   expect(await f.call("asset.import", { requestId: "malformed", path: f.path })).toEqual({
     id: "test",
     ok: true,
-    data: failed,
+    data: workOf(failed as unknown as JobRecord),
   });
 });

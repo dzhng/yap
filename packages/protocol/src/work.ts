@@ -60,8 +60,11 @@ export const modelStatusSchema = asyncWorkSchema
   })
   .passthrough();
 
-export const jobStatusSchema = asyncWorkSchema
-  .extend({
+/** A job's own record; work that a job runs refers to it by `jobId` instead. */
+export const jobStatusSchema = z
+  .object({
+    id: z.string().min(1),
+    state: workStateSchema,
     attemptId: z.string().min(1),
     attemptGeneration: z.int().positive().max(Number.MAX_SAFE_INTEGER),
     target: z.record(z.string(), z.unknown()),

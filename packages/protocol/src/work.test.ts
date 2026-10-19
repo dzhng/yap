@@ -88,8 +88,8 @@ test("status facts stay separate from WorkState", () => {
   ).toBe("absent");
   expect(
     jobStatusSchema.parse({
+      id: "job",
       state: "ready",
-      jobId: "job",
       attemptId: "attempt",
       attemptGeneration: 1,
       target: {},

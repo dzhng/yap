@@ -114,7 +114,7 @@ test("deletion fences retries and joins an acquisition borrowing the donor befor
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(await f.call("job.retry", { jobId: job.jobId })).toMatchObject({
+  expect(await f.call("job.retry", { jobId: job.id })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
@@ -178,7 +178,7 @@ test.each([
     cleanup.push(async () => release.resolve());
     const take = await settleCapture(f, `explicit-donor-${alias}`);
     await expect
-      .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+      .poll(() => f.call("job.get", { jobId: take.job.id }))
       .toMatchObject({ ok: true, data: { state: "ready" } });
     const selectedPath = alias ? join(f.home, "source-alias") : take.directory;
     if (alias) await symlink(take.directory, selectedPath);
@@ -221,7 +221,7 @@ test("a retained donor lease refuses deletion without hiding independent ready a
   );
   const take = await settleCapture(f, "lease-refusal");
   await expect
-    .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+    .poll(() => f.call("job.get", { jobId: take.job.id }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   const acquired = await f.call("acquisition.get", { acquisitionId: take.acquisitionId });
   if (!acquired.ok) throw new Error(JSON.stringify(acquired));
@@ -266,7 +266,7 @@ test("a retained donor lease refuses deletion without hiding independent ready a
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(await f.call("job.retry", { jobId: take.job.jobId })).toMatchObject({
+  expect(await f.call("job.retry", { jobId: take.job.id })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
@@ -293,7 +293,7 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
   });
   const take = await settleCapture(f, "resume-deletion");
   await expect
-    .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+    .poll(() => f.call("job.get", { jobId: take.job.id }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   expect(
     await f.call("recording.delete", { requestId: "test-delete", recordingId: take.recordingId }),
@@ -322,7 +322,7 @@ test("failed public donor removal resumes its durable fence on reopen", async ()
     ok: true,
     data: { deleted: true },
   });
-  expect(await reopened.call("job.retry", { jobId: take.job.jobId })).toMatchObject({
+  expect(await reopened.call("job.retry", { jobId: take.job.id })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
@@ -336,7 +336,7 @@ test("a legacy recording marker resumes old semantics without taking its acquisi
   const f = await fixture(home, sourceWorker);
   const take = await settleCapture(f, "legacy-marker");
   await expect
-    .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+    .poll(() => f.call("job.get", { jobId: take.job.id }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   await f.service.close();
   const legacy = new CaptureStore(join(home, "library", "catalog.sqlite"), {
@@ -406,7 +406,7 @@ test("a recording used by a project refuses until cascade retires its copies and
   const f = await fixture(undefined, sourceWorker);
   const take = await settleCapture(f, "independent-source");
   await expect
-    .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+    .poll(() => f.call("job.get", { jobId: take.job.id }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   const acquisition = data<Acquisition>(
     await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),
@@ -494,7 +494,7 @@ test("a recording used by a project refuses until cascade retires its copies and
       error: { code: "NOT_FOUND" },
     },
   );
-  expect(await f.call("job.retry", { jobId: take.job.jobId })).toMatchObject({
+  expect(await f.call("job.retry", { jobId: take.job.id })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
@@ -510,7 +510,7 @@ test("a recording refuses when a copy asset has a derived asset user", async () 
   const f = await fixture(undefined, sourceWorker);
   const take = await settleCapture(f, "derived-recording-user");
   await expect
-    .poll(() => f.call("job.get", { jobId: take.job.jobId }))
+    .poll(() => f.call("job.get", { jobId: take.job.id }))
     .toMatchObject({ ok: true, data: { state: "ready" } });
   const acquisition = data<Acquisition>(
     await f.call("acquisition.get", { acquisitionId: take.acquisitionId }),

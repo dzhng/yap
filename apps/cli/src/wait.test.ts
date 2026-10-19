@@ -79,18 +79,23 @@ async function fixture(
   return { home, calls, run, stop: () => service.close() };
 }
 const job = (state: string, generation = 2) => ({
-  jobId: "job",
+  id: "job",
   attemptId: `attempt-${generation}`,
   attemptGeneration: generation,
   state,
   target: { kind: "import", id: "admission" },
   published: { generation: "1", attemptId: "older", output: { assetId: "old" }, issues: [] },
 });
+/** What an import reports: the status of its work, referring to the job that runs it. */
+const work = (state: string) => {
+  const { id, target: _target, ...rest } = job(state);
+  return { ...rest, jobId: id };
+};
 
 test("wait submits a mutation once and waits for its current generation instead of accepting retained output", async () => {
   let reads = 0;
   const f = await fixture((request) => {
-    if (request.operation === "asset.import") return { ok: true, data: job("queued") };
+    if (request.operation === "asset.import") return { ok: true, data: work("queued") };
     expect(request.operation).toBe("job.get");
     return {
       ok: true,
@@ -168,7 +173,7 @@ test("pending timeout preserves pinned acknowledgement and current generation, c
     wait: {
       state: "timed_out",
       timeoutMs: 80,
-      job: { jobId: "job", attemptGeneration: 2, attemptId: "attempt-2" },
+      job: { id: "job", attemptGeneration: 2, attemptId: "attempt-2" },
     },
   });
   expect(f.calls.filter((request) => request.operation === "frame.get")).toHaveLength(1);
@@ -217,7 +222,7 @@ test("an older ready rendition never becomes the final file while its replacemen
 test("wait refuses a changed current job target and preserves the acknowledgement", async () => {
   let reads = 0;
   const f = await fixture((request) => {
-    if (request.operation === "asset.import") return { ok: true, data: job("queued") };
+    if (request.operation === "asset.import") return { ok: true, data: work("queued") };
     return {
       ok: true,
       data: {
@@ -258,7 +263,7 @@ test("a prepared-audio dependency finishing does not finish the requested measur
         ok: true,
         data: {
           ...job(request.params.jobId === "audio-job" ? "ready" : "failed"),
-          jobId: request.params.jobId,
+          id: request.params.jobId,
           target: { kind: "asset", id: "a" },
         },
       };
@@ -271,8 +276,8 @@ test("a prepared-audio dependency finishing does not finish the requested measur
   ]);
   expect(output.code).toBe(1);
   expect(JSON.parse(output.stdout)).toMatchObject({
-    data: { jobId: "measurement-job", state: "failed" },
-    wait: { state: "settled", job: { jobId: "measurement-job" } },
+    data: { id: "measurement-job", state: "failed" },
+    wait: { state: "settled", job: { id: "measurement-job" } },
   });
   expect(f.calls.filter((r) => r.operation === "audio.measure").map((r) => r.params)).toEqual([
     { assetId: "a", streamId: "s" },
@@ -906,7 +911,7 @@ test("a changed pinned revision interrupts waiting without delivering another re
 
 test("a hung inspection respects the total wait deadline and preserves admitted work", async () => {
   const f = await fixture(async (request) => {
-    if (request.operation === "asset.import") return { ok: true, data: job("queued") };
+    if (request.operation === "asset.import") return { ok: true, data: work("queued") };
     await new Promise((resolve) => setTimeout(resolve, 160));
     return { ok: true, data: job("running") };
   });
@@ -978,7 +983,7 @@ test("admission timeout reports uncertainty without claiming a mutation was roll
 
 test("a service disappearing after admission interrupts waiting with durable identity", async () => {
   const f = await fixture(async (request) => {
-    if (request.operation === "asset.import") return { ok: true, data: job("queued") };
+    if (request.operation === "asset.import") return { ok: true, data: work("queued") };
     void f.stop();
     await new Promise((resolve) => setTimeout(resolve, 120));
     return { ok: true, data: job("running") };
@@ -991,7 +996,7 @@ test("a service disappearing after admission interrupts waiting with durable ide
   expect(output.code).toBe(1);
   expect(JSON.parse(output.stdout)).toMatchObject({
     ok: true,
-    data: { jobId: "job", target: { kind: "import", id: "admission" } },
+    data: { jobId: "job", state: "queued" },
     wait: {
       state: "interrupted",
       error: { code: expect.stringMatching(/^(CONNECTION_|INVALID_RESPONSE)/) },
@@ -1120,7 +1125,7 @@ test("a delayed batch delivers only completed items and retains each terminal fa
         ok: true,
         data: {
           ...job("ready"),
-          jobId: "ready-job",
+          id: "ready-job",
           target: { kind: "project", id: "p", revisionId: "r7" },
         },
       };
@@ -1290,7 +1295,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
           ...job(
             request.params.jobId === "failed-job" ? "failed" : reads >= 3 ? "ready" : "running",
           ),
-          jobId: request.params.jobId,
+          id: request.params.jobId,
           ...(request.params.jobId === "ready-job"
             ? { published: { generation: "2", output: { assetId: "ready" }, issues: [] } }
             : {}),
@@ -1322,7 +1327,7 @@ test("cached failed batch jobs drain every fresh retained lease while another it
   expect(JSON.parse(output.stdout)).toMatchObject({
     data: {
       items: [
-        { atUs: 7, ok: true, data: { state: "failed", jobId: "failed-job" } },
+        { atUs: 7, ok: true, data: { state: "failed", id: "failed-job" } },
         { atUs: 9, ok: true, data: { output: `${directory}/02.png` } },
       ],
     },
@@ -1483,7 +1488,7 @@ test.each(
         data: { assetId: "a", state: "running", jobId: "job" },
         wait: {
           state: "interrupted",
-          job: { jobId: "job", attemptGeneration: 2, attemptId: "attempt-2" },
+          job: { id: "job", attemptGeneration: 2, attemptId: "attempt-2" },
           error: { code: "INVALID_RESPONSE" },
         },
       });
@@ -1491,7 +1496,7 @@ test.each(
       expect(reply).toMatchObject({ data: { state: "ready" }, wait: { state: "settled" } });
       if (!initialReady)
         expect(reply.wait.job).toEqual({
-          jobId: "job",
+          id: "job",
           attemptGeneration: 2,
           attemptId: "attempt-2",
         });
@@ -1583,7 +1588,7 @@ test.each(["export.recover", "export.status"])(
                   ? "running"
                   : "ready",
             ),
-            jobId: request.params.jobId,
+            id: request.params.jobId,
             target: { kind: "project", id: "p", revisionId: "r5" },
           },
         };
@@ -1607,7 +1612,7 @@ test.each(["export.recover", "export.status"])(
       data: { ...base, state: "ready", receipt, output: "/tmp/final.mp4" },
       wait: {
         state: "settled",
-        job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
+        job: { id: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       },
     });
     expect(f.calls.filter((r) => r.operation === "job.get").map((r) => r.params.jobId)).toEqual([
@@ -1652,7 +1657,7 @@ test.each([
           ok: true,
           data: {
             ...job(state),
-            jobId: "recovery-job",
+            id: "recovery-job",
             target: { kind: "project", id: "p", revisionId: "r5" },
           },
         };
@@ -1675,7 +1680,7 @@ test.each([
       data: { ...base, recovery: { jobId: "recovery-job", state: exposedState, published: null } },
       wait: {
         state: "settled",
-        job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
+        job: { id: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       },
     });
     expect(f.calls.map((r) => r.operation)).toEqual([
@@ -1709,7 +1714,7 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
         ok: true,
         data: {
           ...job("failed", ++inspections === 1 ? 2 : 3),
-          jobId: "recovery-job",
+          id: "recovery-job",
           target: { kind: "project", id: "p", revisionId: "r5" },
         },
       };
@@ -1735,7 +1740,7 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
     data: { ...base, recovery: { jobId: "recovery-job", state: "failed" } },
     wait: {
       state: "interrupted",
-      job: { jobId: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
+      job: { id: "recovery-job", attemptGeneration: 2, attemptId: "attempt-2" },
       error: { code: "INVALID_RESPONSE" },
     },
   });
@@ -1899,15 +1904,16 @@ test("one published output reports the same issues through the service, CLI --wa
     const reply = await callLocal(service.socketPath, { id: "parity", operation, params: values });
     if (!reply.ok) throw Error(reply.error.message);
     return reply.data as {
-      jobId: string;
+      jobId?: string;
       state: string;
       published: { generation: string; attemptId: string; issues: unknown } | null;
     };
   };
   let ready = await handler("asset.import", params);
+  const jobId = ready.jobId;
   for (let poll = 0; ["queued", "running"].includes(ready.state) && poll < 300; poll++) {
     await new Promise((resolve) => setTimeout(resolve, 10));
-    ready = await handler("job.get", { jobId: ready.jobId });
+    ready = await handler("job.get", { jobId });
   }
   expect(ready.published?.issues).toEqual([]);
 

@@ -32,7 +32,7 @@ export const operationErrorSchema = z.object({
   details: z.record(z.string(), z.unknown()),
 });
 export const waitJobSchema = z.object({
-  jobId: z.string().min(1),
+  id: z.string().min(1),
   attemptGeneration: z.int().positive().max(Number.MAX_SAFE_INTEGER),
   attemptId: z.string().min(1),
 });

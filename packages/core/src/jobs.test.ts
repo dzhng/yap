@@ -108,6 +108,32 @@ function fixture(prefix = "run") {
   return { path, ...open(path, prefix) };
 }
 
+test("a job's public record names itself id and reports WorkState", async () => {
+  const { store, queue } = fixture();
+  const recordingId = finished(store);
+  const waiting = queue.submitDeferred({
+    target: { kind: "recording", id: recordingId, revisionId: null },
+    artifact: "export",
+    input: "waiting",
+    lane: "heavy",
+  });
+  queue.startAdmission(() => ({ state: "waiting", dependency: "missing" }));
+  await queue.idle();
+  expect(queue.job(waiting.jobId).state).toBe("waiting");
+  const record = queue.inspect(waiting.jobId);
+  expect(record).toMatchObject({
+    id: waiting.jobId,
+    state: "queued",
+    attemptId: waiting.attemptId,
+    attemptGeneration: 1,
+    target: { kind: "recording", id: recordingId, revisionId: null },
+    published: null,
+  });
+  expect(record).not.toHaveProperty("jobId");
+  expect(record).not.toHaveProperty("generation");
+  queue.cancel(waiting.jobId);
+});
+
 test("update blocking includes dependency wait and queued work even when idle has no live attempt", async () => {
   const { store, queue } = fixture();
   const recordingId = finished(store);
@@ -2530,18 +2556,20 @@ test("compact job inspection preserves publication and recipe identity through r
     lane: "frame",
     input,
   });
-  const expected = {
-    ...job,
+  const { jobId: id, generation: attemptGeneration, ...rest } = omit(job, "input");
+  const summary = {
+    id,
+    ...rest,
+    attemptGeneration,
     inputSha256: createHash("sha256").update(input).digest("hex"),
     published: null,
   };
-  const summary = omit(expected, "input");
   expect(first.queue.inspect(job.jobId)).toEqual(summary);
   (await first.started(job.attemptId)).finish('{"ready":true}');
   await first.queue.idle();
   expect(first.queue.inspect(job.jobId)).toMatchObject({
     state: "ready",
-    published: { generation: 1, attemptId: job.attemptId, output: { ready: true } },
+    published: { generation: "1", attemptId: job.attemptId, output: { ready: true } },
     inputSha256: summary.inputSha256,
   });
   const ready = first.queue.inspect(job.jobId);
@@ -2632,13 +2660,13 @@ test("inspection keeps a previous publication during replacement and hides it af
   const job = f.queue.submit({ ...receipt, lane: "frame" });
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "running",
-    generation: 8,
-    published: { generation: 7, attemptId: "donor", output: { retained: true } },
+    attemptGeneration: 8,
+    published: { generation: "7", attemptId: "donor", output: { retained: true } },
   });
   f.queue.cancel(job.jobId);
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "canceled",
-    published: { generation: 7, attemptId: "donor", output: { retained: true } },
+    published: { generation: "7", attemptId: "donor", output: { retained: true } },
   });
   f.targets.isAvailable = () => false;
   expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "canceled", published: null });

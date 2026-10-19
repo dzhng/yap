@@ -126,7 +126,7 @@ async function cursorTake() {
   const take = await settleCapture(f, "cursor-render");
   await expect
     .poll(async () => {
-      const job = await f.call("job.get", { jobId: take.job.jobId });
+      const job = await f.call("job.get", { jobId: take.job.id });
       return job.ok && (job.data as { state: string }).state;
     })
     .toBe("ready");
@@ -162,7 +162,7 @@ test("a failed cursor.render item recovers through job.retry with the jobId it r
     data: { state: "failed", jobId, published: null },
   });
   expect(f.overlays).toHaveLength(1);
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   await expect
     .poll(async () => items(await f.call("cursor.render", request))[0]!.data.state)
     .toBe("ready");

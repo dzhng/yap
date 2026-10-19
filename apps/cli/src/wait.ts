@@ -69,7 +69,7 @@ export function waitSucceeded(result: OperationResponse): boolean {
   if (!result.ok) return false;
   const data = record(result.data);
   const recovery = record(data.recovery);
-  if (result.wait?.job && recovery.jobId === result.wait.job.jobId && recovery.state !== "ready")
+  if (result.wait?.job && recovery.jobId === result.wait.job.id && recovery.state !== "ready")
     return false;
   if (Array.isArray(data.items))
     return data.items.every((item) => waitSucceeded({ id: result.id, ...item }));
@@ -105,7 +105,7 @@ export async function waitForWork(options: {
   let progress = "";
   let settled = false;
   const jobs = new Map<string, z.infer<typeof jobSummary>>();
-  if (current) jobs.set(current.jobId, current);
+  if (current) jobs.set(current.id, current);
   let batchSelection: unknown;
   const failures = new Map<number, OperationResponse>();
   const inspect = async (jobId: string) => {
@@ -126,7 +126,7 @@ export async function waitForWork(options: {
           );
       const pinned = jobs.get(jobId);
       if (
-        job.jobId !== jobId ||
+        job.id !== jobId ||
         (pinned &&
           (pinned.attemptGeneration !== job.attemptGeneration ||
             pinned.attemptId !== job.attemptId ||
@@ -148,7 +148,7 @@ export async function waitForWork(options: {
     const identity = current
       ? {
           job: {
-            jobId: current.jobId,
+            id: current.id,
             attemptGeneration: current.attemptGeneration,
             attemptId: current.attemptId,
           },
@@ -216,6 +216,13 @@ export async function waitForWork(options: {
     const recovery = record(data.recovery);
     return read === "export.status" && typeof recovery.jobId === "string" ? recovery : data;
   };
+  /** The job that runs this work: a status refers to it; a job's own record is it. */
+  const jobOf = (work: Record<string, unknown>) =>
+    typeof work.jobId === "string"
+      ? work.jobId
+      : jobSummary.safeParse(work).success
+        ? (work.id as string)
+        : undefined;
 
   const closed = new Set<string>();
   const close = async (result: OperationResponse) => {
@@ -299,7 +306,7 @@ export async function waitForWork(options: {
       }
       const work = workStatus(data);
       // Package admissions expose a context-job ID that public job.get cannot inspect.
-      const jobId = read === "package.status" ? undefined : work.jobId;
+      const jobId = read === "package.status" ? undefined : jobOf(work);
       // Issues never change the exit status; a ready output names how many it carries.
       // A read's admission issues sit beside the issues published with its output and with each
       // source generation a project read names.
@@ -311,7 +318,12 @@ export async function waitForWork(options: {
           : []),
       ].flatMap((value) => (Array.isArray(value) ? value : []));
       const count = issueCount(issues as Issue[]);
-      const suffix = current ? `(${current.jobId}, attempt ${current.attemptGeneration})` : "";
+      const attempt =
+        current ??
+        (jobId && typeof work.attemptGeneration === "number"
+          ? { id: jobId, attemptGeneration: work.attemptGeneration }
+          : undefined);
+      const suffix = attempt ? `(${attempt.id}, attempt ${attempt.attemptGeneration})` : "";
       const marker =
         work.state === "ready" && count > 0
           ? `${request.operation}: ready (${count} issues)${suffix ? ` ${suffix}` : ""}`
@@ -430,7 +442,7 @@ export async function waitForWork(options: {
           await update(next);
           const nextData = workStatus(record(next.ok ? next.data : null));
           if (
-            nextData.jobId !== job.jobId &&
+            nextData.jobId !== job.id &&
             (typeof nextData.jobId === "string" || stillPending(nextData))
           )
             current = undefined;

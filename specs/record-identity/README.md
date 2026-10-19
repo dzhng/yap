@@ -6,24 +6,25 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* plan written; no slice started. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01 and 02 landed; next is 03. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
 You are picking this up. Read this README, then work the slices in order; each one leaves
 every suite it touches green. For each slice: invoke `write-tests` first, run that slice's
 narrow checks only, and commit. Slices 06 and 07 (Swift app, skill/evals/docs) can run in
-parallel once 05 lands. Run the full repository check once, in slice 08. Update this
+parallel once 05 lands. Run the full repository check once, in slice 09. Update this
 section and the TODO list before you end a pass.
 
-- [ ] 01 Owner references are `{kind, id}` everywhere (core `JobOwner`/`JobTarget`, evidence owners)
-- [ ] 02 Jobs: `JobQueue.inspect` is the one public job record
+- [x] 01 Owner references are `{kind, id}` everywhere (core `JobOwner`/`JobTarget`, evidence owners)
+- [x] 02 Jobs: `JobQueue.inspect` is the one public job record; `JobQueue.work` is what an operation that started a job reports
 - [ ] 03 Library records name themselves `id`
 - [ ] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows
 - [ ] 05 Catalog format 30 and package version 7, each with a tested migration
 - [ ] 06 macOS app decoders
 - [ ] 07 CLI, skill, evals and docs
-- [ ] 08 Closeout: full run, close-spec, release
+- [ ] 08 Quantity names without translation: the audio/acoustic receipt converters and `internalAudioSelection`
+- [ ] 09 Closeout: full run, close-spec, release
 
 ## The rule
 
@@ -123,8 +124,12 @@ Check: core and service type-check and suites; job.get `target` shape test.
 
 **02 Jobs.** `JobQueue.inspect` returns the public job record: `id`, WorkState `state`,
 `attemptGeneration`, the publication with a string generation. The service's `status()`
-wrapper and capture's raw use both read it. Check: a test that `job.get` and a nested
-capture `job` are the same record; core jobs tests.
+wrapper and capture's raw use both read it. An operation that starts a job
+(`asset.import`, `acquisition.import`) reports `JobQueue.work`: the status of that work,
+`{target, state, jobId, attemptId, attemptGeneration, reason, retryable, published}`, like
+every other work-starting operation, so its `id` is never mistaken for the new asset's. The
+CLI's `--wait` follows a job record by its `id` and a work status by its `jobId`. Check: core
+jobs tests; CLI wait tests; service publication tests.
 
 **03 Library records.** Every producer in the inventory except pictures and devices names
 itself `id`; the service edge's renames are deleted; delete results and IN_USE details
@@ -149,7 +154,18 @@ controller journey, a real launch reading the library, the preview timeline show
 **07 CLI, skill, evals, docs.** `wait.ts` pins, skill scripts and references, eval
 fixtures, protocol and package readmes. Check: CLI suite, `test:tools`, eval tests.
 
-**08 Closeout.** Full repository check once; `close-spec`; release after the user's go.
+**08 Quantity names without translation.** Library deletion kept three translations "on
+purpose": typed converters in `audio-inspection.ts` and `acoustic-inspection.ts` that rename
+`bytes`/`frames`/`range`/`sampleRange.start` to `sizeBytes`/`frameCount`/`sourceRange`/
+`startSamples` between core and public receipts, and `internalAudioSelection` (public
+`sourceRange` → core `range`). Under the relaxed convention (a key may leave out what its
+parent says) they are translation layers like the identity renames: one name per field, held
+by the producer, with stored receipts in the old shape refusing `ARTIFACT_CHANGED` and
+regenerating as they already do. Found by `project-audio.test.ts` ("native mixer serves every
+project audio tap"), which runs only with `YAP_NATIVE` and has failed since slice 07b of
+library deletion.
+
+**09 Closeout.** Full repository check once; `close-spec`; release after the user's go.
 
 ## Firewalls
 
