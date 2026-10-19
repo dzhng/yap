@@ -9,8 +9,9 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-18:* slices 00, 01, 03, 06 and 09 done. Messaging copy is on `main` and live; the images
-still show the old tagline. Done: 00, 01, 03, 06, 09. In flight: 10. Next: 02, 04, 07, then 08.
+*Status, 2026-10-18:* done 00, 01, 02, 03, 06, 07, 09, 10. In flight: 04 (fix round),
+11, 12. Next: 05 and 08 after 04, then 13, 14, M images, 15. Messaging copy is live on `main`;
+the images still show the old tagline.
 
 You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
 the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
@@ -26,15 +27,15 @@ Global TODO (each item is owned by its slice):
 
 - [x] 00 Probes: both pass ([evidence](assets/probes/README.md))
 - [x] 01 Journal schema 3 `mark` contract, Swift and TS, golden fixture
-- [ ] 02 Marks readable through `timeline.events`
+- [x] 02 Marks readable through `timeline.events`
 - [x] 03 `MarkRecognizer`: the Q6 gesture rules, pure
 - [ ] 04 Live marks recorded during a take
 - [ ] 05 Ink overlay (visual: colour, fade, pin badges)
 - [x] 06 Shortcut bindings model, live registration, `shortcuts.get`/`shortcuts.set`
-- [ ] 07 Settings click-to-record field (visual)
+- [x] 07 Settings click-to-record field (visual)
 - [ ] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
 - [x] 09 Background job priority
-- [ ] 10 Transcript backlog: automatic transcription of recordings and imports
+- [x] 10 Transcript backlog: automatic transcription of recordings and imports
 - [ ] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
 - [ ] 12 `recording.prompt` operation; replaces Copy agent prompt
 - [ ] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)

@@ -49,3 +49,30 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
   and errors are `DUPLICATE_SHORTCUT` / `SHORTCUTS_WRITE_FAILED`. Verdict: sound.
 - **Paste prompt and undo mark are registered but do nothing** until slices 12/13 and 04/08.
   Verdict: provisional, removed by those slices.
+
+## Slice 02 (mark read)
+
+- **Mark points store `{hostUs, globalX, globalY, x, y}` like cursor samples, with x/y projected
+  natively at write time**; the reader passes them through. Why: corrected P3 after review
+  found the first draft re-implemented the projection in TypeScript. Verdict: sound.
+- **`timeline.events` reads all of a take's marks into memory per request** before paging.
+  Why: marks per take are few (hand-made gestures). Verdict: sound; revisit only if takes ever
+  carry thousands of marks.
+
+## Slice 07 (Settings field)
+
+- **Shortcuts are grouped by lifetime** ("Shortcuts" and "While Recording") instead of a
+  per-row "active while recording" note; rows warn only for "Refused by macOS" or "Duplicate
+  in Yap", with an orange field border. Why: three unprimed critiques; lifetime stated once.
+  Verdict: sound, user may want to review the look.
+- **The `shortcuts.json` "Show in Finder" workflow and the restart note were removed.** Why:
+  the field applies live, so hand-editing has no purpose. Verdict: sound.
+
+## Slice 10 (transcript backlog)
+
+- **Backlog rows are keyed by asset, stream and acquisition**; recordings use the acquisition
+  selection, imports the bare asset stream. Verdict: sound.
+- **A non-retryable failure stays in the table and is skipped**, not deleted. Why: keeps the
+  evidence of what was attempted; drains skip it. Verdict: sound; table grows only by failures.
+- **An explicit interactive transcription resubmits an existing job's identity**, which joins
+  and promotes it. Verdict: sound.
