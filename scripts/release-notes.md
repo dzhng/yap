@@ -2,6 +2,13 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.64
+
+Fixes the service failing to start after updating to 0.1.62 or 0.1.63 on a Mac whose
+speech model was already installed ("Service closed its control channel"). Your library
+and recordings were never touched; this update installs itself and the service starts
+again.
+
 ## 0.1.63
 
 Automatic updates now cross a library upgrade. 0.1.62 converts libraries to a new format,
