@@ -22,7 +22,12 @@ public struct ControlsState: Equatable, Sendable {
         }
     }
     /// What the capture device reports about itself, once a status answer has arrived.
-    public var device: DeviceStatus?
+    public var device: DeviceStatus? {
+        didSet { if let id = device?.recordingId { deviceReportedTake = id } }
+    }
+    /// The last take the device itself reported. Until it reports a take, the start's answer is
+    /// all that says that take is live.
+    private var deviceReportedTake: String?
     /// The take native or service recovery is finalizing, as the library holds it.
     public var take: TakeStatus?
     /// Read from native capture in this process, so it is known before the service is.
@@ -335,10 +340,12 @@ public struct ControlsState: Equatable, Sendable {
 
     /// Whether the ink is up: while the device records or pauses, and from the moment a start
     /// answers that its take is live, since marks come straight from the capture and can arrive
-    /// before a status read says the device is recording.
+    /// before a status read says the device is recording. Once the device has reported a take it
+    /// alone decides, so a stopped take's ink comes down while the stored take still says recording.
     public var showsInk: Bool {
         if device?.state == .recording || device?.state == .paused { return true }
-        return take?.state == "recording" || take?.state == "paused"
+        guard let take, take.recordingId != deviceReportedTake else { return false }
+        return take.state == "recording" || take.state == "paused"
     }
 
     /// The source owned by the live take, retained before the next catalog poll can refresh the

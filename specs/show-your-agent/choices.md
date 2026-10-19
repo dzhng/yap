@@ -39,6 +39,10 @@ verdict, least confident first.
 - **Displays are fixed at take start**: a display connected mid-take gets no ink panel.
 - **An undo during a pause is timed where the pause began**, the last moment the recording has;
   retractions apply whatever their time.
+- **Ink drawn in the instant before a start answers can still be lost** if a status read from
+  before the start renders in between; the window is the service round trip.
+- **On a retimed clip, travel since a choice reported late is mapped at a fixed offset**, so it
+  can be off by up to one observation step.
 - **A shortcuts file with one bad entry is refused whole at launch**, with the defaults
   registered and the reason in the menu; the next `shortcuts.set` writes over it.
 - **`shortcuts.json` and `shortcuts.set` store modifiers as the Carbon mask** (⌥⇧ = 2560); the
@@ -68,7 +72,9 @@ Capture and marks
   ink overlay classifies nothing and is hidden from every capture by its unshared panels alone
   (`main` removed the mid-take window exclusion in v0.1.61).
 - The ink is up from the moment a start answers that its take is live (`ControlsState.showsInk`),
-  not only once a status read says so, and keeps marks that arrive before its panels open.
+  not only once a status read says so, and keeps marks that arrive before its panels open; once
+  the device has reported the take, the device alone decides, so a stopped take's ink comes down
+  while it finalizes.
 - The capture-exclusion test skips with a reason when the display is asleep: black frames
   passed even with the ink deliberately leaked.
 
