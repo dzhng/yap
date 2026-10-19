@@ -18,12 +18,19 @@ function build(t) {
     main,
     `
 import Foundation
+final class Box: @unchecked Sendable { var data: Data; init(_ data: Data) { self.data = data } }
 @main struct Check {
     static func main() {
         signal(SIGPIPE, SIG_IGN) // as the app does at launch
+        let shortcuts = Box(Data(#"{"version":2,"bindings":{}}"#.utf8))
         let socket = AppSocket(path: CommandLine.arguments[1], maxRequestBytes: 1 << 20) { operation, params, answer in
             switch operation {
             case "update.status": answer(.success(Data(#"{"state":"idle"}"#.utf8)))
+            case "shortcuts.get": answer(.success(shortcuts.data))
+            case "shortcuts.set":
+                let object = try! JSONSerialization.jsonObject(with: params) as! [String: Any]
+                shortcuts.data = try! JSONSerialization.data(withJSONObject: ["version": 2, "bindings": object["bindings"]!])
+                answer(.success(shortcuts.data))
             case "login.setEnabled":
                 answer(.failure(ServiceFailure(code: "INVALID_PARAMS", message: "login.setEnabled requires enabled.")))
             default: answer(.success(params))
@@ -93,6 +100,42 @@ test("the app answers its own operations on its socket, framed like the service"
       details: {},
     },
   });
+  assert.deepEqual(
+    await callLocal(path, { id: "shortcut-get", operation: "shortcuts.get", params: {} }),
+    {
+      id: "shortcut-get",
+      ok: true,
+      data: { version: 2, bindings: {} },
+    },
+  );
+  assert.deepEqual(
+    await callLocal(path, {
+      id: "shortcut-set",
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    }),
+    {
+      id: "shortcut-set",
+      ok: true,
+      data: {
+        version: 2,
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    },
+  );
+  assert.deepEqual(
+    await callLocal(path, { id: "shortcut-get-2", operation: "shortcuts.get", params: {} }),
+    {
+      id: "shortcut-get-2",
+      ok: true,
+      data: {
+        version: 2,
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    },
+  );
   assert.deepEqual(
     await callLocal(path, { id: "c", operation: "skill.status", params: { echoed: [1, "two"] } }),
     { id: "c", ok: true, data: { echoed: [1, "two"] } },

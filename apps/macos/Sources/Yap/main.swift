@@ -247,6 +247,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleAppOperation(_ operation: String, _ params: Data) -> Result<Data, ServiceFailure> {
         if operation.hasPrefix("update.") { return handleUpdate(operation, params) }
         if operation.hasPrefix("login.") { return handleLogin(operation, params) }
+        if operation.hasPrefix("shortcuts.") {
+            guard let controls else {
+                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))
+            }
+            return controls.handleShortcuts(operation, params)
+        }
         if operation.hasPrefix("skill.") || operation.hasPrefix("cli.") {
             guard let controls else {
                 return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))

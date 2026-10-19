@@ -33,8 +33,9 @@ final class RecordingControls: NSObject {
     /// Screen access has no "not yet asked" state to read, so a request this launch that came back
     /// refused is what says asking again would prompt for nothing.
     private var screenRequestRefused = false
-    private var bindings = ShortcutDefaults.suggested
+    private var bindings = ShortcutBindings.defaults
     private var held: Set<String> = []
+    private var shortcutsRecording = false
     private weak var host: ServiceHost?
     var updateProgress: (() -> Void)?
     private var updateFenced = false
@@ -122,10 +123,17 @@ final class RecordingControls: NSObject {
         let overridePath = GlobalShortcuts.overridePath(home: home)
         super.init()
         state.shortcutOverridePath = overridePath
-        bindings = ShortcutDefaults.overridden(by: FileManager.default.contents(atPath: overridePath))
-        let outcome = shortcuts.claim(bindings) { [weak self] action in self?.perform(action) }
-        held = outcome.held
-        state.unavailableShortcuts = outcome.unavailable
+        bindings.merge(
+            ShortcutBindings.decode(FileManager.default.contents(atPath: overridePath))) {
+                _, replacement in replacement
+            }
+        do {
+            let outcome = try shortcuts.apply(bindings, perform: { [weak self] action in self?.perform(action) })
+            held = outcome.held
+            state.unavailableShortcuts = outcome.unavailable
+        } catch let error {
+            state.failure = "Duplicate shortcuts: \(error)"
+        }
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggleCapture)
         statusItem.button?.setAccessibilityLabel("Yap")
@@ -151,6 +159,53 @@ final class RecordingControls: NSObject {
     /// Every `skill.*` and `cli.*` operation, answered by the one home owner.
     func handleHome(_ operation: String) -> Result<Data, ServiceFailure> {
         homeLifecycle.handle(operation)
+    }
+
+    /// The CLI and Settings use this one live binding owner.
+    func handleShortcuts(_ operation: String, _ params: Data) -> Result<Data, ServiceFailure> {
+        if operation == "shortcuts.get" {
+            return ShortcutBindings.encode(bindings).map(Result.success)
+                ?? .failure(ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts."))
+        }
+        guard operation == "shortcuts.set",
+            let object = try? JSONSerialization.jsonObject(with: params) as? [String: Any],
+            let stated = object["bindings"] as? [String: Any]
+        else {
+            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "shortcuts.set requires bindings."))
+        }
+        let unknown = stated.keys.filter { id in !ShortcutBindings.actions.contains { item in item.action.id == id } }
+        guard unknown.isEmpty else {
+            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "Unknown shortcut action \(unknown[0])."))
+        }
+        let encoded = try? JSONSerialization.data(withJSONObject: ["version": 2, "bindings": stated])
+        let decoded = ShortcutBindings.decode(encoded)
+        guard !decoded.isEmpty else {
+            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "shortcuts.set bindings are invalid."))
+        }
+        do {
+            let outcome = try shortcuts.apply(
+                decoded, recording: shortcutsRecording,
+                perform: { [weak self] action in self?.perform(action) })
+            bindings = decoded
+            held = outcome.held
+            state.unavailableShortcuts = outcome.unavailable
+            let path = GlobalShortcuts.overridePath(home: home)
+            try FileManager.default.createDirectory(
+                atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            guard let data = ShortcutBindings.encode(bindings) else {
+                throw ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts.")
+            }
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            render()
+            return .success(data)
+        } catch let error as GlobalShortcuts.ApplyError {
+            return .failure(ServiceFailure(
+                code: "DUPLICATE_SHORTCUT", message: "Duplicate shortcut actions: \(error)."))
+        } catch let failure as ServiceFailure {
+            return .failure(failure)
+        } catch {
+            return .failure(ServiceFailure(code: "SHORTCUTS_WRITE_FAILED", message: error.localizedDescription))
+        }
     }
 
     /// Service-initiated inspect.open uses the same PreviewController as Library actions.
@@ -348,6 +403,8 @@ final class RecordingControls: NSObject {
             if let request = state.setCamera(on) { setCamera(request) }
         case .startOrStop:
             state.isLive ? send("capture.stop", live()) : countThenStart()
+        case .pastePrompt, .undoMark:
+            break // Placeholders until the prompt and mark behavior slices land.
         case .pauseOrResume:
             send(state.device?.state == .paused ? "capture.resume" : "capture.pause", live())
         case .cancel:
@@ -729,7 +786,7 @@ final class RecordingControls: NSObject {
             lastUpdateBlockers = blockers
             updateProgress?()
         }
-        let shortcuts = ShortcutDefaults(bindings: bindings, registered: held)
+        syncShortcutLifetime()
         if !capturePopover.isShown { forgetSourcePreviewRequests() }
         capturePopover.update(captureInput())
         libraryWindow.update(state: state, exports: exports.state)
@@ -741,9 +798,24 @@ final class RecordingControls: NSObject {
         overlay.updateGlass(preferences.controlsGlass)
         overlay.updateCaptureVisibility(preferences.showControlsInScreenshots)
         overlay.updatePreview(cameraPreviewImage)
-        settings.update(state, shortcuts: shortcuts)
+        settings.update(state, shortcuts: bindings, registered: held)
         showStatusItem()
         pace()
+    }
+
+    private func syncShortcutLifetime() {
+        let recording = state.isLive || state.counting
+        guard recording != shortcutsRecording else { return }
+        do {
+            let outcome = try shortcuts.apply(
+                bindings, recording: recording,
+                perform: { [weak self] action in self?.perform(action) })
+            held = outcome.held
+            state.unavailableShortcuts = outcome.unavailable
+            shortcutsRecording = recording
+        } catch let error {
+            state.failure = "Duplicate shortcuts: \(error)"
+        }
     }
 
     var captureView: CaptureView? { capturePopover.view }
@@ -961,7 +1033,8 @@ final class RecordingControls: NSObject {
             startEnabled: transport[0].enabled && !missingCamera && !updateFenced,
             status: CapturePresentation.statusTitle(for: state))
         input.startTitle = transport[0].title
-        input.startShortcut = ShortcutDefaults(bindings: bindings, registered: held).display(of: .startOrStop)
+        input.startShortcut = held.contains(ControlsAction.startOrStop.id)
+            ? bindings[.startOrStop]?.shortcut.display : nil
         input.notices = CapturePresentation.noticeLines(for: state)
         input.adminMessage = state.adminMessage
         input.screenSourcesEnabled = state.screenSelectionAuthorized
