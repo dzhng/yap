@@ -34,7 +34,7 @@ try {
       { error: true },
     );
     await poll(
-      () => service.fixtureCall("inspect.open"),
+      () => service.fixtureCall("inspect"),
       (value) => value.requests.length === 1,
       "input preparation held",
     );
@@ -47,7 +47,7 @@ try {
     assert.equal(refusal.code, "OUTPUT_EXISTS");
     assert.deepEqual(await readFile(join(directory, name)), retained);
     assert.deepEqual(await readdir(directory), [name]);
-    assert.equal((await service.fixtureCall("inspect.open")).cameraStarts, 0);
+    assert.equal((await service.fixtureCall("inspect")).cameraStarts, 0);
     assert.deepEqual((await service.call("asset.list", {})).assets, []);
     report.cases[name] = { take, refusal, retainedBytes: retained.length };
     await service.stop();

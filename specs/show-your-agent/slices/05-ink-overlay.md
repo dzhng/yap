@@ -3,8 +3,7 @@
 **Contract unlocked:** the person sees what they draw and pin, and the recording never does.
 
 **Seam:** a full-screen `OverlayPanel` per display (`apps/macos/Sources/Yap/OverlayPanel.swift`,
-`sharingType = .none`), `ignoresMouseEvents = true`, plus `excludeOwnWindows()` once it is on
-screen (`CaptureExclusion.swift:41-47`), as proven in slice 00. It consumes only the
+`sharingType = .none`), `ignoresMouseEvents = true`, as proven in slice 00. It consumes only the
 recognizer's output stream: strokes, numbered pin badges, retractions. It classifies nothing.
 
 **Slice variable:** the look of ink and pins only. Judge on crops of a stroke, a pin badge and

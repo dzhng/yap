@@ -19,11 +19,10 @@ are ready before the first content click.
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
 controls share that one preference.
-No capture sees the floating controls by default. Settings can let screenshots and
-screen sharing see them; they become visible to captures only after the running take
-confirms it leaves this app's windows out, so they never enter Yap's own recording.
+No capture sees the floating controls: not Yap's own recording, screenshots or screen sharing.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
-turned on and off during the take; the menu's switch only decides how it starts. The menu's
+turned on and off during the take; the menu's switch only decides how it starts. A reserved
+camera that starts off is not opened, so its light stays off until it is turned on. The menu's
 switch and the floating controls' camera button send one action, which during a take is the
 same `capture.setCamera` the CLI calls. Native's live report, never the start selection, says
 whether the camera is on, and a camera that is off shows no picture, not even its last one.
@@ -180,9 +179,10 @@ and the installed-update gate.
 The [capture view](Sources/Yap/CaptureView.swift) consumes immutable
 rendering facts and emits supplied intents. It holds no capture selection, service
 state or recording clock. The controls owner admits those intents; the popover owns explicit dismissal
-and leaves capture selection with the shared controls state. Enabling camera capture offers the
-system's default camera when no device has been chosen; an existing choice never substitutes a
-disconnected device. The capture panel requests a dark native appearance; menu-bar opening establishes
+and leaves capture selection with the shared controls state. The camera menu only picks which
+camera, the system's default until a person picks another; its switch alone turns it on, and an
+existing choice never substitutes a disconnected device. A Mac with no camera or no microphone
+shows that row disabled and off, and a take records without it. The capture panel requests a dark native appearance; menu-bar opening establishes
 key-window focus. Status stays outside the scrolling controls.
 The native popover frame owns the backdrop and arrow together; content adds no
 outer panel or stroke. Library has one entry point in the capture header, and its

@@ -425,13 +425,14 @@ extension ControlsState {
             chosen = .region(displayId: region.displayId, x: region.x, y: region.y,
                 width: region.width, height: region.height)
         }
-        let reserves = source != .camera && (permissions?.camera == .granted || selection.cameraOn)
+        let reserves = source != .camera && cameraAvailable && (permissions?.camera == .granted || selection.cameraOn)
         let companion = reserves ? selection.cameraDeviceId ?? defaultCamera : nil
         let cameraAtStart: CameraSwitch? = companion == nil ? nil : selection.cameraOn ? .on : .off
         let microphoneDeviceId: String?
         if case .device(let id, _) = selection.microphone { microphoneDeviceId = id } else { microphoneDeviceId = nil }
         return .init(
-            source: chosen, microphone: selection.microphone != .off, microphoneDeviceId: microphoneDeviceId,
+            source: chosen, microphone: selection.microphone != .off && microphoneAvailable,
+            microphoneDeviceId: microphoneAvailable ? microphoneDeviceId : nil,
             systemAudio: selection.systemAudio, cameraDeviceId: companion, cameraAtStart: cameraAtStart)
     }
 
@@ -463,7 +464,6 @@ extension ControlsState {
         }
         guard !counting, selection.source != .camera else { return nil }
         selection.cameraOn = on
-        selectDefaultCameraIfNeeded(enabled: on)
         return nil
     }
 }
@@ -501,14 +501,24 @@ extension ControlsState {
     public mutating func observeSources(_ catalog: SourceCatalog) {
         sources = catalog
         if let lost = reconcileSelection() { failure = lost }
+        // Until a person picks a camera, the system's preferred one is picked. Picking never turns
+        // the camera on: the switch alone does that.
+        if selection.cameraDeviceId == nil, let preferred = defaultCamera { selection.cameraDeviceId = preferred }
     }
 
-    /// Offers the system's preferred camera only when the caller has enabled camera capture.
-    /// A disabled companion camera must remain disabled.
-    public mutating func selectDefaultCameraIfNeeded(enabled: Bool) {
-        guard enabled, selection.cameraDeviceId == nil, !sources.cameras.isEmpty else { return }
-        selection.cameraDeviceId = (sources.cameras.first(where: \.isDefault) ?? sources.cameras[0]).id
+    /// Picks which camera the switch turns on, leaving the switch as it is.
+    public mutating func chooseCamera(_ id: String) {
+        guard sources.cameras.contains(where: { $0.id == id }) else { return }
+        selection.cameraDeviceId = id
     }
+
+    /// A Mac with no camera, or no microphone, has nothing for that switch to turn on: it shows
+    /// off and disabled, and a take records without it.
+    public var cameraAvailable: Bool { !sources.cameras.isEmpty }
+    public var microphoneAvailable: Bool { !sources.microphones.isEmpty }
+
+    /// A camera-only take needs a camera to record; a screen take never waits for one.
+    public var cameraBlocksStart: Bool { selection.source == .camera && selection.cameraDeviceId == nil }
 
     /// A catalog read that failed says nothing about which sources exist, so the last catalog and
     /// the selection stand. Absent screen authorization is a successful catalog with empty

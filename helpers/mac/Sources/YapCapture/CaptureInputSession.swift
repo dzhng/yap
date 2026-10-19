@@ -48,13 +48,9 @@ package protocol CaptureInputSession: AnyObject {
     func stop() async -> CaptureFailure?
     func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure
     func discardMedia() async
-    /// Leaves this application's windows out of what the running take records from now on, and
-    /// answers whether the take is known to leave them out. An input that cannot say answers no.
-    func excludeOwnWindows() async -> Bool
 }
 
 extension CaptureInputSession {
-    package func excludeOwnWindows() async -> Bool { false }
     package var companionCamera: (any CompanionCameraSwitch)? { nil }
     package func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure { CaptureInputClosure() }
     package func discardMedia() async {}
@@ -233,22 +229,6 @@ package final class ScreenCaptureInput: CaptureInputSession {
     }
 
     package func startCursorSampling(writer: CaptureWriter) { writer.startCursorSampling() }
-
-    /// A window take records only the window it chose, so nothing else of this app's can enter it.
-    /// A display or region take reads what is on screen now and records the display without this
-    /// app, which is listed once any window of its own is on screen.
-    package func excludeOwnWindows() async -> Bool {
-        guard let display else { return true }
-        guard let video else { return false }
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let filter = CaptureExclusion.ownExcludingFilter(display, in: content) else { return false }
-            try await video.updateContentFilter(filter)
-            return true
-        } catch {
-            return false
-        }
-    }
 
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         if let microphone {

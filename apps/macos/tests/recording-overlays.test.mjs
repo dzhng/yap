@@ -159,8 +159,7 @@ test(
       return Boolean(find(await app.rows(), `source.window.${windowId}`));
     }, 20_000);
     await app.choose(`source.window.${windowId}`);
-    // The microphone switch starts on; turning it off records no audio device of any kind.
-    await app.choose("microphone.toggle");
+    // The fixture lists no microphone, so its switch is off and the take records no audio device.
     assert.equal(find(await app.rows(), "microphone.toggle").checked, false);
     assert.notEqual(
       (await app.window(controlsWindow))?.visible,

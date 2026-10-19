@@ -145,8 +145,10 @@ prompt operation name (`recording.prompt`).
 
 - Whether `NSEvent.modifierFlags` polling and a global `.leftMouseDown` monitor work without
   Input Monitoring or Accessibility on Darwin 27 (slice 00).
-- Whether `sharingType = .none` plus `excludeOwnWindows()` keeps a full-screen overlay out of a
-  ScreenCaptureKit display capture on this macOS (slice 00).
+- Whether `sharingType = .none` alone keeps a full-screen overlay out of a ScreenCaptureKit
+  display capture on this macOS, as it does the floating controls (slice 00). Capture has no
+  mid-take filter update for this app's windows; add one only if the probe shows the overlay
+  leaking.
 - The pointer-travel and 30 s thresholds in D21 are starting values; tune on one fixture in
   slice 11 without loosening the static-page requirement.
 

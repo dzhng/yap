@@ -14,9 +14,8 @@ import SwiftUI
  hides it without stopping the camera; the camera button in the row turns a reserved camera on or
  off, and a camera that is off has no picture at all.
 
- The controls never appear in the take they run. By default no capture sees them at all; a person
- may let screenshots and screen sharing see them, and then they are shown to captures only once the
- running take has confirmed it leaves this app's windows out.
+ No capture sees the controls, so they never appear in the take they run, nor in screenshots or
+ screen sharing.
  */
 @MainActor
 final class RecordingOverlayPanel {
@@ -30,18 +29,10 @@ final class RecordingOverlayPanel {
     private var panel: OverlayPanel?
     private var moved: NSObjectProtocol?
     private var changes: AnyCancellable?
-    /// Asks the running take to leave this app's windows out of what it records, and answers
-    /// whether it now does.
-    private let excludeFromTake: @MainActor () async -> Bool
-    /// Whether screenshots and screen sharing may see the controls.
-    private var visibleToCaptures = false
-    private var excluding: Task<Void, Never>?
 
-    init(preferences: Preferences, perform: @escaping (ControlsAction) -> Void,
-         excludeFromTake: @escaping @MainActor () async -> Bool) {
+    init(preferences: Preferences, perform: @escaping (ControlsAction) -> Void) {
         self.preferences = preferences
         self.perform = perform
-        self.excludeFromTake = excludeFromTake
     }
 
     /// What the controls state says these controls are: on screen saying this, or not on screen.
@@ -62,29 +53,6 @@ final class RecordingOverlayPanel {
     /// Settings' choice of glass, which a running take picks up as soon as it changes.
     func updateGlass(_ glass: ControlsGlass) {
         if model.glass != glass { model.glass = glass }
-    }
-
-    /// Settings' choice of whether screenshots and screen sharing see the controls. Hiding them
-    /// takes effect at once; showing them waits for the take to confirm it leaves them out, and a
-    /// take that cannot is asked again at the next update.
-    func updateCaptureVisibility(_ visible: Bool) {
-        visibleToCaptures = visible
-        guard let panel else { return }
-        guard visible else {
-            excluding?.cancel()
-            excluding = nil
-            panel.sharingType = .none
-            return
-        }
-        guard panel.sharingType == .none, excluding == nil else { return }
-        excluding = Task { [weak self, weak panel] in
-            let excluded = await self?.excludeFromTake() ?? false
-            guard let self, !Task.isCancelled else { return }
-            self.excluding = nil
-            guard excluded, self.visibleToCaptures, let panel, self.panel === panel else { return }
-            panel.sharingType = .readOnly
-            diagnostic("recording overlay visible to captures")
-        }
     }
 
     private func show() {
@@ -119,7 +87,6 @@ final class RecordingOverlayPanel {
         }
         panel.present()
         describe(panel)
-        updateCaptureVisibility(visibleToCaptures)
     }
 
     private func fit() {
@@ -137,8 +104,6 @@ final class RecordingOverlayPanel {
         if let moved { NotificationCenter.default.removeObserver(moved) }
         moved = nil
         changes = nil
-        excluding?.cancel()
-        excluding = nil
         self.panel = nil
         panel.close()
     }
@@ -441,13 +406,38 @@ private struct Glass<Content: View>: NSViewRepresentable {
             }
         }
 
+        private var windowChanges: [NSObjectProtocol] = []
+
         /// Glass given its look before it is in a window can stay dark on screen, while
         /// screenshots show it right; choosing the look again in Settings puts it right. So once
         /// the glass is on screen, its look is chosen again by way of another one, as Settings does.
+        /// The window can be drawn anew after that, and clear glass has still been seen black
+        /// mid-take, so the look is chosen again each time: when the window resizes (a camera
+        /// picture arriving grows it), comes back on screen or moves to another display. Whether
+        /// that cures every black capsule is not yet confirmed on a real display.
         /// This is a workaround, confirmed on a real display in v0.1.57; screenshots can't show the
         /// bug, so no check here catches it. Removing it brings back clear glass that opens black.
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            windowChanges.forEach(NotificationCenter.default.removeObserver)
+            windowChanges = []
+            guard let window else { return }
+            let redrawn: [Notification.Name] = [
+                NSWindow.didResizeNotification, NSWindow.didChangeOcclusionStateNotification,
+                NSWindow.didChangeScreenNotification,
+            ]
+            windowChanges = redrawn.map {
+                NotificationCenter.default.addObserver(forName: $0, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, self.window?.occlusionState.contains(.visible) == true else { return }
+                        self.chooseLookAgain()
+                    }
+                }
+            }
+            chooseLookAgain()
+        }
+
+        private func chooseLookAgain() {
             guard window != nil, let kind else { return }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.window != nil, self.kind == kind else { return }
