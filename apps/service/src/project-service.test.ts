@@ -121,7 +121,7 @@ test("recording.prompt hands off projects and imports by their own ID", async ()
   });
 });
 
-test("recording.prompt without an id describes the latest recording without a transcript claim", async () => {
+test("recording.prompt refuses the latest take, retryably, until it has published", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
   expect(await f.call("recording.prompt", {})).toMatchObject({
     ok: false,
@@ -132,15 +132,12 @@ test("recording.prompt without an id describes the latest recording without a tr
     requestId: "prompt-latest",
     arguments: "{}",
   }).recording;
-  const answer = await f.call("recording.prompt", {});
-  if (!answer.ok) throw new Error(JSON.stringify(answer));
-  const { text, facts } = answer.data as {
-    text: string;
-    facts: { recordingId: string; transcript: string };
-  };
-  expect(facts).toMatchObject({ recordingId: latest.recordingId, transcript: "none" });
-  expect(text).toContain(`Recording: ${latest.recordingId} (`);
-  expect(text).not.toContain("transcript");
+  // An unpublished take has nothing to describe, and an older take is not what was asked for.
+  for (const params of [{}, { recordingId: latest.recordingId }])
+    expect(await f.call("recording.prompt", params)).toMatchObject({
+      ok: false,
+      error: { code: "NOT_READY", retryable: true },
+    });
 });
 
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
@@ -1857,8 +1854,8 @@ test("audio imports persist one pending transcript per audio stream without a mo
   const database = new Catalog(join(f.home, "library/catalog.sqlite"));
   try {
     expect(
-      database.catalog.prepare("SELECT state FROM transcript_backlog ORDER BY streamId").all(),
-    ).toEqual([{ state: "pending" }, { state: "pending" }]);
+      database.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+    ).toEqual({ count: 2 });
     expect(
       database.catalog
         .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")

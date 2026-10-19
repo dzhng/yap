@@ -179,23 +179,27 @@ test("pages equal-time raw samples with explicit range and stable continuation",
   ).toEqual({ samples: [{ sequence: 3, ...f.samples[2] }], nextSequence: null });
 });
 
-test("layout-2 primary camera evidence retains unbound device provenance", async () => {
-  const f = fixture();
-  const receipt = {
-    ...f.receipt,
-    header: { sessionID: f.identity.sourceId, schemaVersion: 2, source: { kind: "camera" } },
-    publications: {},
-  };
-  const admitted = await f.evidence.ingest({ ...f.identity, file: f.file, receipt });
-  expect(admitted.receipt).toEqual(receipt);
-  expect(f.evidence.page({ ...f.identity, range: { startUs: 0, endUs: 30 } }).samples).toEqual(
-    f.samples.map((sample, i) => ({ sequence: i + 1, ...sample })),
-  );
-});
+// The native writer gives every primary take, a camera-only one included, the packed layout.
+test.each([2, 3])(
+  "layout-%i primary camera evidence retains unbound device provenance",
+  async (schemaVersion) => {
+    const f = fixture();
+    const receipt = {
+      ...f.receipt,
+      header: { sessionID: f.identity.sourceId, schemaVersion, source: { kind: "camera" } },
+      publications: {},
+    };
+    const admitted = await f.evidence.ingest({ ...f.identity, file: f.file, receipt });
+    expect(admitted.receipt).toEqual(receipt);
+    expect(f.evidence.page({ ...f.identity, range: { startUs: 0, endUs: 30 } }).samples).toEqual(
+      f.samples.map((sample, i) => ({ sequence: i + 1, ...sample })),
+    );
+  },
+);
 
 test("unbound camera evidence refuses missing and unsupported primary layouts", async () => {
   const f = fixture();
-  for (const schemaVersion of [undefined, 3]) {
+  for (const schemaVersion of [undefined, 1, 4]) {
     const receipt = {
       ...f.receipt,
       header: { sessionID: f.identity.sourceId, schemaVersion, source: { kind: "camera" } },

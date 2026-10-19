@@ -4,7 +4,7 @@
 
 **Seam:** a core `TranscriptBacklog` owner in an additive catalog table (the catalog creates
 additive tables idempotently, `packages/core/src/catalog.ts:2-8`; format stays 29):
-`enqueue(selection)`, `drain()`, `state(selection) → none | pending | submitted`.
+`enqueue(selection)`, `wake()`, `drain()`, `pending(selection)`.
 - Enqueued from recording publication inside `acquisition.import` (recordings bypass
   `asset.import`, `acquisitions.ts:1101-1145`) and from real `asset.import`, not conversions
   (`asset-conversion.ts`). One row per **audio** stream (other kinds throw

@@ -1732,7 +1732,16 @@ test("timeline events expose active marks with projected points and stable pagin
   });
   const direct = f.captureRead.marks(selection);
   expect(direct).toHaveLength(1);
-  expect(direct[0]).toMatchObject({ id: "pin-1", points: [{ x: 16, y: 28 }] });
+  // The mark reader answers in asset time, the clock its event row already reports.
+  expect(direct[0]).toEqual(
+    expect.objectContaining({
+      assetUs: marks[0]!.sourceAtUs,
+      id: "pin-1",
+      points: [expect.objectContaining({ x: 16, y: 28 })],
+    }),
+  );
+  expect(direct[0]).not.toHaveProperty("sourceUs");
+  expect(marks[0]!.sourceAtUs).not.toBe(700);
   expect(f.sourceEvents.events({ assetId: f.asset.id, streamId: "video" })).toMatchObject({
     state: "unavailable",
     page: null,

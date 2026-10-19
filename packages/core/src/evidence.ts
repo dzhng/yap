@@ -232,6 +232,14 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
   } else invalid("Unknown normalized evidence event");
 }
 
+/**
+ * Whether a journal uses the packed layout (separate published media, verified proofs): schema 2,
+ * or 3 once it can carry marks. Schema 1 is the camera companion's own journal.
+ */
+export function packedSchema(version: unknown): boolean {
+  return version === 2 || version === 3;
+}
+
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
 export function validateSourceReceipt(value: unknown, sourceId: string): SourceEvidenceReceipt {
   const receipt = object(value);
@@ -298,7 +306,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   if (receipt.publications !== undefined) {
     for (const [role, proof] of Object.entries(object(receipt.publications))) {
       if (!["video", "narration", "system"].includes(role)) invalid("Invalid publication role");
-      if (role !== "video" && header.schemaVersion !== 2 && header.schemaVersion !== 3)
+      if (role !== "video" && !packedSchema(header.schemaVersion))
         invalid("Audio publication proof requires the packed journal layout");
       const identity = object(proof);
       for (const kind of role === "video"
@@ -327,10 +335,10 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       if (role === "video" && !validCameraGaps(identity.support as SelectionRange, identity.gaps))
         invalid("Invalid verified camera gaps");
     }
-  } else if (header.schemaVersion === 2 || header.schemaVersion === 3)
+  } else if (packedSchema(header.schemaVersion))
     invalid("Packed evidence requires verified publications");
   const camera = header.source != null && object(header.source).kind === "camera";
-  if ((camera && header.schemaVersion !== 2) || header.cameraBinding !== undefined) {
+  if ((camera && !packedSchema(header.schemaVersion)) || header.cameraBinding !== undefined) {
     const binding = object(header.cameraBinding);
     if (
       !camera ||

@@ -1,4 +1,3 @@
-import { fromTime } from "@yap/composition";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { AssetStore } from "./assets.js";
 import type { CaptureMark, CaptureSourceRead } from "./capture-source-read.js";
@@ -28,11 +27,11 @@ export type RecordingPromptMark = {
 export type RecordingPromptClick = { timeUs: number; window?: RecordingPromptWindow };
 
 export type RecordingPromptSources = {
-  recordings: Pick<CaptureStore, "get" | "latest">;
-  acquisitions: Pick<AcquisitionStore, "captureIntent" | "get">;
+  recordings: Pick<CaptureStore, "get" | "latest" | "publishedSource">;
+  acquisitions: Pick<AcquisitionStore, "captureIntent" | "get" | "ready">;
   assets: Pick<AssetStore, "get">;
   capture: Pick<CaptureSourceRead, "marks">;
-  backlog: Pick<TranscriptBacklog, "state">;
+  backlog: Pick<TranscriptBacklog, "pending">;
   transcripts: Pick<TranscriptProcessing, "sourceStatus">;
 };
 
@@ -151,7 +150,7 @@ function transcriptState(sources: RecordingPromptSources, selection: TranscriptB
   if (status.state === "queued" || status.state === "processing") return "pending";
   const terminal =
     ["failed", "canceled", "unavailable"].includes(status.state) && !status.retryable;
-  return sources.backlog.state(selection) !== "none" && !terminal ? "pending" : "none";
+  return sources.backlog.pending(selection) && !terminal ? "pending" : "none";
 }
 
 /** Read a take's acquisition, active marks and transcript state; nothing here waits for recognition (D12). */
@@ -164,15 +163,24 @@ export async function recordingPromptFacts(
   if (!recording) throw new CatalogError("NOT_FOUND", "Recording does not exist");
   const acquisitionOf = (sourceId: string) => {
     const intent = sources.acquisitions.captureIntent(sourceId);
-    return intent ? sources.acquisitions.get(intent.acquisitionId) : null;
+    return intent && sources.acquisitions.ready(intent.acquisitionId)
+      ? sources.acquisitions.get(intent.acquisitionId)
+      : null;
   };
   const primary = acquisitionOf(recording.sourceId);
+  if (!primary) {
+    // A take still recording or importing has nothing to describe yet, and an older take is not
+    // what was asked for. The capture store refuses a source that will never publish as final.
+    sources.recordings.publishedSource(recording.recordingId, recording.sourceId);
+    throw new CatalogError("NOT_READY", "Recording has not finished importing", {
+      recordingId: recording.recordingId,
+    });
+  }
   const companion = recording.camera ? acquisitionOf(recording.camera.sourceId) : null;
-  const bound = (acquisition: typeof primary, role: "video" | "narration" | "system") => {
+  const bound = (acquisition: typeof companion, role: "video" | "narration" | "system") => {
     const binding = acquisition?.bindings.find((value) => value.sourceRoles.includes(role));
     return acquisition && binding
       ? {
-          binding,
           selection: {
             assetId: binding.assetId,
             streamId: binding.streamId,
@@ -184,7 +192,7 @@ export async function recordingPromptFacts(
         }
       : null;
   };
-  const header = primary?.evidence.receipt.header;
+  const header = primary.evidence.receipt.header;
   const source = (header?.source ?? {}) as { kind?: unknown; displayID?: unknown };
   const primaryIsCamera = source.kind === "camera";
   const video = bound(primary, "video");
@@ -201,11 +209,9 @@ export async function recordingPromptFacts(
   const marks: RecordingPromptMark[] = [];
   const clicks: RecordingPromptClick[] = [];
   if (screen) {
-    const offset = fromTime(screen.binding.sourceToAssetOffsetUs);
-    const offsetUs = Number(offset.numerator) / Number(offset.denominator);
     for (const mark of sources.capture.marks(screen.selection)) {
       const window = promptWindow(mark);
-      const timeUs = mark.sourceUs + offsetUs;
+      const timeUs = mark.assetUs;
       if (mark.kind === "click") clicks.push({ timeUs, ...(window ? { window } : {}) });
       else
         marks.push({
@@ -216,9 +222,11 @@ export async function recordingPromptFacts(
         });
     }
   }
+  // The bound stream's length, so the duration and the marks read one clock.
+  const end = (video ?? narration)?.stream?.endUs ?? 0;
   return {
     recordingId: recording.recordingId,
-    durationUs: recording.sourceDurationUs ?? 0,
+    durationUs: typeof end === "number" ? end : end.numerator / end.denominator,
     ...(display
       ? {
           display: {

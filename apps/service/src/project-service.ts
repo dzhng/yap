@@ -409,7 +409,7 @@ export async function startProjectService(options: {
             acquisitionId: acquisition.id,
           });
         }
-        queueMicrotask(() => void transcriptBacklog?.drain());
+        transcriptBacklog?.wake();
       },
     );
     const capture = new CaptureSourceRead(assets, acquisitions, evidence);
@@ -447,7 +447,7 @@ export async function startProjectService(options: {
       modelPreparations.add(automaticModels);
       void automaticModels.finally(() => {
         modelPreparations.delete(automaticModels);
-        queueMicrotask(() => void transcriptBacklog?.drain());
+        transcriptBacklog?.wake();
         admission.progress();
       });
     }
@@ -581,7 +581,7 @@ export async function startProjectService(options: {
       onCapacity: () => {
         resumeCaptureSources();
         for (const error of exports?.resumeRecovery() ?? []) console.error(error);
-        queueMicrotask(() => void transcriptBacklog?.drain());
+        transcriptBacklog?.wake();
       },
       execute: async ({ job, signal }) => {
         if (job.artifact === "asset-conversion") return convertedAssets.execute({ job, signal });
@@ -623,7 +623,7 @@ export async function startProjectService(options: {
           return speakers.execute({ job, signal });
         if (job.artifact === "transcript") {
           const result = await transcripts.execute({ job, signal });
-          queueMicrotask(() => void transcriptBacklog.drain());
+          transcriptBacklog.wake();
           return result;
         }
         if (job.artifact === "export-media" || job.artifact === "export-recovery")
@@ -654,7 +654,7 @@ export async function startProjectService(options: {
             for (const stream of published.streams)
               if (stream.kind === "audio" && options.autoTranscribe)
                 transcriptBacklog.enqueue({ assetId: published.id, streamId: stream.id });
-            queueMicrotask(() => void transcriptBacklog.drain());
+            transcriptBacklog.wake();
           },
         );
         return JSON.stringify({ assetId: asset.id });
@@ -751,6 +751,7 @@ export async function startProjectService(options: {
       status: (selection) => transcripts.sourceStatus(selection),
       submit: (selection) => transcripts.prepareSource(selection, "background"),
       retry: (selection) => transcripts.retrySource(selection),
+      report: (error) => console.error(error),
     });
     await transcriptBacklog.drain();
     const ensureReviewModel = () => {
@@ -770,7 +771,7 @@ export async function startProjectService(options: {
         modelPreparations.add(flight);
         void flight.finally(() => {
           modelPreparations.delete(flight!);
-          queueMicrotask(() => void transcriptBacklog.drain());
+          transcriptBacklog.wake();
           admission.progress();
         });
       }
@@ -1923,12 +1924,12 @@ export async function startProjectService(options: {
               modelPreparations.add(preparing);
               void preparing.finally(() => {
                 modelPreparations.delete(preparing);
-                queueMicrotask(() => void transcriptBacklog.drain());
+                transcriptBacklog.wake();
                 admission.progress();
               });
             }
             const model = await models.status(modelId);
-            queueMicrotask(() => void transcriptBacklog.drain());
+            transcriptBacklog.wake();
             return {
               ok: true,
               data: { jobId: null, presence: modelPresence(modelId, model.state), ...model },
