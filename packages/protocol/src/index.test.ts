@@ -15,6 +15,7 @@ import {
   appOperations,
   parseRequest,
   responseSchema,
+  operationWaitMs,
 } from "./index.js";
 import { workStateSchema } from "./work.js";
 import {
@@ -115,6 +116,26 @@ it("scans operation and status schemas for a second async state vocabulary", () 
   expect(
     scanProtocolStateEnums([z.object({ state: z.enum(["processing", "ready"]) })]),
   ).toHaveLength(1);
+});
+
+it("advertises shortcut bindings as synchronous app operations", () => {
+  expect(appOperations.has("shortcuts.get")).toBe(true);
+  expect(appOperations.has("shortcuts.set")).toBe(true);
+  expect(readOnlyOperations.has("shortcuts.get")).toBe(true);
+  expect(idempotentOperations.has("shortcuts.set")).toBe(true);
+  expect(operationSchema.parse({ operation: "shortcuts.get", params: {} })).toMatchObject({
+    operation: "shortcuts.get",
+    params: {},
+  });
+  expect(
+    operationSchema.parse({
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    }).operation,
+  ).toBe("shortcuts.set");
+  expect(operationWaitMs("shortcuts.set")).toBe(operationWaitMs("update.setEnabled"));
 });
 
 it("has no per-item retry operations", () => {

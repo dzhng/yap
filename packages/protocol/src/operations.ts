@@ -1423,6 +1423,30 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Register or unregister Yap as a macOS login item after the user explicitly confirms the choice.",
     ),
   z
+    .object({ operation: z.literal("shortcuts.get"), params: z.object({}).strict() })
+    .strict()
+    .describe("Read Yap's version 2 global shortcut bindings."),
+  z
+    .object({
+      operation: z.literal("shortcuts.set"),
+      params: z
+        .object({
+          bindings: z.record(
+            z.string().min(1),
+            z
+              .object({
+                keyCode: z.int().nonnegative(),
+                modifiers: z.int().nonnegative(),
+                label: z.string().min(1),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    })
+    .strict()
+    .describe("Apply global shortcut bindings immediately and persist them."),
+  z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
     .strict()
     .describe(
@@ -1667,6 +1691,7 @@ export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationN
   "timeline.events",
   "cursor.raw",
   "login.status",
+  "shortcuts.get",
   "update.status",
   "skill.status",
   "cli.status",
@@ -1706,6 +1731,7 @@ export const idempotentOperations: ReadonlySet<OperationName> = new Set<Operatio
   "artifact.close", // closing an already closed token changes nothing.
   "login.setEnabled", // setting the existing login-item preference changes nothing.
   "update.setEnabled", // setting the existing updater preference changes nothing.
+  "shortcuts.set", // setting the existing bindings changes nothing.
   "skill.install", // installing an already installed skill is a no-op.
   "skill.uninstall", // uninstalling an absent skill is a no-op.
   "skill.update", // updating an already current skill is a no-op.
@@ -1725,7 +1751,7 @@ export const idempotentOperations: ReadonlySet<OperationName> = new Set<Operatio
  * is how a broken service gets fixed.
  */
 export const appOperations: ReadonlySet<string> = new Set(
-  [...operationNames].filter((name) => /^(update|skill|cli|login)\./.test(name)),
+  [...operationNames].filter((name) => /^(update|skill|cli|login|shortcuts)\./.test(name)),
 );
 
 const nativeCall = DEFAULT_CALL_TIMEOUT_MS;
@@ -1735,6 +1761,8 @@ const drain = 180_000;
 const waits: Partial<Record<OperationName, number>> = {
   "login.status": nativeCall,
   "login.setEnabled": nativeCall,
+  "shortcuts.get": nativeCall,
+  "shortcuts.set": nativeCall,
   "update.status": nativeCall,
   "update.check": nativeCall,
   "update.setEnabled": nativeCall,

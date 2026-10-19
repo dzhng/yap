@@ -16,6 +16,8 @@ public enum ControlsAction: Hashable, Sendable {
     /// during one. The menu's switch and the floating controls send this same action.
     case setCamera(Bool)
     case startOrStop
+    case pastePrompt
+    case undoMark
     case pauseOrResume
     case cancel
     case restart
@@ -61,6 +63,8 @@ public enum ControlsAction: Hashable, Sendable {
         case .showCameraPreview(let shown): shown ? "camera.preview.show" : "camera.preview.hide"
         case .setCamera(let on): on ? "capture.camera.on" : "capture.camera.off"
         case .startOrStop: "capture.startOrStop"
+        case .pastePrompt: "capture.pastePrompt"
+        case .undoMark: "capture.undoMark"
         case .pauseOrResume: "capture.pauseOrResume"
         case .cancel: "capture.cancel"
         case .restart: "capture.restart"

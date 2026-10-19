@@ -75,9 +75,13 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func update(_ state: ControlsState, shortcuts: ShortcutDefaults) {
+    func update(
+        _ state: ControlsState, shortcuts: [ControlsAction: ShortcutBindings.Binding],
+        registered: Set<String>
+    ) {
         if model.state != state { model.state = state }
         if model.shortcuts != shortcuts { model.shortcuts = shortcuts }
+        if model.registered != registered { model.registered = registered }
         if model.countdownBeforeRecording != preferences.countdownBeforeRecording {
             model.countdownBeforeRecording = preferences.countdownBeforeRecording
         }
@@ -151,7 +155,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 @MainActor
 final class SettingsModel: ObservableObject {
     @Published var state = ControlsState()
-    @Published var shortcuts = ShortcutDefaults()
+    @Published var shortcuts = ShortcutBindings.defaults
+    @Published var registered: Set<String> = []
     /// Read from the system each time the window is shown or comes forward.
     @Published private(set) var loginItem = SMAppService.Status.notRegistered
     @Published private(set) var loginFailure: String?
@@ -381,7 +386,7 @@ struct SettingsView: View {
 
     private var shortcutsSection: some View {
         Section {
-            ForEach(Self.shortcutActions, id: \.0.id) { action, name in
+            ForEach(ShortcutBindings.actions, id: \.action.id) { action, name in
                 LabeledContent(name) { shortcutValue(action) }
             }
             detailRow("Custom Shortcuts", (model.shortcutFile as NSString).abbreviatingWithTildeInPath) {
@@ -397,11 +402,11 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func shortcutValue(_ action: ControlsAction) -> some View {
-        if let held = model.shortcuts.display(of: action) {
+        if model.registered.contains(action.id), let held = model.shortcuts[action]?.shortcut.display {
             // Modifier glyphs set solid read as one mark; a thin space keeps each one legible.
             Text(held.map(String.init).joined(separator: "\u{2009}")).monospaced()
-        } else if let bound = model.shortcuts.bindings[action] {
-            Label("\(bound.display) is in use elsewhere", systemImage: "exclamationmark.triangle.fill")
+        } else if let bound = model.shortcuts[action] {
+            Label("\(bound.shortcut.display) is in use elsewhere", systemImage: "exclamationmark.triangle.fill")
                 .labelStyle(StatusLabelStyle(tint: .orange))
         } else {
             Text("Off").foregroundStyle(.secondary)
@@ -455,11 +460,6 @@ struct SettingsView: View {
             }
         }
     }
-
-    private static let shortcutActions: [(ControlsAction, String)] = [
-        (.startOrStop, "Start or Finish Recording"), (.pauseOrResume, "Pause or Resume Recording"),
-        (.cancel, "Cancel Take"), (.restart, "Restart Take"),
-    ]
 
     private var loginItemDescription: String {
         switch model.loginItem {

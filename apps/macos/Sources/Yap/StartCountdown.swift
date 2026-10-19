@@ -49,7 +49,7 @@ final class StartCountdown {
         self.panel = panel
         panel.present()
         // Escape belongs to the count while it runs, whichever app the person is looking at.
-        releaseEscape = shortcuts.hold(Shortcut(key: "escape")) { [weak self] in
+        releaseEscape = shortcuts.hold(Shortcut(keyCode: 53, modifiers: 0, label: "Escape")) { [weak self] in
             self?.finish(began: false)
         }
         diagnostic(
