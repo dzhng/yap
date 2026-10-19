@@ -76,3 +76,39 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
   evidence of what was attempted; drains skip it. Verdict: sound; table grows only by failures.
 - **An explicit interactive transcription resubmits an existing job's identity**, which joins
   and promotes it. Verdict: sound.
+
+## Slice 04 (live marks)
+
+- **Clicks come from a global mouse-down/up monitor; ⇧ and pointer from the 60 Hz sampler.**
+  Verdict: sound (slice 00 probe).
+- **Mark points outside the picture store null x/y**, while cursor samples keep out-of-frame
+  pixels with `eligibility: "outside"`. Why: P3 said null outside; marks carry no eligibility
+  field. Verdict: sound, but a small asymmetry with cursor samples worth knowing.
+- **`CursorTrack.projection(forGlobalPoint:hostUs:)` is the one projection** for cursor samples
+  and mark points. Verdict: sound.
+- **The live window lookup uses the CoreGraphics window list (layer 0, Yap's own processes
+  removed)**, not ScreenCaptureKit shareable content. Why: it is synchronous on the capture
+  queue and needs no async content fetch per mark. Verdict: sound.
+
+## Slice 08 (start routing)
+
+- **Display frames come from `NSScreen` and are optional on `ControlsState.Display`** so tests
+  can inject them. Verdict: sound.
+- **On an exact shared edge the containing frame wins, then catalog order.** Verdict: sound.
+- **The 0.4 s guard ignores any second ⌥⇧S after a hotkey start, including the one that would
+  stop the take.** Why: P7's purpose; the first draft only guarded while idle. Verdict: sound.
+
+## Slice 11 (index reasons)
+
+- **"One display width" of pointer travel is measured against the larger captured dimension,
+  in output pixels** like the travel itself. Why: scene evidence exposes source width and height,
+  not a display width. Verdict: sound for landscape displays; portrait displays use height.
+- **Old-policy index generations are reclaimed even when referenced; current ones stay
+  protected by references.** Why: the first draft dropped reference protection for every
+  generation. Verdict: sound.
+
+## Process
+
+- **Codex hit "model at capacity" repeatedly on 2026-10-18 for slices 05 and 12** (three models,
+  fresh sessions too). Both were finished by Claude subagents from Codex's partial work, under
+  the same contract and the same review. Verdict: process note, no code consequence.
