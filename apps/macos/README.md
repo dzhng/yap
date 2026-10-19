@@ -10,7 +10,8 @@ paths remain diagnostics rather than product controls.
 The capture popover, Settings and recording panels consume one controls state and dispatch
 the same actions. A running take retains its selected inputs; changing a preference
 cannot rewrite that selection. Countdown precedes the service start request, so
-canceling it creates no take. Recorder-owned controls stay outside recorded media
+canceling it creates no take. Starting a take or its countdown closes the capture
+panel, which hangs where the countdown and floating controls appear. Recorder-owned controls stay outside recorded media
 and do not activate the app over the source being recorded. Opening the capture
 panel from the menu bar activates its window, so its native glass and controls
 are ready before the first content click.

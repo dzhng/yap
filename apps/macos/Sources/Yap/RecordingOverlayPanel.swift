@@ -240,14 +240,24 @@ struct RecordingOverlayView: View {
     }
 
     private var controls: some View {
-        Glass(kind: model.glass, content: row)
+        // The clear lens alone shows the backdrop as sharply as an empty pane, so a faint white
+        // wash inside it gives the controls a surface of their own.
+        Glass(kind: model.glass, content: row().background(.white.opacity(model.glass == .clear ? 0.12 : 0), in: Capsule()))
+            .overlay {
+                row(lit: true)
+                    .environment(\.colorScheme, model.glass == .dark ? .dark : .light)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
     }
 
-    private var row: some View {
+    /// The controls, or with `lit` the copy that draws only their glow.
+    private func row(lit: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: model.presentation.symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(paused ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.red))
+                .glow(paused ? .primary : .red)
                 .frame(width: 15)
                 .accessibilityLabel(paused ? "Paused" : "Recording")
             // The clock keeps the width of the longest one a take shows, so the row does not change
@@ -261,6 +271,7 @@ struct RecordingOverlayView: View {
             .monospacedDigit()
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+            .unlit()
             separator
             HStack(spacing: 2) {
                 button(paused ? "play.fill" : "pause.fill",
@@ -270,7 +281,7 @@ struct RecordingOverlayView: View {
             if case .companion(let on) = model.camera {
                 separator
                 HStack(spacing: 2) {
-                    cameraSwitch(on)
+                    cameraSwitch(on, lit: lit)
                     if on && !model.previewShown { restore }
                 }
             } else if model.camera.recording && !model.previewShown {
@@ -285,17 +296,20 @@ struct RecordingOverlayView: View {
         .padding(.leading, 16)
         .padding(.trailing, 6)
         .padding(.vertical, 5)
+        .environment(\.glowLayer, lit)
     }
 
     /// The camera's state twice over, so neither colour nor a thin slash has to carry it alone: on
     /// is an engaged toggle showing a camera, off a plain one showing the camera struck through.
     /// Off keeps full contrast: it is a state to change, not an unavailable control.
-    private func cameraSwitch(_ on: Bool) -> some View {
+    private func cameraSwitch(_ on: Bool, lit: Bool = false) -> some View {
         let name = on ? "Turn Camera Off" : "Turn Camera On"
-        return Toggle(isOn: Binding(get: { on }, set: { perform(.setCamera($0)) })) {
+        // The engaged toggle's backing is drawn once, by the controls, not again by their glow.
+        return Toggle(isOn: Binding(get: { on && !lit }, set: { perform(.setCamera($0)) })) {
             Image(systemName: on ? "video.fill" : "video.slash.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
+                .glow(.primary)
                 .frame(width: 30, height: 30)
                 .contentShape(Circle())
         }
@@ -311,7 +325,7 @@ struct RecordingOverlayView: View {
     }
 
     private var separator: some View {
-        Rectangle().fill(.separator).frame(width: 1, height: 20)
+        Rectangle().fill(.separator).frame(width: 1, height: 20).unlit()
     }
 
     private func button(
@@ -321,6 +335,7 @@ struct RecordingOverlayView: View {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tint ?? .primary)
+                .glow(tint ?? .primary)
                 .frame(width: 30, height: 30)
                 .contentShape(Circle())
         }
@@ -329,6 +344,45 @@ struct RecordingOverlayView: View {
         .help(name)
         .accessibilityLabel(name)
     }
+}
+
+/// Whether this copy of the row draws only the glow. A blur among the marks costs the whole row
+/// the glass's automatic contrast, so the glow is a copy of the row in a layer of its own over the
+/// glass.
+private struct GlowLayerKey: EnvironmentKey { static let defaultValue = false }
+private extension EnvironmentValues {
+    var glowLayer: Bool {
+        get { self[GlowLayerKey.self] }
+        set { self[GlowLayerKey.self] = newValue }
+    }
+}
+
+private struct Glow: ViewModifier {
+    @Environment(\.glowLayer) private var glowLayer
+    @Environment(\.colorScheme) private var scheme
+    let color: Color
+    func body(content: Content) -> some View {
+        // Coloured marks always glow, and plain marks only on dark glass, where they are light. On
+        // light glass they are dark, and clear glass turns them dark or light to suit what is behind
+        // without saying which, so there they don't glow.
+        if glowLayer {
+            content.foregroundStyle(color).blur(radius: 5).opacity(color == .primary && scheme == .light ? 0 : 1)
+        } else {
+            content
+        }
+    }
+}
+
+/// What the glow layer leaves out: everything but the glows themselves.
+private struct Unlit: ViewModifier {
+    @Environment(\.glowLayer) private var glowLayer
+    func body(content: Content) -> some View { content.opacity(glowLayer ? 0 : 1) }
+}
+
+private extension View {
+    /// A mark lit in its own colour.
+    func glow(_ color: Color) -> some View { modifier(Glow(color: color)) }
+    func unlit() -> some View { modifier(Unlit()) }
 }
 
 /// The system's Liquid Glass behind the controls: frosted, light or dark, or in its clearest form.

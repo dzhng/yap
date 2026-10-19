@@ -6,6 +6,7 @@ import { controlsProbe, launchReady, setDefault, temporary, waitFor } from "./ha
 
 const countdownWindow = "Yap Countdown";
 const controlsWindow = "Yap Controls";
+const captureWindow = "Yap Capture";
 
 /**
  * An ordinary launch of the packaged app, observed and driven through its controls probe. Such a
@@ -113,8 +114,15 @@ test(
   async () => {
     const app = await launchWith();
     await app.ready();
+    assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
     await app.instance.waitFor(/countdown \d+ seconds on display/);
+    // The menu hangs from the menu bar, right where the count and then the controls appear.
+    assert.notEqual(
+      (await app.window(captureWindow))?.visible,
+      true,
+      "Starting puts the menu away",
+    );
 
     // Escape is not the only way out: a person who reaches for the menu bar instead must find a
     // row that says what pressing it will do, rather than Start doing nothing.
@@ -160,8 +168,14 @@ test(
       "An idle app floats no controls",
     );
 
+    assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
     await waitFor(async () => (await app.working()).startsWith("Recording —"), 20_000);
+    assert.notEqual(
+      (await app.window(captureWindow))?.visible,
+      true,
+      "Starting puts the menu away, so it never covers the floating controls",
+    );
     assert.doesNotMatch(
       app.instance.diagnostics,
       /countdown/,
