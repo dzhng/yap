@@ -29,7 +29,13 @@ a light window, a stroke on a dark window, two pins, an undo.
 never logs `recording overlay visible to captures` and `capture-exclusion.test.mjs`'s second
 case times out ([probe evidence](../assets/probes/README.md)). Reproduce and fix it before
 judging the overlay; the ink overlay itself is always hidden from captures, whatever that
-preference says.
+preference says. Ruled out (2026-10-18 probe): macOS 27 still lists an app whose only window is
+`sharingType = .none` in `SCShareableContent.applications`, on-screen-only or not, so
+`CaptureExclusion.ownExcludingFilter` should find Yap. Remaining suspects in
+`ScreenCaptureInput.excludeOwnWindows()` (`helpers/mac/Sources/YapCapture/CaptureInputSession.swift:239-250`):
+`video` nil, the take not yet `recording`, `ownApplications` identity not matching the dev
+build's bundle identifier, or `updateContentFilter` throwing (its error is swallowed). Add a
+diagnostic for each `false` return first.
 
 **Delegated:** stroke rendering technique, fade curve within the confirmed behaviour.
 **Out of scope:** any visible issue in the recording controls panel.
