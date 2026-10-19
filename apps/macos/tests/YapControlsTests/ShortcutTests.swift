@@ -27,44 +27,6 @@ func runShortcutTests() {
     print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
 }
 
-/// `shortcuts.set` changes only the actions it names, and refuses the whole call for one bad entry.
-func runShortcutSetTests() {
-    var current = ShortcutBindings.defaults
-    current[.startOrStop] = .init(shortcut: .init(keyCode: 2, modifiers: 2_560, label: "⌥⇧D"), lifetime: .app)
-    let paste: [String: Any] = ["keyCode": 11, "modifiers": 2_560, "label": "⌥⇧B"]
-
-    let merged = try? ShortcutBindings.merging([ControlsAction.pastePrompt.id: paste], into: current)
-    precondition(merged?[.pastePrompt]?.shortcut.keyCode == 11, "The named action takes its new key")
-    precondition(merged?[.startOrStop] == current[.startOrStop],
-        "Setting one action keeps every other custom binding, got \(String(describing: merged?[.startOrStop]))")
-    precondition(merged?[.pastePrompt]?.lifetime == .app, "An action keeps its own lifetime")
-
-    for (stated, why) in [
-        ([ControlsAction.pastePrompt.id: paste, ControlsAction.undoMark.id: ["modifiers": 2_560, "label": "⌥⇧U"]],
-            "an entry with no key code"),
-        ([ControlsAction.pastePrompt.id: paste, ControlsAction.cancel.id: ["keyCode": 7, "modifiers": 2_560, "label": ""]],
-            "an entry with no label"),
-        ([ControlsAction.pastePrompt.id: paste, ControlsAction.restart.id: "⌥⇧R"], "an entry that is not an object"),
-        (["capture.unknown": paste], "an unknown action"),
-        ([ControlsAction.pastePrompt.id: ["keyCode": true, "modifiers": 2_560, "label": "⌥⇧B"]],
-            "a boolean key code"),
-        ([ControlsAction.pastePrompt.id: ["keyCode": 11.5, "modifiers": 2_560, "label": "⌥⇧B"]],
-            "a fractional key code"),
-        ([ControlsAction.pastePrompt.id: ["keyCode": 11, "modifiers": -1, "label": "⌥⇧B"]],
-            "negative modifiers"),
-        ([ControlsAction.pastePrompt.id: ["keyCode": 4_294_967_296, "modifiers": 2_560, "label": "⌥⇧B"]],
-            "a key code past 32 bits"),
-    ] as [([String: Any], String)] {
-        do {
-            let accepted = try ShortcutBindings.merging(stated, into: current)
-            preconditionFailure("shortcuts.set accepts \(why), got \(accepted)")
-        } catch {
-            precondition(!error.message.isEmpty, "The refusal of \(why) says why")
-        }
-    }
-    print("PASS shortcuts.set merges into the current bindings and refuses any invalid entry")
-}
-
 func runShortcutPresentationTests() {
     let recording = ShortcutBindings.defaults[.undoMark]!
     precondition(
@@ -79,12 +41,6 @@ func runShortcutPresentationTests() {
         ShortcutPresentation.state(for: recording, registered: true, recording: true, unavailable: false)
             == .active,
         "A registered shortcut says it is active")
-    precondition(
-        ShortcutPresentation.label(keyCode: 1, modifiers: 2_560, key: "s") == "⌥⇧S",
-        "A captured key gets the same modifier glyphs as the defaults")
-    precondition(
-        ShortcutPresentation.label(keyCode: 42, modifiers: 0, key: "") == "Key 42",
-        "An unnamed captured key includes its physical key code")
     precondition(
         ShortcutPresentation.statusTitle(.duplicateInYap) == "Duplicate in Yap"
             && ShortcutPresentation.statusTitle(.refusedByMacOS) == "Refused by macOS",

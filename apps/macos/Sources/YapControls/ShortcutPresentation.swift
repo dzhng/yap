@@ -31,20 +31,4 @@ public enum ShortcutPresentation {
         case .duplicateInYap: "Duplicate in Yap"
         }
     }
-
-    /// Formats the physical key and Carbon modifier mask captured by the native field.
-    public static func label(keyCode: UInt32, modifiers: UInt32, key: String) -> String {
-        var result = ""
-        if modifiers & 0x1000 != 0 { result += "⌃" }
-        if modifiers & 0x0800 != 0 { result += "⌥" }
-        if modifiers & 0x0200 != 0 { result += "⇧" }
-        if modifiers & 0x0100 != 0 { result += "⌘" }
-        let named: [UInt32: String] = [
-            36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 53: "Escape",
-            115: "Home", 116: "Page Up", 117: "Forward Delete", 119: "End",
-            121: "Page Down", 123: "←", 124: "→", 125: "↓", 126: "↑",
-        ]
-        let keyLabel = key.isEmpty ? (named[keyCode] ?? "Key \(keyCode)") : key.uppercased()
-        return result + keyLabel
-    }
 }

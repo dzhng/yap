@@ -1,6 +1,6 @@
 ---
 name: yap
-description: Work with video for the user through the yap CLI — understand a recording they show you, or edit their footage end to end from a one-line prompt and optional inspiration into a finished, exported video. Use for launch/demo videos, podcasts, episode introductions, teasers and trailers; when the user shows you a recording (a bug, feedback, a walkthrough) to understand; wants a recording made, cut, tightened, captioned, reframed, cleaned up, restyled after a reference video or exported; for transcript/audio/frame inspection of their media; and on first-run setup, missing yap installation, skill installation/comparison or explicit refresh, and update-health questions.
+description: Work with video for the user through the yap CLI — understand a recording they show you, or edit their footage end to end from a one-line prompt and optional inspiration into a finished, exported video. Use for launch/demo videos, podcasts, episode introductions, teasers and trailers; when the user shows you a recording (a bug, feedback, a walkthrough) to understand; wants a recording made, cut, tightened, captioned, reframed, cleaned up, restyled after a reference video or exported; for transcript/audio/frame inspection of their media; and on first-run setup, missing yap installation, skill installation/comparison or explicit refresh, update-health questions, and changing Yap's own settings such as its shortcuts.
 ---
 
 # Yap
@@ -330,6 +330,8 @@ Read [video use cases](references/video-use-cases.md) for launch, podcast, tease
 tutorial, update and social-clip shapes. Creative workflows covers compact transcript reading, decision sheets and creative techniques;
 use [editorial checks](references/editorial-checks.md) for rendered-output review.
 For optional MCP use, read [MCP delivery](references/mcp.md); CLI is the default.
+To change Yap's shortcuts, opening at login or automatic updates, read
+[app settings](references/app-settings.md).
 
 **Presets.** When the user names a style, asks for a video "like" a kind they've
 seen, or asks how to shoot for a style, run `yap preset.list`. Read the preset whose

@@ -1426,27 +1426,26 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({ operation: z.literal("shortcuts.get"), params: z.object({}).strict() })
     .strict()
-    .describe("Read Yap's version 2 global shortcut bindings."),
+    .describe(
+      "Read Yap's global shortcuts: for each action its name, keys (as shortcuts.set takes them), label, during (app or recording) and state (active, refused_by_macos).",
+    ),
   z
     .object({
       operation: z.literal("shortcuts.set"),
       params: z
         .object({
-          bindings: z.record(
-            z.string().min(1),
-            z
-              .object({
-                keyCode: z.int().nonnegative(),
-                modifiers: z.int().nonnegative(),
-                label: z.string().min(1),
-              })
-              .strict(),
-          ),
+          bindings: z
+            .record(z.string().min(1), z.string().min(1))
+            .describe(
+              'Action id to keys, e.g. {"capture.startOrStop": "ctrl+cmd+r"}. Modifiers ctrl, option, shift, cmd, then one key: a character the current keyboard layout types, or return, tab, space, delete, escape, forwarddelete, home, end, pageup, pagedown, left, right, up, down, f1–f20, keypad0–keypad9, keypadplus, keypadminus, keypadmultiply, keypaddivide, keypadequals, keypaddecimal, keypadenter, keypadclear, or keyNN for any physical key code. Anything but a function key needs ctrl, option or cmd.',
+            ),
         })
         .strict(),
     })
     .strict()
-    .describe("Apply global shortcut bindings immediately and persist them."),
+    .describe(
+      "Bind the named actions, apply them immediately and persist them; other actions keep their keys. Answers like shortcuts.get, so a refused_by_macos state says another app or macOS holds those keys.",
+    ),
   z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
     .strict()

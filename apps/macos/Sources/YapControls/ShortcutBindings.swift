@@ -63,28 +63,67 @@ public enum ShortcutBindings {
         public let message: String
     }
 
-    /// Applies stated bindings, keyed by action id, over `current`. Actions it does not name keep
-    /// their binding, and one invalid entry refuses the whole statement, so nothing is half-set.
+    /// Applies stated key names (`ctrl+cmd+r`), keyed by action id, over `current`. Actions it
+    /// does not name keep their binding, and one invalid entry refuses the whole statement, so
+    /// nothing is half-set.
     public static func merging(
-        _ stated: [String: Any], into current: [ControlsAction: Binding]
+        _ stated: [String: Any], into current: [ControlsAction: Binding], layout: KeyboardLayout
     ) throws(InvalidBinding) -> [ControlsAction: Binding] {
         var result = current
         for (id, value) in stated {
-            guard let entry = catalog.first(where: { $0.action.id == id }) else {
-                throw InvalidBinding(message: "Unknown shortcut action \(id).")
-            }
-            guard let fields = value as? [String: Any],
-                let keyCode = whole32(fields["keyCode"]),
-                let modifiers = whole32(fields["modifiers"]),
-                let label = fields["label"] as? String, !label.isEmpty
-            else {
-                throw InvalidBinding(message: "Shortcut \(id) needs a keyCode, modifiers and a label.")
+            let entry = try entry(id)
+            guard let keys = value as? String else {
+                throw InvalidBinding(message: "Shortcut \(id) takes key names, such as \"ctrl+cmd+r\".")
             }
             result[entry.action] = Binding(
-                shortcut: Shortcut(keyCode: keyCode, modifiers: modifiers, label: label),
-                lifetime: entry.binding.lifetime)
+                shortcut: try ShortcutKeys.shortcut(keys, layout: layout), lifetime: entry.binding.lifetime)
         }
         return result
+    }
+
+    private static func entry(_ id: String) throws(InvalidBinding) -> Entry {
+        guard let entry = catalog.first(where: { $0.action.id == id }) else {
+            throw InvalidBinding(message: "Unknown shortcut action \(id).")
+        }
+        return entry
+    }
+
+    /// What `shortcuts.get` and `shortcuts.set` answer: every action's name, keys, label, when it
+    /// is held and whether macOS took it.
+    public static func describe(
+        _ bindings: [ControlsAction: Binding], layout: KeyboardLayout,
+        state: (ControlsAction) -> ShortcutPresentation.State
+    ) -> Data {
+        let values = Dictionary(uniqueKeysWithValues: catalog.compactMap { entry -> (String, [String: String])? in
+            guard let binding = bindings[entry.action] else { return nil }
+            let shortcut = binding.shortcut
+            let held: String = switch state(entry.action) {
+            case .active: "active"
+            case .refusedByMacOS: "refused_by_macos"
+            case .duplicateInYap: "duplicate_in_yap"
+            }
+            return (entry.action.id, [
+                "name": entry.name,
+                "keys": ShortcutKeys.name(keyCode: shortcut.keyCode, modifiers: shortcut.modifiers, layout: layout),
+                "label": shortcut.label, "during": binding.lifetime.rawValue, "state": held,
+            ])
+        })
+        return try! JSONSerialization.data(withJSONObject: ["bindings": values], options: [.sortedKeys])
+    }
+
+    /// One stored entry: the physical key, Carbon mask and label the file keeps.
+    private static func stored(_ id: String, _ value: Any) throws(InvalidBinding) -> (ControlsAction, Binding) {
+        let entry = try entry(id)
+        guard let fields = value as? [String: Any],
+            let keyCode = whole32(fields["keyCode"]),
+            let modifiers = whole32(fields["modifiers"]),
+            let label = fields["label"] as? String, !label.isEmpty
+        else {
+            throw InvalidBinding(message: "Shortcut \(id) needs a keyCode, modifiers and a label.")
+        }
+        return (entry.action, Binding(
+            shortcut: Shortcut(keyCode: keyCode, modifiers: modifiers, label: label),
+            lifetime: entry.binding.lifetime))
     }
 
     /// A JSON whole number that fits 32 bits. Booleans, fractions and negatives are refused rather
@@ -107,7 +146,12 @@ public enum ShortcutBindings {
         guard let stated = object["bindings"] as? [String: Any] else {
             throw InvalidBinding(message: "The shortcuts file has no bindings.")
         }
-        return try merging(stated, into: defaults)
+        var result = defaults
+        for (id, value) in stated {
+            let (action, binding) = try stored(id, value)
+            result[action] = binding
+        }
+        return result
     }
 
     public static func encode(_ bindings: [ControlsAction: Binding]) -> Data? {

@@ -113,7 +113,7 @@ test("the app answers its own operations on its socket, framed like the service"
       id: "shortcut-set",
       operation: "shortcuts.set",
       params: {
-        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+        bindings: { "capture.startOrStop": "option+shift+s" },
       },
     }),
     {
@@ -121,7 +121,7 @@ test("the app answers its own operations on its socket, framed like the service"
       ok: true,
       data: {
         version: 2,
-        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+        bindings: { "capture.startOrStop": "option+shift+s" },
       },
     },
   );
@@ -132,7 +132,7 @@ test("the app answers its own operations on its socket, framed like the service"
       ok: true,
       data: {
         version: 2,
-        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+        bindings: { "capture.startOrStop": "option+shift+s" },
       },
     },
   );

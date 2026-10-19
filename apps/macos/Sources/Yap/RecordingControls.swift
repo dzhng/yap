@@ -176,10 +176,8 @@ final class RecordingControls: NSObject {
 
     /// The CLI and Settings use this one live binding owner.
     func handleShortcuts(_ operation: String, _ params: Data) -> Result<Data, ServiceFailure> {
-        if operation == "shortcuts.get" {
-            return ShortcutBindings.encode(bindings).map(Result.success)
-                ?? .failure(ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts."))
-        }
+        let layout = KeyboardLayout.current()
+        if operation == "shortcuts.get" { return .success(describeShortcuts(layout)) }
         guard operation == "shortcuts.set",
             let object = try? JSONSerialization.jsonObject(with: params) as? [String: Any],
             let stated = object["bindings"] as? [String: Any]
@@ -188,7 +186,7 @@ final class RecordingControls: NSObject {
         }
         let next: [ControlsAction: ShortcutBindings.Binding]
         do {
-            next = try ShortcutBindings.merging(stated, into: bindings)
+            next = try ShortcutBindings.merging(stated, into: bindings, layout: layout)
         } catch {
             return .failure(ServiceFailure(code: "INVALID_PARAMS", message: error.message))
         }
@@ -202,7 +200,7 @@ final class RecordingControls: NSObject {
             }
             try data.write(to: URL(fileURLWithPath: path), options: .atomic)
             render()
-            return .success(data)
+            return .success(describeShortcuts(layout))
         } catch let error as GlobalShortcuts.ApplyError {
             return .failure(ServiceFailure(
                 code: "DUPLICATE_SHORTCUT", message: "Duplicate shortcut actions: \(error)."))
@@ -210,6 +208,16 @@ final class RecordingControls: NSObject {
             return .failure(failure)
         } catch {
             return .failure(ServiceFailure(code: "SHORTCUTS_WRITE_FAILED", message: error.localizedDescription))
+        }
+    }
+
+    /// The public answer: each action's keys and whether macOS holds it, as Settings shows it.
+    private func describeShortcuts(_ layout: KeyboardLayout) -> Data {
+        ShortcutBindings.describe(bindings, layout: layout) { [self] action in
+            ShortcutPresentation.state(
+                for: bindings[action]!, registered: held.contains(action.id),
+                recording: shortcutsRecording,
+                unavailable: state.unavailableShortcuts.contains(action.id))
         }
     }
 
@@ -237,7 +245,8 @@ final class RecordingControls: NSObject {
     private func setShortcutFromSettings(
         _ action: ControlsAction, _ shortcut: Shortcut
     ) -> Result<Data, ServiceFailure> {
-        let stated = [action.id: ["keyCode": shortcut.keyCode, "modifiers": shortcut.modifiers, "label": shortcut.label]]
+        let stated = [action.id: ShortcutKeys.name(
+            keyCode: shortcut.keyCode, modifiers: shortcut.modifiers, layout: .current())]
         guard let params = try? JSONSerialization.data(withJSONObject: ["bindings": stated]) else {
             return .failure(ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts."))
         }

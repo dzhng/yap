@@ -83,17 +83,23 @@ test(
       id: "settings-rebind",
       operation: "shortcuts.set",
       params: {
-        bindings: { "capture.startOrStop": { keyCode: 2, modifiers: 2560, label: "⌥⇧D" } },
+        bindings: { "capture.startOrStop": "option+shift+d" },
       },
     });
     assert.equal(rebound.ok, true, JSON.stringify(rebound));
-    assert.equal(rebound.data.bindings["capture.startOrStop"].label, "⌥⇧D");
+    assert.deepEqual(rebound.data.bindings["capture.startOrStop"], {
+      name: "Start or Finish Recording",
+      keys: "option+shift+d",
+      label: "⌥⇧D",
+      during: "app",
+      state: "active",
+    });
 
     const duplicate = await callLocal(socket, {
       id: "settings-duplicate",
       operation: "shortcuts.set",
       params: {
-        bindings: { "capture.startOrStop": { keyCode: 9, modifiers: 2560, label: "⌥⇧V" } },
+        bindings: { "capture.startOrStop": "option+shift+v" },
       },
     });
     assert.equal(duplicate.ok, false, JSON.stringify(duplicate));

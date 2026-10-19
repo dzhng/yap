@@ -131,10 +131,19 @@ it("advertises shortcut bindings as synchronous app operations", () => {
     operationSchema.parse({
       operation: "shortcuts.set",
       params: {
-        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+        bindings: { "capture.startOrStop": "ctrl+cmd+r" },
       },
     }).operation,
   ).toBe("shortcuts.set");
+  // Raw key codes are the app's to derive from the keys a caller names.
+  expect(
+    operationSchema.safeParse({
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    }).success,
+  ).toBe(false);
   expect(operationWaitMs("shortcuts.set")).toBe(operationWaitMs("update.setEnabled"));
 });
 

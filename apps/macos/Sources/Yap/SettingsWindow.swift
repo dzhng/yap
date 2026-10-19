@@ -641,16 +641,19 @@ private final class ShortcutRecorderNativeView: NSView {
     override func keyDown(with event: NSEvent) {
         // Modifier-only presses do not identify a shortcut. Keep the field focused until a
         // physical key arrives, so a person can chord modifiers in any order.
-        let modifierOnly: Set<UInt16> = [54, 55, 56, 58, 59, 60, 61, 62, 63]
-        guard !modifierOnly.contains(event.keyCode) else { return }
+        guard !ShortcutKeys.isModifier(UInt32(event.keyCode)) else { return }
         var modifiers: UInt32 = 0
         if event.modifierFlags.contains(.control) { modifiers |= UInt32(controlKey) }
         if event.modifierFlags.contains(.option) { modifiers |= UInt32(optionKey) }
         if event.modifierFlags.contains(.shift) { modifiers |= UInt32(shiftKey) }
         if event.modifierFlags.contains(.command) { modifiers |= UInt32(cmdKey) }
-        let key = event.charactersIgnoringModifiers ?? ""
-        let label = ShortcutPresentation.label(
-            keyCode: UInt32(event.keyCode), modifiers: modifiers, key: key)
+        // A key every app types with is not offered; the field keeps listening.
+        guard !ShortcutKeys.stealsKey(keyCode: UInt32(event.keyCode), modifiers: modifiers) else {
+            NSSound.beep()
+            return
+        }
+        let label = ShortcutKeys.label(
+            keyCode: UInt32(event.keyCode), modifiers: modifiers, layout: .current())
         captured?(Shortcut(keyCode: UInt32(event.keyCode), modifiers: modifiers, label: label))
     }
 }
