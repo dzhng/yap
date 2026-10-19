@@ -112,3 +112,46 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
 - **Codex hit "model at capacity" repeatedly on 2026-10-18 for slices 05 and 12** (three models,
   fresh sessions too). Both were finished by Claude subagents from Codex's partial work, under
   the same contract and the same review. Verdict: process note, no code consequence.
+
+## Slice 05 (ink overlay)
+
+- **One ordered mark stream from the capture side** (`CaptureMarkUpdate`: live stroke,
+  committed mark, retraction); the overlay classifies nothing. Verdict: sound.
+- **Ink defaults pending the user's look:** #ff3b30, 5 pt strokes and 32 pt pins, both with a
+  white edge and soft shadow (added after the second critique so marks hold on red, busy or
+  light content); strokes fade over 1.2 s after ⇧ is released, strokes visible together fade
+  together; pins stay until undone or the take ends. Verdict: provisional, user-only taste.
+- **Displays are fixed at take start**; a display connected mid-take gets no ink panel.
+  Verdict: sound for now.
+- **The capture-exclusion test skips with a reason when a take's picture is blank** (display
+  asleep). Why: black frames passed even with the ink deliberately leaked. Verdict: sound.
+- **Fixed a slice 01 regression found here:** the service refused journal layout 3 in
+  `capture-publication.ts`, so every screen take hung in finalizing. No unit test reached it;
+  only a real take did. Verdict: fixed, with a test.
+
+## Slice 12 (prompt operation)
+
+- **`recording.prompt` takes exactly one of `{recordingId?}`, `{projectId}`, `{assetId}`**, so
+  the app passes its media target and nothing guesses an ID's kind. Verdict: sound.
+- **Imported videos keep their one-line handoff through the same operation.** Verdict: sound.
+- **Copy prompt is disabled while the service is down** (the text now comes from it). Verdict:
+  sound.
+- **Marks are listed when there are any; clicks only when there are none**, the click line
+  shows the first two times then "…", and names a window only when all clicks share one.
+  Why: keeps the approved screen+mic+marks text exact. Verdict: provisional, user may prefer
+  both.
+- **Pins keep their journal number** (gaps after an undo match the badges the person saw).
+  Verdict: sound.
+- **"display N" is the capture display ID** the CLI uses, omitted when unknown. Verdict: sound,
+  though the number is not a friendly "display 1".
+
+## Slice 13 (paste)
+
+- **`Paster` is the one owner of copying a prompt**; paste posts the physical V key with
+  Command only. Verdict: sound; layouts that remap V may not paste.
+- **The "Copied, press ⌘V" notice shows 2 s then fades, low-centre on the display under the
+  pointer**, and a new copy restarts it. Verdict: sound.
+- **Accessibility reads "Optional" with an "Allow…" button when off**, never orange, and Yap
+  never prompts for it. Verdict: sound.
+- **A failed `recording.prompt` from ⌥⇧V (no recordings yet) reports where the menu shows
+  failures, not in the notice.** Verdict: provisional.

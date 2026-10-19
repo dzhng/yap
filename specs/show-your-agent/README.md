@@ -9,9 +9,10 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-18:* done 00, 01, 02, 03, 06, 07, 09, 10. In flight: 04 (fix round),
-11, 12. Next: 05 and 08 after 04, then 13, 14, M images, 15. Messaging copy is live on `main`;
-the images still show the old tagline.
+*Status, 2026-10-19:* every implementation slice (00–14) is merged on this branch. In progress:
+slice 15 closeout (full repository run). Open: M images (need the user: no image generator is set up
+here), and the closeout checks that need a person and a signed, installed build (D18 timing, a real
+⌥⇧V paste with Accessibility, a fresh agent acting on a real pasted prompt).
 
 You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
 the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
@@ -29,17 +30,17 @@ Global TODO (each item is owned by its slice):
 - [x] 01 Journal schema 3 `mark` contract, Swift and TS, golden fixture
 - [x] 02 Marks readable through `timeline.events`
 - [x] 03 `MarkRecognizer`: the Q6 gesture rules, pure
-- [ ] 04 Live marks recorded during a take
-- [ ] 05 Ink overlay (visual: colour, fade, pin badges)
+- [x] 04 Live marks recorded during a take
+- [x] 05 Ink overlay (visual: colour, fade, pin badges)
 - [x] 06 Shortcut bindings model, live registration, `shortcuts.get`/`shortcuts.set`
 - [x] 07 Settings click-to-record field (visual)
-- [ ] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
+- [x] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
 - [x] 09 Background job priority
 - [x] 10 Transcript backlog: automatic transcription of recordings and imports
-- [ ] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
-- [ ] 12 `recording.prompt` operation; replaces Copy agent prompt
-- [ ] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)
-- [ ] 14 Skill, DEVELOPMENT.md, catalog, release notes
+- [x] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
+- [x] 12 `recording.prompt` operation; replaces Copy agent prompt
+- [x] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)
+- [x] 14 Skill, DEVELOPMENT.md, catalog, release notes
 - [ ] M  Messaging: copy done on this branch; regenerate `header.png`, `og.png`, `launch-poster.jpg`
 - [ ] 15 Closeout: full run, D18 timing, fresh-agent acceptance
 

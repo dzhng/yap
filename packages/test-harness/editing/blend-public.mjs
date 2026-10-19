@@ -217,8 +217,8 @@ try {
       leaf: "export.mp4",
       settings,
     };
-    const created = await call("export.create", exportRequest);
-    const exportId = created.exportId;
+    const exportCreated = await call("export.create", exportRequest);
+    const exportId = exportCreated.exportId;
     const exported = await poll(
       () => call("export.status", { exportId }, { transport: "mcp" }),
       (value) => value.state === "ready",
