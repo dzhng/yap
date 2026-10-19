@@ -736,10 +736,6 @@ export class Models {
       throw new CatalogError("NOT_FOUND", "Model is not registered", { modelId, kind: "model" });
     return model;
   }
-  /** Removal fences acquisition but never removes a registered model from discovery. */
-  listable(modelId: string): boolean {
-    return this.preparations.has(modelId);
-  }
   list() {
     return [...this.preparations].map(([modelId, model]) => ({
       modelId,
@@ -815,12 +811,6 @@ export class Models {
   presence(modelId: string) {
     return this.selected(modelId).presence();
   }
-  removal(requestId: string): { modelId: string; completed: boolean } | null {
-    const row = this.catalog.catalog
-      .prepare("SELECT modelId, completedAtMs FROM model_removals WHERE requestId=?")
-      .get(requestId) as { modelId: string; completedAtMs: number | null } | undefined;
-    return row ? { modelId: row.modelId, completed: row.completedAtMs !== null } : null;
-  }
   /**
    * Readiness from each preparation receipt, for the cheap service health check. Runtime bytes
    * are verified by preparation, explicit `status` and before every execution, never here: a
@@ -851,7 +841,8 @@ export class Models {
       return model.prepare(signal, sources);
     });
   }
-  async remove(modelId: string, requestId: string) {
+  /** `inUse` is asked inside this model's flight, after any earlier removal and replay. */
+  async remove(modelId: string, requestId: string, inUse: (modelDigest: string) => boolean) {
     const previous = this.removals.get(modelId) ?? Promise.resolve();
     const run = previous
       .catch(() => {})
@@ -871,6 +862,8 @@ export class Models {
             return { modelId, deleted: true as const, freedBytes: prior.freedBytes };
           return this.finishRemoval(model, requestId);
         }
+        if (inUse(model.modelDigest))
+          throw new CatalogError("MODEL_IN_USE", "A running job is using this model", { modelId });
         this.catalog.transaction(() => {
           this.catalog.catalog
             .prepare(

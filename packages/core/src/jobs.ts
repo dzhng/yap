@@ -825,8 +825,8 @@ export class JobQueue {
     };
   }
 
-  /** Whether a currently running request's canonical input names the selected model. */
-  hasRunningModelRequest(modelId: string): boolean {
+  /** Whether a running job's input pins this model content digest, as every model consumer does. */
+  runsModel(modelDigest: string): boolean {
     const rows = this.store.catalog
       .prepare("SELECT input FROM jobs WHERE state='running'")
       .all() as { input: string }[];
@@ -834,7 +834,7 @@ export class JobQueue {
       if (Array.isArray(value)) return value.some(namesModel);
       if (!value || typeof value !== "object") return false;
       for (const [key, child] of Object.entries(value)) {
-        if (key === "modelId" && child === modelId) return true;
+        if (key === "modelDigest" && child === modelDigest) return true;
         if (namesModel(child)) return true;
       }
       return false;

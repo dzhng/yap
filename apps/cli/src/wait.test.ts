@@ -1747,32 +1747,57 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
   ]);
 });
 
-test.each(["capture.stop", "recording.get"])(
-  "%s waits for recording.get after finalization",
-  async (operation) => {
-    let admissions = 0;
-    const f = await fixture((request) => {
-      if (request.operation === operation && admissions++ === 0)
-        return { ok: true, data: { recordingId: "recording", state: "running" } };
-      expect(request.operation).toBe("recording.get");
-      return {
-        ok: true,
-        data: { recordingId: "recording", state: "ready", sourceDurationUs: 42 },
-      };
-    });
-    const output = await f.run(operation, { recordingId: "recording" }, [
-      "--wait",
-      "--timeout-ms",
-      "1000",
-    ]);
-    expect(output.code).toBe(0);
-    expect(JSON.parse(output.stdout)).toMatchObject({
-      data: { recordingId: "recording", state: "ready" },
-      wait: { state: "settled" },
-    });
-    expect(f.calls.map((r) => r.operation)).toEqual([operation, "recording.get"]);
-  },
-);
+// A take keeps its own capture lifecycle (`captureReportSchema`): finalizing, then complete or
+// interrupted.
+test.each([
+  ["capture.stop", "complete", 0],
+  ["recording.get", "complete", 0],
+  ["capture.stop", "interrupted", 1],
+])("%s waits through finalizing for recording.get to say %s", async (operation, settled, code) => {
+  let admissions = 0;
+  const f = await fixture((request) => {
+    if (request.operation === operation && admissions++ === 0)
+      return { ok: true, data: { recordingId: "recording", state: "finalizing" } };
+    expect(request.operation).toBe("recording.get");
+    return {
+      ok: true,
+      data: { recordingId: "recording", state: settled, sourceDurationUs: 42 },
+    };
+  });
+  const output = await f.run(operation, { recordingId: "recording" }, [
+    "--wait",
+    "--timeout-ms",
+    "1000",
+  ]);
+  expect(output.code).toBe(code);
+  expect(JSON.parse(output.stdout)).toMatchObject({
+    data: { recordingId: "recording", state: settled },
+    wait: { state: "settled" },
+  });
+  expect(f.calls.map((r) => r.operation)).toEqual([operation, "recording.get"]);
+});
+
+test("capture.stop --wait settles on a take whose finalization failed", async () => {
+  let admissions = 0;
+  const failed = {
+    recordingId: "recording",
+    state: "finalizing",
+    finalizationError: { code: "RECOVERY_FAILED", message: "media unreadable", retryable: true },
+  };
+  const f = await fixture((request) => {
+    if (request.operation === "capture.stop" && admissions++ === 0)
+      return { ok: true, data: { recordingId: "recording", state: "finalizing" } };
+    return { ok: true, data: failed };
+  });
+  // The take stays finalizing until a caller retries, so waiting longer cannot change it.
+  const output = await f.run("capture.stop", { recordingId: "recording" }, [
+    "--wait",
+    "--timeout-ms",
+    "5000",
+  ]);
+  expect(output.code).toBe(1);
+  expect(JSON.parse(output.stdout)).toMatchObject({ data: failed, wait: { state: "settled" } });
+});
 
 test("batch media delivery timeout reclassifies settled wait while keeping completed item facts", async () => {
   const f = await fixture(async (request) => {

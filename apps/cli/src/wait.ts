@@ -14,8 +14,16 @@ import {
 } from "@yap/protocol";
 import { ArtifactDeliveryError, batchReferences, describeBatch } from "./artifact-delivery.js";
 
-const pending = new Set(["queued", "running"]);
 const unsuccessful = new Set(["failed", "canceled", "unavailable", "idle"]);
+// Work reads answer in WorkState; a take keeps its own capture lifecycle (`captureReportSchema`),
+// and one whose finalization failed stays `finalizing` until a caller retries it.
+const successful = new Set(["ready", "complete"]);
+function stillPending(value: Record<string, unknown>): boolean {
+  return (
+    ["queued", "running"].includes(String(value.state)) ||
+    (value.state === "finalizing" && value.finalizationError == null)
+  );
+}
 const jobSummary = waitJobSchema.extend({
   state: workStateSchema,
   target: z.record(z.string(), z.unknown()),
@@ -65,7 +73,10 @@ export function waitSucceeded(result: OperationResponse): boolean {
     return false;
   if (Array.isArray(data.items))
     return data.items.every((item) => waitSucceeded({ id: result.id, ...item }));
-  return data.state === undefined || ["ready"].includes(String(data.state));
+  return (
+    data.state === undefined ||
+    (successful.has(String(data.state)) && data.finalizationError == null)
+  );
 }
 function interrupted(result: Extract<OperationResponse, { ok: false }>) {
   return [
@@ -341,10 +352,10 @@ export async function waitForWork(options: {
             else if (
               String(record(value.published).generation) !==
                 String(jobs.get(value.jobId)!.attemptGeneration) ||
-              pending.has(String(value.state))
+              stillPending(value)
             )
               waiting = true;
-          } else if (pending.has(String(value.state))) waiting = true;
+          } else if (stillPending(value)) waiting = true;
           items.push(item);
         }
         latest = { ...latest, data: { ...batch, items } };
@@ -372,7 +383,7 @@ export async function waitForWork(options: {
         if (unsuccessful.has(job.state)) {
           await close(latest);
           if (read === "export.status") {
-            if (!pending.has(String(work.state))) return metadata("settled");
+            if (!stillPending(work)) return metadata("settled");
             await delay(100, undefined, { signal });
             const next = await call(read, params);
             if (!next.ok && interrupted(next))
@@ -386,13 +397,13 @@ export async function waitForWork(options: {
         if (job.state === "ready") {
           const publication = record(work.published);
           if (
-            !pending.has(String(work.state)) &&
+            !stillPending(work) &&
             (!publication.generation ||
               String(publication.generation) === String(job.attemptGeneration))
           )
             return metadata("settled");
           if (
-            !pending.has(String(work.state)) &&
+            !stillPending(work) &&
             publication.generation &&
             String(publication.generation) !== String(job.attemptGeneration)
           )
@@ -414,13 +425,13 @@ export async function waitForWork(options: {
           const nextData = workStatus(record(next.ok ? next.data : null));
           if (
             nextData.jobId !== job.jobId &&
-            (typeof nextData.jobId === "string" || pending.has(String(nextData.state)))
+            (typeof nextData.jobId === "string" || stillPending(nextData))
           )
             current = undefined;
           continue;
         }
         if (!read) latest = inspected;
-      } else if (!pending.has(String(work.state))) return metadata("settled");
+      } else if (!stillPending(work)) return metadata("settled");
       else if (!read)
         throw new ArtifactDeliveryError(
           "INVALID_RESPONSE",

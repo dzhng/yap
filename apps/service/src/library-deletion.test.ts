@@ -1,9 +1,14 @@
 import { expect, test } from "vitest";
 import { mkdtemp, rm, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
-import { Catalog } from "@yap/core/catalog";
+import { AcquisitionStore } from "@yap/core/acquisitions";
 import { DeletionPlans } from "@yap/core/deletion-plans";
-import { LibraryDeletion, type DeletionPhase } from "./library-deletion.js";
+import {
+  LibraryDeletion,
+  type DeletionPhase,
+  type DeletionRegistration,
+} from "./library-deletion.js";
+import { Catalog, CatalogError } from "@yap/core/catalog";
 import { recordingRetirement } from "./recording-retirement.js";
 import { DerivativeDelivery } from "./delivery.js";
 import type { CaptureSources } from "./capture-sources.js";
@@ -100,13 +105,14 @@ test("a failed phase resumes from its durable plan without reporting success ear
 test("recording source admission stays fenced between file and row phases", async () => {
   const home = await mkdtemp("/tmp/yap-recording-scope-");
   const catalog = new Catalog(join(home, "catalog.sqlite"));
+  new AcquisitionStore(catalog);
   let sourceAdmissionAllowed = true;
-  const store = {
+  const store = Object.assign(catalog, {
     markDeleting: () => ({ recordingId: "one" }),
     deleting: () => ({ recordingId: "one" }),
     finishDeletion: () => {},
     deletionsPage: () => ({ recordings: [], nextAfterId: null }),
-  } as unknown as CaptureStore;
+  }) as unknown as CaptureStore;
   const jobs = { drainOwner: async () => {}, forgetOwner: async () => {} } as unknown as JobQueue;
   const sources = {
     retire: async (
@@ -156,4 +162,59 @@ test("recording source admission stays fenced between file and row phases", asyn
   delivery.dispose();
   catalog.close();
   await rm(home, { recursive: true, force: true });
+});
+
+async function fixtureDeletion(registration: Partial<DeletionRegistration> = {}) {
+  const home = await mkdtemp("/tmp/yap-library-deletion-");
+  const catalog = new Catalog(join(home, "catalog.sqlite"));
+  const deletion = new LibraryDeletion(new DeletionPlans(catalog));
+  deletion.register({
+    kind: "fixture",
+    checkUsers: () => [],
+    tombstone: () => true,
+    drain: () => {},
+    files: async () => {},
+    rows: () => true,
+    result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
+    freedBytes: () => 0,
+    ...registration,
+  });
+  return {
+    deletion,
+    close: async () => {
+      await deletion.close();
+      catalog.close();
+      await rm(home, { recursive: true, force: true });
+    },
+  };
+}
+
+test("a later delete of the same identity reports the bytes it frees, not an earlier delete's", async () => {
+  let bytes = 7;
+  const f = await fixtureDeletion({ freedBytes: () => bytes });
+  // Content-addressed assets return under the same identity when the same file is imported again.
+  await expect(
+    f.deletion.delete({ kind: "fixture", id: "one" }, { requestId: "a-first" }),
+  ).resolves.toMatchObject({ freedBytes: 7 });
+  bytes = 11;
+  await expect(
+    f.deletion.delete({ kind: "fixture", id: "one" }, { requestId: "b-second" }),
+  ).resolves.toMatchObject({ freedBytes: 11 });
+  await f.close();
+});
+
+test("a member's IN_USE refusal reaches the caller as IN_USE in every error mode", async () => {
+  for (const errorMode of ["preserve-catalog", "delete-failed"] as const) {
+    const f = await fixtureDeletion({
+      errorMode,
+      files: async () => {
+        throw new CatalogError("IN_USE", "member gained a user", { usedBy: [] });
+      },
+    });
+    await expect(f.deletion.delete({ kind: "fixture", id: "one" })).rejects.toMatchObject({
+      code: "IN_USE",
+      details: { usedBy: [], fixtureId: "one" },
+    });
+    await f.close();
+  }
 });

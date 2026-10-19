@@ -21,10 +21,9 @@ export type RecordingRetirementOwners = {
 };
 
 export function recordingRetirement(owners: RecordingRetirementOwners): DeletionRegistration {
-  const references = owners.store.catalog ? new ResourceReferences(owners.store) : null;
-  const ownAcquisitions = (recordingId: string): string[] => {
-    if (!references) return [];
-    return (
+  const references = new ResourceReferences(owners.store);
+  const ownAcquisitions = (recordingId: string): string[] =>
+    (
       owners.store.catalog
         .prepare(
           `SELECT id FROM acquisitions
@@ -33,7 +32,6 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
         )
         .all(recordingId) as { id: string }[]
     ).map(({ id }) => id);
-  };
   return {
     kind: "recording",
     errorMode: "preserve-catalog",
@@ -57,8 +55,8 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       if (recording) {
         owners.delivery.revoke({ kind: "recording", id: subject.id });
         const acquisitions = ownAcquisitions(subject.id);
-        references?.fence("acquisition", acquisitions);
-        references?.fence(
+        references.fence("acquisition", acquisitions);
+        references.fence(
           "asset",
           acquisitions.flatMap((id) =>
             references
@@ -75,7 +73,7 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
       await owners.jobs.drainOwner({ kind: "recording", recordingId: subject.id });
       signal.throwIfAborted();
     },
-    drain: async (subject, signal) => {
+    drain: async (subject) => {
       await owners.capture.quiesce(subject.id);
     },
     files: (subject, signal, lifetime) =>

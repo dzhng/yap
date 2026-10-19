@@ -116,17 +116,17 @@ import YapControls
         await until { !library.state.projectsRefreshing && library.state.recent.count == 1 }
         precondition(library.state.projects.map(\.projectId) == ["same"])
         let originalRecordings = library.state.recent
-        script.recordingNext = ["afterSequence": 7]
+        script.recordingNext = ""
         library.refreshRecordings()
         await until { library.state.recordingFailure != nil }
-        precondition(library.state.recent == originalRecordings, "A project cursor cannot authorize recording continuation")
+        precondition(library.state.recent == originalRecordings, "An empty cursor cannot continue the recordings")
         script.recordingNext = NSNull()
         library.refreshRecordings()
         await until { library.state.recordingFailure == nil }
-        script.recordingNext = ["beforeSequence": 0]
+        script.recordingNext = 7
         library.refreshRecordings()
         await until { library.state.recordingFailure != nil }
-        precondition(library.state.recent == originalRecordings, "Recording continuation must move toward older positive sequences")
+        precondition(library.state.recent == originalRecordings, "A cursor is an opaque string")
         script.recordingNext = NSNull()
         library.refreshRecordings()
         await until { library.state.recordingFailure == nil }
@@ -364,7 +364,8 @@ import YapControls
         paged.release()
         for _ in 0..<20 { await Task.yield() }
         precondition(browsing.state.recent.allSatisfy { $0.sourceAdmissions?.first?.job?.state == "ready" }, "Delayed previous-page jobs cannot overwrite current source facts")
-        for invalid in [["beforeSequence": 3], ["beforeSequence": 9], ["afterSequence": 1]] {
+        // A cursor is opaque: the page is refused only when it is empty, or not a string.
+        for invalid: Any in ["", 3, ["beforeSequence": 3]] {
             let olderPage = browsing.state.recent
             paged.recordingCursorOverride = invalid
             browsing.refreshRecordings()

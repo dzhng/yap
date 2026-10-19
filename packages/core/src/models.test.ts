@@ -386,7 +386,7 @@ test("removing a model wins an in-flight prepare and persists until explicit pre
   const models = new Models(f.home, f.network, [manifest], catalog);
   const preparing = models.prepare("tiny", new AbortController().signal);
   await vi.waitFor(() => expect(held).toHaveLength(1));
-  const removed = models.remove("tiny", "remove-tiny");
+  const removed = models.remove("tiny", "remove-tiny", () => false);
   held[0]!.end(contents["Model.mlmodelc/weights/weight.bin"]!.subarray(1024));
   await expect(preparing).rejects.toBeTruthy();
   await expect(removed).resolves.toEqual({
@@ -429,7 +429,7 @@ test("replaying an incomplete removal resumes deletion and measures the bytes", 
   cleanups.push(() => restartedCatalog.close());
   const restarted = new Models(f.home, f.network, [manifest], restartedCatalog);
 
-  await expect(restarted.remove("tiny", "crash")).resolves.toEqual({
+  await expect(restarted.remove("tiny", "crash", () => false)).resolves.toEqual({
     modelId: "tiny",
     deleted: true,
     freedBytes: manifest.files.reduce((total, file) => total + file.bytes, 0) + receiptBytes + 7,
@@ -456,7 +456,7 @@ test("a removal interrupted before its files are gone finishes on restart, not o
   await restarted.prepareAuto(new AbortController().signal);
   expect(restarted.presence("tiny")).toBe("absent");
   await restarted.prepare("tiny", new AbortController().signal);
-  const replayed = await restarted.remove("tiny", "crash");
+  const replayed = await restarted.remove("tiny", "crash", () => false);
   expect(replayed).toMatchObject({ modelId: "tiny", deleted: true });
   expect(replayed.freedBytes).toBeGreaterThan(0);
   expect(restarted.presence("tiny")).toBe("ready");
@@ -468,12 +468,12 @@ test("preparing clears the removal fence but keeps request receipts", async () =
   cleanups.push(() => catalog.close());
   const models = new Models(f.home, f.network, [manifest], catalog);
   await models.prepare("tiny", new AbortController().signal);
-  const first = await models.remove("tiny", "r1");
+  const first = await models.remove("tiny", "r1", () => false);
   await models.prepare("tiny", new AbortController().signal);
 
-  await expect(models.remove("tiny", "r1")).resolves.toEqual(first);
+  await expect(models.remove("tiny", "r1", () => false)).resolves.toEqual(first);
   expect(models.presence("tiny")).toBe("ready");
-  const second = await models.remove("tiny", "r2");
+  const second = await models.remove("tiny", "r2", () => false);
   expect(second.freedBytes).toBe(first.freedBytes);
   expect(models.presence("tiny")).toBe("absent");
 });
@@ -485,8 +485,8 @@ test("concurrent removals are serialized and only the first reports removed byte
   const models = new Models(f.home, f.network, [manifest], catalog);
   await models.prepare("tiny", new AbortController().signal);
   const [first, second] = await Promise.all([
-    models.remove("tiny", "remove-1"),
-    models.remove("tiny", "remove-2"),
+    models.remove("tiny", "remove-1", () => false),
+    models.remove("tiny", "remove-2", () => false),
   ]);
   expect(first.freedBytes).toBeGreaterThan(0);
   expect(second.freedBytes).toBe(0);

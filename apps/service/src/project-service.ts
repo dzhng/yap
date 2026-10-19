@@ -1855,18 +1855,10 @@ export async function startProjectService(options: {
           }
           case "model.remove": {
             const { modelId, requestId } = operation.params;
-            // Resolve registration before consulting running work so an unknown identity always
-            // has the model-specific NOT_FOUND contract.
-            models.presence(modelId);
-            const priorRemoval = models.removal(requestId);
-            if (
-              !(priorRemoval?.modelId === modelId && priorRemoval.completed) &&
-              jobs!.hasRunningModelRequest(modelId)
-            )
-              throw new CatalogError("MODEL_IN_USE", "A running job is using this model", {
-                modelId,
-              });
-            return { ok: true, data: await models.remove(modelId, requestId) };
+            return {
+              ok: true,
+              data: await models.remove(modelId, requestId, (digest) => jobs!.runsModel(digest)),
+            };
           }
           case "alignment.observe": {
             const params = operation.params;

@@ -317,7 +317,7 @@ final class LibraryController {
         !job.jobId.isEmpty && ["idle", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
     }
     private static func active(_ admission: LibraryState.SourceAdmission) -> Bool {
-        admission.job.map { ["queued", "running", "waiting"].contains($0.state) } ?? false
+        admission.job.map { ["queued", "running"].contains($0.state) } ?? false
     }
     private func replaceJob(_ recordingId: String, _ sourceId: String, _ job: LibraryState.Job) {
         guard let index = state.recent.firstIndex(where: { $0.recordingId == recordingId }),

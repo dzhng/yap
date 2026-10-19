@@ -4,7 +4,7 @@ import { z } from "zod";
 /**
  * The only asynchronous work vocabulary exposed at the protocol edge.
  *
- * Storage owners keep their historical strings and map them at the boundary.  The
+ * Storage owners keep their own stored words and map them at the boundary.  The
  * vocabulary deliberately describes lifecycle, rather than the implementation
  * (queue, downloader, installer, or model verifier) that happens to own it.
  */

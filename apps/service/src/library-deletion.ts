@@ -104,9 +104,7 @@ export class LibraryDeletion {
           [subject.kind + "Id"]: subject.id,
         },
       );
-    const pendingRequest = this.plans
-      .requestsForSubject(subject.kind, subject.id)
-      .find((request) => request.result === null);
+    const pendingRequest = this.pendingRequest(subject);
     if (pendingRequest && pendingRequest.cascade !== cascade)
       throw new CatalogError(
         "REQUEST_CONFLICT",
@@ -146,7 +144,7 @@ export class LibraryDeletion {
         );
       if (options.requestId) {
         if (!this.plans.request(options.requestId)) {
-          const pending = this.plans.requestsForSubject(subject.kind, subject.id)[0];
+          const pending = this.pendingRequest(subject);
           this.plans.recordRequest(
             options.requestId,
             subject.kind,
@@ -161,10 +159,7 @@ export class LibraryDeletion {
           cascade,
           result: existing,
         });
-        void existing.catch(() => {
-          const prior = this.requests.get(options.requestId!);
-          if (prior?.result === existing) this.requests.delete(options.requestId!);
-        });
+        this.forgetWhenSettled(options.requestId, existing);
       }
       return existing;
     }
@@ -177,12 +172,23 @@ export class LibraryDeletion {
     this.activeCascade.set(key, cascade);
     if (options.requestId)
       this.requests.set(options.requestId, { kind: subject.kind, id: subject.id, cascade, result });
-    if (options.requestId)
-      void result.catch(() => {
-        const prior = this.requests.get(options.requestId!);
-        if (prior?.result === result) this.requests.delete(options.requestId!);
-      });
+    if (options.requestId) this.forgetWhenSettled(options.requestId, result);
     return result;
+  }
+
+  /** A settled request is answered from its durable row, so memory only joins one in flight. */
+  private forgetWhenSettled(requestId: string, result: Promise<unknown>) {
+    const forget = () => {
+      if (this.requests.get(requestId)?.result === result) this.requests.delete(requestId);
+    };
+    void result.then(forget, forget);
+  }
+
+  /** Settled requests stay for replay; only an unsettled one belongs to the delete in flight. */
+  private pendingRequest(subject: LibrarySubject) {
+    return this.plans
+      .requestsForSubject(subject.kind, subject.id)
+      .find((request) => request.result === null);
   }
 
   private async remove(
@@ -193,7 +199,7 @@ export class LibraryDeletion {
   ): Promise<Record<string, unknown>> {
     try {
       const storedRequest = requestId ? this.plans.request(requestId) : null;
-      const pendingRequest = this.plans.requestsForSubject(subject.kind, subject.id)[0];
+      const pendingRequest = this.pendingRequest(subject);
       const freedBytes =
         storedRequest?.freedBytes ??
         pendingRequest?.freedBytes ??
@@ -238,7 +244,11 @@ export class LibraryDeletion {
       this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
       return result;
     } catch (error) {
-      if (registration.errorMode !== "delete-failed" && error instanceof CatalogError)
+      // An IN_USE refusal names its users, so it reaches the caller whatever the mode.
+      if (
+        error instanceof CatalogError &&
+        (registration.errorMode !== "delete-failed" || error.code === "IN_USE")
+      )
         throw new CatalogError(error.code, error.message, {
           ...error.details,
           [subject.kind + "Id"]: subject.id,

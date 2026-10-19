@@ -2456,7 +2456,18 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
   if (!before.ok) throw new Error(JSON.stringify(before));
   expect(before.data).toMatchObject({ modelBytes: 49 });
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
-  const input = JSON.stringify({ modelId: "parakeet" });
+  const listed = await f.call("model.list", { limit: 1000 });
+  if (!listed.ok) throw new Error(JSON.stringify(listed));
+  const { models } = listed.data as { models: { modelId: string; modelDigest: string }[] };
+  const digestOf = (modelId: string) =>
+    models.find((model) => model.modelId === modelId)!.modelDigest;
+  // Stored the way transcription stores its job input: the model by content digest and repo pin.
+  const input = JSON.stringify({
+    selection: { assetId: "asset" },
+    modelDigest: digestOf("parakeet"),
+    pins: { model: "FluidInference/parakeet-tdt-0.6b-v3" },
+  });
+  const otherInput = JSON.stringify({ engine: { modelDigest: digestOf("qwen3-tts-icl-v1") } });
   catalog.catalog
     .prepare(
       "INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,errorCode,errorDetails,retryable,generation,queuedSequence,deferred,readmitted,inputSha256,input) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -2487,7 +2498,10 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
     ok: false,
     error: { code: "MODEL_IN_USE", retryable: true, details: { modelId: "parakeet" } },
   });
-  catalog.catalog.prepare("DELETE FROM jobs WHERE jobId=?").run("running-model");
+  // A running job that uses a different model does not hold this one.
+  catalog.catalog
+    .prepare("UPDATE jobs SET input=?, inputSha256=? WHERE jobId=?")
+    .run(otherInput, createHash("sha256").update(otherInput).digest("hex"), "running-model");
   const removed = await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" });
   expect(removed).toEqual({
     id: "test",

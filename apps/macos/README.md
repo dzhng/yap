@@ -83,6 +83,11 @@ source facts and caller-created projects separately, with project pages ordered 
 Last-good observations survive
 read errors; generations fence delayed replies after deletion, page changes or
 service replacement. A recording becoming ready cannot silently create a composition.
+Recordings come from `media.list`, so an imported video sits beside the takes with its
+own badge. Every delete goes through one [confirmation](Sources/YapControls/DeleteConfirmation.swift)
+and asks the service for a plain delete. When the service refuses with `IN_USE`, the
+refusal's own list of projects becomes a second confirmation, and only an explicit yes
+sends the cascade: the app never decides to delete a project on its own.
 
 A [preview controller](Sources/Yap/PreviewController.swift) pins identity
 and holds the renewable service lease; its presentation window owns platform

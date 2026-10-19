@@ -219,7 +219,7 @@ export class DeletionPlans {
     });
   }
 
-  /** Adopt an existing tombstone so legacy markers resume through the coordinator. */
+  /** A tombstone that has no plan, such as one an earlier release wrote, resumes through the coordinator. */
   adopt(
     subjectKind: string,
     subjectId: string,

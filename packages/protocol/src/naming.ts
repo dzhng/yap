@@ -1,5 +1,5 @@
 // One naming rule for every public record: identities are `<noun>Id`, quantities end in their unit.
-// The operation-schema lint and the service's response guard both apply it.
+// The operation-schema lint applies it to every schema; service tests apply it to every response.
 
 const units = ["Us", "Ms", "Bytes", "Hz", "Px", "Frames", "Samples", "Count", "Db", "Lufs"];
 const bareUnits = new Set(units.map((unit) => unit.toLowerCase()));

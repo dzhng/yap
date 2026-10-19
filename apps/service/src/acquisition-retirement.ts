@@ -52,9 +52,8 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
         signal.throwIfAborted();
         if (member.memberKind !== "asset") continue;
         if (references.isTombstoned("asset", member.memberId)) continue;
-        // If this acquisition was reached through an asset cascade, the initiating
-        // asset is already tombstoned. Retire the acquisition without deleting its
-        // sibling assets.
+        // Reached through an asset cascade, the acquisition retires but its other assets stay:
+        // a cascade deletes only what the refusal listed.
         if (hasTombstonedAsset) {
           references.unfence("asset", [member.memberId]);
           continue;
