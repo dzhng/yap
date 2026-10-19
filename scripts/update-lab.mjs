@@ -17,6 +17,7 @@ import { tmpdir, homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { frameworkIdentity } from "./sparkle/framework.mjs";
+import { appcast } from "./release-info.mjs";
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -34,6 +35,7 @@ if (
     "crash",
     "incompatible",
     "install",
+    "format-route",
     "disable-quit",
     "busy-quit",
     "unconfirmed-crash",
@@ -318,7 +320,16 @@ try {
     scenario === "missing-format" ? "" : `<yapCatalogFormat>${format}</yapCatalogFormat>`;
   writeFileSync(
     join(root, "appcast.xml"),
-    `<?xml version="1.0"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Lab</title><item><title>0.1.1</title><sparkle:version>${candidateVersion}</sparkle:version><sparkle:shortVersionString>${candidateVersion}</sparkle:shortVersionString>${formatElement}<enclosure url="${url}/update.zip" ${attrs} type="application/octet-stream"/></item></channel></rss>`,
+    scenario === "format-route"
+      ? // The release feed for a candidate writing format 24 and opening 22 onward, read by an
+        // app on 0.1.0 that wrote format 23.
+        appcast({
+          facts: { version: candidateVersion, catalogFormat: 24, minimumCatalogFormat: 22 },
+          title: "Lab",
+          enclosure: `<enclosure url="${url}/update.zip" ${attrs} type="application/octet-stream"/>`,
+          formatSince: { 22: "0.0.1", 23: "0.1.0", 24: "0.1.1" },
+        })
+      : `<?xml version="1.0"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Lab</title><item><title>0.1.1</title><sparkle:version>${candidateVersion}</sparkle:version><sparkle:shortVersionString>${candidateVersion}</sparkle:shortVersionString>${formatElement}<enclosure url="${url}/update.zip" ${attrs} type="application/octet-stream"/></item></channel></rss>`,
   );
   if (scenario !== "unsigned-feed")
     await run(join(frameworkRoot, "bin", "sign_update"), [
@@ -395,7 +406,7 @@ try {
   } else {
     await wait(() => events().some((e) => e.event === "ready"), "preparation");
     if (scenario === "hold") await wait(() => false, "held fixture");
-    else if (scenario === "install") {
+    else if (scenario === "install" || scenario === "format-route") {
       command("install");
       await wait(
         async () =>
@@ -588,7 +599,10 @@ try {
       join(app, "Contents", "Info.plist"),
     ])
   ).trim();
-  const verdict = installedVersion !== "0.1.0" && scenario !== "install" ? "rejected" : "observed";
+  const verdict =
+    installedVersion !== "0.1.0" && !["install", "format-route"].includes(scenario)
+      ? "rejected"
+      : "observed";
   const report = {
     scenario,
     verdict,

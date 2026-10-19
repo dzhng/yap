@@ -111,7 +111,7 @@ test("packaging rejects omitted or stale built catalog metadata before signing a
     );
     writeFileSync(
       join(scratch, "packages/core/dist/catalog.js"),
-      "export const catalogFormat=23;\n",
+      "export const catalogFormat=23;\nexport const minimumSupportedCatalogFormat=23;\n",
     );
     writeFileSync(join(scratch, "package.json"), '{"type":"module"}');
     const service = join(scratch, "dist/Yap.app/Contents/Resources/service");

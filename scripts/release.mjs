@@ -1,5 +1,5 @@
 import { releaseSigningInputs, withReleaseIdentity, signReleaseTree } from "./release-signing.mjs";
-import { bundleFacts, configureReleasePlist, verifiedFramework } from "./release-info.mjs";
+import { appcast, bundleFacts, configureReleasePlist, verifiedFramework } from "./release-info.mjs";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
@@ -231,7 +231,12 @@ async function packageRelease(tag) {
       const feed = join(out, "appcast.xml");
       writeFileSync(
         feed,
-        `<?xml version="1.0"?><rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Yap</title><item><title>${version}</title><sparkle:version>${version}</sparkle:version><sparkle:shortVersionString>${version}</sparkle:shortVersionString><sparkle:minimumSystemVersion>${minimumMacOS}</sparkle:minimumSystemVersion><yapCatalogFormat>${facts.catalogFormat}</yapCatalogFormat><enclosure url="https://github.com/dzhng/yap/releases/download/${tag}/${updateName}" sparkle:edSignature="${signature}" length="${readFileSync(updateArchive).length}" type="application/octet-stream"/></item></channel></rss>\n`,
+        appcast({
+          facts,
+          title: "Yap",
+          minimumSystemVersion: minimumMacOS,
+          enclosure: `<enclosure url="https://github.com/dzhng/yap/releases/download/${tag}/${updateName}" sparkle:edSignature="${signature}" length="${readFileSync(updateArchive).length}" type="application/octet-stream"/>`,
+        }),
       );
       run(tool, ["--ed-key-file", keyFile, feed]);
       run(tool, ["--ed-key-file", keyFile, "--verify", feed]);

@@ -2,6 +2,12 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## Unreleased
+
+Automatic updates now cross a library upgrade. 0.1.62 converts libraries to a new format,
+and 0.1.61 refused it with `UPDATE_INCOMPATIBLE`; this release updates 0.1.61 and 0.1.62
+automatically and converts the library once on open.
+
 ## 0.1.62
 
 Show your agent, in four keys. Press ⌥⇧S to record the display under your pointer, talk,

@@ -61,8 +61,13 @@ applies to the successor; it cannot retract that request while awaiting its repl
 
 [Release packaging](../../../scripts/README.md#versioned-github-releases) signs the
 complete app with a durable self-signed identity, authenticates both feed and
-archive, and derives compatibility from core's catalog format. Only same-format
-updates are accepted; this is not a migration or arbitrary downgrade promise.
+archive, and derives compatibility from core's catalog format. An installed app
+accepts only a feed item declaring its own library's format, so the feed lists the
+update once per format the candidate opens, newest first, each limited by
+`sparkle:minimumUpdateVersion` to apps at least as new as that format. Sparkle offers
+each app the first item it qualifies for, so a format bump updates automatically and a
+downgrade never does. Through 0.1.62 the feed declared only the written format, which
+stranded 0.1.61 on the first bump.
 Source builds keep manual updating. Stable signing is not notarization.
 [Key custody](assets/signing-custody.md) separates the signing identity from the
 update-authentication key and records the approved backup/CI handoff.
