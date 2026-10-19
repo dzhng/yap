@@ -53,7 +53,7 @@ test("the count appears on the display a take would record", { timeout: 120_000 
   try {
     for (const display of displays) {
       await send({ do: "open" });
-      await send({ do: "choose", item: `source.display.${display.displayId}` });
+      await send({ do: "choose", item: `source.display.${display.id}` });
       await waitFor(async () => {
         const rows = (await send({ do: "snapshot" })).rows;
         return rows.some((row) => row.title?.includes(display.name));
@@ -66,8 +66,8 @@ test("the count appears on the display a take would record", { timeout: 120_000 
       }, 20_000);
       assert.equal(
         Number(counted),
-        display.displayId,
-        `A take of ${display.name} (${display.displayId}) counted down on display ${counted}`,
+        display.id,
+        `A take of ${display.name} (${display.id}) counted down on display ${counted}`,
       );
       t.diagnostic(`${display.name}: counted on display ${counted}`);
       // Abandoned while it counts, so nothing is ever recorded of either screen.

@@ -125,7 +125,7 @@ func draftPreview(_ projectId: String) -> [String: Any] {
     ["projectId": projectId, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]
 }
 @MainActor func page(_ owner: LibraryController) -> [[String: String]] {
-    owner.state.projects.map { ["projectId": $0.projectId, "title": $0.title, "createdAt": $0.createdAt, "currentRevisionId": $0.currentRevisionId] }
+    owner.state.projects.map { ["id": $0.id, "title": $0.title, "createdAt": $0.createdAt, "currentRevisionId": $0.currentRevisionId] }
 }
 @main struct Check {
     @MainActor static func main() async {
@@ -178,11 +178,11 @@ func draftPreview(_ projectId: String) -> [String: Any] {
                 try require(page(owner) == Array(newestFirst.prefix(5)) && !owner.state.hasPreviousProjectPage, "Actual previous page must restore complete values")
                 try require((live.calls.last { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary).isEqual(to: ["limit": 5]), "Previous navigation must request the original page")
                 let selected = expected[2]
-                let fetched = try JSONSerialization.jsonObject(with: await live.call("project.get", ["projectId": selected["projectId"]!])) as! NSDictionary
+                let fetched = try JSONSerialization.jsonObject(with: await live.call("project.get", ["projectId": selected["id"]!])) as! NSDictionary
                 try require(fetched.isEqual(to: selected), "Actual selected project.get must preserve all page metadata")
-                owner.perform(.previewProject(selected["projectId"]!))
+                owner.perform(.previewProject(selected["id"]!))
                 try await until { !failures.isEmpty }
-                try require(live.refused.count == 1 && live.refused[0]["operation"] as? String == "preview.get" && (live.refused[0]["params"] as! NSDictionary).isEqual(to: draftPreview(selected["projectId"]!)), "Actual library action must dispatch exactly the selected project owner")
+                try require(live.refused.count == 1 && live.refused[0]["operation"] as? String == "preview.get" && (live.refused[0]["params"] as! NSDictionary).isEqual(to: draftPreview(selected["id"]!)), "Actual library action must dispatch exactly the selected project owner")
                 try require(presentation.movies.isEmpty && failures.last!.contains("FIXTURE_METADATA_ONLY"), "Metadata action must stop before live preview submission")
                 preview.close(); live.host.shutdown(); try await until { live.exited }
                 live.watcher?.cancel(); evidence.record(["check": "actual-metadata-pages-get-and-composed-dispatch", "passed": true])
@@ -200,19 +200,19 @@ func draftPreview(_ projectId: String) -> [String: Any] {
             let preview = PreviewController(call: historical.call, presentation: presentation, now: { clock }, failure: { failures.append($0) })
             let owner = library(historical.call, preview)
             // As the app does: the preview is titled by the name the Library holds for the project.
-            preview.projectTitle = { id in owner.state.projects.first { $0.projectId == id }?.title }
+            preview.projectTitle = { id in owner.state.projects.first { $0.id == id }?.title }
             owner.serviceChanged(ready: true); try await until { !owner.state.projectsRefreshing }
             try require(page(owner).isEmpty && owner.state.nextProjectCursor == nil, "Retained actual empty page must remain empty")
             historical.showProject = true; owner.refreshProjects(); try await until { !owner.state.projectsRefreshing }
             try require(page(owner) == [historical.project as! [String: String]], "Scripted navigation must preserve the unchanged actual metadata row")
-            let id = historical.project["projectId"] as! String, revision = historical.waiting["revisionId"] as! String
+            let id = historical.project["id"] as! String, revision = historical.waiting["revisionId"] as! String
             owner.perform(.previewProject(id)); try await until { !presentation.messages.isEmpty }
             preview.tick(); try await until { !presentation.movies.isEmpty || !failures.isEmpty }
             let requests = historical.calls.filter { $0["operation"] as? String == "preview.get" }.map { $0["params"] as! NSDictionary }
             try require(requests.count == 2 && requests[0].isEqual(to: draftPreview(id)) && requests[1].isEqual(to: draftPreview(id).merging(["revisionId": revision]) { _, pinned in pinned }),
                 "Historical preview request must retain the first returned revision")
             let movie = (ready["published"] as! [String: Any])["output"] as! [String: Any]
-            try require(presentation.movies == [["title": owner.state.projects.first { $0.projectId == id }!.title, "file": movie["file"] as! String, "mediaType": movie["mediaType"] as! String]],
+            try require(presentation.movies == [["title": owner.state.projects.first { $0.id == id }!.title, "file": movie["file"] as! String, "mediaType": movie["mediaType"] as! String]],
                 "Historical ready receipt must dispatch its exact movie path and revision")
             preview.tick(); try await until { historical.calls.contains { $0["operation"] as? String == "project.get" } }
             try require(presentation.movies.count == 1 && failures.isEmpty, "Different actual historical head must not replace preview pin")

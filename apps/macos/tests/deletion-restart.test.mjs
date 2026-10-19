@@ -80,7 +80,7 @@ test(
     try {
       target = await seed("target");
       sibling = await seed("sibling");
-      store.markDeleting(target.recordingId);
+      store.markDeleting(target.id);
     } finally {
       store.close();
     }
@@ -117,7 +117,7 @@ test(
           () =>
             !catalog
               .prepare("SELECT recordingId FROM recordings WHERE recordingId=?")
-              .get(target.recordingId),
+              .get(target.id),
           5_000,
           () => instance.diagnostics,
         );
@@ -127,18 +127,15 @@ test(
               .prepare(
                 `SELECT * FROM ${table} WHERE ${table === "recording_deletions" ? "recordingId=?" : "targetKind='recording' AND targetId=?"}`,
               )
-              .all(target.recordingId),
+              .all(target.id),
             [],
           );
       } finally {
         catalog.close();
       }
-      assert.equal(
-        (await call("recording.get", { recordingId: sibling.recordingId })).recordingId,
-        sibling.recordingId,
-      );
+      assert.equal((await call("recording.get", { recordingId: sibling.id })).id, sibling.id);
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
-      for (const recordingId of [target.recordingId, missingId])
+      for (const recordingId of [target.id, missingId])
         assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
           id: recordingId,
           deleted: true,
@@ -146,7 +143,7 @@ test(
         });
       assert.deepEqual(await instance.reap(), []);
       ({ instance } = await launchReady(home));
-      for (const recordingId of [target.recordingId, missingId])
+      for (const recordingId of [target.id, missingId])
         assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
           id: recordingId,
           deleted: true,

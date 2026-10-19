@@ -182,11 +182,11 @@ final class CaptureController {
             }
             return (
                 displays: self.fixtureWindow != nil ? [] : content.displays.map {
-                    ["displayId": Int($0.displayID), "name": Self.displayName(of: $0.displayID),
+                    ["id": Int($0.displayID), "name": Self.displayName(of: $0.displayID),
                      "width": $0.width, "height": $0.height]
                 },
                 windows: windows.map {
-                    ["windowId": Int($0.windowID), "title": $0.title ?? "",
+                    ["id": Int($0.windowID), "title": $0.title ?? "",
                      "application": $0.owningApplication?.applicationName ?? ""]
                 })
         }, cameras: {
@@ -206,8 +206,8 @@ final class CaptureController {
         let screen = screenAuthorized ? try await screens() : (displays: [], windows: [])
         return [
             "displays": screen.displays, "windows": screen.windows,
-            "cameras": cameras().map { ["cameraId": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
-            "microphones": microphones().map { ["microphoneId": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
+            "cameras": cameras().map { ["id": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
+            "microphones": microphones().map { ["id": $0.id, "name": $0.name, "isDefault": $0.isDefault] },
         ]
     }
 
@@ -330,8 +330,8 @@ final class CaptureController {
     /// display can be selected, and the ordinary service and controller path is unchanged.
     private func source(from selected: [String: Any]) throws -> CaptureSource {
         let kind = selected["kind"] as? String ?? ""
-        let windowID = (selected["windowId"] as? NSNumber)?.uint32Value
         if let fixtureWindow {
+            let windowID = (selected["id"] as? NSNumber)?.uint32Value
             guard kind == "window", windowID == UInt32(fixtureWindow.windowNumber) else {
                 throw CaptureFailure(
                     "SOURCE_UNAVAILABLE",
@@ -339,21 +339,20 @@ final class CaptureController {
             }
             return CaptureSource(kind: "window", windowID: windowID)
         }
-        let displayID = (selected["displayId"] as? NSNumber)?.uint32Value
         switch kind {
         case "camera":
-            guard Set(selected.keys) == ["kind", "deviceId"],
-                let deviceID = selected["deviceId"] as? String, !deviceID.isEmpty,
+            guard Set(selected.keys) == ["kind", "id"],
+                let deviceID = selected["id"] as? String, !deviceID.isEmpty,
                 deviceID.utf16.count <= 256 else { throw invalidSource }
             return CaptureSource(kind: "camera", deviceID: deviceID)
         case "window":
-            guard let windowID else { throw invalidSource }
+            guard let windowID = (selected["id"] as? NSNumber)?.uint32Value else { throw invalidSource }
             return CaptureSource(kind: "window", windowID: windowID)
         case "display":
-            guard let displayID else { throw invalidSource }
+            guard let displayID = (selected["id"] as? NSNumber)?.uint32Value else { throw invalidSource }
             return CaptureSource(kind: "display", displayID: displayID)
         case "region":
-            guard let displayID, let x = selected["x"] as? Double, let y = selected["y"] as? Double,
+            guard let displayID = (selected["displayId"] as? NSNumber)?.uint32Value, let x = selected["x"] as? Double, let y = selected["y"] as? Double,
                 let width = selected["width"] as? Double, let height = selected["height"] as? Double
             else { throw invalidSource }
             return CaptureSource(

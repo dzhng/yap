@@ -69,7 +69,7 @@ test("external controls update capture with actual source, audio and clock", asy
   const windowId = controls.windowId;
   const started = await succeeds(home, "capture.start", {
     requestId: randomUUID(),
-    source: { kind: "window", windowId },
+    source: { kind: "window", id: windowId },
     microphone: false,
     systemAudio: false,
   });
@@ -88,15 +88,15 @@ test("external controls update capture with actual source, audio and clock", asy
   for (const item of ["source.device", "microphone.toggle", "audio.system"]) {
     assert.equal(find(active, item).enabled, false, `${item} stays fixed during the take`);
   }
-  await succeeds(home, "capture.pause", { recordingId: started.recordingId });
+  await succeeds(home, "capture.pause", { recordingId: started.id });
   await waitFor(async () => (await snapshot()).status.startsWith("Paused —"), 20_000);
   const paused = (await snapshot()).status;
   await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.equal((await snapshot()).status, paused);
-  await succeeds(home, "capture.resume", { recordingId: started.recordingId });
+  await succeeds(home, "capture.resume", { recordingId: started.id });
   await waitFor(async () => (await snapshot()).status.startsWith("Recording —"), 20_000);
   await waitFor(async () => seconds((await snapshot()).status) > seconds(paused), 20_000);
-  await succeeds(home, "capture.stop", { recordingId: started.recordingId });
+  await succeeds(home, "capture.stop", { recordingId: started.id });
   // A finished take returns the native start control to its idle action.
   await waitFor(
     async () => find((await snapshot()).rows, "capture.startOrStop").title === "Start recording",

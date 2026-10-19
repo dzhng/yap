@@ -22,45 +22,33 @@ public struct LibraryState: Equatable, Sendable {
     public typealias RecordingCursor = String
     public typealias ProjectCursor = String
     public struct Project: Decodable, Equatable, Sendable {
-        public let projectId: String
+        public let id: String
         public let title: String
         public let createdAt: String
         public let currentRevisionId: String
-        private enum Keys: String, CodingKey { case title, createdAt, currentRevisionId }
-        public init(from decoder: Decoder) throws {
-            guard case .project(let id) = try MediaTarget(from: decoder) else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected a project owner"))
-            }
-            projectId = id
-            let fields = try decoder.container(keyedBy: Keys.self)
-            title = try fields.decode(String.self, forKey: .title)
-            createdAt = try fields.decode(String.self, forKey: .createdAt)
-            currentRevisionId = try fields.decode(String.self, forKey: .currentRevisionId)
-        }
     }
-    /// One `media.list` row: a recording or an imported video, with its measured facts.
+    /// One `media.list` row: a recording or an imported video, with its measured facts. The row
+    /// names what it is as `{kind, id}`.
     public struct Media: Decodable, Equatable, Sendable {
-        public enum Kind: String, Decodable, Sendable { case recording, imported }
-        public let kind: Kind
         public let target: MediaTarget
         public let title: String
         public let durationUs: Int64
         public let sizeBytes: Int64
         public let createdAt: String
-        public init(kind: Kind, target: MediaTarget, title: String, durationUs: Int64, sizeBytes: Int64, createdAt: String) {
-            self.kind = kind; self.target = target; self.title = title
+        public init(target: MediaTarget, title: String, durationUs: Int64, sizeBytes: Int64, createdAt: String) {
+            self.target = target; self.title = title
             self.durationUs = durationUs; self.sizeBytes = sizeBytes; self.createdAt = createdAt
         }
-        private enum Keys: String, CodingKey { case kind, title, durationUs, sizeBytes, createdAt }
+        private enum Keys: String, CodingKey { case kind, id, title, durationUs, sizeBytes, createdAt }
         public init(from decoder: Decoder) throws {
             let fields = try decoder.container(keyedBy: Keys.self)
-            kind = try fields.decode(Kind.self, forKey: .kind)
-            target = try MediaTarget(from: decoder)
-            switch (kind, target) {
-            case (.recording, .recording), (.imported, .asset): break
-            default:
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
-                    debugDescription: "A \(kind.rawValue) row names the wrong owner"))
+            let id = try fields.decode(String.self, forKey: .id)
+            switch try fields.decode(String.self, forKey: .kind) {
+            case "recording": target = .recording(id)
+            case "asset": target = .asset(id)
+            case let kind:
+                throw DecodingError.dataCorruptedError(forKey: .kind, in: fields,
+                    debugDescription: "A media row cannot be a \(kind)")
             }
             title = try fields.decode(String.self, forKey: .title)
             durationUs = try fields.decode(Int64.self, forKey: .durationUs)
@@ -69,13 +57,14 @@ public struct LibraryState: Equatable, Sendable {
         }
     }
     public struct Job: Decodable, Equatable, Sendable {
-        public let jobId: String
+        public let id: String
         public let state: String
         public let reason: String?
         public let target: Target
+        /// The record the job works for, `{kind, id}`.
         public struct Target: Decodable, Equatable, Sendable {
             public let kind: String
-            public let acquisitionId: String?
+            public let id: String
         }
     }
     public struct SourceAdmission: Decodable, Equatable, Sendable {
@@ -125,7 +114,7 @@ public struct LibraryState: Equatable, Sendable {
         let row = media.first { $0.target == target }
         switch target {
         case .recording(let id):
-            let take = recent.first { $0.recordingId == id }
+            let take = recent.first { $0.id == id }
             guard take != nil || row != nil else { return false }
             let title = take.map(LibraryPresentation.recordingTitle(of:)) ?? ElapsedTime.shortTime(of: row!.createdAt)
             deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: title, take: take, media: row)
@@ -133,7 +122,7 @@ public struct LibraryState: Equatable, Sendable {
             guard let row else { return false }
             deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: row.title, take: nil, media: row)
         case .project(let id):
-            guard let project = projects.first(where: { $0.projectId == id }) else { return false }
+            guard let project = projects.first(where: { $0.id == id }) else { return false }
             deletions[target] = .init(target: target, requestId: requestId, cascade: cascade, cascadeProjects: users ?? [], title: project.title, take: nil, media: nil)
         }
         return true
@@ -141,7 +130,7 @@ public struct LibraryState: Equatable, Sendable {
     /// The person declined: nothing was deleted, so the row reads as it did before.
     public mutating func cancelDelete(_ target: MediaTarget) {
         guard let request = deletions.removeValue(forKey: target) else { return }
-        if case .recording = target, let take = request.take, !recent.contains(where: { $0.recordingId == take.recordingId }) {
+        if case .recording = target, let take = request.take, !recent.contains(where: { $0.id == take.id }) {
             recent.append(take)
         }
         if let row = request.media, !media.contains(where: { $0.target == target }) { media.append(row) }
@@ -151,9 +140,9 @@ public struct LibraryState: Equatable, Sendable {
     /// time (as its row reads), a project's title.
     public func confirmationName(for target: MediaTarget) -> String? {
         if let row = media.first(where: { $0.target == target }) ?? deletions[target]?.media {
-            return row.kind == .imported ? row.title : ElapsedTime.shortTime(of: row.createdAt)
+            return row.target.isAsset ? row.title : ElapsedTime.shortTime(of: row.createdAt)
         }
-        if case .project(let id) = target { return projects.first { $0.projectId == id }?.title ?? deletions[target]?.title }
+        if case .project(let id) = target { return projects.first { $0.id == id }?.title ?? deletions[target]?.title }
         return nil
     }
 
@@ -170,9 +159,9 @@ public struct LibraryState: Equatable, Sendable {
         deletions.removeValue(forKey: target)
         media.removeAll { $0.target == target }
         switch target {
-        case .recording(let id): recent.removeAll { $0.recordingId == id }
+        case .recording(let id): recent.removeAll { $0.id == id }
         case .asset: break
-        case .project(let id): projects.removeAll { $0.projectId == id }
+        case .project(let id): projects.removeAll { $0.id == id }
         }
     }
 }

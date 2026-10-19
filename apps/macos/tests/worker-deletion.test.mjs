@@ -254,7 +254,7 @@ test(
           const recordingBefore = await succeeds("recording.get", {
             recordingId: take.id,
           });
-          assert.equal(recordingBefore.recordingId, take.id);
+          assert.equal(recordingBefore.id, take.id);
           let finished = false,
             observations = 0,
             sawDirectoryRemoved = false;
@@ -286,7 +286,7 @@ test(
             (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
             0,
           );
-          assert.equal(result.data.recordingId, take.id);
+          assert.equal(result.data.id, take.id);
           assert.equal(result.data.deleted, true);
           assert.ok(result.data.freedBytes > 0);
           assert.equal(alive(worker.pid), false);

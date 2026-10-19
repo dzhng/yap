@@ -54,7 +54,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const binding = acquisition.bindings.find((value) => value.sourceRoles.includes("video"));
   assert.ok(binding);
   const asset = await call("asset.get", { assetId: binding.assetId });
-  const video = asset.streams.find((value) => value.streamId === binding.streamId);
+  const video = asset.streams.find((value) => value.id === binding.streamId);
   assert.equal(video.kind, "video");
   assert.deepEqual((await call("project.list", {})).projects, []);
   const created = await call("project.create", {

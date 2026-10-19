@@ -59,7 +59,7 @@ final class ExportController {
                 return failure(error.localizedDescription)
             }
             guard state.choosing == choice else { return }
-            guard let owner = try? JSONDecoder().decode(Owner.self, from: answer), owner.target == target else {
+            guard let owner = try? JSONDecoder().decode(Owner.self, from: answer), MediaTarget.project(owner.id) == target else {
                 return failure("The service returned an unreadable or different export owner.")
             }
             let revisionId = owner.currentRevisionId
@@ -93,7 +93,7 @@ final class ExportController {
                 guard let owner = try? JSONDecoder().decode(Owner.self, from: answer) else {
                     throw ServiceFailure(code: "INVALID_RESPONSE", message: "The service returned an unreadable project")
                 }
-                guard owner.target == target else { throw ServiceFailure(code: "INVALID_RESPONSE", message: "The service returned a different project") }
+                guard MediaTarget.project(owner.id) == target else { throw ServiceFailure(code: "INVALID_RESPONSE", message: "The service returned a different project") }
                 let downloads = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
                     ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Downloads")
                 do { try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true) }
@@ -133,7 +133,10 @@ final class ExportController {
                 guard let jobId = state.records.first(where: { $0.exportId == exportId })?.jobId else {
                     throw ServiceFailure(code: "NOT_READY", message: "Export has no retryable job", retryable: true)
                 }
-                let answer = try await call("job.retry", ["jobId": jobId])
+                // job.retry answers with the job itself; the export is read back as usual.
+                _ = try await call("job.retry", ["jobId": jobId])
+                guard known(exportId) else { return }
+                let answer = try await call("export.status", ["exportId": exportId])
                 guard known(exportId) else { return }
                 state.update(try record(answer, exportId: exportId))
                 state.finish(exportId, failure: nil)
@@ -254,7 +257,7 @@ final class ExportController {
                         throw ServiceFailure(code: "INVALID_RESPONSE", message: "export.list returned unreadable data")
                     }
                     for summary in summaries {
-                        guard let exportId = summary["exportId"] as? String else {
+                        guard let exportId = summary["id"] as? String else {
                             failedStatus = failedStatus ?? "INVALID_RESPONSE: export.list returned an unreadable export identity"
                             continue
                         }
@@ -344,19 +347,11 @@ final class ExportController {
     private static func suggestedName(_ owner: Owner, _ revisionId: String, _ kind: ExportsState.Kind)
         -> String
     {
-        if case .project(let id) = owner.target {
-            let title = (owner.title ?? id).replacingOccurrences(of: "/", with: "-")
-                .replacingOccurrences(of: ":", with: "-")
-                .components(separatedBy: .controlCharacters).joined(separator: " ")
-            let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return "Project \(name.isEmpty ? id : name) \(revisionId)" + (kind == .video ? ".mp4" : kind == .audio ? ".wav" : ".zip")
-        }
-        let when = ISO8601DateFormatter.fractional.date(from: owner.createdAt)
-            ?? ISO8601DateFormatter().date(from: owner.createdAt) ?? Date()
-        let stamp = DateFormatter()
-        stamp.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let base = "Recording \(stamp.string(from: when)) \(revisionId)"
-        return base + (kind == .video ? ".mp4" : kind == .audio ? ".wav" : ".zip")
+        let title = (owner.title ?? owner.id).replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .components(separatedBy: .controlCharacters).joined(separator: " ")
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return "Project \(name.isEmpty ? owner.id : name) \(revisionId)" + (kind == .video ? ".mp4" : kind == .audio ? ".wav" : ".zip")
     }
 
     static func savePanel(kind: ExportsState.Kind, suggestedName: String) async -> URL? {
@@ -380,25 +375,8 @@ final class ExportController {
     }
 
     private struct Owner: Decodable {
-        let target: MediaTarget
-        let createdAt: String
+        let id: String
         let title: String?
         let currentRevisionId: String
-        private enum Keys: String, CodingKey { case createdAt, title, currentRevisionId }
-        init(from decoder: Decoder) throws {
-            target = try MediaTarget(from: decoder)
-            let fields = try decoder.container(keyedBy: Keys.self)
-            createdAt = try fields.decode(String.self, forKey: .createdAt)
-            title = try fields.decodeIfPresent(String.self, forKey: .title)
-            currentRevisionId = try fields.decode(String.self, forKey: .currentRevisionId)
-        }
-    }
-}
-
-extension ISO8601DateFormatter {
-    fileprivate static var fractional: ISO8601DateFormatter {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions.insert(.withFractionalSeconds)
-        return formatter
     }
 }

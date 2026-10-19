@@ -60,7 +60,7 @@ func runAwaitedMicrophoneTests() {
 }
 
 func runSelectionTests() {
-    let cameraData = Data(#"{"source":{"kind":"camera","deviceId":"selected-camera"},"microphone":false,"systemAudio":false}"#.utf8)
+    let cameraData = Data(#"{"source":{"kind":"camera","id":"selected-camera"},"microphone":false,"systemAudio":false}"#.utf8)
     guard let cameraStart = try? JSONDecoder().decode(ControlsState.CaptureSelection.Start.self, from: cameraData) else {
         preconditionFailure("A primary camera start crosses the shared controls boundary")
     }
@@ -119,7 +119,7 @@ func runSelectionTests() {
         state.start()?.source == .region(displayId: 3, x: 40, y: 120, width: 800, height: 600),
         "A region start carries the display-local rectangle it was selected as")
     let active = try! JSONDecoder().decode(ControlsState.CaptureSelection.Start.self, from: Data(
-        #"{"source":{"kind":"window","windowId":88},"microphone":false,"systemAudio":true,"cameraDeviceId":"selected-camera"}"#.utf8))
+        #"{"source":{"kind":"window","id":88},"microphone":false,"systemAudio":true,"cameraDeviceId":"selected-camera"}"#.utf8))
     state.sources.cameras = [.init(id: "selected-camera", name: "Selected Camera")]
     state.selection.apply(active, catalog: state.sources)
     // An absent start state means "on", so the restart states it rather than changing it.
@@ -211,12 +211,12 @@ func runCameraReservationTests() {
     let cameraOnly = json(primary.start())
     precondition(cameraOnly["cameraDeviceId"] == nil && cameraOnly["cameraAtStart"] == nil,
                  "A camera-only take has no companion to reserve or switch: \(cameraOnly)")
-    precondition(primary.setCamera(false) == nil && primary.start()?.source == ControlsState.CaptureSelection.Start.Source.camera(deviceId: "external"),
+    precondition(primary.setCamera(false) == nil && primary.start()?.source == ControlsState.CaptureSelection.Start.Source.camera(id: "external"),
                  "The camera switch cannot turn a camera-only take's source off")
 
     // A take started elsewhere with its camera reserved and off restarts the same way.
     let elsewhere = try! JSONDecoder().decode(ControlsState.CaptureSelection.Start.self, from: Data(
-        #"{"source":{"kind":"window","windowId":88},"microphone":false,"systemAudio":false,"cameraDeviceId":"external","cameraAtStart":"off"}"#.utf8))
+        #"{"source":{"kind":"window","id":88},"microphone":false,"systemAudio":false,"cameraDeviceId":"external","cameraAtStart":"off"}"#.utf8))
     var restarted = screen(access: .granted)
     restarted.selection.apply(elsewhere, catalog: restarted.sources)
     precondition(restarted.start() == elsewhere && !restarted.selection.cameraOn,

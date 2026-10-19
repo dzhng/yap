@@ -53,7 +53,7 @@ async function displayTake(origin) {
   const display = sources.displays[0];
   const started = await succeeds(home, "capture.start", {
     requestId: randomUUID(),
-    source: { kind: "display", id: display.displayId },
+    source: { kind: "display", id: display.id },
     microphone: false,
     systemAudio: false,
   });
@@ -62,15 +62,15 @@ async function displayTake(origin) {
   );
   assert.equal(
     Number(onDisplay),
-    display.displayId,
+    display.id,
     "The controls have to be on the display this take records, or this proves nothing",
   );
   await delay(seconds * 1000);
-  await finishCapture((op, params) => succeeds(home, op, params), started.recordingId);
+  await finishCapture((op, params) => succeeds(home, op, params), started.id);
   instance.kill("SIGTERM");
   await instance.exited;
   return {
-    video: join(home, "library", "recordings", started.recordingId, "source", "video.mov"),
+    video: join(home, "library", "recordings", started.id, "source", "video.mov"),
     display,
     controls: { x: Number(x), y: Number(y), width: Number(width), height: Number(height) },
   };

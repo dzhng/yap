@@ -204,7 +204,9 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             await until { !retry.view.messages.isEmpty }
             precondition(retry.view.messages.last!.1 == !dependency)
             if !dependency {
-                retry.service.answer("job.retry", ready)
+                // job.retry answers with the job itself; the preview is read back as usual.
+                retry.service.answer("job.retry", ["id": "preview-job", "state": "queued"])
+                retry.service.answer("preview.get", ready)
                 retry.view.retry?()
                 await until { !retry.view.movies.isEmpty }
                 let request = retry.service.calls.first { $0.0 == "job.retry" }!.1

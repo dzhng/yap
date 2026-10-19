@@ -47,7 +47,7 @@ public enum LibraryPresentation {
                         .init(.deleteAsset(id), deleteTitle, enabled: usable),
                     ], opens: .playAsset(id), attention: request?.failure != nil)
             case .recording(let id):
-                let take = library.recent.first { $0.recordingId == id } ?? request?.take
+                let take = library.recent.first { $0.id == id } ?? request?.take
                 var details: [String] = []
                 if take?.sourceAdmissions?.contains(where: { $0.kind == "primary" && $0.publication?.state == .published }) == true {
                     details.append("Microphone audio")
@@ -87,17 +87,17 @@ public enum LibraryPresentation {
         if let failure = state.library.projectFailure { items.append(.init(id: "projects.failure", kind: .message, title: "Projects unavailable — \(failure)")) }
         if state.library.projectsRefreshing { items.append(.init(id: "projects.refreshing", kind: .message, title: "Reading projects…")) }
         for project in state.library.projects {
-            let request = state.library.deletions[.project(project.projectId)]
+            let request = state.library.deletions[.project(project.id)]
             guard request == nil else { continue }
             let usable = state.service == .ready
-            items.append(.init(id: project.projectId, kind: .project, title: project.title,
+            items.append(.init(id: project.id, kind: .project, title: project.title,
                 details: ["Created \(ElapsedTime.shortTime(of: project.createdAt))"], actions: [
-                .init(.previewProject(project.projectId), "Preview", enabled: usable),
-                .init(.copyProjectPrompt(project.projectId), "Copy agent prompt", enabled: true),
-                .init(.exportProject(project.projectId, .video), "Export Video…", enabled: usable && exports.choosing == nil),
-                .init(.exportProject(project.projectId, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
-                .init(.deleteProject(project.projectId), "Delete Project", enabled: usable),
-            ], opens: .previewProject(project.projectId)))
+                .init(.previewProject(project.id), "Preview", enabled: usable),
+                .init(.copyProjectPrompt(project.id), "Copy agent prompt", enabled: true),
+                .init(.exportProject(project.id, .video), "Export Video…", enabled: usable && exports.choosing == nil),
+                .init(.exportProject(project.id, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
+                .init(.deleteProject(project.id), "Delete Project", enabled: usable),
+            ], opens: .previewProject(project.id)))
         }
         for request in state.library.deletions.values.sorted(by: { $0.target.id < $1.target.id }) {
             guard case .project(let id) = request.target else { continue }

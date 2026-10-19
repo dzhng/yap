@@ -55,7 +55,7 @@ final class RecordingControls: NSObject {
         failure: { [weak self] message in
             self?.state.libraryFailure = message
             self?.render()
-        }).titled { [weak self] id in self?.state.library.projects.first { $0.projectId == id }?.title }
+        }).titled { [weak self] id in self?.state.library.projects.first { $0.id == id }?.title }
     private lazy var exports = ExportController(
         call: { [weak self] operation, params throws(ServiceFailure) in
             guard let self else { throw Self.noService }
@@ -398,7 +398,7 @@ final class RecordingControls: NSObject {
     /// no live take is refused here rather than sent without one.
     private func live() -> [String: Any]? {
         guard let recordingId = state.device?.recordingId
-            ?? (state.take?.state == "finalizing" ? state.take?.recordingId : nil) else { return nil }
+            ?? (state.take?.state == "finalizing" ? state.take?.id : nil) else { return nil }
         return ["recordingId": recordingId]
     }
 
@@ -670,7 +670,7 @@ final class RecordingControls: NSObject {
                 let resolved = try await service().call(
                     "recording.get", ["recordingId": id], as: ControlsState.TakeStatus.self)
                 // A start response may arrive while this read is in flight.
-                if state.take?.recordingId == id { observed = resolved }
+                if state.take?.id == id { observed = resolved }
             } catch {
                 if error.code == "NOT_FOUND" { state.takeWasDeleted(id) }
             }
@@ -687,15 +687,15 @@ final class RecordingControls: NSObject {
             state.observeSources(
                 ControlsState.SourceCatalog(
                     displays: answer.displays.map {
-                        ControlsState.Display(id: $0.displayId, name: $0.name, width: $0.width, height: $0.height)
+                        ControlsState.Display(id: $0.id, name: $0.name, width: $0.width, height: $0.height)
                     },
                     windows: answer.windows.map {
-                        ControlsState.Window(id: $0.windowId, title: $0.title, application: $0.application)
+                        ControlsState.Window(id: $0.id, title: $0.title, application: $0.application)
                     },
                     microphones: answer.microphones.map {
-                        ControlsState.Microphone(id: $0.microphoneId, name: $0.name, isDefault: $0.isDefault)
+                        ControlsState.Microphone(id: $0.id, name: $0.name, isDefault: $0.isDefault)
                     }, cameras: answer.cameras.map {
-                        ControlsState.Camera(id: $0.cameraId, name: $0.name, isDefault: $0.isDefault ?? false)
+                        ControlsState.Camera(id: $0.id, name: $0.name, isDefault: $0.isDefault ?? false)
                     }))
         } catch {
             state.sourcesUnavailable(description: error.localizedDescription)
@@ -785,7 +785,7 @@ final class RecordingControls: NSObject {
                 let asset = try await service().call("asset.get", ["assetId": assetId], as: AssetFile.self)
                 let file = URL(fileURLWithPath: home).appendingPathComponent("library/assets")
                     .appendingPathComponent(asset.fileName)
-                guard asset.assetId == assetId, !asset.fileName.contains("/"),
+                guard asset.id == assetId, !asset.fileName.contains("/"),
                     FileManager.default.fileExists(atPath: file.path) else {
                     state.failure = "Imported media is unavailable."
                     render()
@@ -799,7 +799,7 @@ final class RecordingControls: NSObject {
             }
         }
     }
-    private struct AssetFile: Decodable { let assetId: String; let fileName: String }
+    private struct AssetFile: Decodable { let id: String; let fileName: String }
 
     private func copyAgentPrompt(_ target: MediaTarget) {
         let prompt = LibraryPresentation.agentPrompt(for: target)
@@ -989,9 +989,9 @@ final class RecordingControls: NSObject {
         input.transport = state.isLive ? Array(transport.dropFirst()) : []
         if case .companion = liveCamera { input.liveCamera = !updateFenced }
         if let take = state.library.recent.first {
-            let pending = state.library.deletions[.recording(take.recordingId)]?.isPending == true
+            let pending = state.library.deletions[.recording(take.id)]?.isPending == true
             input.lastRecording = .init(
-                recordingId: take.recordingId,
+                recordingId: take.id,
                 title: LibraryPresentation.recordingTitle(of: take),
                 canPlay: state.service == .ready && !pending && take.state != "canceled",
                 canCopyPrompt: !pending)
@@ -1088,23 +1088,23 @@ private struct StatusAnswer: Decodable {
 
 private struct SourcesAnswer: Decodable {
     struct Display: Decodable {
-        let displayId: Int
+        let id: Int
         let name: String
         let width: Int
         let height: Int
     }
     struct Window: Decodable {
-        let windowId: Int
+        let id: Int
         let title: String
         let application: String
     }
     struct Microphone: Decodable {
-        let microphoneId: String
+        let id: String
         let name: String
         let isDefault: Bool
     }
     struct Camera: Decodable {
-        let cameraId: String
+        let id: String
         let name: String
         let isDefault: Bool?
     }

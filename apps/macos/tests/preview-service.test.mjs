@@ -85,6 +85,12 @@ import CryptoKit
         window?.contentView?.subviews.first { $0 is AVPlayerView } as? AVPlayerView
     }
     @MainActor static func visible() -> NSWindow? { NSApp.windows.first { $0.isVisible && player($0) != nil } }
+    @MainActor static func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap(descendants) }
+    /// The revision choices the window shows, newest first, as the service's history named them.
+    @MainActor static func revisions(_ window: NSWindow?) -> [String] {
+        window?.contentView.map(descendants)?.compactMap { $0 as? PreviewPill }
+            .filter { $0.title.hasPrefix("Revision ") }.map { $0.title } ?? []
+    }
     @MainActor static func runIntegration() async throws {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
@@ -112,7 +118,7 @@ import CryptoKit
             FileHandle.standardOutput.write(Data("SERVICE_PID=\\(pid)\\n".utf8))
         }
         var failures: [String] = []
-        let owner = PreviewController(call: { try await host.call($0, $1) }, failure: { failures.append($0) })
+        let owner = PreviewController(call: { try await host.call($0, $1) }, timelineEnabled: true, failure: { failures.append($0) })
         defer { owner.close() }
         let id = CommandLine.arguments[2]
         owner.open(id)
@@ -126,6 +132,9 @@ import CryptoKit
         guard let item, let window = visible(), let view = player(window) else {
             fatalError("Actual service preview never became playable")
         }
+        // The window reads the project's history from revision.history: its create and its edit.
+        for _ in 0..<50 where revisions(window).isEmpty { await pause() }
+        precondition(revisions(window) == ["Revision 2", "Revision 1"], "Revision history shows: \\(revisions(window))")
         // The pinned revision is the original 8 s edit; identifiers stay out of the title.
         precondition(abs(CMTimeGetSeconds(item.duration)-8) < 0.001)
         precondition(!view.allowsVideoFrameAnalysis)

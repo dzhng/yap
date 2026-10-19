@@ -49,7 +49,8 @@ final class PreviewController {
     private var partialEndUs: Int64?
     private var renewAt = Date.distantPast
     private var reading = false
-    private var requestOperation = "preview.get"
+    /// An explicit retry runs before the next read; the preview is then read back as usual.
+    private var retrying = false
     private var workJobId: String?
     private var polling = false
     /// The project's name as people know it; its identifiers stay out of the window.
@@ -89,7 +90,7 @@ final class PreviewController {
         self.revisionId = revisionId
         self.range = range
         polling = true
-        requestOperation = "preview.get"
+        retrying = false
         let current = generation
         presentation.open(title: self.title(for: target), retry: { [weak self] in
             guard let self, self.generation == current else { return }
@@ -188,11 +189,17 @@ final class PreviewController {
                 lease = renewed
                 renewAt = now().addingTimeInterval(10)
             } else {
-                var params: [String: Any] = requestOperation == "job.retry" ? ["jobId": workJobId as Any] : target.parameters
-                if requestOperation != "job.retry", let pinnedRevision { params["revisionId"] = pinnedRevision }
-                if requestOperation != "job.retry", let previewRange = initialPreviewRange() { params["range"] = previewRange }
-                if requestOperation != "job.retry" { params["maxLongEdge"] = draftMaxLongEdge }
-                let data = try await call(requestOperation, params)
+                if retrying, let workJobId {
+                    // job.retry answers with the job itself.
+                    _ = try await call("job.retry", ["jobId": workJobId])
+                    guard generation == current else { return }
+                    retrying = false
+                }
+                var params: [String: Any] = target.parameters
+                if let pinnedRevision { params["revisionId"] = pinnedRevision }
+                if let previewRange = initialPreviewRange() { params["range"] = previewRange }
+                params["maxLongEdge"] = draftMaxLongEdge
+                let data = try await call("preview.get", params)
                 // Decode the lease separately so a late or otherwise invalid ready answer
                 // releases the service pin rather than leaving it until expiration.
                 let delivered = try? JSONDecoder().decode(Delivery.self, from: data).delivery
@@ -208,7 +215,6 @@ final class PreviewController {
                         throw InvalidAnswer()
                     }
                     revisionId = answer.revisionId
-                    requestOperation = "preview.get"
                     let title = self.title(for: target)
                     if answer.state == "ready" {
                         guard let movie = answer.published?.output, let delivered,
@@ -253,8 +259,8 @@ final class PreviewController {
     private func retryPreview() {
         guard let target, self.revisionId != nil, !reading else { return }
         presentation.show(title: title(for: target), message: "Retrying preview…", canRetry: false)
-        guard let workJobId else { return }
-        requestOperation = "job.retry"
+        guard workJobId != nil else { return }
+        retrying = true
         polling = true
         tick()
     }

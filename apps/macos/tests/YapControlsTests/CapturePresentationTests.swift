@@ -11,7 +11,7 @@ private func action(_ entries: [PresentedControlsAction], _ id: String) -> Prese
 private func recording(elapsedUs: Int64, paused: Bool = false) -> ControlsState {
     var state = ready(source: .window(window))
     state.device = .init(state: paused ? .paused : .recording, recordingId: "rec-1", elapsedUs: elapsedUs)
-    state.take = .init(recordingId: "rec-1", state: paused ? "paused" : "recording",
+    state.take = .init(id: "rec-1", state: paused ? "paused" : "recording",
         interruptionReason: nil, sourceDurationUs: nil)
     return state
 }
@@ -34,7 +34,7 @@ func runCapturePresentationTests() {
 
     var finalizing = running
     finalizing.device = .init(state: .finalizing, recordingId: "rec-1", elapsedUs: 12_000_000)
-    finalizing.take = .init(recordingId: "rec-1", state: "finalizing", interruptionReason: nil, sourceDurationUs: nil)
+    finalizing.take = .init(id: "rec-1", state: "finalizing", interruptionReason: nil, sourceDurationUs: nil)
     let finishing = CapturePresentation.transport(for: finalizing)
     precondition(finalizing.isLive && action(finishing, "capture.cancel").enabled)
     precondition(action(finishing, "capture.startOrStop").title == "Finish Recording")
@@ -53,10 +53,10 @@ func runCapturePresentationTests() {
         && !action(orphaned, "capture.startOrStop").enabled)
 
     var interrupted = ready()
-    interrupted.take = .init(recordingId: "rec-2", state: "interrupted", interruptionReason: "SOURCE_LOST", sourceDurationUs: 4_000_000)
+    interrupted.take = .init(id: "rec-2", state: "interrupted", interruptionReason: "SOURCE_LOST", sourceDurationUs: 4_000_000)
     precondition(CapturePresentation.noticeLines(for: interrupted).contains("Last take interrupted — SOURCE_LOST"))
 
-    interrupted.take = .init(recordingId: "camera-start", state: "interrupted",
+    interrupted.take = .init(id: "camera-start", state: "interrupted",
         interruptionReason: "SOURCE_UNAVAILABLE", sourceDurationUs: nil,
         interruptionMessage: "Camera session did not start.")
     precondition(CapturePresentation.noticeLines(for: interrupted).contains(
@@ -64,7 +64,7 @@ func runCapturePresentationTests() {
         "A camera failure must show its actionable native explanation")
 
     var endedCamera = ready(source: .camera)
-    endedCamera.observeTake(.init(recordingId: "camera-start", state: "recording",
+    endedCamera.observeTake(.init(id: "camera-start", state: "recording",
         interruptionReason: nil, sourceDurationUs: nil))
     endedCamera.observeTake(nil)
     precondition(endedCamera.takeNeedingResolution == "camera-start",
@@ -75,25 +75,25 @@ func runCapturePresentationTests() {
         "Last take interrupted — SOURCE_UNAVAILABLE: Camera session did not start."))
     precondition(endedCamera.takeNeedingResolution == nil, "A terminal take needs no further reads")
     precondition(!endedCamera.observeTake(interrupted.take), "Polling must not reopen dismissed controls")
-    endedCamera.observeTake(.init(recordingId: "next-camera", state: "recording",
+    endedCamera.observeTake(.init(id: "next-camera", state: "recording",
         interruptionReason: nil, sourceDurationUs: nil))
     precondition(!CapturePresentation.noticeLines(for: endedCamera).contains(where: { $0.contains("Last take interrupted") }),
         "Starting a new take clears the previous interruption")
 
-    endedCamera.observeTake(.init(recordingId: "deleted-take", state: "finalizing",
+    endedCamera.observeTake(.init(id: "deleted-take", state: "finalizing",
         interruptionReason: nil, sourceDurationUs: nil))
     endedCamera.takeWasDeleted("deleted-take")
     precondition(!endedCamera.isLive && endedCamera.takeNeedingResolution == nil,
         "A confirmed missing take must release recording controls")
     precondition(action(CapturePresentation.transport(for: endedCamera), "capture.startOrStop").title == "Start Recording")
-    endedCamera.observeTake(.init(recordingId: "new-take", state: "recording",
+    endedCamera.observeTake(.init(id: "new-take", state: "recording",
         interruptionReason: nil, sourceDurationUs: nil))
     endedCamera.takeWasDeleted("deleted-take")
-    precondition(endedCamera.take?.recordingId == "new-take",
+    precondition(endedCamera.take?.id == "new-take",
         "A delayed missing-take answer cannot forget a newer recording")
 
     var recovering = ready()
-    recovering.take = .init(recordingId: "rec-recovery", state: "finalizing", interruptionReason: nil,
+    recovering.take = .init(id: "rec-recovery", state: "finalizing", interruptionReason: nil,
         sourceDurationUs: nil, finalizationError: .init(code: "MEDIA_WORKER_TIMEOUT", message: "Recovery can be retried", retryable: true))
     let recovery = CapturePresentation.transport(for: recovering)
     precondition(recovering.isLive && CapturePresentation.statusTitle(for: recovering) == "Finalization needs attention")
@@ -139,7 +139,7 @@ private func runOverlayCameraTests() {
 
 /// The media.list rows a page of takes would produce, in the same order.
 func mediaRows(_ takes: [ControlsState.RecentTake]) -> [LibraryState.Media] {
-    takes.map { .init(kind: .recording, target: .recording($0.recordingId), title: $0.createdAt,
+    takes.map { .init(target: .recording($0.id), title: $0.createdAt,
         durationUs: $0.sourceDurationUs ?? 0, sizeBytes: 1_000, createdAt: $0.createdAt) }
 }
 
@@ -147,9 +147,9 @@ func runSavedRecordingTests() {
     precondition(LibraryPresentation.agentPrompt(for: .recording("recording-1")) ==
         "I want you to use this recording with this ID with the Yap CLI: recording-1")
     var state = ready()
-    let first = ControlsState.RecentTake(recordingId: "first", createdAt: "2026-09-15T18:04:05Z",
+    let first = ControlsState.RecentTake(id: "first", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 65_000_000, interruptionReason: nil)
-    let sibling = ControlsState.RecentTake(recordingId: "sibling", createdAt: first.createdAt,
+    let sibling = ControlsState.RecentTake(id: "sibling", createdAt: first.createdAt,
         state: "complete", sourceDurationUs: 2_000_000, interruptionReason: nil)
     state.library.recent = [first, sibling]
     state.library.media = mediaRows([first, sibling])
@@ -158,7 +158,7 @@ func runSavedRecordingTests() {
                  "A recording is titled by when it was made, with its length once, below")
     for (status, duration) in [("complete", Int64(1)), ("interrupted", 1), ("interrupted", 0), ("recording", 1), ("canceled", 1)] {
         var observed = state
-        observed.library.recent = [.init(recordingId: "first", createdAt: first.createdAt,
+        observed.library.recent = [.init(id: "first", createdAt: first.createdAt,
             state: status, sourceDurationUs: duration, interruptionReason: nil)]
         observed.library.media = mediaRows(observed.library.recent)
         let offered = LibraryPresentation.recordings(for: observed).items.flatMap(\.actions).filter(\.enabled).map(\.action)
@@ -191,10 +191,10 @@ func runSavedRecordingTests() {
 
 func runSavedRowOpenTests() {
     var state = ready()
-    state.library.recent = [.init(recordingId: "take", createdAt: "2026-09-15T18:04:05Z",
+    state.library.recent = [.init(id: "take", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 1_000_000, interruptionReason: nil)]
     state.library.media = mediaRows(state.library.recent)
-    let project = #"{"projectId":"project","title":"Launch","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r1"}"#
+    let project = #"{"id":"project","title":"Launch","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r1"}"#
     state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(project.utf8))]
     precondition(LibraryPresentation.recordings(for: state).items.first?.open == .playRecording("take"),
                  "Clicking a recording plays it")
@@ -208,7 +208,7 @@ func runSavedRowOpenTests() {
 
 func runSavedProjectRowTests() {
     var state = ready()
-    let project = #"{"projectId":"p-1","title":"Launch","createdAt":"2026-10-13T22:12:00Z","currentRevisionId":"r-9"}"#
+    let project = #"{"id":"p-1","title":"Launch","createdAt":"2026-10-13T22:12:00Z","currentRevisionId":"r-9"}"#
     state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(project.utf8))]
     let row = LibraryPresentation.projects(for: state, exports: .init()).items.first!
     precondition(row.status == nil, "A project row does not label itself a project")
@@ -226,23 +226,23 @@ func runSavedProjectRowTests() {
 func runSavedMediaTests() {
     let page = #"""
     {"media":[
-      {"kind":"recording","recordingId":"take","title":"2026-10-17T21:41:00Z","durationUs":252000000,"sizeBytes":61000000,"createdAt":"2026-10-17T21:41:00Z"},
-      {"kind":"imported","assetId":"a-1","title":"launch-teaser-v2.mp4","durationUs":42000000,"sizeBytes":22000000,"createdAt":"2026-10-17T20:46:00Z"}
+      {"kind":"recording","id":"take","title":"2026-10-17T21:41:00Z","durationUs":252000000,"sizeBytes":61000000,"createdAt":"2026-10-17T21:41:00Z"},
+      {"kind":"asset","id":"a-1","title":"launch-teaser-v2.mp4","durationUs":42000000,"sizeBytes":22000000,"createdAt":"2026-10-17T20:46:00Z"}
     ],"nextCursor":null}
     """#
     struct Page: Decodable { let media: [LibraryState.Media] }
     let media = try! JSONDecoder().decode(Page.self, from: Data(page.utf8)).media
     precondition(media.map(\.target) == [.recording("take"), .asset("a-1")], "media.list rows keep their own owner kinds")
-    let wrongOwner = #"{"kind":"imported","recordingId":"take","title":"x","durationUs":0,"sizeBytes":0,"createdAt":"2026-10-17T20:46:00Z"}"#
+    let wrongOwner = #"{"kind":"project","id":"p-1","title":"x","durationUs":0,"sizeBytes":0,"createdAt":"2026-10-17T20:46:00Z"}"#
     precondition((try? JSONDecoder().decode(LibraryState.Media.self, from: Data(wrongOwner.utf8))) == nil,
-                 "An imported row naming a recording is unreadable, not misfiled")
+                 "A media row of any other kind is unreadable, not misfiled")
     precondition(MediaTarget.asset("a-1").parameters == ["assetId": "a-1"])
     precondition(LibraryPresentation.agentPrompt(for: .asset("a-1")) ==
         "I want you to use this imported video with this asset ID with the Yap CLI: a-1")
 
     var state = ready()
     state.library.media = media
-    state.library.recent = [.init(recordingId: "take", createdAt: "2026-10-17T21:41:00Z",
+    state.library.recent = [.init(id: "take", createdAt: "2026-10-17T21:41:00Z",
         state: "complete", sourceDurationUs: 252_000_000, interruptionReason: nil)]
     var items = LibraryPresentation.recordings(for: state).items
     precondition(items.map(\.id) == ["take", "a-1"], "The tab lists recordings and imports in media.list order")
@@ -277,10 +277,10 @@ func runSavedMediaTests() {
 func runDeleteConfirmationTests() {
     var state = ready()
     state.library.media = [
-        .init(kind: .imported, target: .asset("a-1"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-17T20:46:00Z"),
-        .init(kind: .recording, target: .recording("take"), title: "2026-10-16T15:05:00Z", durationUs: 9_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-16T15:05:00Z"),
+        .init(target: .asset("a-1"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-17T20:46:00Z"),
+        .init(target: .recording("take"), title: "2026-10-16T15:05:00Z", durationUs: 9_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-16T15:05:00Z"),
     ]
-    let project = #"{"projectId":"p-1","title":"Q4 demo","createdAt":"2026-10-13T22:12:00Z","currentRevisionId":"r-9"}"#
+    let project = #"{"id":"p-1","title":"Q4 demo","createdAt":"2026-10-13T22:12:00Z","currentRevisionId":"r-9"}"#
     state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(project.utf8))]
     let size = { LibraryPresentation.byteCount($0) }
 
@@ -299,8 +299,8 @@ func runDeleteConfirmationTests() {
 
     // An IN_USE refusal's own details become the cascade dialog; nothing is queried.
     let refusal = #"""
-    {"assetId":"a-1","usedBy":[{"kind":"project","projectId":"p-1","title":"Q4 demo","revisions":14},
-      {"kind":"project","projectId":"p-2","title":"Bug report: export","revisions":1}],
+    {"assetId":"a-1","usedBy":[{"kind":"project","id":"p-1","title":"Q4 demo","revisions":14},
+      {"kind":"project","id":"p-2","title":"Bug report: export","revisions":1}],
      "acquisitions":[],"derivedAssets":[],"freesBytes":22000000,"cascadeFreesBytes":1400000000}
     """#
     let inUse = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(refusal.utf8))
@@ -310,15 +310,15 @@ func runDeleteConfirmationTests() {
         lead: "This recording is used by:",
         message: "Deleting it also deletes these projects (\(size(1_400_000_000)) total). This can’t be undone.",
         confirm: "Delete all", cascade: true), "The cascade dialog lists the refusal's users: \(cascade)")
-    let ownCopies = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"recordingId":"take","usedBy":[{"kind":"project","projectId":"p-1","title":"Q4 demo","revisions":2}],"acquisitions":[{"kind":"acquisition","acquisitionId":"own-copy"}],"derivedAssets":[],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
-    precondition(ownCopies.usedBy.map(\.projectId) == ["p-1"], "The refusal keeps each project's identity")
+    let ownCopies = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"recordingId":"take","usedBy":[{"kind":"project","id":"p-1","title":"Q4 demo","revisions":2}],"acquisitions":[{"kind":"acquisition","id":"own-copy"}],"derivedAssets":[],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
+    precondition(ownCopies.usedBy.map(\.id) == ["p-1"], "The refusal keeps each project's identity")
     precondition(DeleteConfirmation.cascade(.recording("take"), name: "x", inUse: ownCopies).message
         == "Deleting it also deletes this project (\(size(2)) total). This can’t be undone.",
         "A recording's own copies are not users: they go with any delete, so the dialog never names them")
     precondition(DeleteConfirmation.cascade(.asset("a-1"), name: "x", inUse: ownCopies).message
         == "Deleting it also deletes this project and 1 recording source (\(size(2)) total). This can’t be undone.",
         "An import that a recording also holds names that source")
-    let derivedOnly = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"usedBy":[],"acquisitions":[],"derivedAssets":[{"kind":"asset","assetId":"d"}],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
+    let derivedOnly = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(#"{"usedBy":[],"acquisitions":[],"derivedAssets":[{"kind":"asset","id":"d"}],"freesBytes":1,"cascadeFreesBytes":2}"#.utf8))
     let derived = DeleteConfirmation.cascade(.asset("a-1"), name: "x.mp4", inUse: derivedOnly)
     precondition(derived.users.isEmpty && derived.lead == nil
         && derived.message == "Deleting it also deletes 1 file made from it (\(size(2)) total). This can’t be undone.",
@@ -344,7 +344,7 @@ func runDeleteConfirmationTests() {
 
 func runSavedPagingTests() {
     var state = ready()
-    state.library.recent = [.init(recordingId: "take", createdAt: "2026-09-15T18:04:05Z",
+    state.library.recent = [.init(id: "take", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 1_000_000, interruptionReason: nil)]
     state.library.media = mediaRows(state.library.recent)
     let paging: Set<ControlsAction> = [.previousRecordings, .nextRecordings]

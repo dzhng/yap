@@ -105,17 +105,17 @@ public struct ControlsState: Equatable, Sendable {
 
     public struct TakeStatus: Equatable, Sendable, Decodable {
         public init(
-            recordingId: String, state: String, interruptionReason: String?, sourceDurationUs: Int64?,
+            id: String, state: String, interruptionReason: String?, sourceDurationUs: Int64?,
             finalizationError: FinalizationError? = nil, interruptionMessage: String? = nil
         ) {
-            self.recordingId = recordingId
+            self.id = id
             self.state = state
             self.interruptionReason = interruptionReason
             self.interruptionMessage = interruptionMessage
             self.sourceDurationUs = sourceDurationUs
             self.finalizationError = finalizationError
         }
-        public let recordingId: String
+        public let id: String
         public let state: String
         public let interruptionReason: String?
         public let interruptionMessage: String?
@@ -244,20 +244,20 @@ public struct ControlsState: Equatable, Sendable {
 
     public struct RecentTake: Equatable, Sendable, Decodable {
         public init(
-            recordingId: String, createdAt: String, state: String, sourceDurationUs: Int64?,
+            id: String, createdAt: String, state: String, sourceDurationUs: Int64?,
             interruptionReason: String?, finalizationError: FinalizationError? = nil,
             sourceId: String? = nil, sourceAdmissions: [LibraryState.SourceAdmission]? = nil
         ) {
             self.sourceAdmissions = sourceAdmissions
             self.sourceId = sourceId
-            self.recordingId = recordingId
+            self.id = id
             self.createdAt = createdAt
             self.state = state
             self.sourceDurationUs = sourceDurationUs
             self.interruptionReason = interruptionReason
             self.finalizationError = finalizationError
         }
-        public let recordingId: String
+        public let id: String
         public let createdAt: String
         public let sourceId: String?
         public let sourceAdmissions: [LibraryState.SourceAdmission]?
@@ -265,22 +265,6 @@ public struct ControlsState: Equatable, Sendable {
         public let sourceDurationUs: Int64?
         public let interruptionReason: String?
         public let finalizationError: FinalizationError?
-        private enum Keys: String, CodingKey {
-            case createdAt, sourceId, sourceAdmissions, state, sourceDurationUs,
-                interruptionReason, finalizationError
-        }
-        public init(from decoder: Decoder) throws {
-            guard case .recording(let id) = try MediaTarget(from: decoder) else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected a recording owner"))
-            }
-            let fields = try decoder.container(keyedBy: Keys.self)
-            self.init(recordingId: id, createdAt: try fields.decode(String.self, forKey: .createdAt),
-                state: try fields.decode(String.self, forKey: .state), sourceDurationUs: try fields.decodeIfPresent(Int64.self, forKey: .sourceDurationUs),
-                interruptionReason: try fields.decodeIfPresent(String.self, forKey: .interruptionReason),
-                finalizationError: try fields.decodeIfPresent(FinalizationError.self, forKey: .finalizationError),
-                sourceId: try fields.decodeIfPresent(String.self, forKey: .sourceId),
-                sourceAdmissions: try fields.decodeIfPresent([LibraryState.SourceAdmission].self, forKey: .sourceAdmissions))
-        }
     }
 
     public struct StorageObservation: Equatable, Sendable, Decodable {
@@ -298,7 +282,7 @@ public struct ControlsState: Equatable, Sendable {
     /// The take whose closed inputs no longer appear in capture status.
     public var takeNeedingResolution: String? {
         guard let take, !["complete", "interrupted", "canceled"].contains(take.state) else { return nil }
-        return take.recordingId
+        return take.id
     }
 
     /// Returns whether a newly observed interruption needs the person's attention.
@@ -306,14 +290,14 @@ public struct ControlsState: Equatable, Sendable {
     public mutating func observeTake(_ observed: TakeStatus?) -> Bool {
         guard let observed else { return false }
         let newlyInterrupted = observed.state == "interrupted"
-            && (take?.recordingId != observed.recordingId || take?.state != "interrupted")
+            && (take?.id != observed.id || take?.state != "interrupted")
         take = observed
         return newlyInterrupted
     }
 
     /// A confirmed deletion cannot keep controls attached to the missing take.
     public mutating func takeWasDeleted(_ recordingId: String) {
-        if take?.recordingId == recordingId { take = nil }
+        if take?.id == recordingId { take = nil }
     }
 
     /// Native acquisition and service recovery both retain a take until finalization settles.
@@ -354,18 +338,18 @@ extension ControlsState.CaptureSelection {
             case display(id: Int)
             case window(id: Int)
             case region(displayId: Int, x: Double, y: Double, width: Double, height: Double)
-            case camera(deviceId: String)
+            case camera(id: String)
 
             private enum CodingKeys: String, CodingKey {
-                case kind, displayId, windowId, deviceId, x, y, width, height
+                case kind, id, displayId, x, y, width, height
             }
 
             public init(from decoder: Decoder) throws {
                 let fields = try decoder.container(keyedBy: CodingKeys.self)
                 switch try fields.decode(String.self, forKey: .kind) {
-                case "display": self = .display(id: try fields.decode(Int.self, forKey: .displayId))
-                case "window": self = .window(id: try fields.decode(Int.self, forKey: .windowId))
-                case "camera": self = .camera(deviceId: try fields.decode(String.self, forKey: .deviceId))
+                case "display": self = .display(id: try fields.decode(Int.self, forKey: .id))
+                case "window": self = .window(id: try fields.decode(Int.self, forKey: .id))
+                case "camera": self = .camera(id: try fields.decode(String.self, forKey: .id))
                 case "region":
                     self = .region(
                         displayId: try fields.decode(Int.self, forKey: .displayId),
@@ -384,13 +368,13 @@ extension ControlsState.CaptureSelection {
                 switch self {
                 case .display(let id):
                     try fields.encode("display", forKey: .kind)
-                    try fields.encode(id, forKey: .displayId)
+                    try fields.encode(id, forKey: .id)
                 case .window(let id):
                     try fields.encode("window", forKey: .kind)
-                    try fields.encode(id, forKey: .windowId)
-                case .camera(let deviceId):
+                    try fields.encode(id, forKey: .id)
+                case .camera(let id):
                     try fields.encode("camera", forKey: .kind)
-                    try fields.encode(deviceId, forKey: .deviceId)
+                    try fields.encode(id, forKey: .id)
                 case .region(let displayId, let x, let y, let width, let height):
                     try fields.encode("region", forKey: .kind)
                     try fields.encode(displayId, forKey: .displayId)
@@ -420,7 +404,7 @@ extension ControlsState {
         case .window(let window): chosen = .window(id: window.id)
         case .camera:
             guard let deviceId = selection.cameraDeviceId, !deviceId.isEmpty else { return nil }
-            chosen = .camera(deviceId: deviceId)
+            chosen = .camera(id: deviceId)
         case .region(let region):
             chosen = .region(displayId: region.displayId, x: region.x, y: region.y,
                 width: region.width, height: region.height)

@@ -37,7 +37,7 @@ import YapControls
 
     func json(_ value: Any) -> Data { try! JSONSerialization.data(withJSONObject: value) }
     func status(_ params: [String: Any]) -> [String: Any] {
-        ["exportId": params["requestId"] ?? params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
+        ["id": params["requestId"] ?? params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
          "snapshot": ["revisionId": params["revisionId"]!], "state": "queued", "abandoning": false,
          "destination": ["directory": params["directory"]!, "leaf": params["leaf"]!],
          "cleanupPending": false, "output": NSNull(), "reason": NSNull(), "retryable": false]
@@ -47,7 +47,7 @@ import YapControls
         let id = params["requestId"] as? String ?? params["exportId"] as? String ?? ""
         switch operation {
         case "project.get":
-            return json(["projectId": "take", "createdAt": "2026-09-17T10:11:12.345Z", "currentRevisionId": revision])
+            return json(["id": "take", "createdAt": "2026-09-17T10:11:12.345Z", "currentRevisionId": revision])
         case "export.create":
             if !createFailures.isEmpty {
                 let (failure, admit) = createFailures.removeFirst()
@@ -64,7 +64,7 @@ import YapControls
         case "export.abandon":
             try? await Task.sleep(for: .milliseconds(50))
             admitted[id] = nil
-            return json(["exportId": id, "abandoned": true])
+            return json(["id": id, "abandoned": true])
         default:
             throw ServiceFailure(code: "UNKNOWN_OPERATION", message: operation)
         }
@@ -144,8 +144,8 @@ import YapControls
             choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
         let cursor = "opaque-export-cursor"
         script.pages = [
-            ["exports": [["exportId": first]], "nextCursor": cursor],
-            ["exports": [["exportId": second]], "nextCursor": NSNull()],
+            ["exports": [["id": first]], "nextCursor": cursor],
+            ["exports": [["id": second]], "nextCursor": NSNull()],
         ]
         restarted.discover()
         await until { restarted.state.records.count == 2 }
@@ -196,13 +196,18 @@ test(
         .filter((attempt) => attempt.operation === "export.status" && attempt.response.ok)
         // The receipts predate the WorkState vocabulary: translate them once into today's public
         // status (a committed export reads `ready`, and every async status names its job).
-        .map(({ response: { data } }) => ({
-          ...data,
-          state:
-            { committed: "ready", not_requested: "idle", waiting: "queued" }[data.state] ??
-            data.state,
-          jobId: data.exportId,
-        }));
+        // They also predate record identity: an export names itself `id`.
+        .map(({ response: { data } }) => {
+          const { exportId, ...status } = data;
+          return {
+            ...status,
+            id: exportId,
+            state:
+              { committed: "ready", not_requested: "idle", waiting: "queued" }[data.state] ??
+              data.state,
+            jobId: exportId,
+          };
+        });
       const fixture = join(scratch, "receipts.json");
       await writeFile(fixture, JSON.stringify(receipts));
       const executable = compileControlsCheck(
@@ -215,7 +220,6 @@ import YapControls
 @MainActor final class Script {
     var calls: [(String, [String: Any])] = []
     var statuses: [String: Data] = [:]
-    var retries: [String: Data] = [:]
     var acceptedRetries: [String: Data] = [:]
     var refusedRetries: [String: ServiceFailure] = [:]
     var lostRetryReplies: [String: ServiceFailure] = [:]
@@ -230,7 +234,8 @@ import YapControls
             if let refusal = refusedRetries[id] { throw refusal }
             if let accepted = acceptedRetries[id] { statuses[id] = accepted }
             if let lost = lostRetryReplies[id] { throw lost }
-            return retries[id]!
+            // job.retry answers with the job itself.
+            return json(["id": id, "state": "queued"])
         case "export.status":
             guard let value = statuses[params["exportId"] as! String] else {
                 throw ServiceFailure(code: "NOT_FOUND", message: "Export retired")
@@ -266,7 +271,7 @@ import YapControls
             } else { .recording(receipt["recordingId"] as! String) }
             let snapshot = receipt["snapshot"] as! [String: Any]
             let destination = receipt["destination"] as! [String: Any]
-            precondition(record.target == target && record.exportId == receipt["exportId"] as! String)
+            precondition(record.target == target && record.exportId == receipt["id"] as! String)
             precondition(record.revisionId == snapshot["revisionId"] as! String && record.kind == .video)
             precondition(record.directory == destination["directory"] as! String && record.leaf == destination["leaf"] as! String)
             precondition(record.state == receipt["state"] as! String && record.output == receipt["output"] as? String)
@@ -276,12 +281,12 @@ import YapControls
         }
         let recording = receipts.first { $0["recordingId"] != nil }!
         let project = receipts.first { $0["projectId"] != nil }!
-        let recordingId = recording["exportId"] as! String, projectId = project["exportId"] as! String
+        let recordingId = recording["id"] as! String, projectId = project["id"] as! String
         let cursor = "opaque-export-cursor"
         script.statuses["malformed"] = Data("{}".utf8)
         script.pages = [
-            ["exports": [["exportId": "malformed"], ["exportId": recordingId]], "nextCursor": cursor],
-            ["exports": [["exportId": projectId]], "nextCursor": NSNull()],
+            ["exports": [["id": "malformed"], ["id": recordingId]], "nextCursor": cursor],
+            ["exports": [["id": projectId]], "nextCursor": NSNull()],
         ]
         var changes = 0
         var revealed: [URL] = []
@@ -317,7 +322,7 @@ import YapControls
         }
 
         // A successful new traversal clears only the previous discovery failure.
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let discovered = changes
         exports.discover()
         await until { changes > discovered }
@@ -330,7 +335,6 @@ import YapControls
         let unreadable = exports.state.readFailures[projectId]!
         precondition(unreadable.contains("INVALID_RESPONSE") && exports.state.records.last == originalProject)
         precondition(exportLines(exports).contains { $0 == unreadable }, "Polling failure is visible")
-        script.retries[projectId] = Data("{}".utf8)
         script.refusedRetries[projectId] = ServiceFailure(code: "INVALID_PARAMS", message: "Retry was refused")
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
@@ -358,7 +362,7 @@ import YapControls
         stopped["state"] = "failed"
         stopped["retryable"] = true
         script.statuses[projectId] = script.json(stopped)
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let stoppedRead = changes
         exports.discover()
         await until { changes > stoppedRead }
@@ -370,14 +374,13 @@ import YapControls
         precondition(!exports.state.observed.contains(projectId), "A definite refusal does not make a settled export poll forever")
         script.refusedRetries[projectId] = nil
         script.acceptedRetries[projectId] = script.json(committed)
-        for code in ["INVALID_RESPONSE", "TIMEOUT", "SERVICE_STOPPED", "SERVICE_UNAVAILABLE"] {
+        for code in ["TIMEOUT", "SERVICE_STOPPED", "SERVICE_UNAVAILABLE"] {
             script.statuses[projectId] = script.json(stopped)
-            script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+            script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
             let beforeRead = changes
             exports.discover()
             await until { changes > beforeRead }
-            script.lostRetryReplies[projectId] = code == "INVALID_RESPONSE" ? nil
-                : ServiceFailure(code: code, message: "Accepted retry reply unavailable")
+            script.lostRetryReplies[projectId] = ServiceFailure(code: code, message: "Accepted retry reply unavailable")
             let mutationsBeforeRecovery = script.calls.filter { $0.0 == "job.retry" }.count
             exports.retry(projectId)
             await until { exports.state.acting[projectId] == nil }
@@ -397,9 +400,9 @@ import YapControls
         var sameIdRecording = recording
         sameIdRecording["recordingId"] = projectOwner
         let sameIdExport = "00000000-0000-4000-8000-000000000001"
-        sameIdRecording["exportId"] = sameIdExport
+        sameIdRecording["id"] = sameIdExport
         script.statuses[sameIdExport] = script.json(sameIdRecording)
-        script.pages = [["exports": [["exportId": sameIdExport], ["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": sameIdExport], ["id": projectId]], "nextCursor": NSNull()]]
         let collisionRead = changes
         exports.discover()
         await until { changes > collisionRead }
@@ -412,7 +415,7 @@ import YapControls
         var cleanup = committed
         cleanup["cleanupPending"] = true
         script.statuses[projectId] = script.json(cleanup)
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let cleanupRead = changes
         exports.discover()
         await until { changes > cleanupRead }
@@ -422,7 +425,7 @@ import YapControls
         precondition(pending.committed && pending.cleanupPending && !pending.settled)
         precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.jobRetry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
         precondition(!exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.dismiss.\(projectId)" })
-        script.retries[projectId] = script.json(committed)
+        script.statuses[projectId] = script.json(committed)
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
         let settled = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(committed))

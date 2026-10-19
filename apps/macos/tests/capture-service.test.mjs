@@ -120,8 +120,8 @@ test("records its own window through the service and leaves one inspectable orig
   const sources = await succeeds(home, "capture.sources");
   assert.deepEqual(sources.displays, [], "Fixture mode must expose no display");
   assert.deepEqual(
-    sources.windows.map((window) => window.windowId),
-    [source.windowId],
+    sources.windows.map((window) => window.id),
+    [source.id],
     "Fixture mode must expose this app's own window and nothing else",
   );
 
@@ -135,21 +135,18 @@ test("records its own window through the service and leaves one inspectable orig
 
   await delay(1_200);
   assert.equal(
-    (await succeeds(home, "capture.pause", { recordingId: started.recordingId })).state,
+    (await succeeds(home, "capture.pause", { recordingId: started.id })).state,
     "paused",
   );
   await delay(600);
   assert.equal(
-    (await succeeds(home, "capture.resume", { recordingId: started.recordingId })).state,
+    (await succeeds(home, "capture.resume", { recordingId: started.id })).state,
     "recording",
   );
   await delay(1_200);
   const elapsed = Date.now();
-  const stopped = await finishCapture(
-    (op, params) => succeeds(home, op, params),
-    started.recordingId,
-  );
-  const records = journal(home, started.recordingId);
+  const stopped = await finishCapture((op, params) => succeeds(home, op, params), started.id);
+  const records = journal(home, started.id);
   console.log(
     JSON.stringify({
       case: "capture-terminal-reports",
@@ -161,13 +158,13 @@ test("records its own window through the service and leaves one inspectable orig
     }),
   );
   assert.equal(stopped.state, "complete");
-  assert.equal(stopped.recordingId, started.recordingId);
+  assert.equal(stopped.id, started.id);
   assert.ok(stopped.sourceDurationUs > 1_000_000, `Short take: ${stopped.sourceDurationUs}us`);
   const sourceJournalPath = join(
     home,
     "library",
     "recordings",
-    started.recordingId,
+    started.id,
     "source",
     "source.journal.jsonl",
   );
@@ -180,17 +177,17 @@ test("records its own window through the service and leaves one inspectable orig
   // A take that has ended has no transition left to make, while stopping it again answers with
   // the outcome it already has.
   for (const operation of ["capture.pause", "capture.resume"]) {
-    const refused = await call(home, operation, { recordingId: started.recordingId });
+    const refused = await call(home, operation, { recordingId: started.id });
     assert.equal(refused.ok, false, `${operation} on a finished take must be refused`);
     assert.equal(refused.error.code, "INVALID_STATE");
     assert.equal(refused.error.details.state, "complete");
   }
-  const replay = await succeeds(home, "capture.stop", { recordingId: started.recordingId });
-  for (const key of ["recordingId", "sourceId", "state", "sourceDurationUs"])
+  const replay = await succeeds(home, "capture.stop", { recordingId: started.id });
+  for (const key of ["id", "sourceId", "state", "sourceDurationUs"])
     assert.equal(replay[key], stopped[key]);
 
   const admitted = await waitFor(async () => {
-    const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+    const facts = await succeeds(home, "recording.get", { recordingId: started.id });
     const source = facts.sourceAdmissions.find((value) => value.kind === "primary");
     if (["failed", "unavailable", "canceled"].includes(source?.job?.state))
       throw new Error(JSON.stringify(source));
@@ -204,7 +201,7 @@ test("records its own window through the service and leaves one inspectable orig
   assert.equal(acquisition.sourceId, started.sourceId);
   assert.ok(acquisition.bindings.some((binding) => binding.sourceRoles.includes("video")));
   assert.deepEqual((await succeeds(home, "project.list", {})).projects, []);
-  assert.deepEqual(sourceFiles(home, started.recordingId), [
+  assert.deepEqual(sourceFiles(home, started.id), [
     "capture.journal.jsonl",
     "source.journal.jsonl",
     "source.publication.json",
@@ -279,7 +276,7 @@ test("replays a repeated start onto one take and refuses a concurrent second one
   assert.equal(competing.ok, false);
   assert.equal(competing.error.code, "INVALID_STATE");
   const refused = competing.error.details.recordingId;
-  assert.notEqual(refused, started.recordingId);
+  assert.notEqual(refused, started.id);
   // The refused take keeps an honest terminal identity rather than a false recording state.
   const failed = await succeeds(home, "recording.get", { recordingId: refused });
   assert.equal(failed.state, "interrupted");
@@ -287,9 +284,9 @@ test("replays a repeated start onto one take and refuses a concurrent second one
   assert.ok(failed.sourceAdmissions.every((source) => source.acquisitionId === null));
   assert.deepEqual(
     readdirSync(join(home, "library", "recordings")).sort(),
-    [refused, started.recordingId].sort(),
+    [refused, started.id].sort(),
   );
-  await succeeds(home, "capture.stop", { recordingId: started.recordingId });
+  await succeeds(home, "capture.stop", { recordingId: started.id });
 });
 
 test("a source this app may not capture fails the start and settles that take", async () => {
@@ -299,7 +296,7 @@ test("a source this app may not capture fails the start and settles that take", 
   const refused = await call(
     home,
     "capture.start",
-    silent("other-window", { kind: "window", id: source.windowId + 1 }),
+    silent("other-window", { kind: "window", id: source.id + 1 }),
   );
   assert.equal(refused.ok, false);
   assert.equal(refused.error.code, "SOURCE_UNAVAILABLE");
@@ -336,9 +333,9 @@ test("cancel discards only its own take's media and restart names a new one", as
   const { source } = await fixtureApp(home);
   const kept = await succeeds(home, "capture.start", silent("kept", source));
   await delay(1_200);
-  await finishCapture((op, params) => succeeds(home, op, params), kept.recordingId);
-  const keptSource = join(home, "library", "recordings", kept.recordingId, "source");
-  const keptBytes = sourceFiles(home, kept.recordingId).map((file) => ({
+  await finishCapture((op, params) => succeeds(home, op, params), kept.id);
+  const keptSource = join(home, "library", "recordings", kept.id, "source");
+  const keptBytes = sourceFiles(home, kept.id).map((file) => ({
     file,
     bytes: readFileSync(join(keptSource, file)),
   }));
@@ -348,22 +345,22 @@ test("cancel discards only its own take's media and restart names a new one", as
   const restarted = await succeeds(
     home,
     "capture.restart",
-    silent("restarted", source, { recordingId: discarded.recordingId }),
+    silent("restarted", source, { recordingId: discarded.id }),
   );
-  assert.notEqual(restarted.recordingId, discarded.recordingId);
+  assert.notEqual(restarted.id, discarded.id);
   assert.equal(restarted.state, "recording");
   assert.deepEqual(
     readdirSync(join(home, "library", "recordings")).sort(),
-    [kept.recordingId, restarted.recordingId].sort(),
+    [kept.id, restarted.id].sort(),
   );
 
   await delay(600);
-  const canceled = await succeeds(home, "capture.cancel", { recordingId: restarted.recordingId });
+  const canceled = await succeeds(home, "capture.cancel", { recordingId: restarted.id });
   assert.equal(canceled.state, "canceled");
-  assert.deepEqual(readdirSync(join(home, "library", "recordings")), [kept.recordingId]);
+  assert.deepEqual(readdirSync(join(home, "library", "recordings")), [kept.id]);
   // Only the finished take remains discoverable, and it kept its own media.
-  assert.equal((await succeeds(home, "recording.get")).recordingId, kept.recordingId);
-  assert.deepEqual(sourceFiles(home, kept.recordingId), [
+  assert.equal((await succeeds(home, "recording.get")).id, kept.id);
+  assert.deepEqual(sourceFiles(home, kept.id), [
     "capture.journal.jsonl",
     "source.journal.jsonl",
     "source.publication.json",
@@ -388,7 +385,7 @@ test("a service killed mid-capture leaves a take the next service reconciles fro
   // Native owns the media, so it finalizes the take into its own journal rather than capturing on
   // unindexed. Nothing restarts the service.
   await waitFor(
-    () => journal(home, started.recordingId).some((record) => record.event === "finished"),
+    () => journal(home, started.id).some((record) => record.event === "finished"),
     10_000,
     () => "Native never finalized the take its service abandoned",
   );
@@ -399,7 +396,7 @@ test("a service killed mid-capture leaves a take the next service reconciles fro
   await fixtureApp(home);
   const reconciled = await waitFor(
     async () => {
-      const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+      const facts = await succeeds(home, "recording.get", { recordingId: started.id });
       return (
         ["complete", "interrupted", "canceled"].includes(facts.state) &&
         (facts.sourceDurationUs === null ||
@@ -428,9 +425,10 @@ test("a take killed as it stops is recovered from the media it had already writt
   await delay(1_800);
   // Stop and kill at the same moment: the take is somewhere between the order to finish and the
   // finished media, which is the window a person hits by force quitting as they end a recording.
-  const stopping = call(home, "capture.stop", { recordingId: started.recordingId }).catch(
-    (error) => ({ ok: false, error }),
-  );
+  const stopping = call(home, "capture.stop", { recordingId: started.id }).catch((error) => ({
+    ok: false,
+    error,
+  }));
   instance.kill("SIGKILL");
   await instance.exited;
   await stopping;
@@ -438,7 +436,7 @@ test("a take killed as it stops is recovered from the media it had already writt
   await fixtureApp(home);
   const reconciled = await waitFor(
     async () => {
-      const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+      const facts = await succeeds(home, "recording.get", { recordingId: started.id });
       return (
         ["complete", "interrupted", "canceled"].includes(facts.state) &&
         (facts.sourceDurationUs === null ||
@@ -478,7 +476,7 @@ test("a take killed before any media is decodable stays terminal with no admitte
   await fixtureApp(home);
   const settled = await waitFor(
     async () => {
-      const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+      const facts = await succeeds(home, "recording.get", { recordingId: started.id });
       return (
         ["complete", "interrupted", "canceled"].includes(facts.state) &&
         (facts.sourceDurationUs === null ||
@@ -489,15 +487,15 @@ test("a take killed before any media is decodable stays terminal with no admitte
     20_000,
     () => "Recovered recording/source facts did not settle",
   );
-  const sourceDirectory = join(home, "library", "recordings", started.recordingId, "source");
-  const retainedJournal = journal(home, started.recordingId);
+  const sourceDirectory = join(home, "library", "recordings", started.id, "source");
+  const retainedJournal = journal(home, started.id);
   console.log(
     JSON.stringify({
       case: "undecodable-container",
       settled,
       journalHeader: retainedJournal.find((row) => row.event === "header"),
       journalCompletion: retainedJournal.filter((row) => ["finished", "error"].includes(row.event)),
-      containerMembers: sourceFiles(home, started.recordingId).map((file) => ({
+      containerMembers: sourceFiles(home, started.id).map((file) => ({
         file,
         bytes: statSync(join(sourceDirectory, file)).size,
       })),
@@ -527,7 +525,7 @@ test("a normal quit during capture finalizes the take before the app exits", asy
   // Quit finalized it, so the next service has nothing to reconcile and the take is complete.
   const finished = await waitFor(
     async () => {
-      const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+      const facts = await succeeds(home, "recording.get", { recordingId: started.id });
       return (
         ["complete", "interrupted", "canceled"].includes(facts.state) &&
         (facts.sourceDurationUs === null ||
@@ -636,7 +634,7 @@ test("the fixture records no audio device, whether one is asked for or merely de
   // The silent take this file always asks for is the one the fixture accepts.
   const started = await succeeds(home, "capture.start", silent("silent", source));
   assert.equal(started.state, "recording");
-  await succeeds(home, "capture.stop", { recordingId: started.recordingId });
+  await succeeds(home, "capture.stop", { recordingId: started.id });
 });
 
 test("a start whose answer is lost replays onto its own take instead of starting a second one", async () => {

@@ -97,6 +97,11 @@ test(
               const { preview, ...identity } = historical[key].published;
               historical[key].published = { ...identity, output: preview };
             }
+            // The archive predates record identity: a project names itself `id`.
+            if (key === "project") {
+              const { projectId, ...project } = historical[key];
+              historical[key] = { id: projectId, ...project };
+            }
             // The archive predates WorkState and unit-suffixed delivery fields.
             if (historical[key].state === "processing") historical[key].state = "running";
             if (historical[key].delivery) {

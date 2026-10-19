@@ -75,7 +75,7 @@ final class LibraryController {
         return true
     }
     private func usable(_ projectId: String) -> Bool {
-        ready && state.deletions[.project(projectId)] == nil && state.projects.contains { $0.projectId == projectId }
+        ready && state.deletions[.project(projectId)] == nil && state.projects.contains { $0.id == projectId }
     }
 
     func refreshRecordings() {
@@ -119,12 +119,12 @@ final class LibraryController {
                         vanished.insert(.recording(id)); continue
                     }
                     guard service == serviceGeneration && generation == recordingGeneration else { return }
-                    guard take.recordingId == id else { throw Self.invalid("Recording returned a different identity") }
+                    guard take.id == id else { throw Self.invalid("Recording returned a different identity") }
                     try validate(take)
                     takes.append(take)
                 }
                 state.media = page.media.filter { state.deletions[$0.target] == nil && !vanished.contains($0.target) }
-                state.recent = takes.filter { state.deletions[.recording($0.recordingId)] == nil }
+                state.recent = takes.filter { state.deletions[.recording($0.id)] == nil }
                 state.nextRecordingCursor = page.nextCursor
                 recordingPageIndex = index; state.hasPreviousRecordingPage = index > 0
                 state.recordingFailure = nil
@@ -164,11 +164,11 @@ final class LibraryController {
                 let page: Projects = try await read("project.list", params)
                 guard service == serviceGeneration && generation == projectGeneration else { return }
                 guard page.projects.count <= 5,
-                    Set(page.projects.map(\.projectId)).count == page.projects.count,
+                    Set(page.projects.map(\.id)).count == page.projects.count,
                     page.nextCursor.map({ !$0.isEmpty }) ?? true else {
                     throw Self.invalid("Unreadable project page or cursor")
                 }
-                state.projects = page.projects.filter { state.deletions[.project($0.projectId)] == nil }
+                state.projects = page.projects.filter { state.deletions[.project($0.id)] == nil }
                 state.nextProjectCursor = page.nextCursor
                 projectPageIndex = index; state.hasPreviousProjectPage = index > 0
                 state.projectFailure = nil
@@ -214,7 +214,7 @@ final class LibraryController {
                 if cascade { params["cascade"] = true }
                 let receipt: Deletion = try await read(operation, params)
                 guard service == serviceGeneration else { return }
-                guard receipt.target == target && receipt.deleted else {
+                guard receipt.id == target.id && receipt.deleted else {
                     throw Self.invalid("The service did not confirm deletion of \(target.id).")
                 }
                 recordingGeneration = UUID(); projectGeneration = UUID(); jobsReading = false
@@ -224,7 +224,7 @@ final class LibraryController {
                 // The projects the cascade took with it are gone too.
                 for id in alsoDeleted {
                     closePreview(.project(id)); forgetExports(.project(id))
-                    state.projects.removeAll { $0.projectId == id }
+                    state.projects.removeAll { $0.id == id }
                 }
                 deleted()
             } catch {
@@ -236,7 +236,7 @@ final class LibraryController {
                     let name = state.confirmationName(for: target) {
                     state.finishDelete(target, failure: error.localizedDescription)
                     if await confirm(.cascade(target, name: name, inUse: inUse)) {
-                        delete(target, cascade: true, projects: inUse.usedBy.map(\.projectId))
+                        delete(target, cascade: true, projects: inUse.usedBy.map(\.id))
                     } else {
                         state.cancelDelete(target)
                     }
@@ -259,14 +259,14 @@ final class LibraryController {
             defer { if service == serviceGeneration && generation == recordingGeneration { jobsReading = false } }
             var failure: String?
             for take in state.recent {
-                guard state.deletions[.recording(take.recordingId)] == nil else { continue }
+                guard state.deletions[.recording(take.id)] == nil else { continue }
                 if Self.pendingAdmission(take) {
                     do throws(ServiceFailure) {
-                        let answer: ControlsState.RecentTake = try await read("recording.get", ["recordingId": take.recordingId])
+                        let answer: ControlsState.RecentTake = try await read("recording.get", ["recordingId": take.id])
                         guard service == serviceGeneration && generation == recordingGeneration else { return }
-                        guard answer.recordingId == take.recordingId else { throw Self.invalid("Recording returned a different identity") }
+                        guard answer.id == take.id else { throw Self.invalid("Recording returned a different identity") }
                         try validate(answer)
-                        if let index = state.recent.firstIndex(where: { $0.recordingId == take.recordingId }) { state.recent[index] = answer }
+                        if let index = state.recent.firstIndex(where: { $0.id == take.id }) { state.recent[index] = answer }
                     } catch {
                         guard service == serviceGeneration && generation == recordingGeneration else { return }
                         failure = failure ?? error.localizedDescription
@@ -274,13 +274,13 @@ final class LibraryController {
                 }
                 for admission in take.sourceAdmissions ?? [] where Self.active(admission) {
                     do throws(ServiceFailure) {
-                        let job: LibraryState.Job = try await read("job.get", ["jobId": admission.job!.jobId])
+                        let job: LibraryState.Job = try await read("job.get", ["jobId": admission.job!.id])
                         guard service == serviceGeneration && generation == recordingGeneration else { return }
-                        guard job.jobId == admission.job!.jobId, job.target.kind == "acquisition",
-                            job.target.acquisitionId == admission.acquisitionId, Self.valid(job) else {
+                        guard job.id == admission.job!.id, job.target.kind == "acquisition",
+                            job.target.id == admission.acquisitionId, Self.valid(job) else {
                             throw Self.invalid("Preparation returned a different source job")
                         }
-                        replaceJob(take.recordingId, admission.sourceId, job)
+                        replaceJob(take.id, admission.sourceId, job)
                     } catch {
                         guard service == serviceGeneration && generation == recordingGeneration else { return }
                         failure = failure ?? error.localizedDescription
@@ -309,23 +309,23 @@ final class LibraryController {
             Set(admissions.map(\.sourceId)).count == admissions.count,
             admissions.allSatisfy({ admission in
                 ["primary", "camera"].contains(admission.kind) && !admission.sourceId.isEmpty
-                    && (admission.job.map { $0.target.kind == "acquisition" && $0.target.acquisitionId == admission.acquisitionId && admission.acquisitionId != nil && Self.valid($0) } ?? true)
+                    && (admission.job.map { $0.target.kind == "acquisition" && $0.target.id == admission.acquisitionId && admission.acquisitionId != nil && Self.valid($0) } ?? true)
             }) else { throw Self.invalid("Unreadable source admission receipt") }
     }
 
     private static func valid(_ job: LibraryState.Job) -> Bool {
-        !job.jobId.isEmpty && ["idle", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
+        !job.id.isEmpty && ["idle", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
     }
     private static func active(_ admission: LibraryState.SourceAdmission) -> Bool {
         admission.job.map { ["queued", "running"].contains($0.state) } ?? false
     }
     private func replaceJob(_ recordingId: String, _ sourceId: String, _ job: LibraryState.Job) {
-        guard let index = state.recent.firstIndex(where: { $0.recordingId == recordingId }),
+        guard let index = state.recent.firstIndex(where: { $0.id == recordingId }),
             var admissions = state.recent[index].sourceAdmissions,
             let source = admissions.firstIndex(where: { $0.sourceId == sourceId }) else { return }
         let take = state.recent[index]
         admissions[source].job = job
-        state.recent[index] = .init(recordingId: take.recordingId, createdAt: take.createdAt,
+        state.recent[index] = .init(id: take.id, createdAt: take.createdAt,
             state: take.state, sourceDurationUs: take.sourceDurationUs, interruptionReason: take.interruptionReason,
             finalizationError: take.finalizationError, sourceId: take.sourceId, sourceAdmissions: admissions)
     }
@@ -361,14 +361,6 @@ final class LibraryController {
             nextCursor = try fields.decodeIfPresent(String.self, forKey: .nextCursor)
         }
     }
-    private struct Deletion: Decodable {
-        let target: MediaTarget; let deleted: Bool; let freedBytes: Int64
-        private enum Keys: String, CodingKey { case deleted, freedBytes }
-        init(from decoder: Decoder) throws {
-            target = try MediaTarget(from: decoder)
-            let fields = try decoder.container(keyedBy: Keys.self)
-            deleted = try fields.decode(Bool.self, forKey: .deleted)
-            freedBytes = try fields.decode(Int64.self, forKey: .freedBytes)
-        }
-    }
+    /// The deleted record's stub.
+    private struct Deletion: Decodable { let id: String; let deleted: Bool; let freedBytes: Int64 }
 }

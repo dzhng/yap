@@ -6,9 +6,9 @@ import YapControls
         NSApplication.shared.setActivationPolicy(.prohibited)
         var state = ControlsState()
         state.service = .ready
-        state.library.recent = [.init(recordingId: "fixture-recording", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil)]
-        state.library.media = [.init(kind: .recording, target: .recording("fixture-recording"), title: "2026-10-05T19:18:00Z", durationUs: 154_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-05T19:18:00Z"),
-            .init(kind: .imported, target: .asset("fixture-import"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z")]
+        state.library.recent = [.init(id: "fixture-recording", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil)]
+        state.library.media = [.init(target: .recording("fixture-recording"), title: "2026-10-05T19:18:00Z", durationUs: 154_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-05T19:18:00Z"),
+            .init(target: .asset("fixture-import"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z")]
         var actions: [ControlsAction] = []
         let view = LibraryView(state: state, exports: ExportsState()) { actions.append($0) }
         view.appearance = NSAppearance(named: .darkAqua)
@@ -96,7 +96,7 @@ import YapControls
             var ids = ["library.filter"]
             switch tab {
             case .recordings: ids += facts.library.media.map { "actions.\($0.target.id)" }
-            case .projects: ids += ["library.projects.previous", "library.projects.next"] + facts.library.projects.map { "actions.\($0.projectId)" }
+            case .projects: ids += ["library.projects.previous", "library.projects.next"] + facts.library.projects.map { "actions.\($0.id)" }
             case .exports: ids += deliveries.records.map { "actions.\($0.exportId)" }
             }
             for id in ids {
@@ -143,9 +143,9 @@ import YapControls
         state.service = .ready
         state.storage = .init(totalBytes: 2_400_000_000, modelBytes: 2_200_000_000, observedAt: "2026-10-05T19:18:00Z")
         state.library.recent = [
-            .init(recordingId: "fixture-recording-one", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil),
-            .init(recordingId: long ? "recording-with-a-very-long-identity-for-a-camera-and-narration-observation-that-must-wrap" : "fixture-recording-two", createdAt: "2026-10-05T17:42:00Z", state: "finalizing", sourceDurationUs: 48_000_000, interruptionReason: nil, finalizationError: long ? .init(code: "FIXTURE_FINALIZATION", message: "A selected conference room camera source remains unavailable while the recording's publication is being inspected. Retry belongs to its existing owner.", retryable: true) : nil, sourceId: long ? "source-with-a-very-long-identity-that-remains-visible-without-displacing-the-action-menu" : nil),
-            .init(recordingId: "fixture-recording-three", createdAt: "2026-10-04T23:06:00Z", state: "complete", sourceDurationUs: 312_000_000, interruptionReason: nil),
+            .init(id: "fixture-recording-one", createdAt: "2026-10-05T19:18:00Z", state: "complete", sourceDurationUs: 154_000_000, interruptionReason: nil),
+            .init(id: long ? "recording-with-a-very-long-identity-for-a-camera-and-narration-observation-that-must-wrap" : "fixture-recording-two", createdAt: "2026-10-05T17:42:00Z", state: "finalizing", sourceDurationUs: 48_000_000, interruptionReason: nil, finalizationError: long ? .init(code: "FIXTURE_FINALIZATION", message: "A selected conference room camera source remains unavailable while the recording's publication is being inspected. Retry belongs to its existing owner.", retryable: true) : nil, sourceId: long ? "source-with-a-very-long-identity-that-remains-visible-without-displacing-the-action-menu" : nil),
+            .init(id: "fixture-recording-three", createdAt: "2026-10-04T23:06:00Z", state: "complete", sourceDurationUs: 312_000_000, interruptionReason: nil),
         ]
         if long {
             let admissions = """
@@ -153,18 +153,18 @@ import YapControls
             """
             let sources = try! JSONDecoder().decode([LibraryState.SourceAdmission].self, from: Data(admissions.utf8))
             let last = state.library.recent[1]
-            state.library.recent[1] = .init(recordingId: last.recordingId, createdAt: last.createdAt, state: last.state, sourceDurationUs: last.sourceDurationUs, interruptionReason: last.interruptionReason, finalizationError: last.finalizationError, sourceId: last.sourceId, sourceAdmissions: sources)
+            state.library.recent[1] = .init(id: last.id, createdAt: last.createdAt, state: last.state, sourceDurationUs: last.sourceDurationUs, interruptionReason: last.interruptionReason, finalizationError: last.finalizationError, sourceId: last.sourceId, sourceAdmissions: sources)
         }
         // The tab's page order is media.list's: newest first, imports between recordings.
         let takes = state.library.recent
         state.library.media = [
-            .init(kind: .recording, target: .recording(takes[0].recordingId), title: takes[0].createdAt, durationUs: takes[0].sourceDurationUs ?? 0, sizeBytes: 61_000_000, createdAt: takes[0].createdAt),
-            .init(kind: .imported, target: .asset("fixture-import"), title: long ? "a-very-long-original-filename-for-an-imported-launch-teaser-that-must-not-push-the-badge-away-final-v2.mp4" : "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z"),
-            .init(kind: .recording, target: .recording(takes[1].recordingId), title: takes[1].createdAt, durationUs: takes[1].sourceDurationUs ?? 0, sizeBytes: 9_000_000, createdAt: takes[1].createdAt),
-            .init(kind: .recording, target: .recording(takes[2].recordingId), title: takes[2].createdAt, durationUs: takes[2].sourceDurationUs ?? 0, sizeBytes: 80_000_000, createdAt: takes[2].createdAt),
+            .init(target: .recording(takes[0].id), title: takes[0].createdAt, durationUs: takes[0].sourceDurationUs ?? 0, sizeBytes: 61_000_000, createdAt: takes[0].createdAt),
+            .init(target: .asset("fixture-import"), title: long ? "a-very-long-original-filename-for-an-imported-launch-teaser-that-must-not-push-the-badge-away-final-v2.mp4" : "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-05T18:46:00Z"),
+            .init(target: .recording(takes[1].id), title: takes[1].createdAt, durationUs: takes[1].sourceDurationUs ?? 0, sizeBytes: 9_000_000, createdAt: takes[1].createdAt),
+            .init(target: .recording(takes[2].id), title: takes[2].createdAt, durationUs: takes[2].sourceDurationUs ?? 0, sizeBytes: 80_000_000, createdAt: takes[2].createdAt),
         ]
         let projectJSON = """
-        [{"projectId":"fixture-project","title":"Product demonstration","createdAt":"2026-10-05T19:18:00Z","currentRevisionId":"fixture-revision"}]
+        [{"id":"fixture-project","title":"Product demonstration","createdAt":"2026-10-05T19:18:00Z","currentRevisionId":"fixture-revision"}]
         """
         state.library.projects = try! JSONDecoder().decode([LibraryState.Project].self, from: Data(projectJSON.utf8))
         return state

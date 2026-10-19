@@ -21,7 +21,7 @@ private func record(
 
 func runExportTests() {
     var state = ready()
-    state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(#"{"projectId":"rec-1","title":"Caller project","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r-existing"}"#.utf8))]
+    state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(#"{"id":"rec-1","title":"Caller project","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r-existing"}"#.utf8))]
     var exports = ExportsState()
     precondition(exportItems(state, exports).isEmpty, "No exports section until there is an export to show")
 
@@ -114,7 +114,7 @@ func runExportTests() {
         "A deleted project's exports leave the list")
 
     let status = Data(#"""
-        {"exportId":"e9","kind":"processed-package","abandoning":false,"recovery":null,"projectId":"rec-9",
+        {"id":"e9","kind":"processed-package","abandoning":false,"recovery":null,"projectId":"rec-9",
          "snapshot":{"revisionId":"r4","historyOrdinal":3},"state":"failed",
          "destination":{"directory":"/Volumes/Work","leaf":"take.zip"},"cleanupPending":true,
          "receipt":null,"output":null,"jobId":"j","reason":"Required evidence is unavailable","retryable":true}
@@ -127,7 +127,7 @@ func runExportTests() {
         "Status fields keep their meaning")
     for leaf in ["mix.wav", "mix.m4a"] {
         let fields: [String: Any] = [
-            "exportId": "audio-" + leaf, "projectId": "p", "kind": "audio",
+            "id": "audio-" + leaf, "projectId": "p", "kind": "audio",
             "snapshot": ["revisionId": "r", "settings": ["container": leaf.hasSuffix("wav") ? "wav" : "m4a"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": leaf],
             "retryable": true, "abandoning": false, "cleanupPending": false,
@@ -144,7 +144,7 @@ func runExportTests() {
     }
     for kind in ["srt", "vtt"] {
         let fields: [String: Any] = [
-            "exportId": "captions-" + kind, "projectId": "p", "kind": kind,
+            "id": "captions-" + kind, "projectId": "p", "kind": kind,
             "snapshot": ["revisionId": "r", "placementIds": ["caption"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": "captions." + kind],
             "retryable": true, "abandoning": false, "cleanupPending": false,

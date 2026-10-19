@@ -25,8 +25,8 @@ import YapControls
     var recordingCatalog: [[String: Any]]?
     var recordingNext: Any = NSNull()
     var next: Any = "project-cursor"
-    var projects: [[String: Any]] = [["projectId": "same", "title": "Caller project", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-project"]]
-    var recording: [String: Any] = ["recordingId": "same", "createdAt": "2026-10-01T01:00:00Z", "state": "complete", "sourceId": "source-one", "creationSequence": 1, "lifecycleSequence": 3, "interruptionReason": NSNull(), "interruptionMessage": NSNull(), "finalizationError": NSNull(), "sourceDurationUs": 9000000, "sourceAdmissions": []]
+    var projects: [[String: Any]] = [["id": "same", "title": "Caller project", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-project"]]
+    var recording: [String: Any] = ["id": "same", "createdAt": "2026-10-01T01:00:00Z", "state": "complete", "sourceId": "source-one", "creationSequence": 1, "lifecycleSequence": 3, "interruptionReason": NSNull(), "interruptionMessage": NSNull(), "finalizationError": NSNull(), "sourceDurationUs": 9000000, "sourceAdmissions": []]
     var deletes: [MediaTarget] = []
     var deletedTargets: Set<MediaTarget> = []
     var wrongDelete = false
@@ -39,7 +39,7 @@ import YapControls
     var hold: String?
     var held: CheckedContinuation<Data, Never>?
     var heldAnswer: Data?
-    var job: [String: Any] = ["jobId": "job-one", "state": "running", "attemptId": "attempt-one", "artifact": "acquisition.import", "lane": "heavy", "attemptGeneration": 1, "reason": NSNull(), "errorCode": NSNull(), "errorDetails": NSNull(), "retryable": false, "inputSha256": String(repeating: "1", count: 64), "result": NSNull(), "target": ["kind": "acquisition", "acquisitionId": "acq-one"]]
+    var job: [String: Any] = ["id": "job-one", "state": "running", "attemptId": "attempt-one", "artifact": "acquisition.import", "lane": "heavy", "attemptGeneration": 1, "reason": NSNull(), "errorCode": NSNull(), "errorDetails": NSNull(), "retryable": false, "inputSha256": String(repeating: "1", count: 64), "result": NSNull(), "target": ["kind": "acquisition", "id": "acq-one"]]
     func count(_ operation: String) -> Int { calls.filter { $0.0 == operation }.count }
     func release() { let waiting = held; held = nil; waiting?.resume(returning: heldAnswer!); heldAnswer = nil }
 
@@ -55,23 +55,23 @@ import YapControls
         case "media.list":
             // The Recordings tab pages media.list; each recording's own facts come from recording.get.
             func row(_ take: [String: Any]) -> [String: Any] {
-                ["kind": "recording", "recordingId": take["recordingId"]!, "title": take["createdAt"]!,
+                ["kind": "recording", "id": take["id"]!, "title": take["createdAt"]!,
                  "durationUs": take["sourceDurationUs"] as? Int ?? 0, "sizeBytes": 4096, "createdAt": take["createdAt"]!]
             }
             if let recordingCatalog {
                 // The fake's opaque cursor still pins the page position, as the service's does.
                 let before = (params["cursor"] as? String).flatMap { Int($0.dropFirst("before-".count)) } ?? Int.max
-                let eligible = recordingCatalog.filter { ($0["creationSequence"] as! Int) < before && !deletedTargets.contains(.recording($0["recordingId"] as! String)) }
+                let eligible = recordingCatalog.filter { ($0["creationSequence"] as! Int) < before && !deletedTargets.contains(.recording($0["id"] as! String)) }
                 let page = Array(eligible.prefix(params["limit"] as! Int))
                 answer = ["media": page.map(row), "nextCursor": recordingCursorOverride ?? (eligible.count > page.count ? "before-\(page.last!["creationSequence"] as! Int)" : NSNull())]
             } else {
-                answer = ["media": deletedTargets.contains(.recording(recording["recordingId"] as! String)) ? [] : [row(recording)], "nextCursor": recordingNext]
+                answer = ["media": deletedTargets.contains(.recording(recording["id"] as! String)) ? [] : [row(recording)], "nextCursor": recordingNext]
             }
-        case "project.list": answer = ["projects": projects.filter { !deletedTargets.contains(.project($0["projectId"] as? String ?? "")) }, "nextCursor": next]
+        case "project.list": answer = ["projects": projects.filter { !deletedTargets.contains(.project($0["id"] as? String ?? "")) }, "nextCursor": next]
         case "recording.get" where gone.contains(params["recordingId"] as? String ?? ""):
             throw ServiceFailure(code: "NOT_FOUND", message: "recording was deleted")
         case "recording.get":
-            answer = recordingCatalog?.first { $0["recordingId"] as? String == params["recordingId"] as? String } ?? recording
+            answer = recordingCatalog?.first { $0["id"] as? String == params["recordingId"] as? String } ?? recording
         case "job.get": answer = job
         case "processing.status": answer = ["state": params["artifact"] as? String == "transcript" ? "processing" : "ready", "reason": NSNull()]
         case "index.get": answer = ["state": "ready", "page": [:], "reason": NSNull()]
@@ -84,8 +84,7 @@ import YapControls
             }
             deletes.append(target)
             if !wrongDelete { deletedTargets.insert(deletes.last!) }
-            let owner: [String: Any] = target.parameters
-            answer = (wrongDelete ? ["projectId": "wrong-target"] : owner).merging(["deleted": true, "freedBytes": 4096]) { first, _ in first }
+            answer = ["id": wrongDelete ? "wrong-target" : target.id, "deleted": true, "freedBytes": 4096]
         default: throw ServiceFailure(code: "UNKNOWN_OPERATION", message: operation)
         }
         if let lostDelete, operation.hasSuffix(".delete") {
@@ -114,7 +113,7 @@ import YapControls
         let library = LibraryController(call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) }, confirm: { _ in true }, changed: {}, closePreview: { closed.append($0) }, forgetExports: { forgotten.append($0) }, deleted: {}, preview: { previews.append(.project($0)) }, export: { exports.append((.project($0), $1)) })
         library.serviceChanged(ready: true)
         await until { !library.state.projectsRefreshing && library.state.recent.count == 1 }
-        precondition(library.state.projects.map(\.projectId) == ["same"])
+        precondition(library.state.projects.map(\.id) == ["same"])
         let originalRecordings = library.state.recent
         script.recordingNext = ""
         library.refreshRecordings()
@@ -142,15 +141,15 @@ import YapControls
         precondition(library.perform(.exportProject("same", .package)))
         precondition(previews == [.project("same")] && exports.count == 1 && exports[0].0 == .project("same") && exports[0].1 == .package, "Explicit actions preserve namespace and refuse a fresh recording composition")
         precondition(!library.perform(.pauseOrResume), "Capture transport remains with its existing owner")
-        script.projects = [["projectId": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]; script.next = NSNull()
+        script.projects = [["id": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]; script.next = NSNull()
         library.nextProjects()
-        for _ in 0..<200 where !(library.state.projects.first?.projectId == "later" && !library.state.projectsRefreshing) { try? await Task.sleep(for: .milliseconds(10)) }
-        precondition(library.state.projects.first?.projectId == "later" && !library.state.projectsRefreshing)
+        for _ in 0..<200 where !(library.state.projects.first?.id == "later" && !library.state.projectsRefreshing) { try? await Task.sleep(for: .milliseconds(10)) }
+        precondition(library.state.projects.first?.id == "later" && !library.state.projectsRefreshing)
         precondition(script.calls.last { $0.0 == "project.list" }!.1["cursor"] as? String == "project-cursor")
         precondition(library.state.hasPreviousProjectPage && library.state.nextProjectCursor == nil)
         // A bad page retains the last usable page and cannot invent navigation.
         let lastProjects = library.state.projects
-        script.projects = [["projectId": "broken"]]
+        script.projects = [["id": "broken"]]
         library.refreshProjects()
         await until { library.state.projectFailure != nil && !library.state.projectsRefreshing }
         precondition(library.state.projects == lastProjects && library.state.nextProjectCursor == nil)
@@ -158,12 +157,12 @@ import YapControls
         library.refreshProjects()
         await until { library.state.projectFailure?.contains("SERVICE_UNAVAILABLE") == true }
         precondition(library.state.projects == lastProjects)
-        script.projects = [["projectId": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]
+        script.projects = [["id": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]
         library.refreshProjects()
         await until { library.state.projectFailure == nil && !library.state.projectsRefreshing }
         library.delete(.recording("same"))
         await until { forgotten == [.recording("same")] }
-        precondition(closed == [.recording("same")] && library.state.projects.first?.projectId == "later")
+        precondition(closed == [.recording("same")] && library.state.projects.first?.id == "later")
         await until { library.state.recent.isEmpty && !library.state.projectsRefreshing }
         library.delete(.project("later"))
         await until { forgotten == [.recording("same"), .project("later")] }
@@ -230,14 +229,14 @@ import YapControls
         await until { progressOwner.state.recent.count == 1 && !progressOwner.state.projectsRefreshing }
         overlapping.hold = "job.get"; progressOwner.tick()
         await until { overlapping.held != nil }
-        overlapping.recording["recordingId"] = "new-progress-owner"
+        overlapping.recording["id"] = "new-progress-owner"
         progressOwner.refreshRecordings()
-        await until { progressOwner.state.recent.first?.recordingId == "new-progress-owner" }
+        await until { progressOwner.state.recent.first?.id == "new-progress-owner" }
         overlapping.failure = ("media.list", "NOT_READY"); progressOwner.refreshRecordings()
         await until { progressOwner.state.recordingFailure?.contains("NOT_READY") == true }
         overlapping.release()
         for _ in 0..<20 { await Task.yield() }
-        precondition(progressOwner.state.recent.first?.recordingId == "new-progress-owner" && progressOwner.state.recordingFailure?.contains("NOT_READY") == true, "An obsolete job reply must not clear another owner's read failure")
+        precondition(progressOwner.state.recent.first?.id == "new-progress-owner" && progressOwner.state.recordingFailure?.contains("NOT_READY") == true, "An obsolete job reply must not clear another owner's read failure")
         progressOwner.serviceChanged(ready: false)
 
         // Lost/malformed deletion keeps the typed identity even after discovery hides its owner.
@@ -251,7 +250,7 @@ import YapControls
         await until { deletion.state.deletions[.project("same")]?.failure?.contains("TIMEOUT") == true }
         deletion.refreshProjects()
         await until { deletion.state.projects.isEmpty && !deletion.state.projectsRefreshing }
-        precondition(deletion.state.recent.first?.recordingId == "same" && lostForgotten.isEmpty)
+        precondition(deletion.state.recent.first?.id == "same" && lostForgotten.isEmpty)
         deletion.serviceChanged(ready: false)
         let before = lost.count("project.delete")
         deletion.delete(.project("same")); await Task.yield()
@@ -267,7 +266,7 @@ import YapControls
         precondition(lost.calls.filter { $0.0 == "project.delete" }.allSatisfy { ($0.1["projectId"] as? String) == "same" && $0.1["recordingId"] == nil })
         precondition(Set(lost.calls.filter { $0.0 == "project.delete" }.compactMap { $0.1["requestId"] as? String }).count == 1,
             "Every retry of one deletion replays the same requestId")
-        precondition(deletion.state.recent.first?.recordingId == "same")
+        precondition(deletion.state.recent.first?.id == "same")
 
         // A page read held over deletion cannot restore the deleted project on release.
         let late = Script()
@@ -286,31 +285,32 @@ import YapControls
         let generation = LibraryController(call: { op, params throws(ServiceFailure) in try await changed.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         generation.serviceChanged(ready: true)
         await until { generation.state.projects.count == 1 && !generation.state.projectsRefreshing }
-        changed.projects = [["projectId": "page-two", "title": "Second page", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-two"]]; changed.next = NSNull()
+        changed.projects = [["id": "page-two", "title": "Second page", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-two"]]; changed.next = NSNull()
         generation.nextProjects()
-        await until { generation.state.projects.first?.projectId == "page-two" && !generation.state.projectsRefreshing }
+        await until { generation.state.projects.first?.id == "page-two" && !generation.state.projectsRefreshing }
         changed.hold = "project.list"; generation.refreshProjects()
         await until { changed.held != nil }
-        changed.projects = [["projectId": "page-one", "title": "First page", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-one"]]; changed.next = "project-cursor"
+        changed.projects = [["id": "page-one", "title": "First page", "createdAt": "2026-10-01T01:00:00Z", "currentRevisionId": "r-one"]]; changed.next = "project-cursor"
         generation.previousProjects()
-        await until { generation.state.projects.first?.projectId == "page-one" && !generation.state.projectsRefreshing }
+        await until { generation.state.projects.first?.id == "page-one" && !generation.state.projectsRefreshing }
         changed.release()
         for _ in 0..<20 { await Task.yield() }
-        precondition(generation.state.projects.first?.projectId == "page-one" && !generation.state.hasPreviousProjectPage)
+        precondition(generation.state.projects.first?.id == "page-one" && !generation.state.hasPreviousProjectPage)
         changed.hold = "media.list"; generation.refreshRecordings()
         await until { changed.held != nil }
-        changed.recording["recordingId"] = "replacement"
+        changed.recording["id"] = "replacement"
         generation.serviceChanged(ready: false); generation.serviceChanged(ready: true)
-        await until { generation.state.recent.first?.recordingId == "replacement" }
+        await until { generation.state.recent.first?.id == "replacement" }
         changed.release()
         for _ in 0..<20 { await Task.yield() }
-        precondition(generation.state.recent.first?.recordingId == "replacement", "Old service catalog must not replace a current observation")
+        precondition(generation.state.recent.first?.id == "replacement", "Old service catalog must not replace a current observation")
         let lastRecording = generation.state.recent
-        changed.recording["projectId"] = "also-project"
+        let createdAt = changed.recording["createdAt"]!
+        changed.recording["createdAt"] = NSNull()
         generation.refreshRecordings()
         await until { generation.state.recordingFailure != nil }
-        precondition(generation.state.recent == lastRecording, "Dual namespace recording response remains visibly malformed")
-        changed.recording.removeValue(forKey: "projectId")
+        precondition(generation.state.recent == lastRecording, "An unreadable recording response remains visibly malformed")
+        changed.recording["createdAt"] = createdAt
         generation.refreshRecordings()
         await until { generation.state.recordingFailure == nil }
         // Every ambiguity classification retains one exact target for explicit replay.
@@ -334,18 +334,18 @@ import YapControls
         // A bounded recording continuation remains older even when a new take arrives.
         let paged = Script()
         func row(_ sequence: Int) -> [String: Any] {
-            paged.recording.merging(["recordingId": "take-\(sequence)", "creationSequence": sequence]) { _, value in value }
+            paged.recording.merging(["id": "take-\(sequence)", "creationSequence": sequence]) { _, value in value }
         }
         paged.recordingCatalog = (1...7).reversed().map(row)
         let browsing = LibraryController(call: { op, params throws(ServiceFailure) in try await paged.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         browsing.serviceChanged(ready: true)
-        await until { browsing.state.recent.map(\.recordingId) == ["take-7", "take-6", "take-5", "take-4", "take-3"] }
+        await until { browsing.state.recent.map(\.id) == ["take-7", "take-6", "take-5", "take-4", "take-3"] }
         paged.recordingCatalog!.insert(row(8), at: 0)
         browsing.nextRecordings()
-        await until { browsing.state.recent.map(\.recordingId) == ["take-2", "take-1"] }
+        await until { browsing.state.recent.map(\.id) == ["take-2", "take-1"] }
         precondition(browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor == nil)
         browsing.previousRecordings()
-        await until { browsing.state.recent.map(\.recordingId) == ["take-8", "take-7", "take-6", "take-5", "take-4"] }
+        await until { browsing.state.recent.map(\.id) == ["take-8", "take-7", "take-6", "take-5", "take-4"] }
         precondition(!browsing.state.hasPreviousRecordingPage && browsing.state.nextRecordingCursor != nil)
         precondition(paged.calls.filter { $0.0 == "media.list" }.allSatisfy { ($0.1["limit"] as? Int) == 5 }, "Browsing never widens the catalog read")
         // An old page's held preparation read cannot starve the current page.
@@ -357,7 +357,7 @@ import YapControls
         paged.hold = "job.get"; browsing.tick()
         await until { paged.held != nil }
         browsing.nextRecordings()
-        await until { browsing.state.recent.map(\.recordingId) == ["take-2", "take-1"] }
+        await until { browsing.state.recent.map(\.id) == ["take-2", "take-1"] }
         paged.job["state"] = "ready"
         browsing.tick()
         await until { browsing.state.recent.allSatisfy { $0.sourceAdmissions?.first?.job?.state == "ready" } }
@@ -379,10 +379,10 @@ import YapControls
         paged.hold = "media.list"; browsing.refreshRecordings()
         await until { paged.held != nil }
         browsing.previousRecordings()
-        await until { browsing.state.recent.first?.recordingId == "take-7" && !browsing.state.recordingsRefreshing }
+        await until { browsing.state.recent.first?.id == "take-7" && !browsing.state.recordingsRefreshing }
         paged.release()
         for _ in 0..<20 { await Task.yield() }
-        precondition(browsing.state.recent.map(\.recordingId) == ["take-7", "take-6", "take-5", "take-4", "take-3"] && !browsing.state.hasPreviousRecordingPage)
+        precondition(browsing.state.recent.map(\.id) == ["take-7", "take-6", "take-5", "take-4", "take-3"] && !browsing.state.hasPreviousRecordingPage)
         // A deletion pinned on one page stays the same typed request after navigation.
         paged.lostDelete = "TIMEOUT"
         browsing.delete(.recording("take-7"))
@@ -411,7 +411,7 @@ import YapControls
         for _ in 0..<20 { await Task.yield() }
         precondition(asked[0].confirm == "Delete" && !asked[0].cascade && asking.count("recording.delete") == 0
                      && confirmed.state.deletions.isEmpty, "Cancel sends nothing and leaves no deletion behind")
-        asking.inUse = ["recordingId": "same", "usedBy": [["kind": "project", "projectId": "p", "title": "Q4 demo", "revisions": 14]],
+        asking.inUse = ["recordingId": "same", "usedBy": [["kind": "project", "id": "p", "title": "Q4 demo", "revisions": 14]],
             "acquisitions": [], "derivedAssets": [], "freesBytes": 10, "cascadeFreesBytes": 2000]
         answer = true
         confirmed.perform(.deleteRecording("same"))
@@ -430,13 +430,13 @@ import YapControls
 
         // A recording deleted elsewhere between the page read and its own read drops from the page.
         let racing = Script()
-        racing.recordingCatalog = [racing.recording, racing.recording.merging(["recordingId": "gone", "creationSequence": 0]) { _, new in new }]
+        racing.recordingCatalog = [racing.recording, racing.recording.merging(["id": "gone", "creationSequence": 0]) { _, new in new }]
         racing.gone = ["gone"]
         let survived = LibraryController(call: { op, params throws(ServiceFailure) in try await racing.call(op, params) }, confirm: { _ in true }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
         survived.serviceChanged(ready: true)
         await until { !survived.state.recordingsRefreshing && racing.count("recording.get") == 2 }
         precondition(survived.state.recordingFailure == nil && survived.state.media.map(\.target) == [.recording("same")]
-                     && survived.state.recent.map(\.recordingId) == ["same"],
+                     && survived.state.recent.map(\.id) == ["same"],
                      "One vanished recording does not blank the page: \(String(describing: survived.state.recordingFailure))")
         survived.serviceChanged(ready: false)
         print("PASS native library pages, typed deletion and source-only recording facts")

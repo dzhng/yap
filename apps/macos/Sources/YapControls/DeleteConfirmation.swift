@@ -18,10 +18,11 @@ public struct DeleteConfirmation: Equatable, Sendable {
         self.message = message; self.confirm = confirm; self.cascade = cascade
     }
 
-    /// What an `IN_USE` refusal says about the item's users, as the service sent it.
+    /// What an `IN_USE` refusal says about the item's users, as the service sent it. Each user
+    /// is a `{kind, id}` reference.
     public struct InUse: Decodable, Equatable, Sendable {
         public struct Project: Decodable, Equatable, Sendable {
-            public let projectId: String
+            public let id: String
             public let title: String
             public let revisions: Int
         }
@@ -30,8 +31,8 @@ public struct DeleteConfirmation: Equatable, Sendable {
         public let acquisitions: [Source]
         public let freesBytes: Int64
         public let cascadeFreesBytes: Int64
-        public struct Derived: Decodable, Equatable, Sendable { public let assetId: String }
-        public struct Source: Decodable, Equatable, Sendable { public let acquisitionId: String }
+        public struct Derived: Decodable, Equatable, Sendable { public let id: String }
+        public struct Source: Decodable, Equatable, Sendable { public let id: String }
     }
 
     /// Asked before the first call. `sizeBytes` is the page row's measured size, when it has one.

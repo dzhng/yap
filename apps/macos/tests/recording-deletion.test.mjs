@@ -80,7 +80,7 @@ test(
     assert.equal(before.data.recordingId, null);
     const identityBefore = await cliCall("recording.get", reference);
     assert.equal(identityBefore.ok, true, JSON.stringify(identityBefore));
-    assert.equal(identityBefore.data.recordingId, take.id);
+    assert.equal(identityBefore.data.id, take.id);
     assert.ok(before.data.totalBytes > 0);
     const directoryBytes = sizeTree(directory);
     const filesBeforeDelete = snapshotFiles(join(home, "library"));
@@ -91,7 +91,7 @@ test(
       (sum, [path, bytes]) => sum + (filesAfterDelete.has(path) ? 0 : bytes),
       0,
     );
-    assert.equal(cliResult.data.recordingId, take.id);
+    assert.equal(cliResult.data.id, take.id);
     assert.equal(cliResult.data.deleted, true);
     assert.ok(cliResult.data.freedBytes >= directoryBytes);
     assert.ok(freedMeasured <= cliResult.data.freedBytes);
@@ -109,7 +109,7 @@ test(
     );
     // Native capture capacity and the service's durable capture priority must both be released.
     const replacement = await start();
-    assert.notEqual(replacement.recordingId, take.id);
+    assert.notEqual(replacement.id, take.id);
     assert.equal(replacement.state, "recording");
     const client = new Client({ name: "recording-deletion-test", version: "1" });
     try {
@@ -128,31 +128,31 @@ test(
       assert.equal(usage.structuredContent.data.recordingId, null);
       const replacementBefore = await client.callTool({
         name: "recording.get",
-        arguments: { recordingId: replacement.recordingId },
+        arguments: { recordingId: replacement.id },
       });
       assert.equal(replacementBefore.structuredContent.ok, true);
-      assert.equal(replacementBefore.structuredContent.data.recordingId, replacement.recordingId);
+      assert.equal(replacementBefore.structuredContent.data.id, replacement.id);
       assert.ok(usage.structuredContent.data.totalBytes > 0);
-      const replacementDirectory = join(home, "library", "recordings", replacement.recordingId);
+      const replacementDirectory = join(home, "library", "recordings", replacement.id);
       const replacementFreedBytes = sizeTree(replacementDirectory);
       const result = await client.callTool({
         name: "recording.delete",
-        arguments: { recordingId: replacement.recordingId, requestId: randomUUID() },
+        arguments: { recordingId: replacement.id, requestId: randomUUID() },
       });
       assert.equal(result.structuredContent.ok, true);
       assert.deepEqual(result.structuredContent.data, {
-        id: replacement.recordingId,
+        id: replacement.id,
         deleted: true,
         freedBytes: replacementFreedBytes,
       });
       const absent = await client.callTool({
         name: "recording.get",
-        arguments: { recordingId: replacement.recordingId },
+        arguments: { recordingId: replacement.id },
       });
       assert.equal(absent.structuredContent.error.code, "NOT_FOUND");
     } finally {
       await client.close();
     }
-    assert.equal(existsSync(join(home, "library", "recordings", replacement.recordingId)), false);
+    assert.equal(existsSync(join(home, "library", "recordings", replacement.id)), false);
   },
 );

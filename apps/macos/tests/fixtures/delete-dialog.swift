@@ -8,10 +8,10 @@ import YapControls
         let output = CommandLine.arguments[1]
         var state = LibraryState()
         state.media = [
-            .init(kind: .imported, target: .asset("a"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-17T20:46:00Z"),
-            .init(kind: .recording, target: .recording("r"), title: "2026-10-16T15:05:00Z", durationUs: 690_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-16T15:05:00Z"),
+            .init(target: .asset("a"), title: "launch-teaser-v2.mp4", durationUs: 42_000_000, sizeBytes: 22_000_000, createdAt: "2026-10-17T20:46:00Z"),
+            .init(target: .recording("r"), title: "2026-10-16T15:05:00Z", durationUs: 690_000_000, sizeBytes: 61_000_000, createdAt: "2026-10-16T15:05:00Z"),
         ]
-        let refusal = #"{"recordingId":"r","usedBy":[{"kind":"project","projectId":"p1","title":"Q4 demo","revisions":14},{"kind":"project","projectId":"p2","title":"Bug report: export","revisions":3}],"acquisitions":[],"derivedAssets":[],"freesBytes":61000000,"cascadeFreesBytes":1400000000}"#
+        let refusal = #"{"recordingId":"r","usedBy":[{"kind":"project","id":"p1","title":"Q4 demo","revisions":14},{"kind":"project","id":"p2","title":"Bug report: export","revisions":3}],"acquisitions":[],"derivedAssets":[],"freesBytes":61000000,"cascadeFreesBytes":1400000000}"#
         let inUse = try! JSONDecoder().decode(DeleteConfirmation.InUse.self, from: Data(refusal.utf8))
         for (name, dialog) in [
             ("plain", state.confirmation(for: .recording("r"))!),

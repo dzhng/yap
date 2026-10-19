@@ -91,7 +91,7 @@ public struct ExportsState: Equatable, Sendable {
         public var settled: Bool { !abandoning && (committed ? !cleanupPending : stopped) }
 
         private enum Keys: String, CodingKey {
-            case exportId, kind, snapshot, state, jobId, destination, output, reason
+            case id, kind, snapshot, state, jobId, destination, output, reason
             case retryable, abandoning, cleanupPending
         }
         private enum SnapshotKeys: String, CodingKey { case revisionId }
@@ -103,7 +103,7 @@ public struct ExportsState: Equatable, Sendable {
             let destination = try fields.nestedContainer(
                 keyedBy: DestinationKeys.self, forKey: .destination)
             self.init(
-                exportId: try fields.decode(String.self, forKey: .exportId),
+                exportId: try fields.decode(String.self, forKey: .id),
                 target: try MediaTarget(from: decoder),
                 kind: try fields.decode(Kind.self, forKey: .kind),
                 revisionId: try snapshot.decode(String.self, forKey: .revisionId),

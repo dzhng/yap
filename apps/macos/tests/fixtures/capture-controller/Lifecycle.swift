@@ -59,7 +59,7 @@ struct ControllerLifecycle {
         defer { host.shutdown() }
         let fields: [String: Any] = ["recordingId": "recording-stop", "sourceId": "source-stop",
             "outputDirectory": root.appendingPathComponent("source").path,
-            "source": ["kind": "window", "windowId": 1], "microphone": mode == "cleanup-pending", "systemAudio": false]
+            "source": ["kind": "window", "id": 1], "microphone": mode == "cleanup-pending", "systemAudio": false]
         if pendingStart {
             let start = Task { await controller.handle("capture.start", try! JSONSerialization.data(withJSONObject: fields)) }
             await prepareEntered.wait()

@@ -1,7 +1,8 @@
 import Foundation
 
 /// Recording, imported asset and project identifiers remain separate namespaces, including in
-/// service receipts.
+/// service receipts. It decodes from the one reference a receipt carries (`recordingId`,
+/// `assetId` or `projectId`); a record's own `id` names it without saying which kind it is.
 public enum MediaTarget: Hashable, Sendable, Decodable {
     case recording(String)
     case asset(String)
