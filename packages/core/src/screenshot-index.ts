@@ -871,6 +871,9 @@ export class ScreenshotIndexStore<
     owner: IndexOwner,
     keep: (identity: D["identity"]) => boolean,
     signal?: AbortSignal,
+    /** A generation from an older selection policy is never valid again, so a reference to it
+     * no longer protects it; current-policy generations stay while anything references them. */
+    foreign: (identity: D["identity"]) => boolean = () => false,
   ): Promise<void> {
     let cursor = 0;
     let failureCount = 0;
@@ -888,10 +891,11 @@ export class ScreenshotIndexStore<
         try {
           if (
             !keep(identity) &&
-            !this.references.has(
-              "index-generation",
-              indexGenerationResource(owner, identity.generation),
-            )
+            (foreign(identity) ||
+              !this.references.has(
+                "index-generation",
+                indexGenerationResource(owner, identity.generation),
+              ))
           )
             await this.remove(identity);
         } catch (error) {

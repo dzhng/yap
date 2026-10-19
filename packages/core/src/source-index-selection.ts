@@ -6,14 +6,25 @@ import { observedSceneBoundary, type SourceSceneChunk } from "./source-scene-chu
 import type { SceneSampleClock } from "./source-scenes.js";
 import type { TimeRange } from "./presentation-time.js";
 import { selectionPolicy } from "./screenshot-index.js";
+import { coverageDue } from "./index-coverage.js";
 
 /** Raw pictures have no cursor overlay; presentation samples, not nearest frames, anchor changes. */
 export const sourceIndexPolicy = {
-  id: "source-presentation-selection-v2",
-  coverageUs: selectionPolicy.coverageUs,
+  id: "source-presentation-selection-v3",
+};
+export type IndexMoment = {
+  sourceUs: number;
+  kind: "mark" | "pin" | "click";
+  markId: string;
+};
+export type IndexPointerSample = {
+  sourceUs: number;
+  x: number | null;
+  y: number | null;
 };
 export type SourceIndexReason =
   | { kind: "first" | "last" | "availability" | "coverage"; eventSourceUs: number }
+  | { kind: "mark" | "pin" | "click"; eventSourceUs: number; markId: string }
   | {
       kind: "scene";
       side: "before" | "after";
@@ -51,6 +62,8 @@ export async function* sourceIndexChunks(
 export async function* selectSourceIndex(
   support: readonly TimeRange[],
   chunks: AsyncIterable<SourceSceneChunk> | Iterable<SourceSceneChunk>,
+  moments: readonly IndexMoment[] = [],
+  pointerSamples: readonly IndexPointerSample[] = [],
   signal?: AbortSignal,
 ): AsyncGenerator<SourceIndexRequest> {
   const pending = new Map<number, SourceIndexRequest>();
@@ -60,7 +73,10 @@ export async function* selectSourceIndex(
   let previous: Point | undefined, previousSupport: TimeRange | undefined;
   let through = -1,
     lastRequest = -Infinity,
-    representativeRun: number | undefined;
+    representativeRun: number | undefined,
+    pointerTravel = 0,
+    pointerIndex = 0,
+    momentIndex = 0;
   function add(at: number, range: TimeRange, reason: SourceIndexReason) {
     let request = pending.get(at);
     if (!request) {
@@ -76,6 +92,7 @@ export async function* selectSourceIndex(
     if (at > lastRequest) {
       lastRequest = at;
       representativeRun = undefined;
+      pointerTravel = 0;
     }
   }
   function edges(throughUs: number) {
@@ -104,6 +121,19 @@ export async function* selectSourceIndex(
       signal?.throwIfAborted();
       const at = point.requestedSourceUs;
       if (at <= through) continue;
+      while (pointerSamples[pointerIndex] && pointerSamples[pointerIndex]!.sourceUs <= at) {
+        const sample = pointerSamples[pointerIndex++];
+        const previous = pointerSamples[pointerIndex - 2];
+        if (
+          sample &&
+          previous &&
+          sample.x !== null &&
+          sample.y !== null &&
+          previous.x !== null &&
+          previous.y !== null
+        )
+          pointerTravel += Math.hypot(sample.x - previous.x, sample.y - previous.y);
+      }
       edges(at);
       while (support[supportIndex] && support[supportIndex]!.endUs <= at) supportIndex++;
       const possible = support[supportIndex];
@@ -119,6 +149,15 @@ export async function* selectSourceIndex(
             });
           representativeRun = undefined;
         } else {
+          while (moments[momentIndex] && moments[momentIndex]!.sourceUs <= at) {
+            const moment = moments[momentIndex++];
+            if (moment && range.startUs <= moment.sourceUs && moment.sourceUs < range.endUs)
+              add(moment.sourceUs, range, {
+                kind: moment.kind,
+                markId: moment.markId,
+                eventSourceUs: moment.sourceUs,
+              });
+          }
           const before =
             previousSupport === range && previous?.status === "available" ? previous : undefined;
           if (!before || !point.continuousFromPrevious)
@@ -134,9 +173,16 @@ export async function* selectSourceIndex(
             add(before!.requestedSourceUs, range, { ...reason, side: "before" });
             add(at, range, { ...reason, side: "after" });
           }
+          const pictureChanged =
+            representativeRun === undefined || representativeRun !== point.stillnessRunStartUs;
           if (
-            at - lastRequest >= sourceIndexPolicy.coverageUs &&
-            representativeRun !== point.stillnessRunStartUs
+            Number.isFinite(lastRequest) &&
+            coverageDue({
+              sinceLastChosenUs: at - lastRequest,
+              pictureChanged,
+              pointerTravelPt: pointerTravel,
+              displayWidthPt: Math.max(chunk.sourceWidth, chunk.sourceHeight),
+            })
           )
             add(at, range, { kind: "coverage", eventSourceUs: at });
           if (lastRequest === at) representativeRun = point.stillnessRunStartUs;
@@ -150,6 +196,17 @@ export async function* selectSourceIndex(
     }
   }
   signal?.throwIfAborted();
+  for (const moment of moments.slice(momentIndex)) {
+    const range = support.find(
+      (value) => value.startUs <= moment.sourceUs && moment.sourceUs < value.endUs,
+    );
+    if (range)
+      add(moment.sourceUs, range, {
+        kind: moment.kind,
+        markId: moment.markId,
+        eventSourceUs: moment.sourceUs,
+      });
+  }
   edges(Infinity);
   yield* flush(Infinity);
 }
