@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
-import { storedWork, type PackageStoredState } from "@yap/protocol";
 import {
   archiveLimits,
   validateArchiveLimits,
@@ -33,7 +32,15 @@ const packageRegistryLimits = Object.freeze({
   owners: 4,
   terminal: 32,
 });
-type State = PackageStoredState;
+type State =
+  | "queued"
+  | "opening"
+  | "ready"
+  | "closing"
+  | "cleanup_failed"
+  | "failed"
+  | "canceled"
+  | "closed";
 type Admission = {
   id: string;
   state: State;
@@ -259,15 +266,13 @@ export class PackageRegistry<
     return entry;
   }
   private snapshot(entry: Entry<T>): PackageAdmission {
-    return Object.freeze(
-      storedWork({
-        id: entry.id,
-        state: entry.state,
-        packageHandle: entry.packageHandle,
-        jobId: entry.jobId,
-        error: entry.error,
-      }),
-    );
+    return Object.freeze({
+      id: entry.id,
+      state: entry.state,
+      packageHandle: entry.packageHandle,
+      jobId: entry.jobId,
+      error: entry.error,
+    });
   }
   private async execute(entry: Entry<T>, job: ContextJob, signal: AbortSignal): Promise<string> {
     if (job.artifact !== "package.open") {

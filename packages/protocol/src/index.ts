@@ -146,7 +146,6 @@ export * from "./framing.js";
 export * from "./layout.js";
 export * from "./refusal-ledger.js";
 export * from "./operations.js";
-export * from "./naming.js";
 export * from "./tools.js";
 export * from "./update.js";
 export * from "./work.js";

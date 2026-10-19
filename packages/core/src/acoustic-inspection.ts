@@ -1,4 +1,3 @@
-import { storedWork } from "@yap/protocol";
 import { loudnessMeasurementSchema, type LoudnessMeasurement } from "./audio-measurement.js";
 import {
   selectionRangeSchema,
@@ -411,13 +410,13 @@ export class AcousticInspection {
     const status = this.owners.jobs.status(identity);
     return {
       status,
-      summary: storedWork({
+      summary: {
         jobId: status.jobId,
         state: status.state,
         reason: status.reason,
         retryable: status.retryable,
         generation: status.published?.generation ?? null,
-      }),
+      },
     };
   }
   async request(input: AcousticInput) {
@@ -431,7 +430,7 @@ export class AcousticInspection {
       dependency = this.dependency(recipe.identity);
     }
     if (!dependency.status.published)
-      return storedWork({
+      return {
         ...selection,
         state: dependency.status.state,
         reason: dependency.status.reason,
@@ -439,7 +438,7 @@ export class AcousticInspection {
         jobId: dependency.status.jobId,
         dependency: dependency.summary,
         published: null,
-      });
+      };
     if (artifact === "loudness") {
       const audio = parsePublicAudioArtifact(JSON.parse(dependency.status.published.result));
       assertLoudnessCoverage(audio);
@@ -470,7 +469,7 @@ export class AcousticInspection {
             identity,
             "heavy",
           );
-    return storedWork({
+    return {
       ...selection,
       state: status.state,
       reason: status.reason,
@@ -484,7 +483,7 @@ export class AcousticInspection {
             artifact: status.published.value,
           }
         : null,
-    });
+    };
   }
   private async image(input: AcousticInput) {
     const renderer = this.owners.renderer;

@@ -1,4 +1,3 @@
-import { storedWork } from "@yap/protocol";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import {
@@ -207,7 +206,7 @@ export class ProjectPreviewInspection {
         ...(admitted ? { admitted } : {}),
       },
     );
-    return storedWork({
+    return {
       projectId: pinned.projectId,
       revisionId: pinned.revisionId,
       range: structuredClone(pinned.range),
@@ -224,7 +223,7 @@ export class ProjectPreviewInspection {
             preview: status.published.value,
           }
         : null,
-    });
+    };
   }
 
   async retry(input: ProjectPreviewInput) {

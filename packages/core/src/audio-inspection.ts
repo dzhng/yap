@@ -1,4 +1,3 @@
-import { storedWork } from "@yap/protocol";
 import {
   audioProcessingEvidenceSchema,
   audioProcessingIssues,
@@ -386,7 +385,7 @@ export class MediaAudioInspection {
           acquisitions.retain(owner, [options.selection.acquisitionId]);
       },
     });
-    return storedWork({
+    return {
       ...options.selection,
       range: options.range,
       issues,
@@ -401,7 +400,7 @@ export class MediaAudioInspection {
             audio: status.published.value,
           }
         : null,
-    });
+    };
   }
   request(input: SourceAudioInput): Promise<ReturnType<MediaAudioInspection["requestSource"]>>;
   request(input: ProjectAudioInput): ReturnType<MediaAudioInspection["requestProject"]>;
@@ -529,7 +528,7 @@ export class MediaAudioInspection {
       "heavy",
       admitted ? { admitted } : {},
     );
-    return storedWork({
+    return {
       ...selection,
       issues,
       state: status.state,
@@ -543,7 +542,7 @@ export class MediaAudioInspection {
             audio: status.published.value,
           }
         : null,
-    });
+    };
   }
 
   /** Export pins the existing PCM recipe; encoded renditions depend on that same job/cache. */

@@ -530,8 +530,7 @@ test("export discovery pages pinned summaries without admitting work and binds c
     page.exports.map((row) => row.exportId),
     ids.slice(1).reverse(),
   );
-  // A summary carries the owner's work mark, which never reaches a caller's JSON.
-  assert.deepEqual(JSON.parse(JSON.stringify(page.exports[0])), {
+  assert.deepEqual(page.exports[0], {
     exportId: ids[2],
     projectId: f.projectId,
     kind: "video",

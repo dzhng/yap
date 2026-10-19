@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { storedWork } from "@yap/protocol";
 import {
   closeSync,
   constants,
@@ -213,10 +212,6 @@ class Preparation {
   }
 
   snapshot(): ModelStatus {
-    return storedWork(this.current());
-  }
-
-  private current(): ModelStatus {
     const unsupported = this.platformFailure();
     if (unsupported)
       return {
@@ -257,10 +252,6 @@ class Preparation {
   }
 
   async status(): Promise<ModelStatus> {
-    return storedWork(await this.verified());
-  }
-
-  private async verified(): Promise<ModelStatus> {
     if (this.platformFailure()) return this.snapshot();
     if (this.flight || !this.manifest.runtimeArtifact) return this.snapshot();
     if (this.verification) return this.verification;

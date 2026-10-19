@@ -9,7 +9,7 @@ import {
 import { ResourceReferences, resourceKinds, type ResourceReference } from "@yap/core/references";
 import { resourceIdentity, staleTranscriptIssues } from "@yap/core/project-package";
 import type { ProjectPackages, PinnedProjectPackage } from "./project-packages.js";
-import { storedWork, type operationSchema } from "@yap/protocol";
+import type { operationSchema } from "@yap/protocol";
 import { projectCaptionSidecar, type PinnedCaptionSidecar } from "@yap/core/project-window";
 import type { AssetStore } from "@yap/core/assets";
 import { writeFile } from "node:fs/promises";
@@ -176,7 +176,7 @@ const admittedSql = "(receipt IS NULL OR abandoning=1 OR assembly IS NOT NULL)";
 
 /** The summary both discovery pages and status report for one intent. */
 function summarize(row: Lifecycle, job: Pick<Job, "state" | "jobId"> | null) {
-  return storedWork({
+  return {
     jobId: job?.jobId ?? null,
     state: row.receipt
       ? ("committed" as const)
@@ -185,7 +185,7 @@ function summarize(row: Lifecycle, job: Pick<Job, "state" | "jobId"> | null) {
         : (job?.state ?? ("not_requested" as const)),
     abandoning: !!row.abandoning,
     cleanupPending: cleanupPending(row),
-  });
+  };
 }
 
 /** Durable external truth belongs here; execution state and retries remain in JobQueue.

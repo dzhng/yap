@@ -118,20 +118,16 @@ export async function projectServiceFixture(
     const wireParams = needsRequestId
       ? { ...params, requestId: `fixture-${operation}-${++requestSequence}` }
       : params;
-    try {
-      const result = await callLocal(service.socketPath, {
-        id: "test",
-        operation,
-        params: wireParams,
-      });
-      if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
-        expect(result.data).not.toHaveProperty("input");
-        expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));
-      }
-      return result;
-    } catch (error) {
-      throw error;
+    const result = await callLocal(service.socketPath, {
+      id: "test",
+      operation,
+      params: wireParams,
+    });
+    if (result.ok && ["job.get", "job.retry", "job.cancel", "asset.import"].includes(operation)) {
+      expect(result.data).not.toHaveProperty("input");
+      expect(result.data).toHaveProperty("inputSha256", expect.stringMatching(/^[a-f0-9]{64}$/));
     }
+    return result;
   }
   async function job(jobId: string, state: string) {
     const deadline = performance.now() + 3000;

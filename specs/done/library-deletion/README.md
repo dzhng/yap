@@ -84,9 +84,9 @@ Each concept has one owner, and the operation schemas are the reference:
   schemas, and `pageCursor` (`packages/core/src/page-cursor.ts`) binds each cursor to
   its operation and filters. Library listings are newest first.
 - **Async state:** one vocabulary, `workStateSchema` (`packages/protocol/src/work.ts`).
-  Each owner keeps its stored words and marks the status it returns with `storedWork`; the
-  service edge maps exactly the marked records through the owners' tables in `work.ts`, so no
-  other `state` field is touched. `job.get`, `job.retry` and
+  Each owner keeps its stored words; the service edge maps the `state` of every record that
+  also carries a `jobId` through the one `storedWorkState` table in `work.ts`, and no other
+  `state` field. `job.get`, `job.retry` and
   `job.cancel` own polling and recovery, replacing the ten `*.retry` operations. A
   take keeps its own capture lifecycle (`finalizing`, `complete`, `interrupted`).
 - **Identity and replay:** every operation that creates or changes something takes a
@@ -94,17 +94,14 @@ Each concept has one owner, and the operation schemas are the reference:
   parameters refuses `REQUEST_CONFLICT`. Replay records live as long as the library, like
   every other replay table, so a repeated delete returns its first result after the subject
   is gone. Read-only operations, and operations whose
-  repeat joins the same work or changes nothing, take none; `naming.test.ts` holds every
+  repeat joins the same work or changes nothing, take none; `replay.test.ts` holds every
   operation to one of the three.
 - **Errors:** each code has one category and one retryability, both in
   `packages/protocol/src/refusal-ledger.json`, which the protocol tests hold to every
   literal in product source.
-- **Naming:** identities are `<noun>Id` and quantities carry their unit
-  (`packages/protocol/src/naming.ts`), except where the parent already says it: a record's
-  own `id`, a `count` or `bytes`, a `start` under `sampleRange`. The lint checks numeric keys
-  whose last word names a quantity, outside the edit document and export settings that
-  `@yap/composition` owns, and the service and CLI suites hold every response they receive
-  to it.
+- **Naming:** identities are `<noun>Id`, in parameters and results alike, so a result's
+  identity feeds the next call unchanged; quantities carry their unit unless the parent
+  already says it (`count`, `bytes`, a `start` under `sampleRange`). No lint enforces it.
   Renames happen at the producer, and old stored shapes refuse `ARTIFACT_CHANGED` and are
   regenerated, not migrated. Three translations remain on purpose: one typed converter
   per record inside `audio-inspection.ts` and `acoustic-inspection.ts`, where the media
@@ -143,7 +140,7 @@ Each concept has one owner, and the operation schemas are the reference:
 - **Internal wires kept their own names.** Slice 07b had renamed fields the service sends to
   the native worker and the Python model workers, which still read the old names, so 0.1.60
   could not render prepared or typed-processed audio and refused every alignment and speaker
-  observation. The fix restored each worker's own names; the naming rule covers public
+  observation. The fix restored each worker's own names; the naming convention covers public
   results only. See [choices.md](choices.md#follow-up-2026-10-18).
 - **A still screen keeps reaching disk.** Outside this spec's contract, the final full
   run found that a force-quit take of a still screen lost all of it, on main too. The

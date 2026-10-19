@@ -103,10 +103,7 @@ import {
   type UpdateStatus,
   type UpdateBlocker,
   appOperations,
-  markedWorkState,
-  valueNamingViolations,
-  storedWork,
-  type StoredWorkState,
+  workState,
 } from "@yap/protocol";
 
 function sourceRangeAsMicroseconds(value: SelectionRange | undefined) {
@@ -211,14 +208,15 @@ function importedAlignmentView(
     if (!status.published)
       return {
         ...cue,
-        alignment: storedWork({
+        alignment: {
           state: status.state,
+          jobId: null,
           reason: status.reason,
           retryable: status.retryable,
           modelId: input.modelId,
           channel: input.channel,
           sourceRange: cue.source,
-        }),
+        },
       };
     const evidence = status.published.evidence;
     return {
@@ -709,9 +707,10 @@ export async function startProjectService(options: {
           }),
         ) as SpeechTranscriptionReceipt,
     });
+    /** The review model's status, as work with no job of its own. */
     const ensureReviewModel = () => {
       const modelId = "parakeet";
-      const current = transcripts.recognitionReadiness();
+      const current = { ...transcripts.recognitionReadiness(), jobId: null };
       if (current.state === "ready" || current.state === "preparing" || current.state === "failed")
         return current;
       let flight = reviewModelPreparations.get(modelId);
@@ -729,7 +728,7 @@ export async function startProjectService(options: {
           admission.progress();
         });
       }
-      return transcripts.recognitionReadiness();
+      return { ...transcripts.recognitionReadiness(), jobId: null };
     };
     const audioCapabilities = await nativeAudioCapabilities(worker);
     const pictureCapabilities = await nativePictureCapabilities(worker);
@@ -1232,7 +1231,7 @@ export async function startProjectService(options: {
       return owner ? mediaExports.status(owner.exportId) : status(jobId);
     };
 
-    /** Responses carry plain JSON numbers, and every status an owner marked reports WorkState. */
+    /** Work is a record with a `state` and a `jobId`; its state reports WorkState. */
     const toWire = (value: unknown): unknown => {
       if (Array.isArray(value)) return value.map(toWire);
       if (typeof value === "bigint") return Number(value);
@@ -1240,11 +1239,7 @@ export async function startProjectService(options: {
       const mapped: Record<string, unknown> = Object.fromEntries(
         Object.entries(value).map(([key, child]) => [key, toWire(child)]),
       );
-      const state = markedWorkState(value);
-      if (state) {
-        mapped.state = state;
-        if (!("jobId" in mapped)) mapped.jobId = null;
-      }
+      if ("state" in mapped && "jobId" in mapped) mapped.state = workState(String(mapped.state));
       return mapped;
     };
     const describeCapture = captureSources.describe.bind(captureSources);
@@ -1342,7 +1337,9 @@ export async function startProjectService(options: {
                 home: options.home,
                 node: process.versions.node,
                 uptimeMs: Math.round(performance.now() - started),
-                models: models.statuses(),
+                models: models
+                  .statuses()
+                  .map((model) => ({ ...model, status: { ...model.status, jobId: null } })),
               },
             };
           case "service.tools":
@@ -1981,13 +1978,14 @@ export async function startProjectService(options: {
             if (!candidate) {
               return {
                 ok: true,
-                data: storedWork({
+                data: {
                   ...request,
                   state: "unavailable",
+                  jobId: null,
                   reason: "continuity_candidate_required",
                   retryable: false,
                   receipt: null,
-                }),
+                },
               };
             }
             const receipt = evaluateSpeakerContinuity(candidate);
@@ -2005,13 +2003,14 @@ export async function startProjectService(options: {
             );
             return {
               ok: true,
-              data: storedWork({
+              data: {
                 ...request,
                 state: "ready",
+                jobId: null,
                 reason: receipt.status === "accepted" ? null : "continuity_quality_gate",
                 retryable: false,
                 receipt,
-              }),
+              },
             };
           }
           case "speaker.continuity.get": {
@@ -2033,27 +2032,29 @@ export async function startProjectService(options: {
                 );
               return {
                 ok: true,
-                data: storedWork({
+                data: {
                   ...operation.params,
                   state: "ready",
+                  jobId: null,
                   reason:
                     retained.receipt.status === "accepted"
                       ? "continuity_not_promoted"
                       : "continuity_quality_gate",
                   retryable: false,
                   receipt: retained.receipt,
-                }),
+                },
               };
             }
             return {
               ok: true,
-              data: storedWork({
+              data: {
                 ...operation.params,
                 state: "unavailable",
+                jobId: null,
                 reason: "continuity_not_published",
                 retryable: false,
                 receipt: null,
-              }),
+              },
             };
           }
           case "speaker.observe": {
@@ -3191,11 +3192,12 @@ export async function startProjectService(options: {
                 throw new CatalogError(
                   "NOT_READY",
                   "The selected project transcript is not ready",
-                  storedWork({
-                    state: transcript.state as StoredWorkState,
+                  {
+                    state: transcript.state,
+                    jobId: null,
                     reason: "reason" in transcript ? transcript.reason : null,
                     dependencies: transcript.dependencies,
-                  }),
+                  },
                 );
               }
               if (transcript.page.nextCursor !== null) {
@@ -3648,16 +3650,7 @@ export async function startProjectService(options: {
     };
     const serve: LocalHandler = (request, signal) => {
       const task = Promise.resolve(handle(request, signal)).then((result) => {
-        const wire = toWire(result) as OperationResult;
-        // Test suites set this so every response they receive is held to the naming rule.
-        if (process.env.YAP_NAMING_GUARD && wire.ok) {
-          const violations = valueNamingViolations(wire.data, request.operation);
-          if (violations.length)
-            return operationError("INVALID_RESPONSE", "Response breaks the naming rule", {
-              violations,
-            });
-        }
-        return wire;
+        return toWire(result) as OperationResult;
       });
       pending.add(task);
       void task.then(

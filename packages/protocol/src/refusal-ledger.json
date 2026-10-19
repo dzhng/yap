@@ -1112,7 +1112,6 @@
         "apps/service/src/audio-processing.ts": 7,
         "apps/service/src/capture.ts": 1,
         "apps/service/src/project-render.ts": 2,
-        "apps/service/src/project-service.ts": 1,
         "apps/service/src/render.ts": 1,
         "apps/service/src/voice.ts": 3,
         "apps/service/src/worker.ts": 6,

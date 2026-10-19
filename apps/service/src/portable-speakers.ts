@@ -1,5 +1,3 @@
-import type { ArtifactState } from "@yap/core/jobs";
-import { storedWork } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { acquisitionContext } from "@yap/core/acquisitions";
@@ -178,14 +176,14 @@ export function portableProjectSpeakers(
           found.set(JSON.stringify(source.observationRange), resource.metadata);
       }
       const evidence = [...found.values()],
-        speaker = storedWork({
+        speaker = {
           selection,
           evidence,
-          state: (evidence.length ? "ready" : "unavailable") as ArtifactState,
+          state: evidence.length ? "ready" : "unavailable",
           reason: evidence.length ? null : "source_evidence_unobserved",
           retryable: false,
           jobId: null,
-        });
+        };
       return { ...speaker, transcript: null, speaker };
     });
   const plan = {
