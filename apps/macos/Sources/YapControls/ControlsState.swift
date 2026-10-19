@@ -45,8 +45,6 @@ public struct ControlsState: Equatable, Sendable {
     public var failure: String?
     /// Shortcuts whose key combination this app could not claim, so nothing was stolen.
     public var unavailableShortcuts: [String] = []
-    /// Where a person can state their own key combinations when a default is taken.
-    public var shortcutOverridePath: String?
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
     public private(set) var unansweredStart: StartRequest?
     /// Whether any source was ever selected. Only before then is a display offered by default.

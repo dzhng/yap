@@ -82,7 +82,7 @@ public enum CapturePresentation {
             let detail = take.interruptionMessage.map { ": \($0)" } ?? ""
             lines.append("Last take interrupted — \(take.interruptionReason ?? "reason unavailable")\(detail)")
         }
-        if !state.unavailableShortcuts.isEmpty { lines.append("\(state.unavailableShortcuts.joined(separator: " and ")) is already in use elsewhere.") }
+        if !state.unavailableShortcuts.isEmpty { lines.append("\(state.unavailableShortcuts.joined(separator: " and ")) was refused by macOS.") }
         return lines
     }
 }

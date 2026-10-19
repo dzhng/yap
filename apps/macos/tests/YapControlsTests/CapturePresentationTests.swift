@@ -104,6 +104,8 @@ func runCapturePresentationTests() {
     var refused = ready()
     refused.failure = "PERMISSION_REQUIRED: Screen recording permission is not authorized."
     precondition(CapturePresentation.noticeLines(for: refused).contains(refused.failure!))
+    refused.unavailableShortcuts = ["⌥⇧S"]
+    precondition(CapturePresentation.noticeLines(for: refused).contains("⌥⇧S was refused by macOS."))
     print("PASS shared capture lifecycle and transport applicability")
     runOverlayCameraTests()
 }
