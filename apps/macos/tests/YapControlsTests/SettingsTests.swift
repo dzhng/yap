@@ -37,7 +37,10 @@ func runPreferenceTests() {
     let suite = directory.appendingPathComponent("preferences").path
     let launch = { Preferences(defaults: UserDefaults(suiteName: suite)!) }
 
+    let defaults = launch()
+    precondition(defaults.countdown == nil, "The countdown is off until a person enables it")
     let first = launch()
+    first.countdownBeforeRecording = true
     precondition(first.showSettingsAtLaunch, "Settings opens at launch until a person turns it off")
     precondition(first.setUpAgents, "Agent setup (command and skill) is on by default")
     precondition(first.showCameraPreview, "Camera preview is visible by default")

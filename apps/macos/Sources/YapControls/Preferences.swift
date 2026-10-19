@@ -87,9 +87,9 @@ public struct Preferences {
         nonmutating set { defaults.set(newValue, forKey: Key.showControlsInScreenshots) }
     }
 
-    /// Countdown defaults on so people have time to return to their content before capture starts.
+    /// Countdown defaults off; the agent can trim the start, and people can opt into a pause.
     public var countdownBeforeRecording: Bool {
-        get { defaults.object(forKey: Key.countdownBeforeRecording) as? Bool ?? true }
+        get { defaults.object(forKey: Key.countdownBeforeRecording) as? Bool ?? false }
         nonmutating set { defaults.set(newValue, forKey: Key.countdownBeforeRecording) }
     }
 

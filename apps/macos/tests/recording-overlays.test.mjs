@@ -73,7 +73,7 @@ test(
   "Escape during the countdown abandons the start and allocates no recording",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     // A display is selected but never recorded: the count is abandoned before capture is asked for.
     await app.ready();
     await app.choose("capture.startOrStop");
@@ -112,7 +112,7 @@ test(
   "the menu offers to cancel the count it is running, and does",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     await app.ready();
     assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
