@@ -2,7 +2,7 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
-## Unreleased
+## 0.1.62
 
 Show your agent, in four keys. Press ⌥⇧S to record the display under your pointer, talk,
 hold ⇧ and move to draw, ⇧-click to drop a numbered pin, and press ⌥⇧S again. ⌥⇧V pastes a
