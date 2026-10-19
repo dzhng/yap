@@ -41,6 +41,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         suspendShortcuts: @escaping () -> Void,
         resumeShortcuts: @escaping () -> Void,
         setShortcut: @escaping (ControlsAction, Shortcut) -> Bool,
+        resetShortcuts: @escaping () -> Void,
         refreshPermissions: @escaping () -> Void,
         agentSetup: AgentSetup = NoAgentSetup()
     ) {
@@ -50,7 +51,7 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         model = SettingsModel(
             preferences: preferences, perform: perform, update: update,
             suspendShortcuts: suspendShortcuts, resumeShortcuts: resumeShortcuts,
-            setShortcut: setShortcut, agentSetup: agentSetup)
+            setShortcut: setShortcut, resetShortcuts: resetShortcuts, agentSetup: agentSetup)
         super.init()
         // Returning from System Settings activates this app again; that is when access changes.
         NotificationCenter.default.addObserver(
@@ -82,13 +83,9 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func update(
-        _ state: ControlsState, shortcuts: [ControlsAction: ShortcutBindings.Binding],
-        registered: Set<String>
-    ) {
+    func update(_ state: ControlsState, shortcuts: [ControlsAction: ShortcutBindings.Binding]) {
         if model.state != state { model.state = state }
         if model.shortcuts != shortcuts { model.shortcuts = shortcuts }
-        if model.registered != registered { model.registered = registered }
         if model.countdownBeforeRecording != preferences.countdownBeforeRecording {
             model.countdownBeforeRecording = preferences.countdownBeforeRecording
         }
@@ -160,7 +157,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 final class SettingsModel: ObservableObject {
     @Published var state = ControlsState()
     @Published var shortcuts = ShortcutBindings.defaults
-    @Published var registered: Set<String> = []
     @Published var recordingAction: ControlsAction?
     @Published var shortcutErrorAction: ControlsAction?
     /// Read from the system each time the window is shown or comes forward.
@@ -192,6 +188,7 @@ final class SettingsModel: ObservableObject {
     private let suspendShortcuts: () -> Void
     private let resumeShortcuts: () -> Void
     private let setShortcut: (ControlsAction, Shortcut) -> Bool
+    private let resetShortcuts: () -> Void
     private let preferences: Preferences
     private let agentSetup: AgentSetup
 
@@ -199,6 +196,7 @@ final class SettingsModel: ObservableObject {
          update: @escaping (String, [String: Any]) -> Void,
          suspendShortcuts: @escaping () -> Void = {}, resumeShortcuts: @escaping () -> Void = {},
          setShortcut: @escaping (ControlsAction, Shortcut) -> Bool = { _, _ in false },
+         resetShortcuts: @escaping () -> Void = {},
          agentSetup: AgentSetup = NoAgentSetup()) {
         self.preferences = preferences
         self.perform = perform
@@ -206,6 +204,7 @@ final class SettingsModel: ObservableObject {
         self.suspendShortcuts = suspendShortcuts
         self.resumeShortcuts = resumeShortcuts
         self.setShortcut = setShortcut
+        self.resetShortcuts = resetShortcuts
         self.agentSetup = agentSetup
         showAtLaunch = preferences.showSettingsAtLaunch
         countdownBeforeRecording = preferences.countdownBeforeRecording
@@ -230,12 +229,17 @@ final class SettingsModel: ObservableObject {
         resumeShortcuts()
     }
 
+    /// Restore Defaults: every action back on Yap's own keys, through `shortcuts.reset`.
+    func restoreDefaultShortcuts() {
+        shortcutErrorAction = nil
+        resetShortcuts()
+    }
+
+    /// One key per recording: accepted or refused, the field lets go and the shortcuts return.
     func captureShortcut(_ action: ControlsAction, shortcut: Shortcut) {
-        if setShortcut(action, shortcut) {
-            shortcutErrorAction = nil
-        } else {
-            shortcutErrorAction = action
-        }
+        let accepted = setShortcut(action, shortcut)
+        endShortcutRecording(action)
+        shortcutErrorAction = accepted ? nil : action
     }
 
     func setAutomaticUpdates(_ enabled: Bool) {
@@ -415,6 +419,14 @@ struct SettingsView: View {
             shortcutRows(for: .recording)
         } header: {
             Text("While Recording")
+        } footer: {
+            // Below both groups, and named for all of them, since it restores every shortcut.
+            HStack {
+                Spacer()
+                Button("Reset All Shortcuts to Defaults") { model.restoreDefaultShortcuts() }
+                    .disabled(model.shortcuts == ShortcutBindings.defaults)
+            }
+            .padding(.bottom, 8)
         }
     }
 
@@ -431,13 +443,8 @@ struct SettingsView: View {
     private func shortcutValue(_ action: ControlsAction) -> some View {
         let binding = model.shortcuts[action]
         let unavailable = model.state.unavailableShortcuts.contains(action.id)
-        let status = binding.map {
-            ShortcutPresentation.state(
-                for: $0, registered: model.registered.contains(action.id),
-                recording: model.state.isLive || model.state.counting,
-                unavailable: unavailable,
-                duplicate: model.shortcutErrorAction == action)
-        } ?? .refusedByMacOS
+        let status = ShortcutPresentation.state(
+            unavailable: unavailable, duplicate: model.shortcutErrorAction == action)
         HStack(alignment: .center, spacing: 8) {
             if status != .active {
                 shortcutStatus(status)
@@ -642,6 +649,12 @@ private final class ShortcutRecorderNativeView: NSView {
         // Modifier-only presses do not identify a shortcut. Keep the field focused until a
         // physical key arrives, so a person can chord modifiers in any order.
         guard !ShortcutKeys.isModifier(UInt32(event.keyCode)) else { return }
+        // Escape on its own leaves the field and keeps the binding, as macOS's own fields do.
+        if event.keyCode == 53, event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .function, .numericPad]).isEmpty {
+            window?.makeFirstResponder(nil)
+            return
+        }
         var modifiers: UInt32 = 0
         if event.modifierFlags.contains(.control) { modifiers |= UInt32(controlKey) }
         if event.modifierFlags.contains(.option) { modifiers |= UInt32(optionKey) }

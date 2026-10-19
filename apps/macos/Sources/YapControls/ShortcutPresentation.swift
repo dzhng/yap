@@ -8,20 +8,12 @@ public enum ShortcutPresentation {
         case duplicateInYap
     }
 
-    /// Registration is observed from the app. A recording-lifetime binding is intentionally
-    /// described separately while idle: it is valid, but there is no reason to claim it yet.
-    public static func state(
-        for binding: ShortcutBindings.Binding,
-        registered: Bool,
-        recording: Bool,
-        unavailable: Bool,
-        duplicate: Bool = false
-    ) -> State {
+    /// What a binding's status says. Refusal is what the last registration reported, so a
+    /// binding released while Settings records a key, or an in-take one while idle, is not refused.
+    public static func state(unavailable: Bool, duplicate: Bool = false) -> State {
         if duplicate { return .duplicateInYap }
         if unavailable { return .refusedByMacOS }
-        if binding.lifetime == .recording && !recording { return .active }
-        if registered { return .active }
-        return .refusedByMacOS
+        return .active
     }
 
     public static func statusTitle(_ state: State) -> String {

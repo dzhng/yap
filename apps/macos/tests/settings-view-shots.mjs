@@ -13,7 +13,7 @@ const scratch = mkdtempSync(join(tmpdir(), "yap-settings-view-"));
 try {
   const executable = compileControlsCheck(
     scratch,
-    ["SettingsWindow", "WindowMenu"],
+    ["SettingsWindow", "WindowMenu", "CurrentKeyboardLayout"],
     String.raw`
 import AppKit
 import SwiftUI
@@ -44,7 +44,6 @@ enum ControlsProbe { static let observed = true }
             for (name, updates) in states {
                 let preferences = Preferences(defaults: UserDefaults(suiteName: "\(scratch)/\(theme)-\(name)")!)
                 let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
-                model.registered = [ControlsAction.startOrStop.id, ControlsAction.pastePrompt.id]
                 model.state.permissions = ControlsState.Permissions(
                     screen: .granted, microphone: .granted,
                     accessibility: name == "accessibility-allowed" ? .granted : .denied)
@@ -91,14 +90,13 @@ enum ControlsProbe { static let observed = true }
 
         let shortcutStates = [
             "active", "refused-by-macos", "duplicate-in-yap",
-            "recording-in-progress", "field-recording",
+            "recording-in-progress", "field-recording", "customized",
         ]
         for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for name in shortcutStates {
                 let preferences = Preferences(defaults: UserDefaults(suiteName: "\(scratch)/shortcuts-\(theme)-\(name)")!)
                 let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
                 model.shortcuts = ShortcutBindings.defaults
-                model.registered = [ControlsAction.startOrStop.id, ControlsAction.pastePrompt.id]
                 switch name {
                 case "refused-by-macos":
                     model.state.unavailableShortcuts = [ControlsAction.undoMark.id]
@@ -107,9 +105,11 @@ enum ControlsProbe { static let observed = true }
                 case "recording-in-progress":
                     model.state.service = .ready
                     model.state.device = .init(state: .recording, recordingId: "shot", elapsedUs: 1_000_000)
-                    model.registered = Set(ShortcutBindings.catalog.map { $0.action.id })
                 case "field-recording":
                     model.recordingAction = .startOrStop
+                case "customized":
+                    model.shortcuts[.startOrStop] = .init(
+                        shortcut: .init(keyCode: 15, modifiers: 4_352, label: "⌃⌘R"), lifetime: .app)
                 default: break
                 }
                 let content = NSHostingView(rootView: SettingsView(model: model))

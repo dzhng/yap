@@ -1447,6 +1447,12 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Bind the named actions, apply them immediately and persist them; other actions keep their keys. Answers like shortcuts.get, so a refused_by_macos state says another app or macOS holds those keys.",
     ),
   z
+    .object({ operation: z.literal("shortcuts.reset"), params: z.object({}).strict() })
+    .strict()
+    .describe(
+      "Put every shortcut back on Yap's default keys, as Settings' Restore Defaults does. Answers like shortcuts.get.",
+    ),
+  z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
     .strict()
     .describe(
@@ -1746,6 +1752,7 @@ export const idempotentOperations: ReadonlySet<OperationName> = new Set<Operatio
   "login.setEnabled", // setting the existing login-item preference changes nothing.
   "update.setEnabled", // setting the existing updater preference changes nothing.
   "shortcuts.set", // setting the existing bindings changes nothing.
+  "shortcuts.reset", // restoring the defaults twice leaves the defaults.
   "skill.install", // installing an already installed skill is a no-op.
   "skill.uninstall", // uninstalling an absent skill is a no-op.
   "skill.update", // updating an already current skill is a no-op.
@@ -1777,6 +1784,7 @@ const waits: Partial<Record<OperationName, number>> = {
   "login.setEnabled": nativeCall,
   "shortcuts.get": nativeCall,
   "shortcuts.set": nativeCall,
+  "shortcuts.reset": nativeCall,
   "update.status": nativeCall,
   "update.check": nativeCall,
   "update.setEnabled": nativeCall,

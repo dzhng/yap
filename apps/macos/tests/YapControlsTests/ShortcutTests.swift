@@ -28,19 +28,14 @@ func runShortcutTests() {
 }
 
 func runShortcutPresentationTests() {
-    let recording = ShortcutBindings.defaults[.undoMark]!
-    precondition(
-        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: false)
-            == .active,
-        "An idle recording-lifetime shortcut has no warning state")
-    precondition(
-        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: true)
-            == .refusedByMacOS,
+    // Refusal is only what registration reported: a binding Settings released to record a key,
+    // or an in-take one while idle, is not refused.
+    precondition(ShortcutPresentation.state(unavailable: false) == .active,
+        "A binding macOS did not refuse is active")
+    precondition(ShortcutPresentation.state(unavailable: true) == .refusedByMacOS,
         "An unavailable shortcut says macOS refused it")
-    precondition(
-        ShortcutPresentation.state(for: recording, registered: true, recording: true, unavailable: false)
-            == .active,
-        "A registered shortcut says it is active")
+    precondition(ShortcutPresentation.state(unavailable: true, duplicate: true) == .duplicateInYap,
+        "A duplicate says so before anything else")
     precondition(
         ShortcutPresentation.statusTitle(.duplicateInYap) == "Duplicate in Yap"
             && ShortcutPresentation.statusTitle(.refusedByMacOS) == "Refused by macOS",

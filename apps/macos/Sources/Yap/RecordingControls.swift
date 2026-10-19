@@ -103,6 +103,7 @@ final class RecordingControls: NSObject {
             if case .success = self.setShortcutFromSettings(action, shortcut) { return true }
             return false
         },
+        resetShortcuts: { [weak self] in _ = self?.handleShortcuts("shortcuts.reset", Data("{}".utf8)) },
         refreshPermissions: { [weak self] in
             self?.readPermissions()
             self?.render()
@@ -178,6 +179,7 @@ final class RecordingControls: NSObject {
     func handleShortcuts(_ operation: String, _ params: Data) -> Result<Data, ServiceFailure> {
         let layout = KeyboardLayout.current()
         if operation == "shortcuts.get" { return .success(describeShortcuts(layout)) }
+        if operation == "shortcuts.reset" { return resetShortcuts(layout) }
         guard operation == "shortcuts.set",
             let object = try? JSONSerialization.jsonObject(with: params) as? [String: Any],
             let stated = object["bindings"] as? [String: Any]
@@ -211,13 +213,25 @@ final class RecordingControls: NSObject {
         }
     }
 
+    /// Every action back on its default. The stored file goes, so a later change to the defaults
+    /// reaches this person too.
+    private func resetShortcuts(_ layout: KeyboardLayout) -> Result<Data, ServiceFailure> {
+        let path = GlobalShortcuts.overridePath(home: home)
+        do {
+            if FileManager.default.fileExists(atPath: path) { try FileManager.default.removeItem(atPath: path) }
+        } catch {
+            return .failure(ServiceFailure(code: "SHORTCUTS_WRITE_FAILED", message: error.localizedDescription))
+        }
+        // The defaults bind each key once, so they always apply.
+        try? applyShortcuts(ShortcutBindings.defaults, recording: shortcutsRecording)
+        render()
+        return .success(describeShortcuts(layout))
+    }
+
     /// The public answer: each action's keys and whether macOS holds it, as Settings shows it.
     private func describeShortcuts(_ layout: KeyboardLayout) -> Data {
         ShortcutBindings.describe(bindings, layout: layout) { [self] action in
-            ShortcutPresentation.state(
-                for: bindings[action]!, registered: held.contains(action.id),
-                recording: shortcutsRecording,
-                unavailable: state.unavailableShortcuts.contains(action.id))
+            ShortcutPresentation.state(unavailable: state.unavailableShortcuts.contains(action.id))
         }
     }
 
@@ -910,7 +924,7 @@ final class RecordingControls: NSObject {
         overlay.updateCamera(camera, previewShown: preferences.showCameraPreview)
         overlay.updateGlass(preferences.controlsGlass)
         overlay.updatePreview(cameraPreviewImage)
-        settings.update(state, shortcuts: bindings, registered: held)
+        settings.update(state, shortcuts: bindings)
         showStatusItem()
         pace()
     }

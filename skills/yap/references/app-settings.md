@@ -66,6 +66,16 @@ Refusals, and what to tell the user:
 
 Report the `label` back to the user (`⌃⌘R`), not the `keys` string.
 
+To put every shortcut back on Yap's defaults, as Settings' "Reset All Shortcuts
+to Defaults" does:
+
+```sh
+yap shortcuts.reset
+```
+
+It answers like `shortcuts.get`. Yap's defaults then apply even if a later
+version changes them.
+
 ## Opening at login
 
 `login.status` reads whether Yap opens at login. Change it with

@@ -127,7 +127,8 @@ cleanup.
 These operations belong to the app and are answered on its own socket, so they
 work while the service is down. `update.status`, `update.check`, and
 `update.setEnabled` expose the native app updater; `shortcuts.get` and
-`shortcuts.set` read and bind global shortcuts by key name (`ctrl+cmd+r`);
+`shortcuts.set` read and bind global shortcuts by key name (`ctrl+cmd+r`), and
+`shortcuts.reset` puts every one back on its default;
 `login.status` and `login.setEnabled` read and change opening at login, after
 explicit user consent. [App settings](app-settings.md) says how to use them. `cli.status`, `cli.install`
 and `cli.uninstall` expose the app-managed

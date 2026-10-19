@@ -104,6 +104,19 @@ test(
     });
     assert.equal(duplicate.ok, false, JSON.stringify(duplicate));
     assert.equal(duplicate.error.code, "DUPLICATE_SHORTCUT");
+
+    // Restoring puts every action back on its default and forgets the stored file, so a later
+    // change to the defaults reaches this person too.
+    assert.equal(existsSync(join(home, "shortcuts.json")), true);
+    const restored = await callLocal(socket, {
+      id: "settings-restore",
+      operation: "shortcuts.reset",
+      params: {},
+    });
+    assert.equal(restored.ok, true, JSON.stringify(restored));
+    assert.equal(restored.data.bindings["capture.startOrStop"].keys, "option+shift+s");
+    assert.equal(restored.data.bindings["capture.restart"].keys, "option+shift+r");
+    assert.equal(existsSync(join(home, "shortcuts.json")), false);
     instance.kill("SIGTERM");
     await instance.exited;
   },
