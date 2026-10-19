@@ -48,7 +48,7 @@ async function audio(params, name) {
   const mcp = await service.mcp.callTool({ name: "audio.get", arguments: params });
   assert.equal(mcp.structuredContent.ok, true);
   assert.deepEqual(Buffer.from(mcp.content.find((v) => v.type === "audio").data, "base64"), bytes);
-  assert.equal(ready.published.output.frames, pcm.length / 8);
+  assert.equal(ready.published.output.frameCount, pcm.length / 8);
   assert.equal(cli.published.output.sampleRate, 48000);
   assert.equal(cli.published.output.channels, 2);
   report.costs.push({
@@ -121,7 +121,7 @@ try {
       label: "clip",
       clip: {
         trackId: ref("track"),
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -176,11 +176,10 @@ try {
     (v) => v.state === "ready",
     "gain movie",
   );
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     ...selection(),
     kind: "video",
-    exportId,
+    requestId: randomUUID(),
     directory: out,
     leaf: "gain-export.mp4",
   });

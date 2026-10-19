@@ -117,7 +117,7 @@ try {
         label: `angle-${name}`,
         clip: {
           trackId: { label: "angles" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: {
@@ -137,7 +137,7 @@ try {
           status: "accepted",
           method: "waveform",
           fingerprint: "sha256:known-angle-control",
-          sources: members.map(({ asset, streamId }) => ({ assetId: asset.id, streamId })),
+          sources: members.map(({ asset, streamId }) => ({ assetId: asset.assetId, streamId })),
         },
         members: members.map(({ name }, index) => ({
           clipId: { label: `angle-${name}` },
@@ -151,7 +151,7 @@ try {
 
   const expected = {};
   for (const { name, asset, streamId } of members) {
-    const request = { assetId: asset.id, streamId, atUs: 0, maxLongEdge: 64 };
+    const request = { assetId: asset.assetId, streamId, atUs: 0, maxLongEdge: 64 };
     await poll(
       () => call("frame.get", request),
       (value) => value.state === "ready",

@@ -91,7 +91,7 @@ try {
         label: "red",
         clip: {
           trackId: { label: "video-a" },
-          assetId: red.id,
+          assetId: red.assetId,
           streamId: red.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -102,7 +102,7 @@ try {
         label: "blue",
         clip: {
           trackId: { label: "video-b" },
-          assetId: blue.id,
+          assetId: blue.assetId,
           streamId: blue.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -116,7 +116,7 @@ try {
         label,
         clip: {
           trackId: { label: trackLabel },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -144,9 +144,8 @@ try {
       },
     ],
   });
-  const exportId = randomUUID();
-  await call("export.create", {
-    exportId,
+  const { exportId } = await call("export.create", {
+    requestId: randomUUID(),
     projectId: project.project.projectId,
     revisionId: edited.revision.revisionId,
     kind: "video",
@@ -166,17 +165,21 @@ try {
   const audio = delivered.streams.find((stream) => stream.kind === "audio");
   assert.ok(video && audio, "combined export must retain video and audio streams");
   const events = await poll(
-    () => call("timeline.events", { assetId: delivered.id, streamId: video.id, limit: 50 }),
+    () =>
+      call("timeline.events", { assetId: delivered.assetId, streamId: video.streamId, limit: 50 }),
     (value) => value.state === "ready",
     "delivered video scenes",
   );
-  const sceneRows = events.page.rows
-    .filter((row) => row.kind === "scene")
-    .map((row) => row.sourceAtUs);
+  const sceneRows = events.rows.filter((row) => row.kind === "scene").map((row) => row.sourceAtUs);
   assert.deepEqual(sceneRows, [250000, 500000, 750000]);
   const audioPath = join(out, "delivered.wav");
   const audioResult = await poll(
-    () => call("audio.get", { assetId: delivered.id, streamId: audio.id }, { output: audioPath }),
+    () =>
+      call(
+        "audio.get",
+        { assetId: delivered.assetId, streamId: audio.streamId },
+        { output: audioPath },
+      ),
     (value) => value.state === "ready",
     "delivered audio",
   );
@@ -198,18 +201,18 @@ try {
     durationUs: video.endUs,
     videoFrames: video.samples.count,
   };
-  report.deliveredVideo = { streamId: video.id, sceneRows };
+  report.deliveredVideo = { streamId: video.streamId, sceneRows };
   report.deliveredAudio = {
     path: "delivered.wav",
     sha256: hash(audioBytes),
     bytes: audioBytes.length,
-    streamId: audio.id,
+    streamId: audio.streamId,
     sampleRate: audioResult.published.output.sampleRate,
     channels: audioResult.published.output.channels,
     frames: header.frames,
     samples,
   };
-  report.export.audioFrames = audioResult.published.output.frames;
+  report.export.audioFrames = audioResult.published.output.frameCount;
   report.export.sampleRate = audioResult.published.output.sampleRate;
   report.export.channels = audioResult.published.output.channels;
   report.checks = {

@@ -141,7 +141,7 @@ try {
         operation: "place",
         clip: {
           trackId,
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: span } },
           placement: { kind: "project", range: { startUs: i * span, endUs: (i + 1) * span } },
@@ -182,10 +182,13 @@ try {
   report.observations.prepareMs = performance.now() - preparingAt;
   report.receipts.push(prepared);
   report.observations.nativePeakResidentBytes = prepared.published.output.peakResidentBytes;
-  assert.deepEqual(prepared.published.output.sampleRange, { start: 0, end: seconds * 48000 });
+  assert.deepEqual(prepared.published.output.sampleRange, {
+    startSamples: 0,
+    endSamples: seconds * 48000,
+  });
   assert.deepEqual(await call("audio.prepare", selection), prepared);
   const resultAsset = await call("asset.get", { assetId: prepared.published.output.assetId });
-  const full = join(home, "library/assets", resultAsset.id + ".wav"),
+  const full = join(home, "library/assets", resultAsset.assetId + ".wav"),
     f = await open(full, "r");
   let expected;
   try {
@@ -239,9 +242,9 @@ try {
   ]);
   await service.start();
   const range = {
-    assetId: resultAsset.id,
+    assetId: resultAsset.assetId,
     streamId: resultAsset.streams[0].streamId,
-    range: { startUs: (seconds - 1) * 1e6, endUs: seconds * 1e6 },
+    sourceRange: { startUs: (seconds - 1) * 1e6, endUs: seconds * 1e6 },
   };
   const lateAt = performance.now();
   const late = await wait(

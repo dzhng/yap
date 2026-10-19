@@ -63,8 +63,8 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
         label: "clip",
         clip: {
           trackId: { label: "track" },
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: duration } },
           placement: { kind: "project", range: { startUs: 0, endUs: duration } },
         },
@@ -83,18 +83,20 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
   const range = { startUs: 333333, endUs: 799999 };
   try {
     for (const [name, selection, rate] of [
-      ["source", { assetId: asset.id, streamId: stream.id }, nativeRate],
+      ["source", { assetId: asset.assetId, streamId: stream.streamId }, nativeRate],
       ["project", { projectId, revisionId: edited.revision.revisionId }, 48000],
     ]) {
       const fullPath = join(out, `rate-${name}-full.wav`),
         rangePath = join(out, `rate-${name}-range.wav`);
+      // A source selection names its span sourceRange; a project selection names it range.
+      const ranged = { ...selection, [selection.assetId ? "sourceRange" : "range"]: range };
       const fullReceipt = await poll(
         () => call("audio.get", selection, { output: fullPath }),
         (v) => v.state === "ready",
         `${name} audio`,
       );
       const rangeReceipt = await poll(
-        () => call("audio.get", { ...selection, range }, { output: rangePath }),
+        () => call("audio.get", ranged, { output: rangePath }),
         (v) => v.state === "ready",
         `${name} range audio`,
       );
@@ -118,7 +120,7 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
       assert.equal(peakIndex, (rate * clickTime) / 1000000, "Resampling moved the known impulse");
       const bucketFrames = rate === 44100 ? 441 : 480;
       const overview = await delivered("waveform.get", { ...selection, bucketFrames }, rate);
-      const detail = await delivered("waveform.get", { ...selection, range, bucketFrames }, rate);
+      const detail = await delivered("waveform.get", { ...ranged, bucketFrames }, rate);
       const checkBuckets = (document, left, right) => {
         assert.deepEqual(document.sampleRange, { start: left, end: right });
         let next = left;
@@ -149,16 +151,16 @@ export async function verifyAcousticRateAxes({ out, call, delivered }) {
         );
       const waveform = await delivered(
         "waveform.get",
-        { ...selection, range, bucketFrames, format: "image" },
+        { ...ranged, bucketFrames, format: "image" },
         rate,
       );
       const spectrum = await delivered(
         "spectrogram.get",
-        { ...selection, range, fftFrames: 1024, hopFrames: 512 },
+        { ...ranged, fftFrames: 1024, hopFrames: 512 },
         rate,
       );
       for (const image of [waveform, spectrum])
-        assert.deepEqual(image.metadata.sampleRange, { start, end });
+        assert.deepEqual(image.metadata.sampleRange, { startSamples: start, endSamples: end });
       const imagePixels = async (image) => {
         const { stdout } = await run(
           "ffmpeg",

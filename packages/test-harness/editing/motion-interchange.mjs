@@ -53,7 +53,7 @@ try {
     "alpha import",
   );
   const asset = await call("asset.get", { assetId: imported.published.output.assetId });
-  assert.equal(asset.id, report.sourceSha256);
+  assert.equal(asset.assetId, report.sourceSha256);
   const stream = asset.streams.find((s) => s.kind === "video");
   assert.equal(stream.codec, "ap4h");
   assert.equal(stream.endUs, 1000000);
@@ -87,8 +87,8 @@ try {
       label: "motion",
       clip: {
         trackId: { label: "pictures" },
-        assetId: asset.id,
-        streamId: stream.id,
+        assetId: asset.assetId,
+        streamId: stream.streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
       },
@@ -141,7 +141,7 @@ try {
     expectedRevisionId: revisionId,
     requestId: randomUUID(),
   });
-  revisionId = undone.id;
+  revisionId = undone.revisionId;
   assert.deepEqual(
     (await picture({ ...selection(), atUs: 1250001 }, "undo-repeat-phase-1")).pixels,
     reference[1].pixels,
@@ -241,7 +241,7 @@ try {
       operation: "place",
       clip: {
         trackId: { label: "pictures" },
-        assetId: still.id,
+        assetId: still.assetId,
         streamId: still.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: {
@@ -303,7 +303,7 @@ try {
   await call("export.create", {
     projectId,
     revisionId: retimedRevision,
-    exportId,
+    requestId: exportId,
     kind: "processed-package",
     directory: out,
     leaf: "motion.zip",
@@ -319,7 +319,7 @@ try {
   await service.start();
   const opened = await call("package.open", { path: packaged.output });
   const ready = await poll(
-    () => call("package.status", { admissionId: opened.id }),
+    () => call("package.status", { admissionId: opened.packageId }),
     (v) => v.state === "ready",
     "open alpha package",
   );
@@ -336,7 +336,7 @@ try {
     (await picture({ ...recipient, atUs: 2000001 }, "adopted-retimed-phase-2")).pixels,
     reference[2].pixels,
   );
-  const retainedAsset = await call("asset.get", { assetId: asset.id });
+  const retainedAsset = await call("asset.get", { assetId: asset.assetId });
   assert.deepEqual(retainedAsset.streams, asset.streams);
   const undoAdoption = await call("edit.undo", {
     projectId: recipient.projectId,
@@ -346,7 +346,7 @@ try {
   assert.deepEqual(
     (
       await picture(
-        { projectId: recipient.projectId, revisionId: undoAdoption.id, atUs: 1250001 },
+        { projectId: recipient.projectId, revisionId: undoAdoption.revisionId, atUs: 1250001 },
         "adopted-undo-phase-1",
       )
     ).pixels,
@@ -370,7 +370,7 @@ try {
   await run("/usr/bin/zip", ["-d", broken, mediaMember]);
   const bad = await call("package.open", { path: broken });
   const failed = await poll(
-    () => call("package.status", { admissionId: bad.id }),
+    () => call("package.status", { admissionId: bad.packageId }),
     (v) => v.state === "failed" || v.state === "ready",
     "missing movie refusal",
   );

@@ -81,7 +81,7 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
           label: `clip${i}`,
           clip: {
             trackId: { label: "track" },
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId,
             source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
             placement: { kind: "project", range: { startUs, endUs: startUs + 2000000 } },
@@ -175,7 +175,7 @@ export async function verifyAcousticRetiming({ out, call, delivered, pixels }) {
       const start = bounds ? left : 0,
         end = bounds ? right : full.frames;
       for (const m of [a, b]) {
-        assert.deepEqual(m.sampleRange, { start, end });
+        assert.deepEqual(m.sampleRange, { startSamples: start, endSamples: end });
         assert.equal(m.revisionId, selection.revisionId);
       }
       const wp = await pixels(waveform),

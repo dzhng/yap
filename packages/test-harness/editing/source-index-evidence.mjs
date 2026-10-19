@@ -50,13 +50,13 @@ async function ready(selection) {
   );
 }
 async function pages(selection, initial) {
-  const rows = [...initial.page.entries];
-  let cursor = initial.page.nextCursor;
+  const rows = [...initial.entries];
+  let cursor = initial.nextCursor;
   while (cursor) {
     const page = await call("index.get", { ...selection, cursor, limit: 1 });
-    assert.equal(page.page.metadata.generation, initial.page.metadata.generation);
-    rows.push(...page.page.entries);
-    cursor = page.page.nextCursor;
+    assert.equal(page.metadata.generation, initial.metadata.generation);
+    rows.push(...page.entries);
+    cursor = page.nextCursor;
   }
   return rows;
 }
@@ -76,16 +76,16 @@ async function coverage(reference) {
 }
 async function inspect(selection, name) {
   const page = await ready(selection);
-  const reference = { ...selection, generation: page.page.metadata.generation };
+  const reference = { ...selection, generation: page.metadata.generation };
   const entries = await pages(selection, page);
   const ranges = await coverage(reference);
-  assert.equal(entries.length, page.page.metadata.candidateCount);
+  assert.equal(entries.length, page.metadata.candidateCount);
   assert.deepEqual(
     entries.map((e) => e.candidate.ordinal),
     entries.map((_, i) => i),
   );
   assert.equal(ranges[0].source.startUs, 0);
-  assert.equal(ranges.at(-1).source.endUs, page.page.metadata.durationUs);
+  assert.equal(ranges.at(-1).source.endUs, page.metadata.durationUs);
   for (let i = 1; i < ranges.length; i++)
     assert.equal(ranges[i].source.startUs, ranges[i - 1].source.endUs);
   for (const entry of entries) {
@@ -96,13 +96,13 @@ async function inspect(selection, name) {
     assert.equal(entry.frame.acquisitionId, selection.acquisitionId);
     assert.equal(entry.frame.requestedSourceUs, entry.candidate.requestedSourceUs);
     assert.equal(entry.frame.atUs, entry.candidate.requestedSourceUs);
-    assert.equal(entry.frame.implementationId, page.page.metadata.implementationId);
+    assert.equal(entry.frame.implementationId, page.metadata.implementationId);
     const sample = entry.frame.sample,
       at = BigInt(entry.candidate.requestedSourceUs + sample.originUs);
     assert(BigInt(sample.value) * 1000000n <= at * BigInt(sample.timescale));
     assert(BigInt(sample.endValue) * 1000000n > at * BigInt(sample.endTimescale));
   }
-  const record = { name, selection, metadata: page.page.metadata, entries, coverage: ranges };
+  const record = { name, selection, metadata: page.metadata, entries, coverage: ranges };
   report.selections.push(record);
   return { page, reference, entries, ranges, record };
 }
@@ -260,11 +260,11 @@ try {
   const asset = await imported(join(fixture, "source.mov"), "source-index");
   const videos = asset.streams.filter((s) => s.kind === "video");
   assert.equal(videos.length, 2);
-  const first = { assetId: asset.id, streamId: videos[0].id },
-    second = { assetId: asset.id, streamId: videos[1].id };
+  const first = { assetId: asset.assetId, streamId: videos[0].streamId },
+    second = { assetId: asset.assetId, streamId: videos[1].streamId };
   const hit = await service.arm("media.sourceVisualSamples");
   const preparing = await call("index.get", first, { transport: "mcp" });
-  assert.equal(preparing.page, null);
+  assert.equal(preparing.entries, undefined);
   assert.equal(preparing.jobId, null);
   const dependency = preparing.dependencies.find((d) => d.artifact === "source-scenes");
   assert.ok(dependency.jobId);
@@ -298,7 +298,7 @@ try {
   const changingAsset = await imported(changingFile, "changing-pictures");
   const changingSelected = await inspect(
     {
-      assetId: changingAsset.id,
+      assetId: changingAsset.assetId,
       streamId: changingAsset.streams.find((s) => s.kind === "video").streamId,
     },
     "native-temporal-pictures",
@@ -367,7 +367,8 @@ try {
         { error: true },
       )
     ).code,
-    "ARTIFACT_CHANGED",
+    // A cursor continues only the filter set that issued it.
+    "INVALID_PARAMS",
   );
   const filtered = await call("index.coverage", {
     ...selected.reference,
@@ -379,10 +380,10 @@ try {
   report.checks.coverageFilterBinding = true;
   const wrong = await call(
     "index.get",
-    { ...second, cursor: selected.page.page.nextCursor },
+    { ...second, cursor: selected.page.nextCursor },
     { error: true },
   );
-  assert.equal(wrong.code, "ARTIFACT_CHANGED");
+  assert.equal(wrong.code, "INVALID_PARAMS");
   const frameHit = await service.arm("media.sourceFrame");
   const secondPending = await poll(
     () => call("index.get", second, { transport: "mcp" }),
@@ -411,8 +412,8 @@ try {
   report.checks.canceledFrameRetry = true;
   const island = await imported(islandFile, "short-physical-island");
   const narrow = {
-    assetId: island.id,
-    streamId: island.streams.filter((s) => s.kind === "video")[1].id,
+    assetId: island.assetId,
+    streamId: island.streams.filter((s) => s.kind === "video")[1].streamId,
   };
   const short = await inspect(narrow, "native-short-island");
   assert(short.entries.some((e) => e.candidate.requestedSourceUs === 50000));
@@ -492,10 +493,12 @@ try {
   const acquiredSelection = {
     assetId: binding.assetId,
     streamId: binding.streamId,
-    acquisitionId: acquisition.id,
+    acquisitionId: acquisitionJob.target.acquisitionId,
   };
   const acquired = await inspect(acquiredSelection, "native-acquisition");
-  assert(acquired.entries.every((e) => e.frame.acquisitionId === acquisition.id));
+  assert(
+    acquired.entries.every((e) => e.frame.acquisitionId === acquisitionJob.target.acquisitionId),
+  );
   assert.equal(
     (
       await call(
@@ -515,7 +518,7 @@ try {
   await rm(donor, { recursive: true });
   report.checks.retainedAcquisition = {
     scope: "Synthetic capture journal around real native video",
-    acquisitionId: acquisition.id,
+    acquisitionId: acquisitionJob.target.acquisitionId,
     donorRemoved: true,
   };
   const project = await call("project.create", {
@@ -553,15 +556,12 @@ try {
   await call("edit.restore", {
     projectId,
     requestId: "index-restore",
-    expectedRevisionId: undone.id,
+    expectedRevisionId: undone.revisionId,
     targetRevisionId: edited.revision.revisionId,
   });
   const history = await call("revision.history", { projectId, limit: 1 });
   assert.ok(history);
-  assert.equal(
-    (await call("index.get", first)).page.metadata.generation,
-    selected.reference.generation,
-  );
+  assert.equal((await call("index.get", first)).metadata.generation, selected.reference.generation);
   await call("project.delete", { projectId }, { transport: "mcp" });
   assert.equal((await image(selected.reference, 0, "after-project-delete")).sha256, picture.sha256);
   report.checks.projectHistoryAndDeletionIndependence = true;
@@ -584,10 +584,10 @@ try {
   await service.start();
   const resumed = await call("index.get", {
     ...first,
-    cursor: selected.page.page.nextCursor,
+    cursor: selected.page.nextCursor,
     limit: 1,
   });
-  assert.equal(resumed.page.metadata.generation, selected.reference.generation);
+  assert.equal(resumed.metadata.generation, selected.reference.generation);
   assert.equal((await image(selected.reference, 0, "restarted")).sha256, picture.sha256);
   report.checks.restart = true;
   assert.equal(
@@ -626,13 +626,13 @@ try {
   report.controlledProbeAdmission = [];
   for (const control of controlled) {
     const asset = await imported(control.path, control.name);
-    const selection = { assetId: asset.id, streamId: control.streamId };
+    const selection = { assetId: asset.assetId, streamId: control.streamId };
     assert.deepEqual(service.barriers.get(control.sha256 + "/fixture.probe").override, control);
     if (control.name === "declared-empty-support") {
       const result = await call("index.get", selection, { transport: "mcp" });
       assert.equal(result.state, "unavailable");
       assert.equal(result.reason, "no_video");
-      assert.equal(result.page, null);
+      assert.equal(result.entries, undefined);
       report.controlledProbeAdmission.push({
         name: control.name,
         selection,
@@ -643,20 +643,16 @@ try {
       const empty = await inspect(selection, "controlled-ready-empty");
       assert.equal(empty.entries.length, 0);
       assert.equal(empty.page.state, "ready");
-      assertEmptyCoverage(empty.ranges, selection, empty.page.page.metadata.implementationId);
+      assertEmptyCoverage(empty.ranges, selection, empty.page.metadata.implementationId);
       const sampledEmpty = structuredClone(empty.ranges);
       sampledEmpty[1].equality = "sampled";
       assert.throws(() =>
-        assertEmptyCoverage(sampledEmpty, selection, empty.page.page.metadata.implementationId),
+        assertEmptyCoverage(sampledEmpty, selection, empty.page.metadata.implementationId),
       );
       const missingObservation = structuredClone(empty.ranges);
       delete missingObservation[1].observation;
       assert.throws(() =>
-        assertEmptyCoverage(
-          missingObservation,
-          selection,
-          empty.page.page.metadata.implementationId,
-        ),
+        assertEmptyCoverage(missingObservation, selection, empty.page.metadata.implementationId),
       );
       report.negativeControls.falselySampledEmptyRejected = true;
       report.negativeControls.missingEmptyObservationRejected = true;

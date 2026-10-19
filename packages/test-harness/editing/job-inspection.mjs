@@ -69,7 +69,7 @@ try {
           operation: "place",
           clip: {
             trackId: start === 0 ? { label: "audio" } : revision.document.tracks[0].id,
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: 720000 } },
             placement: { kind: "project", range: { startUs: i * 720000, endUs: (i + 1) * 720000 } },

@@ -88,8 +88,8 @@ try {
         operation: "place",
         clip: {
           trackId: { label: "voice" },
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -97,14 +97,18 @@ try {
     ],
   };
   const placed = await call("edit.apply", edit);
-  assert.ok(service.assets.references(asset.id).some((r) => r.id === placed.revision.revisionId));
+  assert.ok(
+    service.assets.references(asset.assetId).some((r) => r.id === placed.revision.revisionId),
+  );
   await connectMcp();
-  const expected = { projectId, deleted: true };
-  const deleted = await mcp.callTool({ name: "project.delete", arguments: { projectId } });
+  const deletion = { projectId, requestId: "delete" };
+  const deleted = await mcp.callTool({ name: "project.delete", arguments: deletion });
   assert.equal(deleted.structuredContent.ok, true);
-  assert.deepEqual(deleted.structuredContent.data, expected);
+  const expected = deleted.structuredContent.data;
+  assert.equal(expected.projectId, projectId);
+  assert.equal(expected.deleted, true);
   trace.push({ transport: "mcp", operation: "project.delete", ok: true });
-  assert.deepEqual(await call("project.delete", { projectId }), expected);
+  assert.deepEqual(await call("project.delete", deletion), expected);
   assert.equal((await call("project.get", { projectId }, false)).code, "NOT_FOUND");
   assert.equal((await call("edit.apply", edit, false)).code, "NOT_FOUND");
   assert.equal(
@@ -112,19 +116,20 @@ try {
     "NOT_FOUND",
   );
   assert.deepEqual((await call("project.list", {})).projects, []);
-  assert.deepEqual(await call("asset.get", { assetId: asset.id }), asset);
-  assert.ok(!service.assets.references(asset.id).some((r) => r.kind === "revision"));
+  assert.deepEqual(await call("asset.get", { assetId: asset.assetId }), asset);
+  assert.ok(!service.assets.references(asset.assetId).some((r) => r.kind === "revision"));
   await mcp.close();
   mcp = undefined;
   await service.close();
   service = await startProjectService({ home });
-  assert.deepEqual(await call("project.delete", { projectId }), expected);
+  assert.deepEqual(await call("project.delete", deletion), expected);
   assert.deepEqual(await call("project.create", creation), created);
   assert.deepEqual((await call("project.list", {})).projects, []);
-  assert.deepEqual(await call("asset.get", { assetId: asset.id }), asset);
-  assert.deepEqual(await call("project.delete", { projectId: "absent" }), {
+  assert.deepEqual(await call("asset.get", { assetId: asset.assetId }), asset);
+  assert.deepEqual(await call("project.delete", { projectId: "absent", requestId: "absent" }), {
     projectId: "absent",
     deleted: true,
+    freedBytes: 0,
   });
   console.log(
     JSON.stringify(

@@ -52,13 +52,13 @@ try {
   const donorReal = await realpath(donor);
   if (values.package) {
     const opened = await call("package.open", { path: await realpath(resolve(values.package)) });
-    const ready = await settled("package.status", { admissionId: opened.id }, "ready");
+    const ready = await settled("package.status", { admissionId: opened.packageId }, "ready");
     await settled(
       "package.adopt",
       { packageHandle: ready.packageHandle, requestId: "bootstrap" },
       "ready",
     );
-    await call("package.close", { admissionId: opened.id });
+    await call("package.close", { admissionId: opened.packageId });
     report.checks.push("fresh catalog bootstrap through retained package admission/adoption");
   }
   let assetId = values.asset;
@@ -108,7 +108,7 @@ try {
         clip: {
           trackId: first ? revision.document.tracks[0].id : { label: "audio" },
           assetId,
-          streamId: stream.id,
+          streamId: stream.streamId,
           ...(values.acquisition ? { acquisitionId: values.acquisition } : {}),
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: i * 1000000, endUs: (i + 1) * 1000000 } },
@@ -133,7 +133,7 @@ try {
   const exportId = randomUUID();
   await call("export.create", {
     projectId: created.project.projectId,
-    exportId,
+    requestId: exportId,
     directory: out,
     leaf: "project.zip",
     kind: "processed-package",
@@ -143,7 +143,7 @@ try {
   await mkdir(extraction);
   await run("unzip", ["-q", exported.output, "-d", extraction]);
   const manifest = JSON.parse(await readFile(join(extraction, "manifest.json")));
-  assert.equal(manifest.version, 2);
+  assert.equal(manifest.version, 6);
   const reference = manifest.resources.find(
     (item) => item.identity.kind === "asset" && item.identity.id === assetId,
   );
@@ -154,8 +154,9 @@ try {
   const portable = JSON.parse(bytes);
   assert.deepEqual(
     header.streams,
-    portable.asset.streams.map(({ segments, ...item }) => ({
+    portable.asset.streams.map(({ id, segments, ...item }) => ({
       ...item,
+      streamId: id,
       segmentCount: segments?.length ?? 0,
     })),
   );
@@ -181,7 +182,7 @@ try {
   await rename(donor, join(out, "donor-removed"));
   await start(join(out, "receiver"));
   const opened = await call("package.open", { path: exported.output });
-  const ready = await settled("package.status", { admissionId: opened.id }, "ready");
+  const ready = await settled("package.status", { admissionId: opened.packageId }, "ready");
   const adopted = await settled(
     "package.adopt",
     { packageHandle: ready.packageHandle, requestId: "adopt" },
@@ -232,14 +233,14 @@ try {
   do {
     const page = await call(
       "asset.segments",
-      { assetId, streamId: stream.id, limit: 1000, ...(cursor ? { cursor } : {}) },
+      { assetId, streamId: stream.streamId, limit: 1000, ...(cursor ? { cursor } : {}) },
       { transport: "mcp" },
     );
     await writeFile(join(out, `segments-${count}.json`), JSON.stringify(page));
     assert.deepEqual(
       page.segments,
       portable.asset.streams
-        .find((item) => item.id === stream.id)
+        .find((item) => item.id === stream.streamId)
         .segments.slice(count, count + 1000)
         .map((row, i) => ({ ordinal: count + i, ...row })),
     );
@@ -249,7 +250,7 @@ try {
   assert.equal(count, stream.segmentCount);
   report.physicalRows = count;
   report.checks.push("receiver adoption and exact complete physical rows");
-  await call("package.close", { admissionId: opened.id });
+  await call("package.close", { admissionId: opened.packageId });
   for (const mode of ["missing", "corrupt", "duplicate-stream", "version1"]) {
     const directory = join(out, mode);
     await mkdir(directory);
@@ -277,7 +278,7 @@ try {
     const path = join(out, `${mode}.zip`);
     await run("zip", ["-qr", path, "."], { cwd: directory });
     const pending = await call("package.open", { path });
-    const failure = await settled("package.status", { admissionId: pending.id }, "failed");
+    const failure = await settled("package.status", { admissionId: pending.packageId }, "failed");
     assert.equal(failure.packageHandle, null);
     await writeFile(join(out, `${mode}.json`), JSON.stringify(failure, null, 2));
     report.checks.push(`${mode} never ready`);

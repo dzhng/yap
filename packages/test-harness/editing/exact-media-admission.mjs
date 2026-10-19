@@ -122,38 +122,42 @@ try {
       expectedEnd,
       `${name}: discovery rounded physical endpoint`,
     );
-    const selection = { assetId: asset.id, streamId: asset.streams[0].streamId };
+    const selection = { assetId: asset.assetId, streamId: asset.streams[0].streamId };
     const segments = await call("asset.segments", { ...selection, limit: 1 });
     assert.deepEqual(segments.segments[0].endUs, expectedEnd);
     report.assets.push({ name, sha256: hash(bytes), asset, segments });
     const format = { sampleRate: rate, channels: 1 };
     const tail = { startUs: exact((frames - 16) * 1000000, rate), endUs: expectedEnd };
     await audio(
-      { ...selection, range: tail },
+      { ...selection, sourceRange: tail },
       name + "-late-before-full",
       original.pcm.subarray((frames - 16) * 4),
       format,
     );
     await audio(selection, name + "-default-full", original.pcm, format);
     await audio(
-      { ...selection, range: { startUs: 0, endUs: expectedEnd } },
+      { ...selection, sourceRange: { startUs: 0, endUs: expectedEnd } },
       name + "-exact-full",
       original.pcm,
       format,
     );
     const floorEnd = Math.floor((frames * 1000000) / rate);
     await audio(
-      { ...selection, range: { startUs: 0, endUs: floorEnd } },
+      { ...selection, sourceRange: { startUs: 0, endUs: floorEnd } },
       name + "-explicit-floor",
       original.pcm.subarray(0, -4),
       format,
     );
-    const refused = await call(
+    const clamped = await call(
       "audio.get",
-      { ...selection, range: { startUs: 0, endUs: floorEnd + 1 } },
-      { error: true, transport: "mcp" },
+      { ...selection, sourceRange: { startUs: 0, endUs: floorEnd + 1 } },
+      { transport: "mcp" },
     );
-    assert.equal(refused.code, "INVALID_RANGE");
+    assert.deepEqual(
+      clamped.issues.map((v) => v.code),
+      ["range-clamped"],
+    );
+    assert.deepEqual(clamped.issues[0].evidence.applied, { startUs: 0, endUs: expectedEnd });
     const extracted = await poll(
       () => call("audio.extract", { ...selection, rendition: { sampleRate: rate, channels: 1 } }),
       (v) => v.state === "ready",
@@ -161,7 +165,7 @@ try {
     );
     assert.equal(
       extracted.published.output.assetId,
-      asset.id,
+      asset.assetId,
       "Whole-source extraction must retain the byte-copy identity",
     );
     assert.deepEqual(extracted.published.output.durationUs, expectedEnd);
@@ -210,7 +214,7 @@ try {
         label: "voice",
         clip: {
           trackId: { label: "sound" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: source.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: expectedEnd } },
           placement: { kind: "project", range: { startUs: 0, endUs: expectedEnd } },
@@ -256,7 +260,7 @@ try {
     clipId: placed.edit.labels.voice,
     kind: "audio",
     media: {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: source.streamId,
       source: { kind: "range", range: { startUs: 0, endUs } },
     },
@@ -275,27 +279,26 @@ try {
   );
   await audio(selected(), "project-replaced", stereo);
   const revisionBeforeFailure = revision.revisionId;
-  const bad = await call(
-    "edit.apply",
-    {
-      projectId,
-      expectedRevisionId: revision.revisionId,
-      requestId: randomUUID(),
-      operations: [replace(floorEnd + 1)],
-    },
-    { error: true },
+  const clampedEdit = await call("edit.apply", {
+    projectId,
+    expectedRevisionId: revision.revisionId,
+    requestId: randomUUID(),
+    operations: [replace(floorEnd + 1)],
+  });
+  assert.equal(clampedEdit.edit.changed, false);
+  assert.deepEqual(
+    clampedEdit.edit.issues.map((v) => v.code),
+    ["range-clamped"],
   );
-  assert.equal(bad.code, "INVALID_EDIT");
   assert.equal((await call("project.get", { projectId })).currentRevisionId, revisionBeforeFailure);
   await poll(
     () => call("audio.prepare", selected()),
     (v) => v.state === "ready",
     "prepare exact project",
   );
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     projectId,
-    exportId,
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: out,
     leaf: "exact-project.zip",
@@ -310,9 +313,9 @@ try {
   receiver = await realpath(await mkdtemp("/tmp/yap-exact-receiver-"));
   service = new JourneyService(receiver, report, join(out, "receiver-native"));
   await service.start();
-  const opened = await call("package.open", { path: exported.output });
+  const opened = await call("package.open", { requestId: randomUUID(), path: exported.output });
   const openedReady = await poll(
-    () => call("package.status", { admissionId: opened.id }),
+    () => call("package.status", { admissionId: opened.packageId }),
     (v) => v.state === "ready",
     "open exact package",
   );
@@ -326,7 +329,7 @@ try {
     (v) => v.state === "ready",
     "adopt exact package",
   );
-  const portableAsset = await call("asset.get", { assetId: asset.id });
+  const portableAsset = await call("asset.get", { assetId: asset.assetId });
   assert.deepEqual(portableAsset, asset);
   const portableSegments = await call("asset.segments", { ...source, limit: 1 });
   assert.deepEqual(portableSegments, report.assets[0].segments);
@@ -336,7 +339,7 @@ try {
   });
   assert.deepEqual(portableRevision.revision.document, revision.document);
   report.portableExactMetadata = true;
-  await call("package.close", { admissionId: opened.id });
+  await call("package.close", { admissionId: opened.packageId });
   await audio(
     {
       projectId: adopted.published.output.projectId,

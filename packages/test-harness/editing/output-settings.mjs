@@ -147,8 +147,8 @@ try {
         operation: "place",
         clip: {
           trackId: { label: "video" },
-          assetId: asset.id,
-          streamId: video.id,
+          assetId: asset.assetId,
+          streamId: video.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
         },
@@ -157,7 +157,7 @@ try {
         operation: "place",
         clip: {
           trackId: { label: "audio" },
-          assetId: narration.id,
+          assetId: narration.assetId,
           streamId: narration.streams.find((v) => v.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
@@ -311,17 +311,16 @@ try {
   assert.equal(invalidExport.code, "INVALID_PARAMS");
   assert.match(invalidExport.message, /Baseline profile/);
   report.invalid = { preview: invalid, export: invalidExport };
-  const exportId = randomUUID(),
-    request = {
-      projectId,
-      revisionId: edited.revision.revisionId,
-      exportId,
-      kind: "video",
-      directory: out,
-      leaf: "export.mp4",
-      settings: override.entry.settings,
-    };
-  await call("export.create", request);
+  const request = {
+    projectId,
+    revisionId: edited.revision.revisionId,
+    requestId: randomUUID(),
+    kind: "video",
+    directory: out,
+    leaf: "export.mp4",
+    settings: override.entry.settings,
+  };
+  const { exportId } = await call("export.create", request);
   const exported = await poll(
     () => call("export.status", { exportId }),
     (v) => v.state === "ready",

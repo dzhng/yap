@@ -91,7 +91,7 @@ try {
       const asset = await call("asset.get", { assetId: ready.published.output.assetId });
       const stream = asset.streams.find((stream) => stream.kind === "image");
       assert.ok(stream);
-      imported[id] = { assetId: asset.id, streamId: stream.id };
+      imported[id] = { assetId: asset.assetId, streamId: stream.streamId };
     }
     const created = await call("project.create", {
       requestId: `create-${item.scenario}`,
@@ -217,8 +217,8 @@ try {
       leaf: "export.mp4",
       settings,
     };
-    const created = await call("export.create", exportRequest);
-    const exportId = created.exportId;
+    const accepted = await call("export.create", exportRequest);
+    const exportId = accepted.exportId;
     const exported = await poll(
       () => call("export.status", { exportId }, { transport: "mcp" }),
       (value) => value.state === "ready",

@@ -109,7 +109,7 @@ async function delivered(params, transport) {
     data = result.structuredContent.data;
   }
   assert.equal(data.revisionId, ready.revisionId);
-  assert.equal(data.published.output.bytes, bytes.length);
+  assert.equal(data.published.output.sizeBytes, bytes.length);
   return { data, bytes, name };
 }
 try {
@@ -128,7 +128,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: sha256 });
     media[name] = {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((s) => s.kind === "video").streamId,
       audioStreamId: asset.streams.find((s) => s.kind === "audio").streamId,
       sha256,
@@ -256,7 +256,7 @@ try {
     batch.items.map((item) => item.ok),
     [true, false, true],
   );
-  assert.equal(batch.items[1].error.code, "INVALID_PARAMS");
+  assert.equal(batch.items[1].error.code, "INVALID_RANGE");
   for (const index of [0, 2])
     assert.ok((await readFile(batch.items[index].data.output)).equals(firstBytes));
   report.checks.batch = batch;
@@ -304,14 +304,23 @@ try {
   for (const name of ["a", "b"])
     assert.equal(hash(await readFile(join(corpus, name + ".mov"))), media[name].sha256);
   report.checks.originals = true;
-  assert.equal((await call("project.delete", { projectId }, { transport: "mcp" })).deleted, true);
+  assert.equal(
+    (
+      await call(
+        "project.delete",
+        { projectId, requestId: "delete-pictures" },
+        { transport: "mcp" },
+      )
+    ).deleted,
+    true,
+  );
   assert.equal(
     (await call("frame.get", { projectId, atUs: 0 }, { error: true })).code,
     "NOT_FOUND",
   );
   for (const name of ["a", "b"])
     assert.equal(
-      (await call("asset.get", { assetId: media[name].assetId })).id,
+      (await call("asset.get", { assetId: media[name].assetId })).assetId,
       media[name].assetId,
     );
   // A new project cannot reuse a deleted project's cached picture artifacts.

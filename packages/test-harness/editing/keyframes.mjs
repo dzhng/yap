@@ -173,7 +173,7 @@ try {
       label: "clip",
       clip: {
         trackId: ref("track"),
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -291,7 +291,7 @@ try {
     expectedRevisionId: head,
     targetRevisionId: authored.revision.revisionId,
   });
-  head = restored.id;
+  head = restored.revisionId;
   const moved = await edit([
     { operation: "move", clipIds: [clipId], atUs: 2000000, ripple: "none" },
   ]);
@@ -385,11 +385,10 @@ try {
     (v) => v.state === "ready",
     "range preview",
   );
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     ...selection,
     kind: "video",
-    exportId,
+    requestId: randomUUID(),
     directory: out,
     leaf: "export.mp4",
   });
@@ -480,7 +479,7 @@ try {
       rangePath,
     });
   report.passed = true;
-  await call("project.delete", { projectId });
+  await call("project.delete", { projectId, requestId: randomUUID() });
 } catch (error) {
   report.error = String(error.stack ?? error);
   throw error;

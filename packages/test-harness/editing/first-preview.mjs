@@ -139,12 +139,12 @@ async function mcpPreview(revisionId = head, range) {
 }
 async function delivered(status) {
   assert.equal(status.published.output.mediaType, "video/mp4");
-  const { token, bytes } = status.delivery;
+  const { token, sizeBytes: bytes } = status.delivery;
   assert.ok(bytes > 0);
   const chunks = [];
   let offset = 0;
   while (offset < bytes) {
-    const params = { token, offset, maxBytes: Math.min(65536, bytes - offset) };
+    const params = { token, offsetBytes: offset, maxBytes: Math.min(65536, bytes - offset) };
     const chunk = await call("artifact.read", params, { transport: "mcp" });
     if (offset === 0)
       assert.deepEqual(
@@ -153,16 +153,17 @@ async function delivered(status) {
         "Chunk retry must be stable",
       );
     const data = Buffer.from(chunk.data, "base64");
-    assert.equal(chunk.offset, offset);
-    assert.equal(chunk.nextOffset, offset + data.length);
-    assert.ok(data.length > 0 && chunk.nextOffset <= bytes);
+    assert.equal(chunk.offsetBytes, offset);
+    assert.equal(chunk.nextOffsetBytes, offset + data.length);
+    assert.ok(data.length > 0 && chunk.nextOffsetBytes <= bytes);
     chunks.push(data);
-    offset = chunk.nextOffset;
+    offset = chunk.nextOffsetBytes;
     assert.equal(chunk.eof, offset === bytes);
   }
   await call("artifact.close", { token }, { transport: "mcp" });
   assert.equal(
-    (await call("artifact.read", { token, offset: 0 }, { transport: "mcp", error: true })).code,
+    (await call("artifact.read", { token, offsetBytes: 0 }, { transport: "mcp", error: true }))
+      .code,
     "ARTIFACT_EXPIRED",
   );
   return Buffer.concat(chunks);
@@ -435,7 +436,7 @@ async function lifecycle(refs, fullAudio) {
   };
 }
 const source = (asset, kind, startUs, endUs) => ({
-  assetId: asset.id,
+  assetId: asset.assetId,
   streamId: asset.streams.find((stream) => stream.kind === kind && stream.decodable).streamId,
   source: { kind: "range", range: { startUs, endUs } },
 });
@@ -492,7 +493,7 @@ try {
     (
       await call(
         "artifact.read",
-        { token: baseline.status.delivery.token, offset: 0 },
+        { token: baseline.status.delivery.token, offsetBytes: 0 },
         { transport: "mcp", error: true },
       )
     ).code,
@@ -556,7 +557,7 @@ try {
     { projectId, requestId: "undo-audio", expectedRevisionId: head },
     { transport: "mcp" },
   );
-  head = undone.id;
+  head = undone.revisionId;
   const undoPreview = await preview("undo");
   const undo = await inspect(undoPreview.file, replacedIds, refs);
   assert.ok(rmsDifference(undo.samples, video.samples) < 1e-6);
@@ -566,7 +567,7 @@ try {
     expectedRevisionId: head,
     targetRevisionId: baselineRevision,
   });
-  head = restored.id;
+  head = restored.revisionId;
   await edit("music-explicit-gain", [
     { operation: "track.add", label: "music", track: { kind: "audio", order: 1 } },
     place("music-first", { label: "music" }, source(b, "audio", 0, 2000000), 0, 2000000),
@@ -627,7 +628,7 @@ try {
     expectedRevisionId: head,
     targetRevisionId: baselineRevision,
   });
-  head = allScopeBase.id;
+  head = allScopeBase.revisionId;
   const gain = (target, value) => ({
     operation: "processing.set",
     target,
@@ -703,7 +704,7 @@ try {
     (
       await call(
         "artifact.read",
-        { token: tokenToRevoke, offset: 0 },
+        { token: tokenToRevoke, offsetBytes: 0 },
         { transport: "mcp", error: true },
       )
     ).code,

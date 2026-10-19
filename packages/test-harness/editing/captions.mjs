@@ -96,7 +96,7 @@ async function project(canvas) {
 try {
   await service.start();
   const font = await admit(frozen.cases[0].request.fontPath);
-  assert.equal(font.id, frozen.fontSHA256);
+  assert.equal(font.assetId, frozen.fontSHA256);
   if (values.case === "literal-text")
     for (const test of frozen.cases.filter((test) => test.receipt && test.name !== "repeat")) {
       const expected = await admit(join(fixture, test.name + ".png"));
@@ -104,7 +104,7 @@ try {
       const source = {
         kind: "text",
         text: input.text,
-        font: { assetId: font.id, postScriptName: test.receipt.font },
+        font: { assetId: font.assetId, postScriptName: test.receipt.font },
         width: input.width,
         height: input.height,
         size: input.size,
@@ -142,7 +142,7 @@ try {
           operation: "place",
           clip: {
             trackId: ref("control"),
-            assetId: expected.id,
+            assetId: expected.assetId,
             streamId: expected.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -191,7 +191,7 @@ try {
     const source = {
       kind: "text",
       text: "é",
-      font: { assetId: font.id, postScriptName: "ArialMT" },
+      font: { assetId: font.assetId, postScriptName: "ArialMT" },
       width: 320,
       height: 100,
       size: 32,
@@ -297,7 +297,7 @@ try {
           source: {
             ...source,
             text,
-            font: { assetId: imported.id, postScriptName },
+            font: { assetId: imported.assetId, postScriptName },
             size: 40,
             verticalAlignment: "center",
             alignment: "center",
@@ -321,7 +321,7 @@ try {
       if (name === "color-emoji") assert.ok(coloredPixels > 100, "Emoji must retain color");
       report.checks.push({
         name,
-        fontAssetId: imported.id,
+        fontAssetId: imported.assetId,
         postScriptName,
         text,
         exactUTF16: true,
@@ -337,7 +337,7 @@ try {
     const source = {
       kind: "text",
       text: "Attached caption",
-      font: { assetId: font.id, postScriptName: "ArialMT" },
+      font: { assetId: font.assetId, postScriptName: "ArialMT" },
       width: 320,
       height: 100,
       size: 32,
@@ -362,8 +362,8 @@ try {
         label: "parent",
         clip: {
           trackId: ref("media"),
-          assetId: media.id,
-          streamId: stream.id,
+          assetId: media.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
         },
@@ -419,7 +419,7 @@ try {
     });
     const retimed = await call("edit.apply", {
       projectId: p.selection().projectId,
-      expectedRevisionId: restored.id,
+      expectedRevisionId: restored.revisionId,
       requestId: randomUUID(),
       operations: [
         {
@@ -530,7 +530,7 @@ try {
     const changedPath = join(home, "same-name-different-metrics.ttf");
     await writeFile(changedPath, modified);
     const changed = await admit(changedPath);
-    assert.notEqual(changed.id, font.id);
+    assert.notEqual(changed.assetId, font.assetId);
     assert.deepEqual(changed.fontFaces, font.fontFaces);
     const p = await project({
       width: 420,
@@ -541,7 +541,7 @@ try {
     const source = {
       kind: "text",
       text: "Exact face identity",
-      font: { assetId: font.id, postScriptName: "ArialMT" },
+      font: { assetId: font.assetId, postScriptName: "ArialMT" },
       width: 420,
       height: 100,
       size: 32,
@@ -566,7 +566,7 @@ try {
       {
         operation: "text.set",
         clipId: placed.edit.labels["text-clip"],
-        source: { ...source, font: { assetId: changed.id, postScriptName: "ArialMT" } },
+        source: { ...source, font: { assetId: changed.assetId, postScriptName: "ArialMT" } },
       },
     ]);
     const distinct = await picture({ ...p.selection(), atUs: 0 }, "same-name-distinct-asset");
@@ -577,8 +577,8 @@ try {
     );
     report.checks.push({
       name: "same-face-name-distinct-bytes",
-      original: font.id,
-      changed: changed.id,
+      original: font.assetId,
+      changed: changed.assetId,
       unitsPerEm: [originalUnits, originalUnits * 2],
       distinctRaster: true,
       exactHalfWidth: true,
@@ -587,7 +587,7 @@ try {
     const exportId = randomUUID();
     await call("export.create", {
       ...donor,
-      exportId,
+      requestId: exportId,
       kind: "processed-package",
       directory: home,
       leaf: "fonts.zip",
@@ -603,7 +603,7 @@ try {
     await service.start();
     const admission = await call("package.open", { path: exported.output });
     const ready = await poll(
-      () => call("package.status", { admissionId: admission.id }),
+      () => call("package.status", { admissionId: admission.packageId }),
       (value) => value.state === "ready",
       "open font package",
     );
@@ -629,13 +629,16 @@ try {
       requestId: randomUUID(),
     });
     const adoptedHistory = await picture(
-      { projectId: adopted.project.projectId, revisionId: undo.id, atUs: 0 },
+      { projectId: adopted.project.projectId, revisionId: undo.revisionId, atUs: 0 },
       "adopted-original-history",
     );
     assert.deepEqual(adoptedHistory.bytes, original.bytes);
-    assert.deepEqual((await call("asset.get", { assetId: font.id })).fontFaces, font.fontFaces);
     assert.deepEqual(
-      (await call("asset.get", { assetId: changed.id })).fontFaces,
+      (await call("asset.get", { assetId: font.assetId })).fontFaces,
+      font.fontFaces,
+    );
+    assert.deepEqual(
+      (await call("asset.get", { assetId: changed.assetId })).fontFaces,
       changed.fontFaces,
     );
     report.checks.push({
@@ -658,7 +661,7 @@ try {
           source: {
             ...source,
             text: "مرحبا بالعالم",
-            font: { assetId: collection.id, postScriptName },
+            font: { assetId: collection.assetId, postScriptName },
           },
         },
       ]);
@@ -669,7 +672,7 @@ try {
     assert.notDeepEqual(...rasters);
     report.checks.push({
       name: "collection-face-raster-selection",
-      assetId: collection.id,
+      assetId: collection.assetId,
       distinctRaster: true,
     });
   }
@@ -677,7 +680,7 @@ try {
     const source = {
       kind: "text",
       text: "Alpha",
-      font: { assetId: font.id, postScriptName: "ArialMT" },
+      font: { assetId: font.assetId, postScriptName: "ArialMT" },
       width: 320,
       height: 100,
       size: 32,
@@ -740,7 +743,7 @@ try {
     const exportId = randomUUID();
     await call("export.create", {
       ...p.selection(),
-      exportId,
+      requestId: exportId,
       kind: "video",
       directory: out,
       leaf: "text-export.mp4",
@@ -786,7 +789,7 @@ try {
         label: "opaque-clip",
         clip: {
           trackId: ref("opaque"),
-          assetId: opaque.id,
+          assetId: opaque.assetId,
           streamId: opaque.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },

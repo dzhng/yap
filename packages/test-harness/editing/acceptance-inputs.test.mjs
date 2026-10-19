@@ -11,7 +11,7 @@ const marks = JSON.parse(
   ),
 );
 test("human source marks require original byte identity and clock before projection", () => {
-  const source = { id: marks.binding.sourceSha256, originUs: 48675 };
+  const source = { assetId: marks.binding.sourceSha256, originUs: 48675 };
   const result = bindMarkedSpeech(marks, source);
   assert.deepEqual(result.contextAssetRange, { startUs: 50470000, endUs: 57610000 });
   assert.deepEqual(
@@ -28,7 +28,7 @@ test("human source marks require original byte identity and clock before project
       { startUs: 55210000, endUs: 55319000 },
     ],
   );
-  assert.throws(() => bindMarkedSpeech(marks, { ...source, id: "different WAV" }), /identity/);
+  assert.throws(() => bindMarkedSpeech(marks, { ...source, assetId: "different WAV" }), /identity/);
   assert.throws(() => bindMarkedSpeech(marks, { ...source, originUs: 48676 }), /clock/);
 });
 

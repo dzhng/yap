@@ -25,18 +25,26 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
     return call("asset.get", { assetId: job.published.output.assetId }, { transport: "mcp" });
   }
   const asset = await imported(path);
-  assert.equal(asset.id, oracle.fixtureSha256);
+  assert.equal(asset.assetId, oracle.fixtureSha256);
   assert.deepEqual(asset.originUs, oracle.metadata.originUs);
   assert.deepEqual(
     asset.streams,
-    oracle.metadata.streams.map(({ segments, ...stream }) => ({
+    oracle.metadata.streams.map(({ id, segments, ...stream }) => ({
       ...stream,
+      // The oracle predates the probe's alpha fact; this fixture's avc1 picture is opaque.
+      ...(stream.kind === "video" ? { hasAlpha: false } : {}),
+      streamId: id,
       segmentCount: segments.length,
     })),
   );
-  const record = (report.mixedMedia = { fixtureSha256: asset.id, asset, segments: [], frames: [] });
+  const record = (report.mixedMedia = {
+    fixtureSha256: asset.assetId,
+    asset,
+    segments: [],
+    frames: [],
+  });
   for (const stream of oracle.metadata.streams) {
-    const selected = { assetId: asset.id, streamId: stream.id };
+    const selected = { assetId: asset.assetId, streamId: stream.id };
     const segments = [];
     let cursor,
       pages = 0;
@@ -67,11 +75,11 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
   const tail = expected.subarray(23890 * 4);
   assert.equal(hash(tail), oracle.latePCMHash);
   const source = {
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams.find((s) => s.kind === "audio").streamId,
   };
   for (const [name, params, pcm] of [
-    ["mixed-raw-late", { ...source, range: oracle.lateRange }, tail],
+    ["mixed-raw-late", { ...source, sourceRange: oracle.lateRange }, tail],
     ["mixed-raw-full", source, expected],
   ]) {
     await audio(params, name, pcm, { sampleRate: 48000, channels: 1 });
@@ -82,7 +90,7 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
   const donor = await imported(donorPath);
   assert.equal(donor.originUs, 0);
   const videos = [asset, donor].map((value) => ({
-    assetId: value.id,
+    assetId: value.assetId,
     streamId: value.streams.find((s) => s.kind === "video").streamId,
   }));
   const normalized = (sample, origin, end = false) =>
@@ -144,8 +152,8 @@ export async function verifyMixedMedia({ service, report, out, audio }) {
     const first = await call("timeline.events", params, { transport: "mcp" });
     assert.equal(first.state, "ready");
     assert.equal(first.context.coverage.find((c) => c.kind === "scene").state, "ready");
-    assert.equal(first.page.nextCursor, null);
-    return { first, rows: first.page.rows };
+    assert.equal(first.nextCursor, null);
+    return { first, rows: first.rows };
   }
 
   const mixedScenes = await scenes(videos[0]),

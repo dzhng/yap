@@ -149,7 +149,7 @@ test("PNG, JPEG, H264 MP4 and HEVC MP4 admit without replacing original bytes", 
     if (asset.streams[0].kind === "video") {
       await sourceFrame(
         asset,
-        asset.streams[0].streamId,
+        asset.streams[0].id,
         assets.path(asset.id),
         join(directory, asset.id + ".png"),
       );

@@ -182,7 +182,7 @@ try {
         operation: "place",
         clip: {
           trackId: topology.edit.labels[`t${clip.lane}`],
-          assetId: assets[0].id,
+          assetId: assets[0].assetId,
           streamId: assets[0].streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: clip.endUs - clip.startUs } },
           placement: { kind: "project", range: { startUs: clip.startUs, endUs: clip.endUs } },
@@ -197,7 +197,7 @@ try {
           operation: "place",
           clip: {
             trackId: topology.edit.labels[`t${lane}`],
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: {
               kind: "range",
@@ -292,8 +292,8 @@ try {
         (v) => v.state === "ready",
         "inspection",
       );
-      rows.push(...result.page.rows);
-      cursor = result.page.nextCursor;
+      rows.push(...result.rows);
+      cursor = result.nextCursor;
       assert(++count <= 100, "bounded paging must advance");
     } while (rows.length < 250 && cursor);
     assert.equal(rows.length, 250);
@@ -319,7 +319,7 @@ try {
   report.prepared = prepared;
   assert.deepEqual(await call("audio.prepare", selection), prepared);
   const retained = await call("asset.get", { assetId: prepared.published.output.assetId });
-  const fullPath = join(home, "library/assets", retained.id + ".wav");
+  const fullPath = join(home, "library/assets", retained.assetId + ".wav");
   let wet;
   const referenceAt = performance.now();
   if (long) {
@@ -339,7 +339,10 @@ try {
       file: fullPath,
       fileSha256: await digest(fullPath),
     };
-    assert.deepEqual(prepared.published.output.sampleRange, { start: 0, end: frames });
+    assert.deepEqual(prepared.published.output.sampleRange, {
+      startSamples: 0,
+      endSamples: frames,
+    });
     assert(prepared.published.output.peakResidentBytes <= 4 * 1024 ** 3);
     report.checks.nativePreparationPeakRSS = prepared.published.output.peakResidentBytes;
   } else {
@@ -360,8 +363,8 @@ try {
   await service.start();
   const lateStartUs = long ? (seconds - 1) * 1e6 : 7750000;
   const late = {
-    ...(long ? selection : { assetId: retained.id, streamId: retained.streams[0].streamId }),
-    range: { startUs: lateStartUs, endUs: seconds * 1e6 },
+    ...(long ? selection : { assetId: retained.assetId, streamId: retained.streams[0].streamId }),
+    [long ? "range" : "sourceRange"]: { startUs: lateStartUs, endUs: seconds * 1e6 },
   };
   const lateResult = await audio(late, "retained-late");
   if (long) {

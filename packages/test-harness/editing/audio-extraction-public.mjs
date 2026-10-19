@@ -72,7 +72,7 @@ async function project(asset, name, { offsetUs = 0, durationUs = 1000000 } = {})
         operation: "place",
         clip: {
           trackId: { label: "audio" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: durationUs } },
           placement: {
@@ -112,7 +112,7 @@ try {
   const bytes = await readFile(reference);
   const asset = await imported(reference, "reference");
   const selected = {
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
@@ -142,7 +142,7 @@ try {
   await writeFile(oddPath, oddBytes);
   const oddAsset = await imported(oddPath, "odd");
   const odd = await extract({
-    assetId: oddAsset.id,
+    assetId: oddAsset.assetId,
     streamId: oddAsset.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   });
@@ -164,13 +164,13 @@ try {
   report.checks.exactWholeSourceFrames = true;
   const raw = {
     ...selected,
-    range: { startUs: 0, endUs: 2500000 },
+    sourceRange: { startUs: 0, endUs: 2500000 },
     rendition: { sampleRate: 44100, channels: 2 },
   };
   const dedupSelection = {
     assetId: selected.assetId,
     streamId: selected.streamId,
-    range: raw.range,
+    sourceRange: raw.sourceRange,
   };
   await poll(
     () => call("audio.get", dedupSelection),
@@ -191,7 +191,7 @@ try {
   await copyFile(dedupWave, dedupPath);
   const preexisting = await imported(dedupPath, "preexisting-conversion");
   const rawExcerpt = await extract(raw);
-  assert.equal(rawExcerpt.assetId, preexisting.id);
+  assert.equal(rawExcerpt.assetId, preexisting.assetId);
   assert.equal(
     (await call("asset.get", { assetId: rawExcerpt.assetId })).fileName,
     preexisting.fileName,
@@ -203,7 +203,7 @@ try {
   await writeSourceWave(stereoPath, { source: 0, seconds: 1 });
   const stereo = await imported(stereoPath, "stereo");
   const stereoInput = {
-    assetId: stereo.id,
+    assetId: stereo.assetId,
     streamId: stereo.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
@@ -213,7 +213,7 @@ try {
   await run("ffmpeg", ["-v", "error", "-i", stereoPath, "-c:a", "pcm_s16be", aiffPath]);
   const aiff = await imported(aiffPath, "integer-aiff");
   const aiffInput = {
-    assetId: aiff.id,
+    assetId: aiff.assetId,
     streamId: aiff.streams[0].streamId,
     rendition: { sampleRate: 24000, channels: 1 },
   };
@@ -264,12 +264,12 @@ try {
   });
   const rawClockExcerpt = await extract({
     ...stereoInput,
-    range: { startUs: 100000, endUs: 800000 },
+    sourceRange: { startUs: 100000, endUs: 800000 },
   });
   assert.equal(shiftedExcerpt.assetId, original.assetId);
   assert.equal(rawClockExcerpt.assetId, original.assetId);
-  assert.equal(shiftedExcerpt.origin.selection.sampleRange.start, 100800);
-  assert.equal(rawClockExcerpt.origin.selection.sampleRange.start, 4800);
+  assert.equal(shiftedExcerpt.origin.selection.sampleRange.startSamples, 100800);
+  assert.equal(rawClockExcerpt.origin.selection.sampleRange.startSamples, 4800);
   report.checks.sourceAndProjectClocks = true;
   const equalOrigins = await call("asset.origins", { assetId: original.assetId });
   assert(
@@ -314,7 +314,7 @@ try {
 
   const cancelInput = {
     ...stereoInput,
-    range: { startUs: 17001, endUs: 743219 },
+    sourceRange: { startUs: 17001, endUs: 743219 },
     rendition: { sampleRate: 22050, channels: 1 },
   };
   const beforeCancel = await call("asset.list", {});
@@ -330,7 +330,7 @@ try {
   await compareSelection(cancelInput, retried, "canceled-retry");
   report.checks.cancellationFenceAndRetry = true;
 
-  const crashInput = { ...cancelInput, range: { startUs: 21001, endUs: 753219 } };
+  const crashInput = { ...cancelInput, sourceRange: { startUs: 21001, endUs: 753219 } };
   const beforeCrash = await call("asset.list", {});
   const crashHit = await service.arm("media.convertSelectedAudio");
   const crashed = await call("audio.extract", crashInput);
@@ -382,7 +382,7 @@ try {
   await service.start();
   const admitted = await call("package.open", { path: exported.output });
   const opened = await poll(
-    () => call("package.status", { admissionId: admitted.id }),
+    () => call("package.status", { admissionId: admitted.packageId }),
     (v) => v.state === "ready",
     "package",
   );
@@ -392,7 +392,7 @@ try {
     (v) => v.state === "ready",
     "adopt",
   );
-  await call("package.close", { admissionId: admitted.id });
+  await call("package.close", { admissionId: admitted.packageId });
   await rm(home, { recursive: true });
   assert.deepEqual(
     await retainedBytes(original, "relocated-excerpt"),

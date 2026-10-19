@@ -110,7 +110,7 @@ try {
       operation: "place",
       clip: {
         trackId: { label: "narration" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
@@ -153,9 +153,9 @@ try {
     protectedJoinGuardFrames: 0,
   };
   const selection = {
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams[0].streamId,
-    range: { startUs: 0, endUs: 250000 },
+    sourceRange: { startUs: 0, endUs: 250000 },
     rendition: { sampleRate: rate, channels: 2 },
   };
   const extraction = await poll(
@@ -292,7 +292,7 @@ try {
         expectedRevisionId: revisionId,
         requestId: `undo-room-${n}`,
       })
-    ).id;
+    ).revisionId;
   assert.deepEqual(await audio("undo-room"), silent);
   const capability = (await call("processing.capabilities", {})).find((v) => v.type === "rnnoise");
   report.checks.rnnoise = {
@@ -336,7 +336,7 @@ try {
     const preparedAsset = await call("asset.get", { assetId: prepared.published.output.assetId });
     assert.deepEqual(
       await audio("noise-prepared", {
-        assetId: preparedAsset.id,
+        assetId: preparedAsset.assetId,
         streamId: preparedAsset.streams.find((v) => v.kind === "audio").streamId,
       }),
       wet,
@@ -391,10 +391,13 @@ try {
           expectedRevisionId: revisionId,
           requestId: `undo-noise-${n}`,
         })
-      ).id;
+      ).revisionId;
     assert.deepEqual(await audio("undo-noise"), silent);
     assert.deepEqual(
-      await audio("source-after-noise", { assetId: asset.id, streamId: asset.streams[0].streamId }),
+      await audio("source-after-noise", {
+        assetId: asset.assetId,
+        streamId: asset.streams[0].streamId,
+      }),
       sourcePCM,
     );
     Object.assign(report.checks.rnnoise, {
@@ -416,9 +419,9 @@ try {
 
   revisionId = (
     await call("edit.undo", { projectId, expectedRevisionId: revisionId, requestId: "undo-gap" })
-  ).id;
+  ).revisionId;
   assert.deepEqual(await audio("undo-gap"), baseline);
-  assert.equal(hash(await readFile(sourcePath)), asset.id);
+  assert.equal(hash(await readFile(sourcePath)), asset.assetId);
   report.checks.undoAndRender = {
     roomUndoExact: true,
     gapUndoExact: true,

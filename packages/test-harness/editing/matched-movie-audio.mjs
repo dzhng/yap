@@ -50,7 +50,7 @@ export async function matchedMovieAudio({ call, out, canvas, name, expected, wro
           operation: "place",
           clip: {
             trackId: { label: "audio" },
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: durationUs } },
             placement: { kind: "project", range: { startUs: 0, endUs: durationUs } },

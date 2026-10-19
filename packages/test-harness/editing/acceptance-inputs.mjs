@@ -37,7 +37,7 @@ export function sourceRange(range, originUs) {
 }
 export function bindMarkedSpeech(marks, asset) {
   assert.equal(
-    asset.id,
+    asset.assetId,
     marks.binding.sourceSha256,
     "Human marks require their original source identity",
   );

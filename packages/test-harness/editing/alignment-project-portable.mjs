@@ -66,7 +66,7 @@ try {
         operation: "place",
         clip: {
           trackId: { label: "sound" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams.find((s) => s.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 951000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 951000 } },
@@ -89,7 +89,7 @@ try {
     ...selection,
     preparedResourceId: prepared.published.output.resourceId,
     tap,
-    range: { startUs: 0, endUs: 951000 },
+    sourceRange: { startUs: 0, endUs: 951000 },
     channel: 0,
     text: "fortunate",
     modelId: "nemo-ctc110",
@@ -103,7 +103,7 @@ try {
   report.checks.alignment = ready;
   assert.equal(ready.target.kind, "project");
   assert.equal(ready.target.projectId, selection.projectId);
-  assert.equal(ready.published.output.source.pcm.frames, 15216);
+  assert.equal(ready.published.output.source.pcm.frameCount, 15216);
   assert.equal(ready.published.output.source.pcm.sampleRate, 16000);
   const query = {
     ...selection,
@@ -145,10 +145,9 @@ try {
   await service.stop();
   await service.start();
   assert.deepEqual(await call("alignment.get", query), first);
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     projectId: selection.projectId,
-    exportId,
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: out,
     leaf: "tap.zip",
@@ -171,9 +170,12 @@ try {
   service = new JourneyService(receiver, report);
   call = service.call.bind(service);
   await service.start();
-  const opened = await call("package.open", { path: join(out, "tap.zip") });
+  const opened = await call("package.open", {
+    requestId: randomUUID(),
+    path: join(out, "tap.zip"),
+  });
   const packageReady = await poll(
-    () => call("package.status", { admissionId: opened.id }),
+    () => call("package.status", { admissionId: opened.packageId }),
     (j) => j.state === "ready",
     "open",
   );
@@ -187,7 +189,7 @@ try {
   };
   const packagePage = await call("alignment.get", sourceQuery);
   report.checks.packagePage = packagePage;
-  assert.ok(packagePage.page.nextCursor);
+  assert.ok(packagePage.nextCursor);
   const packageRows = [];
   let sourceCursor;
   for (let page = 0; page < 100; page++) {
@@ -196,8 +198,8 @@ try {
       { ...sourceQuery, ...(sourceCursor ? { cursor: sourceCursor } : {}) },
       { transport: "mcp" },
     );
-    packageRows.push(...result.page.rows);
-    sourceCursor = result.page.nextCursor;
+    packageRows.push(...result.rows);
+    sourceCursor = result.nextCursor;
     if (!sourceCursor) break;
   }
   assert.equal(sourceCursor, null);
@@ -209,7 +211,7 @@ try {
   assert.equal(
     (await call("alignment.get", { ...sourceQuery, cursor: first.nextCursor }, { error: true }))
       .code,
-    "ARTIFACT_CHANGED",
+    "INVALID_PARAMS",
   );
   const adopted = await poll(
     () =>
@@ -234,14 +236,14 @@ try {
   assert.deepEqual(await complete(nextQuery), allRows);
   assert.equal(
     (await call("alignment.get", { ...nextQuery, cursor: first.nextCursor }, { error: true })).code,
-    "ARTIFACT_CHANGED",
+    "INVALID_PARAMS",
   );
   const replay = await call("package.adopt", {
     packageHandle: packageReady.packageHandle,
     requestId: "adopt-tap",
   });
   assert.deepEqual(replay.published, adopted.published);
-  await call("package.close", { admissionId: opened.id });
+  await call("package.close", { admissionId: opened.packageId });
   await service.stop();
   await service.start();
   assert.deepEqual(await call("alignment.get", nextQuery, { transport: "mcp" }), receiverPage);

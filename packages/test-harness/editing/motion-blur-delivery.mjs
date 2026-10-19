@@ -117,8 +117,8 @@ try {
       label: "motion",
       clip: {
         trackId: { label: "pictures" },
-        assetId: asset.id,
-        streamId: stream.id,
+        assetId: asset.assetId,
+        streamId: stream.streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
       },

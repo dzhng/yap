@@ -81,7 +81,7 @@ try {
       label: "clip",
       clip: {
         trackId: { label: "track" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 250000 } },
@@ -204,11 +204,10 @@ try {
     preview.published.output.implementationId.includes(capability.implementationId),
     "Persisted preview must retain actual native SDR recipe",
   );
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     projectId,
     revisionId,
-    exportId,
+    requestId: randomUUID(),
     kind: "video",
     directory: out,
     leaf: "export.mp4",

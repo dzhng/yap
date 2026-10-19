@@ -280,7 +280,8 @@ for (const [name, params] of [
   assert.equal(response.error?.code, "NOT_READY", JSON.stringify(response));
   assert.match(response.error.message, new RegExp(name));
   assert.match(response.error.message, /67108864/);
-  assert.equal(response.error.retryable, false);
+  // Native refusals carry only a code; the refusal ledger assigns retryability in the service.
+  assert.equal("retryable" in response.error, false);
   assert.deepEqual(await readdir(dir), []);
   checks.push({ limit: name, response: response.error });
 }

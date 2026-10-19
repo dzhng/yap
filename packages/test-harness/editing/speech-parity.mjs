@@ -177,9 +177,9 @@ try {
     "source admission",
   );
   const asset = await call("asset.get", { assetId: definition.sha256 });
-  assert.equal(asset.id, definition.sha256);
+  assert.equal(asset.assetId, definition.sha256);
   assert.equal(asset.originUs, 250000);
-  const selection = { assetId: asset.id, streamId: "track:1" };
+  const selection = { assetId: asset.assetId, streamId: "track:1" };
   report.readiness = [];
   for (const state of actualInference
     ? []
@@ -247,7 +247,7 @@ try {
     await call("transcript.get", { ...selection, limit: 1000 }, { transport: "mcp" }),
     full,
   );
-  assert.deepEqual(full.page.transcript.engine, {
+  assert.deepEqual(full.transcript.engine, {
     ...engine,
     policy: transcriptPolicy,
     kindPolicy: wordKindPolicy,
@@ -260,9 +260,9 @@ try {
       }).body;
   if (actualInference)
     assert.deepEqual(historicalWholeSupportRecords(actualRaw), historicalWholeSupportRecords(raw));
-  assert.deepEqual(full.page.transcript.raw, { bytes: actualRaw.length, sha256: hash(actualRaw) });
+  assert.deepEqual(full.transcript.raw, { sizeBytes: actualRaw.length, sha256: hash(actualRaw) });
   assert.deepEqual(
-    full.page.rows
+    full.rows
       .filter((row) => row.type === "word")
       .map((row) => ({
         text: row.text,
@@ -280,7 +280,7 @@ try {
   const retainedRaw = join(
     home,
     "library/transcripts/assets",
-    asset.id,
+    asset.assetId,
     full.generation,
     "raw.jsonl",
   );
@@ -323,7 +323,7 @@ try {
     (value) => value.state === "ready",
     "repeated occurrences",
   );
-  const projectedWords = projected.page.rows.filter((row) => row.type === "word");
+  const projectedWords = projected.rows.filter((row) => row.type === "word");
   const firstWords = words.filter((word) => word.source.endUs <= 6000000);
   assert.deepEqual(
     projectedWords.map((row) => row.text),
@@ -335,9 +335,9 @@ try {
       (value) => value.state === "ready",
       "repeated phrase search",
     );
-    assert.equal(matches.page.entries.length, 2);
+    assert.equal(matches.entries.length, 2);
     assert.deepEqual(
-      matches.page.entries.map((entry) => entry.words[0].clipId).sort(),
+      matches.entries.map((entry) => entry.words[0].clipId).sort(),
       Object.values(placed.edit.labels)
         .filter((id) => id !== placed.edit.labels.speech)
         .sort(),
@@ -392,8 +392,8 @@ try {
     (value) => value.state === "ready",
     "remaining phrase occurrence",
   );
-  assert.equal(remaining.page.entries.length, 1);
-  assert.equal(remaining.page.entries[0].words[0].clipId, placed.edit.labels.clip1);
+  assert.equal(remaining.entries.length, 1);
+  assert.equal(remaining.entries[0].words[0].clipId, placed.edit.labels.clip1);
   await service.stop();
   await service.start();
   assert.deepEqual(await audio(query.revisionId, "historical-restart"), before);
@@ -404,7 +404,7 @@ try {
     { transport: "mcp" },
   );
   assert.deepEqual(undone.document, placed.revision.document);
-  assert.deepEqual(await audio(undone.id, "undo-fixture"), before);
+  assert.deepEqual(await audio(undone.revisionId, "undo-fixture"), before);
   report.checks.explicitCutProtectedPCMAndUndo = {
     cut,
     beforeSha256: hash(before),

@@ -61,7 +61,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: admitted.published.output.assetId });
     assets.push({
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((s) => s.kind === "audio").streamId,
     });
   }

@@ -111,7 +111,7 @@ async function delivered(params, transport) {
     });
   }
   assert.equal(data.published.output.revisionId, ready.revisionId);
-  assert.equal(data.published.output.frames, pcm(bytes).length / 8);
+  assert.equal(data.published.output.frameCount, pcm(bytes).length / 8);
   return { bytes, data, name };
 }
 async function waveform(params, range, gain, requestedBucketFrames = 479) {
@@ -132,7 +132,7 @@ async function waveform(params, range, gain, requestedBucketFrames = 479) {
   assert.equal(mcp.content.length, 2);
   assert.equal(mcp.content[1].type, "text");
   assert.equal(mcp.content[1].text, bytes.toString("utf8"));
-  assert.equal(cli.published.output.bytes, bytes.length);
+  assert.equal(cli.published.output.sizeBytes, bytes.length);
   assert.equal(cli.published.generation, ready.published.generation);
   const document = JSON.parse(bytes);
   const start = Math.floor((range.startUs * 48000) / 1000000);
@@ -254,8 +254,8 @@ try {
         label: `${label}-clip`,
         clip: {
           trackId: ref(label),
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -277,7 +277,7 @@ try {
   report.checks.taps = [];
   report.checks.waveforms = [];
   report.checks.sourceWaveform = await waveform(
-    { assetId: audio.id, streamId: audioStream.id, range },
+    { assetId: audio.assetId, streamId: audioStream.streamId, sourceRange: range },
     range,
     1,
   );
@@ -297,8 +297,8 @@ try {
       assert.deepEqual(cli.bytes, mcp.bytes);
       const result = verify(cli.bytes, range, gain);
       assert.deepEqual(cli.data.published.output.sampleRange, {
-        start: result.start,
-        end: result.end,
+        startSamples: result.start,
+        endSamples: result.end,
       });
       report.checks.waveforms.push(await waveform(params, range, gain));
       report.checks.taps.push({
@@ -316,7 +316,7 @@ try {
   const ranged = await delivered({ projectId, revisionId, range }, "cli");
   assert.deepEqual(pcm(ranged.bytes), pcm(full.bytes).subarray(15 * 8, 47952 * 8));
   report.checks.autoWaveform = await waveform(
-    { assetId: audio.id, streamId: audioStream.id },
+    { assetId: audio.assetId, streamId: audioStream.streamId },
     { startUs: 0, endUs: 1000000 },
     1,
     null,
@@ -325,7 +325,7 @@ try {
     (
       await call(
         "waveform.get",
-        { assetId: audio.id, streamId: audioStream.id, bucketFrames: 1 },
+        { assetId: audio.assetId, streamId: audioStream.streamId, bucketFrames: 1 },
         { error: true },
       )
     ).code,
@@ -410,7 +410,7 @@ try {
   report.checks.cancelRetry = verify(retried.bytes, cancellationRange, 72.1875);
   assert.equal((await call("project.delete", { projectId }, { transport: "mcp" })).deleted, true);
   assert.equal((await call("audio.get", { projectId }, { error: true })).code, "NOT_FOUND");
-  assert.equal((await call("asset.get", { assetId: audio.id })).id, audio.id);
+  assert.equal((await call("asset.get", { assetId: audio.assetId })).assetId, audio.assetId);
   report.checks.deletionPreservesSource = true;
   assert.equal(hash(await readFile(source)), report.sourceSha256);
   report.passed = true;

@@ -353,7 +353,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
       const member = members.get(source);
       for (const pictureSampleIndex of pictureSampleIndexes) {
         const frameRequest = {
-          assetId: member.asset.id,
+          assetId: member.asset.assetId,
           streamId: member.streamId,
           atUs: pictureSampleIndex * frameDurationUs + 500_000,
           maxLongEdge: width,
@@ -389,7 +389,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
             label: `selection-${sequenceIndex}`,
             clip: {
               trackId: { label: "retained-multicam" },
-              assetId: member.asset.id,
+              assetId: member.asset.assetId,
               streamId: member.streamId,
               source: {
                 kind: "range",

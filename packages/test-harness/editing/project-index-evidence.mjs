@@ -39,36 +39,32 @@ async function ready(input) {
 }
 async function inspect(input) {
   const first = await ready(input),
-    metadata = first.page.metadata;
+    metadata = first.metadata;
   const reference = Object.fromEntries(
     ["projectId", "revisionId", "generation", "tap", "maxLongEdge"].map((key) => [
       key,
       metadata[key],
     ]),
   );
-  const entries = [...first.page.entries];
-  let cursor = first.page.nextCursor;
-  let afterOrdinal = -1;
+  const entries = [...first.entries];
+  let cursor = first.nextCursor;
+  // Cursors are opaque, so a continuation advances when it delivers rows.
   while (cursor) {
-    assert.ok(cursor.afterOrdinal > afterOrdinal, "Index continuation must advance");
-    afterOrdinal = cursor.afterOrdinal;
     const page = await call("index.get", { ...input, cursor, limit: 1 });
-    assert.equal(page.page.metadata.generation, metadata.generation);
-    entries.push(...page.page.entries);
-    cursor = page.page.nextCursor;
+    assert.equal(page.metadata.generation, metadata.generation);
+    assert.ok(page.entries.length > 0, "Index continuation must advance");
+    entries.push(...page.entries);
+    cursor = page.nextCursor;
   }
   const coverage = [];
-  let afterSequence = -1;
   do {
-    if (cursor) {
-      assert.ok(cursor.afterSequence > afterSequence, "Coverage continuation must advance");
-      afterSequence = cursor.afterSequence;
-    }
+    const continued = cursor !== undefined && cursor !== null;
     const page = await call("index.coverage", {
       ...reference,
       limit: 1,
       ...(cursor ? { cursor } : {}),
     });
+    if (continued) assert.ok(page.coverage.length > 0, "Coverage continuation must advance");
     coverage.push(...page.coverage);
     cursor = page.nextCursor;
   } while (cursor);
@@ -137,7 +133,7 @@ try {
       {
         operation: "place",
         clip: {
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           trackId: { label: "voice" },
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
@@ -211,7 +207,7 @@ try {
       `import ${name}`,
     );
     const asset = await call("asset.get", { assetId: fixture.sha256 });
-    media[name] = { assetId: asset.id, streamId: asset.streams[0].streamId };
+    media[name] = { assetId: asset.assetId, streamId: asset.streams[0].streamId };
     await rm(fixture.path);
   }
   const visual = await call("project.create", { requestId: "layered", canvas });
@@ -365,7 +361,7 @@ try {
     maxLongEdge: 160,
     limit: 1,
   });
-  assert.ok(firstPage.page.nextCursor);
+  assert.ok(firstPage.nextCursor);
   const changedTap = { target: { kind: "output" }, point: { kind: "dry" } };
   assert.equal(
     (
@@ -374,12 +370,13 @@ try {
         {
           projectId: composition.reference.projectId,
           tap: changedTap,
-          cursor: firstPage.page.nextCursor,
+          cursor: firstPage.nextCursor,
         },
         { error: true },
       )
     ).code,
-    "ARTIFACT_CHANGED",
+    // A cursor continues only the filter set that issued it.
+    "INVALID_PARAMS",
   );
   for (const changed of [{ tap: changedTap }, { maxLongEdge: 320 }]) {
     assert.equal(
@@ -403,7 +400,7 @@ try {
         { error: true },
       )
     ).code,
-    "ARTIFACT_CHANGED",
+    "INVALID_PARAMS",
   );
   const changed = await call("edit.apply", {
     projectId: composition.reference.projectId,
@@ -423,11 +420,11 @@ try {
   await service.start();
   const continued = await call("index.get", {
     projectId: composition.reference.projectId,
-    cursor: firstPage.page.nextCursor,
+    cursor: firstPage.nextCursor,
     limit: 1,
   });
   assert.equal(continued.revisionId, composition.reference.revisionId);
-  assert.deepEqual(continued.page.entries[0].candidate, composition.entries[1].candidate);
+  assert.deepEqual(continued.entries[0].candidate, composition.entries[1].candidate);
   const historical = await image(composition.reference, 2, "historical-after-restart");
   assert.equal(historical.sha256, old.sha256);
   const current = await inspect({
@@ -455,13 +452,14 @@ try {
   const lease = leaseReply.data;
   const liveRead = await call("artifact.read", {
     token: lease.delivery.token,
-    offset: 0,
+    offsetBytes: 0,
     maxBytes: 16,
   });
   assert.equal(Buffer.from(liveRead.data, "base64").length, 16);
   await call("project.delete", { projectId: composition.reference.projectId });
   assert.equal(
-    (await call("artifact.read", { token: lease.delivery.token, offset: 0 }, { error: true })).code,
+    (await call("artifact.read", { token: lease.delivery.token, offsetBytes: 0 }, { error: true }))
+      .code,
     "ARTIFACT_EXPIRED",
   );
   assert.equal(

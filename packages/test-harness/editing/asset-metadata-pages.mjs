@@ -23,10 +23,12 @@ try {
   const headers = await service.call("asset.get", { assetId: values.asset });
   await writeFile(join(out, "headers.json"), JSON.stringify(headers, null, 2));
   assert.equal(headers.originUs, expected.originUs);
+  // The expected file is the stored asset record, whose streams keep their internal `id`.
   assert.deepEqual(
     headers.streams,
-    expected.streams.map(({ segments, ...stream }) => ({
+    expected.streams.map(({ segments, id, ...stream }) => ({
       ...stream,
+      streamId: id,
       segmentCount: segments?.length ?? 0,
     })),
   );
@@ -50,7 +52,7 @@ try {
       );
       report.pages.push({
         streamId: stream.id,
-        afterOrdinal: cursor?.afterOrdinal ?? -1,
+        afterOrdinal: count - 1,
         count: page.segments.length,
         transport,
         milliseconds: performance.now() - before,
@@ -76,8 +78,8 @@ try {
     "asset.segments",
     {
       assetId: values.asset,
-      streamId: expected.streams[0].streamId,
-      cursor: { assetId: "wrong", streamId: expected.streams[0].streamId, afterOrdinal: 0 },
+      streamId: expected.streams[0].id,
+      cursor: "not-a-cursor-this-service-issued",
     },
     { error: true },
   );

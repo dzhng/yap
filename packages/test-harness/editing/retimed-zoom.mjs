@@ -234,7 +234,7 @@ export async function runRetimedZoom(output) {
         label: "clip",
         clip: {
           trackId: { label: "track" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
@@ -311,11 +311,10 @@ export async function runRetimedZoom(output) {
         };
       }),
     };
-    const exportId = randomUUID();
-    await call("export.create", {
+    const { exportId } = await call("export.create", {
       ...splitSelection,
       kind: "video",
-      exportId,
+      requestId: randomUUID(),
       directory: out,
       leaf: "content-export.mp4",
     });
@@ -344,7 +343,7 @@ export async function runRetimedZoom(output) {
       targetRevisionId: placed.revision.revisionId,
       requestId: randomUUID(),
     });
-    revisionId = restored.id;
+    revisionId = restored.revisionId;
     await edit([
       {
         operation: "processing.set",
@@ -373,7 +372,7 @@ export async function runRetimedZoom(output) {
       targetRevisionId: selection.revisionId,
       requestId: randomUUID(),
     });
-    revisionId = reset.id;
+    revisionId = reset.revisionId;
     for (const i of [15, 30, 52, 70, 89]) {
       const scale = expectedScale(i, "content");
       await edit([

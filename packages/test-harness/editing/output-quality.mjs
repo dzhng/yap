@@ -64,8 +64,8 @@ try {
     const acquisition = await call("acquisition.get", {
       acquisitionId: ready.target.acquisitionId,
     });
-    assert(acquisition.bindings.some((binding) => binding.assetId === asset.id));
-    acquisitionId = acquisition.id;
+    assert(acquisition.bindings.some((binding) => binding.assetId === asset.assetId));
+    acquisitionId = ready.target.acquisitionId;
     report.acquisition = acquisition;
   }
   const created = await call("project.create", {
@@ -90,7 +90,7 @@ try {
         label: "screen-clip",
         clip: {
           trackId: { label: "screen" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           ...(acquisitionId ? { acquisitionId } : {}),
           streamId: asset.streams.find((x) => x.kind === "video").streamId,
           source: { kind: "range", range: { startUs, endUs: startUs + durationUs } },

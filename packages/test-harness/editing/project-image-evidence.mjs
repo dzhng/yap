@@ -29,7 +29,7 @@ async function importImage(name) {
     "import image",
   );
   const asset = await call("asset.get", { assetId: hash(bytes) });
-  return { assetId: asset.id, streamId: asset.streams[0].streamId };
+  return { assetId: asset.assetId, streamId: asset.streams[0].streamId };
 }
 async function picture(selection, name) {
   const ready = await poll(
@@ -184,19 +184,19 @@ try {
     "image index",
   );
   report.checks.index = index;
-  assert.ok(index.page.entries.length > 2);
-  assert.deepEqual(index.page.metadata.scenes, []);
-  for (const entry of index.page.entries) {
+  assert.ok(index.entries.length > 2);
+  assert.deepEqual(index.metadata.scenes, []);
+  for (const entry of index.entries) {
     assert.ok(entry.frame.pictures.every((v) => v.kind === "image"));
     assert.ok(entry.candidate.reasons.every((v) => v.kind !== "scene"));
   }
   const reference = Object.fromEntries(
     ["projectId", "revisionId", "generation", "tap", "maxLongEdge"].map((key) => [
       key,
-      index.page.metadata[key],
+      index.metadata[key],
     ]),
   );
-  for (const entry of index.page.entries) {
+  for (const entry of index.entries) {
     const file = join(out, `index-${entry.candidate.ordinal}.png`);
     await call("index.frame", { ...reference, ordinal: entry.candidate.ordinal }, { output: file });
     const direct = await picture(
@@ -319,7 +319,8 @@ try {
   const lease = await direct("frame.get", { ...selection, atUs: 0 });
   await call("project.delete", { projectId });
   assert.equal(
-    (await call("artifact.read", { token: lease.delivery.token, offset: 0 }, { error: true })).code,
+    (await call("artifact.read", { token: lease.delivery.token, offsetBytes: 0 }, { error: true }))
+      .code,
     "ARTIFACT_EXPIRED",
   );
   assert.equal(
@@ -464,7 +465,7 @@ try {
     "mixed index",
   );
   assert.equal(
-    mixedIndex.page.metadata.scenes.length,
+    mixedIndex.metadata.scenes.length,
     1,
     "Only advancing video requires source scene evidence",
   );
@@ -474,7 +475,7 @@ try {
     transparentPixels,
     transparentMaximum,
     imageMaximum,
-    index: mixedIndex.page.metadata,
+    index: mixedIndex.metadata,
   };
   await call("project.delete", { projectId: mixedId });
   report.passed = true;

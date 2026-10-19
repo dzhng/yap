@@ -68,14 +68,17 @@ async function audio(selection, name, requested = full) {
   const delivered = await call("audio.get", params, { output: path });
   const receipt = delivered.published.output,
     sampleRange = bounds(requested);
-  assert.deepEqual(receipt.sampleRange, sampleRange);
+  assert.deepEqual(receipt.sampleRange, {
+    startSamples: sampleRange.start,
+    endSamples: sampleRange.end,
+  });
   assert.equal(receipt.sampleRate, 48000);
   assert.equal(receipt.channels, 2);
-  assert.equal(receipt.frames, sampleRange.end - sampleRange.start);
+  assert.equal(receipt.frameCount, sampleRange.end - sampleRange.start);
   assert.equal(delivered.revisionId, selection.revisionId);
   assert.equal(ready.published.generation, delivered.published.generation);
   const pcm = await ff(["-i", path, "-map", "0:a:0", "-f", "f32le", "-"]);
-  assert.equal(pcm.length, receipt.frames * 8);
+  assert.equal(pcm.length, receipt.frameCount * 8);
   for (let i = 0; i < pcm.length; i += 4) assert(Number.isFinite(pcm.readFloatLE(i)));
   report.receipts[name] = { ...receipt, file: name + ".wav", pcmSha256: hash(pcm) };
   return { pcm, path };
@@ -155,7 +158,7 @@ try {
   }
   const [narration, footage, alternate] = assets;
   const media = (asset, kind, selected) => ({
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams.find((s) => s.kind === kind).streamId,
     source: { kind: "range", range: selected },
   });
@@ -274,14 +277,13 @@ try {
   samePCM(late.pcm, before.pcm.subarray(n.start * 8, n.end * 8));
   const editedMovie = await preview(selection, "edited-preview");
   const rangeMovie = await preview(selection, "edited-range-preview", range);
-  const exportId = randomUUID(),
-    directory = await realpath(out);
-  await call(
+  const directory = await realpath(out);
+  const { exportId } = await call(
     "export.create",
     {
       projectId,
       revisionId: selection.revisionId,
-      exportId,
+      requestId: randomUUID(),
       kind: "video",
       directory,
       leaf: "edited-export.mp4",
@@ -310,7 +312,7 @@ try {
   samePCM((await audio(original, "historical-after-restart")).pcm, before.pcm);
   assert.deepEqual((await call("revision.get", original)).revision, placed.revision);
   assert.deepEqual(
-    (await call("revision.history", { projectId })).revisions.map((r) => r.id),
+    (await call("revision.history", { projectId })).revisions.map((r) => r.revisionId),
     [
       made.revision.revisionId,
       placed.revision.revisionId,
@@ -324,10 +326,10 @@ try {
     expectedRevisionId: selection.revisionId,
   });
   assert.deepEqual(undo.document, replaced.revision.document);
-  samePCM((await audio({ projectId, revisionId: undo.id }, "undo-full")).pcm, before.pcm);
+  samePCM((await audio({ projectId, revisionId: undo.revisionId }, "undo-full")).pcm, before.pcm);
   for (const input of report.inputs) assert.equal(hash(await readFile(input.path)), input.sha256);
   for (const asset of assets)
-    assert.deepEqual(await call("asset.get", { assetId: asset.id }), asset);
+    assert.deepEqual(await call("asset.get", { assetId: asset.assetId }), asset);
   for (const [name, file] of [
     ["original-listening", before.path],
     ["edited-listening", after.path],
@@ -352,7 +354,7 @@ try {
       call,
       audio,
       frame,
-      selection: { projectId, revisionId: undo.id },
+      selection: { projectId, revisionId: undo.revisionId },
       document: undo.document,
       before,
       inputs: report.inputs,

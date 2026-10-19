@@ -9,7 +9,7 @@ export async function authorAcceptedRetime({ edit, asset, streamId, candidate })
       label: "clip",
       clip: {
         trackId: { label: "audio" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 4820000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 4820000 } },

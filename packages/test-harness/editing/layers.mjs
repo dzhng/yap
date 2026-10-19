@@ -74,7 +74,7 @@ async function imported(fixture) {
     "layer import",
   );
   const asset = await call("asset.get", { assetId: fixture.sha256 });
-  return { assetId: asset.id, streamId: asset.streams[0].streamId };
+  return { assetId: asset.assetId, streamId: asset.streams[0].streamId };
 }
 async function createProject(canvas, media, suffix, scenario) {
   const processing = Object.entries(scenario.stacks)
@@ -127,20 +127,20 @@ async function createProject(canvas, media, suffix, scenario) {
 }
 async function deliveryBytes(delivery) {
   const chunks = [];
-  let offset = 0;
-  while (offset < delivery.bytes) {
+  let offsetBytes = 0;
+  while (offsetBytes < delivery.sizeBytes) {
     const part = await call(
       "artifact.read",
-      { token: delivery.token, offset, maxBytes: 65536 },
+      { token: delivery.token, offsetBytes, maxBytes: 65536 },
       { transport: "mcp" },
     );
     const bytes = Buffer.from(part.data, "base64");
     assert.ok(bytes.length > 0);
-    assert.equal(part.nextOffset, offset + bytes.length);
+    assert.equal(part.nextOffsetBytes, offsetBytes + bytes.length);
     chunks.push(bytes);
-    offset = part.nextOffset;
+    offsetBytes = part.nextOffsetBytes;
   }
-  assert.equal(offset, delivery.bytes);
+  assert.equal(offsetBytes, delivery.sizeBytes);
   await call("artifact.close", { token: delivery.token }, { transport: "mcp" });
   return Buffer.concat(chunks);
 }
@@ -760,7 +760,7 @@ try {
     (
       await call(
         "artifact.read",
-        { token: lease.delivery.token, offset: 0 },
+        { token: lease.delivery.token, offsetBytes: 0 },
         { transport: "mcp", error: true },
       )
     ).code,

@@ -53,9 +53,9 @@ try {
   await rm(path);
   const replay = await call("asset.import", { requestId: "original", path });
   assert.equal(replay.jobId, submitted.jobId);
-  assert.equal(replay.published.output.assetId, asset.id);
+  assert.equal(replay.published.output.assetId, asset.assetId);
   const another = await call("asset.import", { requestId: "same-bytes", path: duplicate });
-  assert.equal((await settled(another.jobId)).published.output.assetId, asset.id);
+  assert.equal((await settled(another.jobId)).published.output.assetId, asset.assetId);
   const unsupported = join(home, "unsupported.avi");
   await run(
     process.env.FFMPEG ?? "ffmpeg",
@@ -72,12 +72,12 @@ try {
     "id",
     "kind",
   ]);
-  const finalAsset = await call("asset.get", { assetId: asset.id });
+  const finalAsset = await call("asset.get", { assetId: asset.assetId });
   const origins = [];
   let cursor;
   do {
     const page = await call("asset.origins", {
-      assetId: asset.id,
+      assetId: asset.assetId,
       limit: 1,
       ...(cursor ? { cursor } : {}),
     });
@@ -87,8 +87,8 @@ try {
   assert.deepEqual(origins.map((origin) => origin.source).sort(), [path, duplicate].sort());
   const page = await call("asset.list", { limit: 1 });
   assert.deepEqual(
-    page.assets.map((a) => a.id),
-    [asset.id],
+    page.assets.map((a) => a.assetId),
+    [asset.assetId],
   );
   assert.equal(page.nextCursor, null);
   mcp = new Client({ name: "yap-asset-acceptance", version: "1" });
@@ -99,16 +99,16 @@ try {
       stderr: "pipe",
     }),
   );
-  const viaMcp = await mcp.callTool({ name: "asset.get", arguments: { assetId: asset.id } });
+  const viaMcp = await mcp.callTool({ name: "asset.get", arguments: { assetId: asset.assetId } });
   assert.equal(viaMcp.structuredContent.ok, true);
   assert.deepEqual(viaMcp.structuredContent.data, finalAsset);
   const mcpOrigins = await mcp.callTool({
     name: "asset.origins",
-    arguments: { assetId: asset.id, limit: 1 },
+    arguments: { assetId: asset.assetId, limit: 1 },
   });
   assert.deepEqual(
     mcpOrigins.structuredContent.data,
-    await call("asset.origins", { assetId: asset.id, limit: 1 }),
+    await call("asset.origins", { assetId: asset.assetId, limit: 1 }),
   );
   const mcpFailure = await mcp.callTool({ name: "job.get", arguments: { jobId: rejected.jobId } });
   assert.deepEqual(mcpFailure.structuredContent.data, failure);
@@ -118,10 +118,10 @@ try {
   service = await startProjectService({ home });
   const reopened = await call("asset.import", { requestId: "original", path });
   assert.equal(reopened.jobId, submitted.jobId);
-  assert.equal(reopened.published.output.assetId, asset.id);
-  assert.deepEqual(await call("asset.get", { assetId: asset.id }), finalAsset);
+  assert.equal(reopened.published.output.assetId, asset.assetId);
+  assert.deepEqual(await call("asset.get", { assetId: asset.assetId }), finalAsset);
   observations.push({
-    assetId: asset.id,
+    assetId: asset.assetId,
     jobId: submitted.jobId,
     duplicateJobId: another.jobId,
     checks: [

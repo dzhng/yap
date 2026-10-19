@@ -105,7 +105,7 @@ try {
           ...(queryOnly ? { label: `clip${i}` } : {}),
           clip: {
             trackId: tracks[lane],
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: { kind: "range", range: { startUs: 0, endUs: endUs - startUs } },
             placement: { kind: "project", range: { startUs, endUs } },
@@ -234,7 +234,7 @@ try {
       await service.stop();
       await service.start();
       assert.equal((await call("job.get", { jobId: admitted.jobId })).state, "ready");
-      assert.equal((await call("asset.get", { assetId: asset.id })).id, asset.id);
+      assert.equal((await call("asset.get", { assetId: asset.assetId })).assetId, asset.assetId);
     }
   }
   if (!queryOnly)

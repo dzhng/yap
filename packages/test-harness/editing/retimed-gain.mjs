@@ -46,7 +46,7 @@ export async function runRetimedGain(output) {
     const bytes = await readFile(path),
       header = waveHeader(bytes, bytes.length);
     const pcm = bytes.subarray(header.offset);
-    assert.equal(result.published.output.frames, pcm.length / 8);
+    assert.equal(result.published.output.frameCount, pcm.length / 8);
     assert.equal(result.published.output.channels, 2);
     assert.equal(result.published.output.sampleRate, 48000);
     const mcp = await service.mcp.callTool({ name: "audio.get", arguments: selection });
@@ -98,7 +98,7 @@ export async function runRetimedGain(output) {
             label: "clip",
             clip: {
               trackId: { label: "track" },
-              assetId: asset.id,
+              assetId: asset.assetId,
               streamId: asset.streams.find((v) => v.kind === "audio").streamId,
               source: { kind: "range", range: { startUs: 200000, endUs: 1200000 } },
               placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },

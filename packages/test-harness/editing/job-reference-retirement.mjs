@@ -109,8 +109,8 @@ try {
   const asset = await call("asset.get", { assetId });
   const stream = asset.streams.find((v) => v.kind === "audio" && v.decodable);
   assert.ok(stream && stream.endUs >= 1000000);
-  const selection = { assetId, streamId: stream.id };
-  const survivor = { ...selection, range: { startUs: 900000, endUs: 910000 } };
+  const selection = { assetId, streamId: stream.streamId };
+  const survivor = { ...selection, sourceRange: { startUs: 900000, endUs: 910000 } };
   const sibling = await ready(survivor);
   const before = await call("audio.get", survivor, { output: join(out, "survivor-before.wav") });
   const siblingBytes = await readFile(before.output);
@@ -120,7 +120,7 @@ try {
     const results = await Promise.all(
       Array.from({ length: Math.min(4, 513 - base) }, async (_, i) => {
         const range = { startUs: (base + i) * 1000, endUs: (base + i) * 1000 + 500 };
-        const done = await ready({ ...selection, range });
+        const done = await ready({ ...selection, sourceRange: range });
         return { jobId: done.jobId, range };
       }),
     );
@@ -130,7 +130,7 @@ try {
   report.timings.publicSetupMs = performance.now() - started;
   const history = report.history.map((v) => v.jobId);
   assert.equal(new Set(history).size, 513);
-  const canceledSelection = { ...selection, range: { startUs: 800000, endUs: 810000 } };
+  const canceledSelection = { ...selection, sourceRange: { startUs: 800000, endUs: 810000 } };
   let held = await service.arm("media.sourceAudio");
   const canceled = await call("audio.get", canceledSelection, { transport: "mcp" });
   await held();
@@ -140,7 +140,7 @@ try {
     (v) => v.state === "canceled",
     "canceled sibling",
   );
-  const interruptedSelection = { ...selection, range: { startUs: 850000, endUs: 860000 } };
+  const interruptedSelection = { ...selection, sourceRange: { startUs: 850000, endUs: 860000 } };
   held = await service.arm("media.sourceAudio");
   const interrupted = await call("audio.get", interruptedSelection, { transport: "mcp" });
   await held();

@@ -106,8 +106,8 @@ export async function verifyNarrationMusic({
           label: "musicClip",
           clip: {
             trackId: { label: "musicTrack" },
-            assetId: asset.id,
-            streamId: stream.id,
+            assetId: asset.assetId,
+            streamId: stream.streamId,
             source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
             placement: { kind: "project", range: placement },
             pitch: "preserve",
@@ -183,12 +183,12 @@ export async function verifyNarrationMusic({
       assert.deepEqual(undone.document, added.revision.document);
       equal(
         await delivered(
-          { projectId: selection.projectId, revisionId: undone.id },
+          { projectId: selection.projectId, revisionId: undone.revisionId },
           `music-${name}-undo`,
         ),
         target,
       );
-      mixedSelection.revisionId = undone.id;
+      mixedSelection.revisionId = undone.revisionId;
     }
     const undone = await request("edit.undo", {
       projectId: selection.projectId,
@@ -198,7 +198,7 @@ export async function verifyNarrationMusic({
     assert.deepEqual(undone.document, document);
     equal(
       await delivered(
-        { projectId: selection.projectId, revisionId: undone.id },
+        { projectId: selection.projectId, revisionId: undone.revisionId },
         "music-removed-undo",
       ),
       before.pcm,

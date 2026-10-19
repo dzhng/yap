@@ -39,8 +39,8 @@ export async function reorderQuery({ service, save, result, apply, selection, au
           (v) => v.state === "ready",
           "reorder cut page",
         );
-        rows.push(...page.page.rows);
-        cursor = page.page.nextCursor;
+        rows.push(...page.rows);
+        cursor = page.nextCursor;
         assert.ok(++calls <= 100, "Bounded source paging must make progress toward 250 rows");
       } while (rows.length < 250 && cursor);
       assert.equal(rows.length, 250);
@@ -52,7 +52,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
           const side = (sourceAtUs) => ({
             clipId: clip.clipId,
             kind: "range",
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             sourceAtUs,
             rate: 1,
@@ -145,7 +145,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
       expectedRevisionId: moved.revision.revisionId,
       requestId: "reorder-undo",
     });
-    const restored = await query(undone.id);
+    const restored = await query(undone.revisionId);
     await save("reorder-undo.json", { expected: beforeExpected, actual: restored });
     assert.deepEqual(restored.rows, beforeExpected);
     result.inspection = {
@@ -160,7 +160,7 @@ export async function reorderQuery({ service, save, result, apply, selection, au
       range,
       before: selection.revisionId,
       after: moved.revision.revisionId,
-      undo: undone.id,
+      undo: undone.revisionId,
       clips: [left, right],
       staleRevisionControlRejected: true,
       wrongPositionControlRejected: true,

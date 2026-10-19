@@ -88,7 +88,7 @@ try {
         label: `${kind}-${i}`,
         clip: {
           trackId: { label: kind },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams.find((s) => s.kind === kind && s.decodable).streamId,
           source: { kind: "range", range: { startUs: 0, endUs: duration } },
           placement: {
@@ -110,7 +110,7 @@ try {
       projectId,
       revisionId: edited.revision.revisionId,
       kind: "video",
-      exportId,
+      requestId: exportId,
       directory: out,
       leaf: "long.mp4",
     },

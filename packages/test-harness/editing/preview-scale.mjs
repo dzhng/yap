@@ -90,8 +90,8 @@ export async function previewScale(service, out, limits, base, durationUs) {
       operation: "place",
       clip: {
         trackId: { label: "picture" },
-        assetId: asset.id,
-        streamId: stream.id,
+        assetId: asset.assetId,
+        streamId: stream.streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 1e6 } },
         placement: {
           kind: "project",

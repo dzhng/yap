@@ -60,7 +60,7 @@ try {
         source = join(home, `${name}.${kind}`);
       await copyFile(join(fixture, "sources", `${name}.${kind}`), source);
       const asset = await imported(source),
-        selection = { assetId: asset.id, streamId: asset.streams[0].streamId };
+        selection = { assetId: asset.assetId, streamId: asset.streams[0].streamId };
       const first = await ready(selection),
         file = join(out, `${name}-cli.png`);
       const delivered = await call("frame.get", selection, { output: file });
@@ -121,13 +121,13 @@ try {
   const opened = await direct("frame.get", selection);
   const chunk = await call(
     "artifact.read",
-    { token: opened.delivery.token, offset: 0, maxBytes: 65536 },
+    { token: opened.delivery.token, offsetBytes: 0, maxBytes: 65536 },
     { transport: "mcp" },
   );
   assert.ok(Buffer.from(chunk.data, "base64").equals(await readFile(selected.file)));
   await call("artifact.close", { token: opened.delivery.token }, { transport: "mcp" });
   assert.equal(
-    (await call("artifact.read", { token: opened.delivery.token, offset: 0 }, { error: true }))
+    (await call("artifact.read", { token: opened.delivery.token, offsetBytes: 0 }, { error: true }))
       .code,
     "ARTIFACT_EXPIRED",
   );
@@ -152,7 +152,7 @@ try {
     (
       await call(
         "artifact.read",
-        { token: stale.delivery.token, offset: 0 },
+        { token: stale.delivery.token, offsetBytes: 0 },
         { error: true, transport: "mcp" },
       )
     ).code,
@@ -229,13 +229,16 @@ try {
     ],
   });
   await call("project.delete", { projectId }, { transport: "mcp" });
-  assert.equal((await call("asset.get", { assetId: selection.assetId })).id, selection.assetId);
+  assert.equal(
+    (await call("asset.get", { assetId: selection.assetId })).assetId,
+    selection.assetId,
+  );
   assert.equal((await ready(selection)).published.generation, restarted.published.generation);
   report.checks.projectDeletion = { rawImagePreserved: true, assetDeletionPublicSurface: false };
 
   const video = await imported(join(root, "specs/done/agent-editing/assets/00-corpus/a.mov"));
   const videoSelection = {
-    assetId: video.id,
+    assetId: video.assetId,
     streamId: video.streams.find((stream) => stream.kind === "video").streamId,
   };
   for (const [params, code] of [

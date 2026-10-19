@@ -98,13 +98,13 @@ async function readBytes(token, offset, length) {
   for (let at = 0; at < length;) {
     const reply = await call(
       "artifact.read",
-      { token, offset: offset + at, maxBytes: Math.min(65536, length - at) },
+      { token, offsetBytes: offset + at, maxBytes: Math.min(65536, length - at) },
       { transport: "mcp" },
     );
     const block = Buffer.from(reply.data, "base64");
-    assert.equal(reply.offset, offset + at);
+    assert.equal(reply.offsetBytes, offset + at);
     assert.ok(block.length > 0 && block.length <= 65536);
-    assert.equal(reply.nextOffset, offset + at + block.length);
+    assert.equal(reply.nextOffsetBytes, offset + at + block.length);
     blocks.push(block);
     at += block.length;
   }
@@ -154,7 +154,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: sha256 });
     assets.push({
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((s) => s.kind === "audio").streamId,
     });
   }
@@ -232,9 +232,9 @@ try {
     large = await ready(selection);
   report.extractionMs = performance.now() - started;
   const audio = large.published.output,
-    { token, bytes } = large.delivery;
+    { token, sizeBytes: bytes } = large.delivery;
   assert.ok(bytes > 1024 ** 3);
-  assert.equal(audio.frames, 144000000);
+  assert.equal(audio.frameCount, 144000000);
   assert.equal(audio.sampleRate, 48000);
   assert.equal(audio.channels, 2);
   const response = await service.mcp.callTool({ name: "audio.get", arguments: selection });
@@ -260,7 +260,7 @@ try {
     ranged = await ready({ ...selection, range });
   const start = Math.floor((range.startUs * 48000) / 1000000),
     end = Math.floor((range.endUs * 48000) / 1000000);
-  assert.deepEqual(ranged.published.output.sampleRange, { start, end });
+  assert.deepEqual(ranged.published.output.sampleRange, { startSamples: start, endSamples: end });
   const rangeResponse = await service.mcp.callTool({
     name: "audio.get",
     arguments: { ...selection, range },
@@ -325,7 +325,7 @@ try {
   report.large = {
     nativeReceipt: audio,
     bytes,
-    frames: audio.frames,
+    frames: audio.frameCount,
     wavSha256,
     pcmSha256,
     expectedPcmSha256,

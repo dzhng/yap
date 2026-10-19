@@ -140,7 +140,7 @@ const placed = (asset, trackId, kind, label) => ({
   label,
   clip: {
     trackId,
-    assetId: asset.id,
+    assetId: asset.assetId,
     ...(kind === "video" && asset.acquisitionId ? { acquisitionId: asset.acquisitionId } : {}),
     streamId: asset.streams.find((stream) => stream.kind === kind).streamId,
     source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
@@ -163,11 +163,14 @@ try {
   const modelPins = await copyModels(donor, prepared);
   assert.equal((await call("model.status", { modelId: "parakeet" })).state, "ready");
   const transcriptParams = {
-    assetId: speech.id,
+    assetId: speech.assetId,
     streamId: speech.streams.find((stream) => stream.kind === "audio").streamId,
     limit: 1000,
   };
-  await call("transcript.transcribe", { assetId: speech.id, streamId: transcriptParams.streamId });
+  await call("transcript.transcribe", {
+    assetId: speech.assetId,
+    streamId: transcriptParams.streamId,
+  });
   const donorTranscript = await poll(
     () => call("transcript.get", transcriptParams, { transport: "mcp" }),
     (value) => value.state === "ready",
@@ -229,13 +232,13 @@ try {
   const acquisition = await call("acquisition.get", {
     acquisitionId: captureJob.target.acquisitionId,
   });
-  a.acquisitionId = acquisition.id;
+  a.acquisitionId = captureJob.target.acquisitionId;
   const normalizedHash = hash(await readFile(acquisition.evidence.receipt.file));
   const captureBinding = acquisition.bindings.find((binding) =>
     binding.sourceRoles.includes("video"),
   );
   const cursorParams = {
-    acquisitionId: acquisition.id,
+    acquisitionId: captureJob.target.acquisitionId,
     assetId: captureBinding.assetId,
     streamId: captureBinding.streamId,
     sourceRange: { startUs: 0, endUs: 2000000 },
@@ -251,7 +254,7 @@ try {
   const indexParams = {
     assetId: captureBinding.assetId,
     streamId: captureBinding.streamId,
-    acquisitionId: acquisition.id,
+    acquisitionId: captureJob.target.acquisitionId,
   };
   const donorIndex = await poll(
     () => call("index.get", { ...indexParams, limit: 100 }, { transport: "mcp" }),
@@ -270,8 +273,8 @@ try {
   }
 
   // Explicit generated-origin metadata tests reference closure without running synthesis.
-  service.assets.retain({ kind: "asset", id: b.id }, [reference.id]);
-  service.assets.retain({ kind: "asset", id: reference.id }, [speech.id]);
+  service.assets.retain({ kind: "asset", id: b.assetId }, [reference.assetId]);
+  service.assets.retain({ kind: "asset", id: reference.assetId }, [speech.assetId]);
   await service.assets.import(
     join(scratch, "imports", "b.mov"),
     { kind: "generated", source: "portable dependency fixture; no synthesis quality claim" },
@@ -290,7 +293,9 @@ try {
     },
   });
   const projectId = created.project.projectId;
-  service.assets.retain({ kind: "revision", id: created.revision.revisionId }, [revisionOnly.id]);
+  service.assets.retain({ kind: "revision", id: created.revision.revisionId }, [
+    revisionOnly.assetId,
+  ]);
   const first = await call("edit.apply", {
     projectId,
     requestId: "first",
@@ -355,11 +360,10 @@ try {
     "donor-current",
   );
   const history = await call("revision.history", { projectId });
-  const directory = await realpath(out),
-    exportId = randomUUID();
-  await call("export.create", {
+  const directory = await realpath(out);
+  const { exportId } = await call("export.create", {
     projectId,
-    exportId,
+    requestId: randomUUID(),
     directory,
     leaf: "project.zip",
     kind: "processed-package",
@@ -370,9 +374,9 @@ try {
   );
   const packagePath = join(out, "relocated.zip");
   await rename(exported.output, packagePath);
-  const localAdmission = await call("package.open", { path: packagePath });
+  const localAdmission = await call("package.open", { requestId: randomUUID(), path: packagePath });
   const localReady = await poll(
-    () => call("package.status", { admissionId: localAdmission.id }),
+    () => call("package.status", { admissionId: localAdmission.packageId }),
     (value) => value.state === "ready",
   );
   const localAdoption = await poll(
@@ -384,7 +388,7 @@ try {
     (value) => value.state === "ready",
   );
   assert.notEqual(localAdoption.published.output.projectId, projectId);
-  await call("package.close", { admissionId: localAdmission.id });
+  await call("package.close", { admissionId: localAdmission.packageId });
   // Export an older moment after the donor has undone, restored and edited again.
   const donorUndo = await call("edit.undo", {
     projectId,
@@ -394,13 +398,13 @@ try {
   const donorRestore = await call("edit.restore", {
     projectId,
     requestId: "later-restore",
-    expectedRevisionId: donorUndo.id,
+    expectedRevisionId: donorUndo.revisionId,
     targetRevisionId: latest.revision.revisionId,
   });
   const donorLater = await call("edit.apply", {
     projectId,
     requestId: "later-edit",
-    expectedRevisionId: donorRestore.id,
+    expectedRevisionId: donorRestore.revisionId,
     operations: [{ operation: "canvas.set", canvas: { background: "#ff0000ff" } }],
   });
   await projectIndexSnapshot(donorLater.revision.revisionId, "donor-later-excluded");
@@ -452,17 +456,20 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   const receiver = join(scratch, "receiver");
   await start(receiver);
   for (const path of [corrupt, missing]) {
-    const bad = await call("package.open", { path });
+    const bad = await call("package.open", { requestId: randomUUID(), path });
     const failure = await poll(
-      () => call("package.status", { admissionId: bad.id }, { transport: "mcp" }),
+      () => call("package.status", { admissionId: bad.packageId }, { transport: "mcp" }),
       (value) => value.state === "failed",
     );
     assert.match(failure.error, /Missing member|mismatch|hash|identity/i);
-    await call("package.close", { admissionId: bad.id });
+    await call("package.close", { admissionId: bad.packageId });
   }
-  const cancelAdmission = await call("package.open", { path: packagePath });
+  const cancelAdmission = await call("package.open", {
+    requestId: randomUUID(),
+    path: packagePath,
+  });
   const cancelReady = await poll(
-    () => call("package.status", { admissionId: cancelAdmission.id }),
+    () => call("package.status", { admissionId: cancelAdmission.packageId }),
     (value) => value.state === "ready",
   );
   // A deterministic timing barrier after real copying lets public package.close exercise adoption cancellation.
@@ -489,16 +496,20 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     async () => ({ hit: stagedHit }),
     (value) => value.hit,
   );
-  await call("package.close", { admissionId: cancelAdmission.id });
+  await call("package.close", { admissionId: cancelAdmission.packageId });
   service.assets.stagePortable = originalStage;
   assert.deepEqual((await call("project.list", {})).projects, []);
   assert.deepEqual((await call("asset.list", {})).assets, []);
   await close();
   await start(receiver);
 
-  const admission = await call("package.open", { path: packagePath }, { transport: "mcp" });
+  const admission = await call(
+    "package.open",
+    { requestId: randomUUID(), path: packagePath },
+    { transport: "mcp" },
+  );
   const ready = await poll(
-    () => call("package.status", { admissionId: admission.id }),
+    () => call("package.status", { admissionId: admission.packageId }),
     (value) => value.state === "ready",
   );
   const adoptedJob = await poll(
@@ -514,9 +525,9 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     project: await call("project.get", { projectId: adoptedJob.published.output.projectId }),
     revision: { revisionId: adoptedJob.published.output.revisionId },
   };
-  const reopened = await call("package.open", { path: packagePath });
+  const reopened = await call("package.open", { requestId: randomUUID(), path: packagePath });
   const replayReady = await poll(
-    () => call("package.status", { admissionId: reopened.id }),
+    () => call("package.status", { admissionId: reopened.packageId }),
     (value) => value.state === "ready",
   );
   const replay = await poll(
@@ -524,25 +535,31 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     (value) => value.state === "ready",
   );
   assert.deepEqual(replay.published.output, adoptedJob.published.output);
-  await call("package.close", { admissionId: reopened.id });
-  await call("package.close", { admissionId: admission.id });
+  await call("package.close", { admissionId: reopened.packageId });
+  await call("package.close", { admissionId: admission.packageId });
   assert.equal(
-    (await call("package.status", { admissionId: admission.id }, { transport: "mcp" })).state,
-    "closed",
+    (await call("package.status", { admissionId: admission.packageId }, { transport: "mcp" }))
+      .state,
+    "idle",
   );
   await rm(packagePath);
   await close();
   await start(receiver);
-  assert.equal((await call("asset.get", { assetId: revisionOnly.id })).id, revisionOnly.id);
+  assert.equal(
+    (await call("asset.get", { assetId: revisionOnly.assetId })).assetId,
+    revisionOnly.assetId,
+  );
   const adoptedHistory = await call("revision.history", { projectId: adopted.project.projectId });
   assert.ok(
     service.assets
-      .references(revisionOnly.id)
-      .some((owner) => owner.kind === "revision" && owner.id === adoptedHistory.revisions[0].id),
+      .references(revisionOnly.assetId)
+      .some(
+        (owner) => owner.kind === "revision" && owner.id === adoptedHistory.revisions[0].revisionId,
+      ),
   );
   const adoptedAcquisition = await call(
     "acquisition.get",
-    { acquisitionId: acquisition.id },
+    { acquisitionId: captureJob.target.acquisitionId },
     { transport: "mcp" },
   );
   assert.equal(adoptedAcquisition.journal.sha256, hash(journal));
@@ -599,9 +616,11 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   report.projectIndexes = [];
   for (const original of [historicalProjectIndex, currentProjectIndex]) {
     const ordinal = history.revisions.find(
-      (value) => value.id === original.result.revisionId,
+      (value) => value.revisionId === original.result.revisionId,
     ).ordinal;
-    const revisionId = adoptedHistory.revisions.find((value) => value.ordinal === ordinal).id;
+    const revisionId = adoptedHistory.revisions.find(
+      (value) => value.ordinal === ordinal,
+    ).revisionId;
     const result = await call(
       "index.get",
       { projectId: adopted.project.projectId, revisionId, limit: 100 },
@@ -634,7 +653,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   }
 
   assert.equal(
-    (await call("model.status", { modelId: "parakeet" }, { transport: "mcp" })).state,
+    (await call("model.status", { modelId: "parakeet" }, { transport: "mcp" })).presence,
     "absent",
   );
   const adoptedTranscript = await call("transcript.get", transcriptParams);
@@ -650,11 +669,11 @@ with zipfile.ZipFile(sys.argv[1]) as source:
   );
   const actualAssets = (await call("asset.list", {}, { transport: "mcp" })).assets;
   assert.deepEqual(
-    actualAssets.map((item) => item.id).sort(),
-    [a.id, b.id, reference.id, speech.id, revisionOnly.id].sort(),
+    actualAssets.map((item) => item.assetId).sort(),
+    [a.assetId, b.assetId, reference.assetId, speech.assetId, revisionOnly.assetId].sort(),
   );
   for (const original of [a, b, reference, speech, revisionOnly])
-    assert.equal(hash(await readFile(service.assets.path(original.id))), original.id);
+    assert.equal(hash(await readFile(service.assets.path(original.assetId))), original.assetId);
   assert.deepEqual(
     (await call("revision.history", { projectId: adopted.project.projectId })).revisions.map(
       (revision) => revision.document,
@@ -674,11 +693,14 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     },
     { transport: "mcp" },
   );
-  assert.deepEqual(await render(adopted.project.projectId, undo.id, "adopted-history"), before);
+  assert.deepEqual(
+    await render(adopted.project.projectId, undo.revisionId, "adopted-history"),
+    before,
+  );
   const edited = await call("edit.apply", {
     projectId: adopted.project.projectId,
     requestId: "edit-adopted",
-    expectedRevisionId: undo.id,
+    expectedRevisionId: undo.revisionId,
     operations: [{ operation: "canvas.set", canvas: { background: "#ff0000ff" } }],
   });
   const undoEdit = await call("edit.undo", {
@@ -687,9 +709,12 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     expectedRevisionId: edited.revision.revisionId,
   });
   assert.deepEqual(undoEdit.document, undo.document);
-  const historicalAdmission = await call("package.open", { path: historicalPath });
+  const historicalAdmission = await call("package.open", {
+    requestId: randomUUID(),
+    path: historicalPath,
+  });
   const historicalReady = await poll(
-    () => call("package.status", { admissionId: historicalAdmission.id }),
+    () => call("package.status", { admissionId: historicalAdmission.packageId }),
     (value) => value.state === "ready",
   );
   const historicalAdoption = await poll(
@@ -700,7 +725,7 @@ with zipfile.ZipFile(sys.argv[1]) as source:
       }),
     (value) => value.state === "ready",
   );
-  await call("package.close", { admissionId: historicalAdmission.id });
+  await call("package.close", { admissionId: historicalAdmission.packageId });
   await rm(historicalPath);
   await close();
   await start(receiver);
@@ -725,13 +750,13 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     expectedRevisionId: historicalAdoption.published.output.revisionId,
   });
   assert.deepEqual(
-    await render(historicalProjectId, historicalUndo.id, "selected-history-undo"),
+    await render(historicalProjectId, historicalUndo.revisionId, "selected-history-undo"),
     before,
   );
   const historicalEdit = await call("edit.apply", {
     projectId: historicalProjectId,
     requestId: "historical-edit",
-    expectedRevisionId: historicalUndo.id,
+    expectedRevisionId: historicalUndo.revisionId,
     operations: [{ operation: "canvas.set", canvas: { background: "#ff0000ff" } }],
   });
   const historicalUndoEdit = await call("edit.undo", {
@@ -740,7 +765,11 @@ with zipfile.ZipFile(sys.argv[1]) as source:
     expectedRevisionId: historicalEdit.revision.revisionId,
   });
   assert.deepEqual(
-    await render(historicalProjectId, historicalUndoEdit.id, "selected-history-edit-undone"),
+    await render(
+      historicalProjectId,
+      historicalUndoEdit.revisionId,
+      "selected-history-edit-undone",
+    ),
     before,
   );
   const large = await call("project.create", {

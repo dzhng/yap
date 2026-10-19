@@ -16,7 +16,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
   const source = {
     kind: "text",
     text: "Boundary caption",
-    font: { assetId: font.id, postScriptName: "ArialMT" },
+    font: { assetId: font.assetId, postScriptName: "ArialMT" },
     width: 320,
     height: 100,
     size: 28,
@@ -37,7 +37,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
       operation: "place",
       clip: {
         trackId: { label: "video" },
-        assetId: media.id,
+        assetId: media.assetId,
         streamId: media.streams.find((s) => s.kind === "video").streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 2000000 } },
@@ -62,10 +62,9 @@ export async function captionClock({ call, out, font, project, admit, picture, r
     );
     await api("preview.get", params, { output: files[name] });
   }
-  const exportId = randomUUID();
-  await api("export.create", {
+  const { exportId } = await api("export.create", {
     ...p.selection(),
-    exportId,
+    requestId: randomUUID(),
     kind: "video",
     directory: out,
     leaf: "export.mp4",
@@ -110,7 +109,7 @@ export async function captionClock({ call, out, font, project, admit, picture, r
   for (const name of ["full", "range"]) {
     const asset = await admit(files[name]);
     assets[name] = {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((s) => s.kind === "video").streamId,
     };
   }

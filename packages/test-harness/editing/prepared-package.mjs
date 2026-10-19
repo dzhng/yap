@@ -209,7 +209,7 @@ try {
         operation: "place",
         clip: {
           trackId: { label: "audio" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: clipUs } },
           placement: { kind: "project", range: { startUs: 0, endUs: clipUs } },
@@ -229,7 +229,7 @@ try {
           operation: "place",
           clip: {
             trackId,
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: { kind: "range", range },
             placement: { kind: "project", range },
@@ -296,9 +296,9 @@ try {
       call(
         "audio.get",
         {
-          assetId: learnedAsset.id,
+          assetId: learnedAsset.assetId,
           streamId: learnedAsset.streams[0].streamId,
-          range: { startUs: 0, endUs: 1000000 },
+          sourceRange: { startUs: 0, endUs: 1000000 },
         },
         learnedPath,
       ),
@@ -329,10 +329,9 @@ try {
     }),
   );
   await start(donor);
-  const exportId = randomUUID();
-  await call("export.create", {
+  const { exportId } = await call("export.create", {
     projectId,
-    exportId,
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: out,
     leaf: "prepared.zip",
@@ -348,9 +347,9 @@ try {
   await rm(donor, { recursive: true });
   await rm(source);
   await start(receiver);
-  const cancelAdmission = await call("package.open", { path: archive });
+  const cancelAdmission = await call("package.open", { requestId: randomUUID(), path: archive });
   const cancelReady = await poll(
-    () => call("package.status", { admissionId: cancelAdmission.id }),
+    () => call("package.status", { admissionId: cancelAdmission.packageId }),
     (value) => value.state === "ready",
   );
   const originalStage = service.assets.stagePortable.bind(service.assets);
@@ -372,15 +371,15 @@ try {
     async () => ({ staged }),
     (value) => value.staged,
   );
-  await call("package.close", { admissionId: cancelAdmission.id });
+  await call("package.close", { admissionId: cancelAdmission.packageId });
   service.assets.stagePortable = originalStage;
   assert.deepEqual((await call("project.list", {})).projects, []);
   assert.deepEqual((await call("asset.list", {})).assets, []);
   await close();
   await start(receiver);
-  const admission = await call("package.open", { path: archive });
+  const admission = await call("package.open", { requestId: randomUUID(), path: archive });
   const opened = await poll(
-    () => call("package.status", { admissionId: admission.id }),
+    () => call("package.status", { admissionId: admission.packageId }),
     (value) => value.state === "ready",
   );
   const adopted = await poll(
@@ -393,7 +392,7 @@ try {
     adopted.published.output,
   );
   const history = await call("revision.history", { projectId: adopted.published.output.projectId });
-  await call("package.close", { admissionId: admission.id });
+  await call("package.close", { admissionId: admission.packageId });
   await rm(archive);
   const changed = await call("edit.apply", {
     projectId: adopted.published.output.projectId,
@@ -435,16 +434,16 @@ try {
   });
   const restored = await call("audio.prepare", {
     projectId: adopted.published.output.projectId,
-    revisionId: undone.id,
+    revisionId: undone.revisionId,
   });
   assert.equal(restored.state, "ready");
-  assert.equal(restored.published.output.assetId, learnedAsset.id);
+  assert.equal(restored.published.output.assetId, learnedAsset.assetId);
   await close();
   await owner(receiver, false, async ({ prepared, assets, projects, calls }) => {
     for (const [i, original] of values.entries()) {
       const revisionId = history.revisions.find(
         (revision) => revision.ordinal === originals[i].ordinal,
-      ).id;
+      ).revisionId;
       const resourceId = preparedAudioResource(
         adopted.published.output.projectId,
         original.portable.publication.attemptId,
@@ -479,7 +478,7 @@ try {
     assert.equal(calls(), 0);
   });
   await start(receiver);
-  assert.equal((await call("model.status", { modelId: "parakeet" })).state, "absent");
+  assert.equal((await call("model.status", { modelId: "parakeet" })).presence, "absent");
   for (const [i, original] of values.entries()) {
     const asset = await call("asset.get", { assetId: original.value.assetId });
     const output = join(out, `public-prepared-${i}.wav`);
@@ -488,9 +487,9 @@ try {
         call(
           "audio.get",
           {
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
-            range: { startUs: 750000, endUs: 1000000 },
+            sourceRange: { startUs: 750000, endUs: 1000000 },
           },
           output,
         ),

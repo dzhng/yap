@@ -48,7 +48,7 @@ try {
   const asset = await call("asset.get", { assetId: importedJob.published.output.assetId });
   const video = asset.streams.find((stream) => stream.kind === "video");
   assert.ok(video, "Fixture must expose a video stream");
-  const selection = { assetId: asset.id, streamId: video.id };
+  const selection = { assetId: asset.assetId, streamId: video.streamId };
 
   const indexed = await poll(
     () => call("index.get", { ...selection, limit: 1 }, { transport: "mcp" }),
@@ -62,7 +62,7 @@ try {
       "index.coverage",
       {
         ...selection,
-        generation: indexed.page.metadata.generation,
+        generation: indexed.metadata.generation,
         limit: 20,
         ...(cursor ? { cursor } : {}),
       },
@@ -146,7 +146,7 @@ try {
   await mkdir(exportDirectory);
   const exportId = randomUUID();
   await call("export.create", {
-    exportId,
+    requestId: exportId,
     projectId: created.project.projectId,
     revisionId: edited.revision.revisionId,
     kind: "video",
@@ -211,7 +211,7 @@ try {
   assert.ok(means[1] <= 2, `physical gap frame unexpectedly contains picture: ${means[1]}`);
   assert.ok(means[2] > 0, `post-gap frame unexpectedly black: ${means[2]}`);
   report.checks = {
-    sourceCoverage: { generation: indexed.page.metadata.generation, gap },
+    sourceCoverage: { generation: indexed.metadata.generation, gap },
     project: { projectId: project.projectId, revisionId: project.revisionId, frames },
     export: {
       exportId,

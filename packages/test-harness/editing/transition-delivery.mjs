@@ -94,7 +94,7 @@ try {
         label: "red",
         clip: {
           trackId: { label: "red-track" },
-          assetId: red.id,
+          assetId: red.assetId,
           streamId: red.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -105,7 +105,7 @@ try {
         label: "blue",
         clip: {
           trackId: { label: "blue-track" },
-          assetId: blue.id,
+          assetId: blue.assetId,
           streamId: blue.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -205,7 +205,7 @@ try {
           label: "pulse",
           clip: {
             trackId: { label: "pulse-track" },
-            assetId: red.id,
+            assetId: red.assetId,
             streamId: red.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -294,7 +294,7 @@ try {
         label: `moving-${index}`,
         clip: {
           trackId: { label: index === 0 ? "moving-a-track" : "moving-b-track" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams.find((stream) => stream.kind === "video").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -345,7 +345,7 @@ try {
     distance(movingSamples[500000].meanRGB, movingSamples[100000].meanRGB) > 0.5,
     "moving crossfade midpoint must differ from its outside-window control",
   );
-  report.moving = { sources: movingAssets.map((asset) => asset.id), samples: movingSamples };
+  report.moving = { sources: movingAssets.map((asset) => asset.assetId), samples: movingSamples };
   const audioSourcePaths = [join(out, "audio-a.wav"), join(out, "audio-b.wav")];
   await writeSourceWave(audioSourcePaths[0], { source: 0, seconds: 1 });
   await writeSourceWave(audioSourcePaths[1], { source: 1, seconds: 1 });
@@ -383,7 +383,7 @@ try {
         label: `audio-${index}`,
         clip: {
           trackId: { label: index === 0 ? "audio-a-track" : "audio-b-track" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams.find((stream) => stream.kind === "audio").streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },

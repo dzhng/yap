@@ -33,12 +33,15 @@ async function importFont(path, requestId = randomUUID(), transport = "cli") {
     "font admission",
   );
   const asset = await call("asset.get", { assetId: job.published.output.assetId });
-  assert.equal(asset.id, hash(await readFile(path)));
+  assert.equal(asset.assetId, hash(await readFile(path)));
   assert.deepEqual(asset.streams, []);
   assert.equal(asset.originUs, 0);
   assert.ok(asset.fontFaces.length > 0);
   assert.equal(new Set(asset.fontFaces.map((f) => f.postScriptName)).size, asset.fontFaces.length);
-  assert.deepEqual(await call("asset.get", { assetId: asset.id }, { transport: "mcp" }), asset);
+  assert.deepEqual(
+    await call("asset.get", { assetId: asset.assetId }, { transport: "mcp" }),
+    asset,
+  );
   return { asset, admitted, requestId, path };
 }
 try {
@@ -46,7 +49,7 @@ try {
   const singlePath = join(home, "single.ttf");
   await copyFile(resolve(values.font), singlePath);
   const single = await importFont(singlePath, "single");
-  report.inputs = [{ path: resolve(values.font), sha256: single.asset.id }];
+  report.inputs = [{ path: resolve(values.font), sha256: single.asset.assetId }];
   assert.equal(single.asset.fontFaces.length, 1);
   const copyPath = join(home, "copy-without-extension");
   await copyFile(singlePath, copyPath);
@@ -55,18 +58,18 @@ try {
   await copyFile(singlePath, changedPath);
   await appendFile(changedPath, Buffer.alloc(4));
   const changed = await importFont(changedPath);
-  assert.notEqual(changed.asset.id, single.asset.id);
+  assert.notEqual(changed.asset.assetId, single.asset.assetId);
   assert.deepEqual(changed.asset.fontFaces, single.asset.fontFaces);
   const collectionPath = join(home, "collection-without-extension");
   await copyFile(resolve(values.collection), collectionPath);
   const collection = await importFont(collectionPath, "collection", "mcp");
   assert.ok(collection.asset.fontFaces.length > 1);
-  report.inputs.push({ path: resolve(values.collection), sha256: collection.asset.id });
+  report.inputs.push({ path: resolve(values.collection), sha256: collection.asset.assetId });
   const fontFaces = single.asset.fontFaces;
   await rm(singlePath);
   const replay = await call("asset.import", { requestId: single.requestId, path: single.path });
   assert.equal(replay.jobId, single.admitted.jobId);
-  assert.deepEqual(await call("asset.get", { assetId: single.asset.id }), single.asset);
+  assert.deepEqual(await call("asset.get", { assetId: single.asset.assetId }), single.asset);
   const missing = await call(
     "asset.import",
     { requestId: "missing", path: join(home, "missing.ttf") },
@@ -92,8 +95,8 @@ try {
     cursor = page.nextCursor;
   } while (cursor);
   assert.deepEqual(
-    listed.map((a) => a.id).sort(),
-    [single.asset.id, changed.asset.id, collection.asset.id].sort(),
+    listed.map((a) => a.assetId).sort(),
+    [single.asset.assetId, changed.asset.assetId, collection.asset.assetId].sort(),
   );
   for (const asset of listed) {
     assert.deepEqual(asset.mediaKinds, []);
@@ -124,7 +127,7 @@ try {
           operation: "place",
           clip: {
             trackId: { label: "v" },
-            assetId: single.asset.id,
+            assetId: single.asset.assetId,
             streamId: fontFaces[0].postScriptName,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -138,14 +141,17 @@ try {
   await service.stop();
   await service.start();
   assert.deepEqual(
-    await call("asset.get", { assetId: single.asset.id }, { transport: "mcp" }),
+    await call("asset.get", { assetId: single.asset.assetId }, { transport: "mcp" }),
     single.asset,
   );
-  assert.deepEqual(await call("asset.get", { assetId: collection.asset.id }), collection.asset);
+  assert.deepEqual(
+    await call("asset.get", { assetId: collection.asset.assetId }),
+    collection.asset,
+  );
   assert.equal(
     (await call("asset.import", { requestId: "single", path: singlePath })).published.output
       .assetId,
-    single.asset.id,
+    single.asset.assetId,
   );
   report.checks = [
     "exact hash identity",

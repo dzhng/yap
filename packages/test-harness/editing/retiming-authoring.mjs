@@ -75,11 +75,15 @@ try {
   const asset = await call("asset.get", { assetId: job.published.output.assetId });
   const stream = asset.streams.find((v) => v.kind === "audio");
   assert(stream);
-  const timing = await call("asset.segments", { assetId: asset.id, streamId: stream.id });
+  const timing = await call("asset.segments", {
+    assetId: asset.assetId,
+    streamId: stream.streamId,
+  });
   assert.equal(timing.nextCursor, null);
   const modelAsset = compositionAsset({
     ...asset,
-    streams: [{ ...stream, segments: timing.segments }],
+    id: asset.assetId,
+    streams: [{ ...stream, id: stream.streamId, segments: timing.segments }],
   });
   for (const candidate of frozen.results) {
     const name = candidate.path.replace(/\.wav$/, ""),
@@ -113,13 +117,13 @@ try {
     const { selected, startUs, durationUs } = await authorAcceptedRetime({
       edit,
       asset,
-      streamId: stream.id,
+      streamId: stream.streamId,
       candidate,
     });
     const base = revision;
     const compile = (value, range) => {
       const model = validateComposition(value.document, [modelAsset]);
-      return createCompiler(model, value.id).audioWindow({
+      return createCompiler(model, value.revisionId).audioWindow({
         range: range ?? { startUs: 0, endUs: model.durationUs },
         rendition: { sampleRate: 48000, channels: 2 },
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
@@ -162,7 +166,12 @@ try {
         clips: [...window.audio()],
         processing: window.processing(),
         assets: [
-          { assetId: asset.id, streamId: stream.id, path: source, originUs: asset.originUs },
+          {
+            assetId: asset.assetId,
+            streamId: stream.streamId,
+            path: source,
+            originUs: asset.originUs,
+          },
         ],
       };
       await writeFile(path, JSON.stringify(plan, null, 2));
@@ -177,7 +186,7 @@ try {
       } else if (values["public-audio"]) {
         const selection = {
           projectId,
-          revisionId: variant === "full" ? base.id : revision.revisionId,
+          revisionId: variant === "full" ? base.revisionId : revision.revisionId,
           range: window.manifest.range,
         };
         plans[variant].receipt = await poll(
@@ -220,7 +229,7 @@ try {
       durationUs,
       context,
       plans,
-      publicRevision: base.id,
+      publicRevision: base.revisionId,
       exactAcceptedSampleCount: true,
       pureSplitKeepsFullRun: true,
       shortQueryKeepsFullRun: true,

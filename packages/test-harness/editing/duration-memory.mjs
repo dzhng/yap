@@ -116,13 +116,13 @@ try {
       let generation;
       if (transcript) {
         await call("transcript.transcribe", {
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
         });
         const sourceWords = await poll(
           () =>
             call("transcript.get", {
-              assetId: asset.id,
+              assetId: asset.assetId,
               streamId: asset.streams[0].streamId,
               limit: 1000,
             }),
@@ -132,7 +132,7 @@ try {
         generation = sourceWords.generation;
         trial.sourceTranscript = sourceWords;
         assert.deepEqual(
-          sourceWords.page.rows
+          sourceWords.rows
             .filter((row) => row.type === "word")
             .slice(0, 5)
             .map((row) => ({ text: row.text, source: row.sourceRange })),
@@ -186,7 +186,10 @@ try {
             ...(transcript || capture ? { label: clipLabel(first + offset) } : {}),
             clip: {
               trackId: track,
-              ...(events?.selection ?? { assetId: asset.id, streamId: asset.streams[0].streamId }),
+              ...(events?.selection ?? {
+                assetId: asset.assetId,
+                streamId: asset.streams[0].streamId,
+              }),
               source: {
                 kind: "range",
                 range: transcript
@@ -288,8 +291,8 @@ try {
             (x) => x.state === "ready",
             "query page",
           );
-          rows.push(...page.page.rows);
-          cursor = page.page.nextCursor;
+          rows.push(...page.rows);
+          cursor = page.nextCursor;
           assert.ok(++pages <= 100, "Continuation must make bounded progress");
         } while (rows.length < rowsPerQuery && cursor);
         assert.deepEqual(
@@ -310,7 +313,7 @@ try {
               word = transcript.words[ordinal];
             return {
               type: "word",
-              id: `w${ordinal}`,
+              wordId: `w${ordinal}`,
               ordinal,
               text: word.text,
               kind: "speech",
@@ -319,7 +322,7 @@ try {
               sourceRange: word.source,
               partial: false,
               clipId: clipIds[index],
-              assetId: asset.id,
+              assetId: asset.assetId,
               streamId: asset.streams[0].streamId,
               trackId: track,
               trackRank: 0,
@@ -385,7 +388,8 @@ try {
           assert.equal(page.projectId, projectId);
           assert.equal(page.revisionId, revisionId);
           if (cursor) {
-            assert.deepEqual(page.dependencies, { manifestId: cursor.manifestId });
+            // A continuation names only the manifest it reads; the opaque cursor no longer shows it.
+            assert.deepEqual(Object.keys(page.dependencies), ["manifestId"]);
           } else {
             assert.equal(page.dependencies.length, 1);
             if (events) {
@@ -396,27 +400,20 @@ try {
               assert.deepEqual(page.dependencies[0].transcript.engine, transcript.engine);
             }
           }
-          const delivered = search ? page.page.entries : page.page.rows;
+          const delivered = search ? page.entries : page.rows;
           if (!search && !capture)
             assert.ok(delivered.length > 0, "Transcript continuation must progress");
-          assert.notDeepEqual(page.page.nextCursor, cursor);
-          if (page.page.nextCursor) {
-            const next = page.page.nextCursor;
-            assert(
-              !checkpoints.has(next.checkpointId),
-              "Evidence continuation repeated a checkpoint",
-            );
-            checkpoints.add(next.checkpointId);
-            if (cursor)
-              assert.deepEqual(
-                { ...next, checkpointId: cursor.checkpointId },
-                cursor,
-                "Evidence continuation changed its pinned query",
-              );
+          assert.notDeepEqual(page.nextCursor, cursor);
+          if (page.nextCursor) {
+            // Cursors are opaque: a repeat is a repeated checkpoint. The service itself refuses
+            // a cursor replayed against a different query, so its pinned fields are not read here.
+            const next = page.nextCursor;
+            assert(!checkpoints.has(next), "Evidence continuation repeated a checkpoint");
+            checkpoints.add(next);
           }
           rows.push(...delivered);
           pages.push({ params, response: page });
-          cursor = page.page.nextCursor;
+          cursor = page.nextCursor;
           assert.ok(
             pages.length <= (search || capture ? 100 : 10),
             "Evidence continuation must remain bounded",
@@ -501,7 +498,7 @@ try {
         assert.equal(document.channels, 2);
         assert.equal(document.bucketFrames, 48);
         assert.deepEqual(document.buckets, expectedBuckets);
-        assert.equal(ready.published.output.bytes, Buffer.byteLength(text));
+        assert.equal(ready.published.output.sizeBytes, Buffer.byteLength(text));
         if (!trial.waveform) {
           const file = `waveform-${report.cases.length}-${seconds}.json`;
           await writeFile(join(out, file), text);

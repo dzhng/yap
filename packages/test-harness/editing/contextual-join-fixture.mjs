@@ -116,8 +116,8 @@ async function makeProject(fixture, name, clips) {
       label: `${name}-clip-${index}`,
       clip: {
         trackId: tracked.revision.document.tracks[0].id,
-        assetId: fixture.asset.id,
-        streamId: fixture.stream.id,
+        assetId: fixture.asset.assetId,
+        streamId: fixture.stream.streamId,
         source: { kind: "range", range: clip.source },
         placement: { kind: "project", range: clip.project },
       },
@@ -157,7 +157,7 @@ async function prepareAndVerify(
   const audio = prepared.published.output;
   assert.equal(audio.sampleRate, 48000);
   assert.equal(audio.channels, 2);
-  assert.equal(audio.frames, Math.round((range.endUs * 48000) / 1_000_000));
+  assert.equal(audio.frameCount, Math.round((range.endUs * 48000) / 1_000_000));
   let rendered;
   for (;;) {
     rendered = await call("transcript.render.prepare", selection);
@@ -188,7 +188,7 @@ async function prepareAndVerify(
   assert.equal(reportData.rendered.recognition.state, speech ? "observed" : "missing");
   assert.equal(reportData.audio.dimensions.sampleRate, 48000);
   assert.equal(reportData.audio.dimensions.channels, 2);
-  assert.equal(reportData.audio.dimensions.frames, audio.frames);
+  assert.equal(reportData.audio.dimensions.frameCount, audio.frameCount);
   assert.deepEqual(reportData.rendered.prepared.sampleRange, audio.sampleRange);
   if (expectedBoundary === "jump") {
     assert.equal(reportData.boundary.before.kind, "range");
@@ -257,7 +257,7 @@ async function prepareAndVerify(
     boundaryAtUs,
     prepared: {
       resourceId: audio.resourceId,
-      frames: audio.frames,
+      frames: audio.frameCount,
       sampleRange: audio.sampleRange,
       sha256: audio.sha256,
     },
@@ -266,7 +266,7 @@ async function prepareAndVerify(
       ...(speech
         ? {
             generation: speech.generation,
-            frames: speech.pcm.frames,
+            frames: speech.pcm.frameCount,
             sampleRange: speech.pcm.sampleRange,
             transcript: {
               generation: speech.transcript.generation,
@@ -311,8 +311,8 @@ try {
             operation: "place",
             clip: {
               trackId: repairedProject.trackId,
-              assetId: fixture.asset.id,
-              streamId: fixture.stream.id,
+              assetId: fixture.asset.assetId,
+              streamId: fixture.stream.streamId,
               source: { kind: "range", range: full },
               placement: { kind: "project", range: full },
             },

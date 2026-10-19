@@ -116,7 +116,7 @@ async function deliveredPair(selection, name) {
   const cli = await call("frame.get", { ...selection, atUs: 150000 }, { output });
   const image = provenance(cli, selection, 150000, 100000);
   assert.equal(cli.output, output);
-  assert.equal((await stat(output)).size, image.bytes);
+  assert.equal((await stat(output)).size, image.sizeBytes);
   await matchesReference(output, name === "track2" ? "second" : "first", image);
   const reply = await service.mcp.callTool({
     name: "frame.get",
@@ -156,8 +156,8 @@ try {
   assert.equal(asset.originUs, 1250000);
   const videos = asset.streams.filter((stream) => stream.kind === "video");
   assert.equal(videos.length, 2);
-  const first = { assetId: asset.id, streamId: videos[0].id };
-  const second = { assetId: asset.id, streamId: videos[1].id };
+  const first = { assetId: asset.assetId, streamId: videos[0].streamId };
+  const second = { assetId: asset.assetId, streamId: videos[1].streamId };
   await deliveredPair(first, "track1");
   await deliveredPair(second, "track2");
   await assert.rejects(() => mcpNoImage("frame.get", { ...first, atUs: 150000 }));
@@ -245,13 +245,13 @@ try {
   const selected = {
     assetId: binding.assetId,
     streamId: binding.streamId,
-    acquisitionId: acquisition.id,
+    acquisitionId: job.target.acquisitionId,
   };
   const acquired = await deliveredPair(selected, "acquired");
   assert.notEqual(acquired.supportDigest, undefined);
   const wrong = await call(
     "frame.get",
-    { ...first, acquisitionId: acquisition.id, atUs: 150000 },
+    { ...first, acquisitionId: job.target.acquisitionId, atUs: 150000 },
     { error: true, transport: "mcp" },
   );
   assert.equal(wrong.code, "INVALID_PARAMS");
@@ -268,7 +268,7 @@ try {
   provenance(retained, selected, 850000, 800000);
   await matchesReference(retained.output, "first", retained.published.output);
   report.checks.retainedAcquisition = {
-    id: acquisition.id,
+    id: job.target.acquisitionId,
     donorDeleted: true,
     restarted: true,
     supportBasis: binding.supportBasis,

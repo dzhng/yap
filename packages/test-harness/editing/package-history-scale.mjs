@@ -249,7 +249,7 @@ try {
         clip: {
           trackId: { label: "audio" },
           assetId: asset.id,
-          streamId: asset.streams[0].streamId,
+          streamId: asset.streams[0].id,
           source: { kind: "range", range: { startUs: 0, endUs: 100000 } },
           placement: { kind: "project", range: { startUs: i * 100000, endUs: (i + 1) * 100000 } },
         },
@@ -391,7 +391,7 @@ try {
   await start(receiver, "receiver open/adopt/read");
   const admission = await call("package.open", { path: second.output }, { transport: "cli" });
   const opened = await poll(
-    () => call("package.status", { admissionId: admission.id }),
+    () => call("package.status", { admissionId: admission.packageId }),
     (v) => v.state === "ready",
     "package open",
   );
@@ -400,9 +400,9 @@ try {
     (v) => v.state === "ready",
     "package adoption",
   );
-  await call("package.close", { admissionId: admission.id });
+  await call("package.close", { admissionId: admission.packageId });
   const receivingId = adopted.published.output.projectId;
-  let cursor = null,
+  let cursor,
     count = 0;
   const mapped = [];
   do {
@@ -412,7 +412,10 @@ try {
       assert(original);
       assert.equal(revision.ordinal, count);
       assert.notEqual(revision.revisionId, original.id);
-      assert.equal(digest({ ...revision, id: original.id, projectId }), original.semanticSha256);
+      assert.equal(
+        digest({ ...revision, revisionId: original.id, projectId }),
+        original.semanticSha256,
+      );
       mapped.push(revision.revisionId);
       count++;
     }
@@ -455,7 +458,7 @@ try {
   });
   assert.equal(digest(undone.document), expected[998].documentSha256);
   assert.deepEqual(
-    await audio({ projectId: receivingId, revisionId: undone.id }, "receiver-undone-late"),
+    await audio({ projectId: receivingId, revisionId: undone.revisionId }, "receiver-undone-late"),
     baseline,
   );
   report.checks.adoption = {

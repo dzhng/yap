@@ -84,7 +84,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: imported.published.output.assetId });
     const selection = {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((stream) => stream.kind === "audio").streamId,
       channel: 0,
       sourceRange: { startUs: 0, endUs: (input.frames * 1000000) / 16000 },
@@ -102,7 +102,7 @@ try {
     const published = ready.published.output;
     for (const [field, expected] of Object.entries(expectedEngine))
       assert.equal(published.source.engine[field], expected);
-    const read = { assetId: asset.id, generation: ready.published.output.generation };
+    const read = { assetId: asset.assetId, generation: ready.published.output.generation };
     const thresholds = [];
     for (const thresholdRMS of [0.01, 0]) {
       const request = { ...read, view: "acoustic", thresholdRMS, limit: 1000 };

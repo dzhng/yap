@@ -233,7 +233,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: job.published.output.assetId });
     const source = {
-      assetId: asset.id,
+      assetId: asset.assetId,
       streamId: asset.streams.find((v) => v.kind === "video").streamId,
     };
     row.import = { ack, job, source };

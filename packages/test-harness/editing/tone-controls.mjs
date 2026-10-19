@@ -145,7 +145,7 @@ try {
         label: "shot",
         clip: {
           trackId: { label: "v" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 500000 } },
@@ -179,7 +179,7 @@ try {
         await call("export.create", {
           projectId,
           revisionId,
-          exportId,
+          requestId: exportId,
           kind: "video",
           directory: out,
           leaf: name + ".mp4",

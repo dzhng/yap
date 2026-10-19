@@ -29,7 +29,7 @@ const controls = JSON.parse(await readFile(join(assets, "controls.json")));
 const manifest = JSON.parse(
   await readFile(join(root, "fixtures/video-editing-feedback/manifest.json")),
 );
-const rect = (id, x, y, width, height) => ({ id, rect: { x, y, width, height } });
+const rect = (id, x, y, width, height) => ({ regionId: id, rect: { x, y, width, height } });
 const masks = {
   graham: [
     rect("face-area", 215, 75, 70, 70),
@@ -162,7 +162,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: imported.published.output.assetId }),
       stream = asset.streams.find((v) => v.kind === (c.camera ? "video" : "image"));
-    const source = { assetId: asset.id, streamId: stream.id };
+    const source = { assetId: asset.assetId, streamId: stream.streamId };
     const observations = pictureObservationRequestSchema.parse({ regions: c.regions });
     const row = { id: c.id, inputSha256: c.sha256, source, observations, frames: [] };
     report.cases.push(row);
@@ -275,12 +275,12 @@ try {
             (v) => v.state === "ready",
             kind,
           );
-          assert.ok(ready.page.entries.length > 0);
+          assert.ok(ready.entries.length > 0);
           const pages = [ready],
             delivered = [];
           for (;;) {
             const page = pages.at(-1);
-            for (const entry of page.page.entries) {
+            for (const entry of page.entries) {
               const file = join(directory, `${kind}-${entry.candidate.ordinal}.png`);
               const receipt = await call("index.frame", entry.reference, { output: file });
               delivered.push({
@@ -289,16 +289,12 @@ try {
                 proof: await prove(file, entry.frame.observations),
               });
             }
-            if (!page.page.nextCursor) break;
+            if (!page.nextCursor) break;
             pages.push(
-              await call(
-                "index.get",
-                { ...input, cursor: page.page.nextCursor },
-                { transport: "mcp" },
-              ),
+              await call("index.get", { ...input, cursor: page.nextCursor }, { transport: "mcp" }),
             );
           }
-          assert.equal(delivered.length, ready.page.metadata.candidateCount);
+          assert.equal(delivered.length, ready.metadata.candidateCount);
           row[kind] = { pages, delivered };
         }
       }

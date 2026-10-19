@@ -59,18 +59,26 @@ try {
     const stream = asset.streams.find((s) => s.kind === "audio");
     assert(stream);
     await rm(external);
-    const segments = await call("asset.segments", { assetId: asset.id, streamId: stream.id });
+    const segments = await call("asset.segments", {
+      assetId: asset.assetId,
+      streamId: stream.streamId,
+    });
     assert.equal(segments.nextCursor, null);
     const available = segments.segments
       .filter((s) => !s.empty)
       .map((s) => ({ startUs: s.startUs, endUs: s.endUs }));
     const range = { startUs: 500000, endUs: 750000 };
     const baseline = await worker("media.sourceAudio", {
-      source: { source: path, streamId: stream.id, sourceOffsetUs: -asset.originUs, available },
+      source: {
+        source: path,
+        streamId: stream.streamId,
+        sourceOffsetUs: -asset.originUs,
+        available,
+      },
       range,
       output: join(out, `pathname-${extension}.wav`),
     });
-    const selection = { assetId: asset.id, streamId: stream.id, range };
+    const selection = { assetId: asset.assetId, streamId: stream.streamId, sourceRange: range };
     let inspected;
     const deadline = Date.now() + 30000;
     for (;;) {
@@ -84,7 +92,7 @@ try {
     }
     const item = {
       extension,
-      assetId: asset.id,
+      assetId: asset.assetId,
       sourceSha256: hash(await readFile(path)),
       baseline,
       inspected,

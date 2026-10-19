@@ -158,7 +158,7 @@ try {
   );
   const asset = await call("asset.get", { assetId: loaded.published.output.assetId });
   const source = {
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams.find((v) => v.kind === "audio").streamId,
   };
   const extracted = await poll(
@@ -198,7 +198,7 @@ try {
         label: track + "-clip",
         clip: {
           trackId: { label: track },
-          assetId: a.id,
+          assetId: a.assetId,
           streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
@@ -263,8 +263,8 @@ try {
   assert.equal(baseline.pcm.rate, 48000);
   assert.equal(baseline.pcm.channels, 2);
   assert.deepEqual(baseline.pcm.data, expected, "explicit trim and gain independent oracle");
-  assert.equal(baseline.status.published.output.sampleRange.start, 0);
-  assert.equal(baseline.status.published.output.sampleRange.end, frames);
+  assert.equal(baseline.status.published.output.sampleRange.startSamples, 0);
+  assert.equal(baseline.status.published.output.sampleRange.endSamples, frames);
   report.checks.oracle = {
     frames,
     channels: 2,
@@ -346,7 +346,7 @@ try {
     expectedRevisionId: head,
     requestId: "undo-video",
   });
-  head = undone.id;
+  head = undone.revisionId;
   const undoAudio = await exported({ projectId, revisionId: head }, "undo-video");
   assert.deepEqual(wave(await readFile(undoAudio.status.output)).data, currentExpected);
   report.checks.videoRemoval = {
@@ -612,7 +612,7 @@ try {
     );
     const encodedReady = await call("job.get", { jobId: encodedJob.jobId });
     assert.equal(encodedReady.state, "ready");
-    assert.ok(encodedReady.generation > canceled.generation);
+    assert.ok(encodedReady.attemptGeneration > canceled.attemptGeneration);
     assert.ok(encodedReady.published.output.contentFrames > 0);
     assert.equal(retry.receipt.sha256, hash(await readFile(retry.output)));
     report.checks.aacDependencyCancellation = {

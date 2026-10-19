@@ -77,7 +77,11 @@ async function inspect(
   const asset = await call("asset.get", { assetId: prepared.published.output.assetId });
   const stream = asset.streams.find((s) => s.kind === "audio");
   assert(stream);
-  const selection = { assetId: asset.id, streamId: stream.id, range: { startUs, endUs } };
+  const selection = {
+    assetId: asset.assetId,
+    streamId: stream.streamId,
+    sourceRange: { startUs, endUs },
+  };
   await poll(
     () => call("audio.get", selection),
     (v) => v.state === "ready",
@@ -167,12 +171,11 @@ async function movieDelivery(selection, name) {
     (v) => v.state === "ready",
     "learned range movie",
   );
-  const exportId = randomUUID();
-  await call(
+  const { exportId } = await call(
     "export.create",
     {
       ...selection,
-      exportId,
+      requestId: randomUUID(),
       kind: "video",
       directory: await realpath(out),
       leaf: name + "export.mp4",
@@ -262,7 +265,7 @@ async function combinedTemporal(asset) {
       operation: "place",
       clip: {
         trackId: { label: "first" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
@@ -316,7 +319,7 @@ async function combinedTemporal(asset) {
       label: "newMember",
       clip: {
         trackId: placed.edit.labels.second,
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 2000000 } },
         placement: { kind: "project", range: { startUs: 2000000, endUs: 4000000 } },
@@ -524,7 +527,7 @@ async function unitRateJourney() {
         label: "clip",
         clip: {
           trackId: { label: "audio" },
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
@@ -617,20 +620,20 @@ async function unitRateJourney() {
   for (let at = 0; at < halfWet.length; at += 4)
     halfWet.writeFloatLE(Math.fround(halfWet.readFloatLE(at) * 0.5), at);
   await projectAudio(
-    { projectId, revisionId: undone.id },
+    { projectId, revisionId: undone.revisionId },
     outputTap({ kind: "processed" }),
     "undo-state",
     halfWet,
   );
   const restored = await call("edit.restore", {
     projectId,
-    expectedRevisionId: undone.id,
+    expectedRevisionId: undone.revisionId,
     targetRevisionId: original.revisionId,
     requestId: "restore-original",
   });
   assert.deepEqual(restored.document, placed.revision.document);
   await projectAudio(
-    { projectId, revisionId: restored.id },
+    { projectId, revisionId: restored.revisionId },
     outputTap({ kind: "processed" }),
     "restore-state",
     expected,
@@ -671,7 +674,7 @@ async function unitRateJourney() {
         operation: "place",
         clip: {
           trackId: { label: "audio" },
-          assetId: stereoAsset.id,
+          assetId: stereoAsset.assetId,
           streamId: stereoAsset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
@@ -825,7 +828,7 @@ async function unitRateJourney() {
   assert.equal((await call("audio.prepare", selected)).state, "ready");
   const unprepared = await call("edit.apply", {
     projectId,
-    expectedRevisionId: restored.id,
+    expectedRevisionId: restored.revisionId,
     requestId: "new-mix-unavailable",
     operations: [
       {

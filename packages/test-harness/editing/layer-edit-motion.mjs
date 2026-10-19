@@ -42,7 +42,7 @@ async function importMedia(fixture) {
     "import",
   );
   const asset = await call("asset.get", { assetId: fixture.sha256 });
-  return { assetId: asset.id, streamId: asset.streams[0].streamId };
+  return { assetId: asset.assetId, streamId: asset.streams[0].streamId };
 }
 function expected(frameIndex, clipOnly = false, screenVisible = true) {
   let surface = clipOnly ? background(canvas, [0, 0, 0, 0]) : background(canvas);
@@ -159,17 +159,17 @@ async function movie(revisionId, range, mapping, name) {
   const chunks = [];
   let offset = 0;
   try {
-    while (offset < mcp.delivery.bytes) {
+    while (offset < mcp.delivery.sizeBytes) {
       const part = await call(
         "artifact.read",
-        { token: mcp.delivery.token, offset, maxBytes: 65536 },
+        { token: mcp.delivery.token, offsetBytes: offset, maxBytes: 65536 },
         { transport: "mcp" },
       );
       const bytes = Buffer.from(part.data, "base64");
       assert.ok(bytes.length > 0);
-      assert.equal(part.nextOffset, offset + bytes.length);
+      assert.equal(part.nextOffsetBytes, offset + bytes.length);
       chunks.push(bytes);
-      offset = part.nextOffset;
+      offset = part.nextOffsetBytes;
     }
     assert.ok(
       Buffer.concat(chunks).equals(await readFile(file)),

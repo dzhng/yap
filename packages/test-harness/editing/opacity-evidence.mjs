@@ -82,7 +82,7 @@ try {
         label: "clip",
         clip: {
           trackId: ref("track"),
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -153,7 +153,7 @@ try {
   const split = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: restored.id,
+    expectedRevisionId: restored.revisionId,
     operations: [{ operation: "split", clipIds: [clipId], atUs: 375001 }],
   });
   for (let i = 0; i < 8; i++)
@@ -183,7 +183,7 @@ try {
   await call("export.create", {
     ...selection,
     kind: "video",
-    exportId,
+    requestId: exportId,
     directory: out,
     leaf: "export.mp4",
   });
@@ -199,8 +199,8 @@ try {
       "error",
       "-i",
       path,
-      "-vsync",
-      "0",
+      "-fps_mode",
+      "passthrough",
       "-f",
       "rawvideo",
       "-pix_fmt",
@@ -259,7 +259,7 @@ try {
   const unity = await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: windowBase.id,
+    expectedRevisionId: windowBase.revisionId,
     operations: [
       {
         operation: "processing.set",
@@ -303,16 +303,16 @@ try {
     "windowed opacity index",
   );
   assert.deepEqual(
-    retained.page.entries.map((entry) => entry.candidate.sampleAtUs),
+    retained.entries.map((entry) => entry.candidate.sampleAtUs),
     [0, 125000, 250000, 375000, 875000],
   );
   const reference = Object.fromEntries(
     ["projectId", "revisionId", "generation", "tap", "maxLongEdge"].map((key) => [
       key,
-      retained.page.metadata[key],
+      retained.metadata[key],
     ]),
   );
-  for (const entry of retained.page.entries) {
+  for (const entry of retained.entries) {
     const file = join(out, `window-index-${entry.candidate.ordinal}.png`);
     await call("index.frame", { ...reference, ordinal: entry.candidate.ordinal }, { output: file });
     const direct = await picture(
@@ -327,7 +327,7 @@ try {
     "dry opacity index",
   );
   assert.deepEqual(
-    dryIndex.page.entries.map((entry) => entry.candidate.sampleAtUs),
+    dryIndex.entries.map((entry) => entry.candidate.sampleAtUs),
     [0, 875000],
   );
   report.checks.activation = {

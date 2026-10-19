@@ -126,7 +126,7 @@ try {
     );
     const asset = await call("asset.get", { assetId: ready.published.output.assetId });
     const stream = asset.streams.find((v) => ["video", "image"].includes(v.kind));
-    return { source: { assetId: asset.id, streamId: stream.id }, stream };
+    return { source: { assetId: asset.assetId, streamId: stream.streamId }, stream };
   }
   async function frame(selection, file, atUs, options = {}) {
     const params = {
@@ -654,7 +654,7 @@ try {
           (v) => v.state === "ready",
           "retained face index",
         );
-        const entry = ready.page.entries[0];
+        const entry = ready.entries[0];
         if (faceObservations) assert.equal(entry.frame.faceObservations.status, "available");
         else assert.equal(entry.frame.faceObservations, undefined);
         const file = join(
@@ -664,16 +664,12 @@ try {
         );
         const delivered = await call("index.frame", entry.reference, { output: file });
         assert.deepEqual(delivered.published.output.faceObservations, entry.frame.faceObservations);
-        if (ready.page.nextCursor)
-          await call(
-            "index.get",
-            { ...params, cursor: ready.page.nextCursor },
-            { transport: "mcp" },
-          );
+        if (ready.nextCursor)
+          await call("index.get", { ...params, cursor: ready.nextCursor }, { transport: "mcp" });
         report.indexes.push({
           kind,
           params,
-          metadata: ready.page.metadata,
+          metadata: ready.metadata,
           entry,
           delivered,
           pngSha256: hash(await readFile(file)),

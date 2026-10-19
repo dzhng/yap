@@ -103,7 +103,7 @@ const placed = (asset, track, startUs, endUs, sourceStartUs = 0, label) => ({
   ...(label ? { label } : {}),
   clip: {
     trackId: { label: track },
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams[0].streamId,
     source: {
       kind: "range",
@@ -146,7 +146,7 @@ try {
   const extracted = await poll(
     () =>
       call("audio.extract", {
-        assetId: reference.id,
+        assetId: reference.assetId,
         streamId: reference.streams[0].streamId,
         rendition: { sampleRate: 24000, channels: 1 },
       }),
@@ -154,7 +154,7 @@ try {
     "canonical reference",
   );
   const excerpt = extracted.published.output;
-  assert.equal(excerpt.assetId, reference.id);
+  assert.equal(excerpt.assetId, reference.assetId);
   const donor = await project(`voice-donor-${randomUUID()}`, [
     { operation: "track.add", label: "audio", track: { kind: "audio", order: 0 } },
     placed(reference, "audio", 0, 5000000),
@@ -182,7 +182,7 @@ try {
     "voice.generate",
     {
       ...base,
-      reference: { assetId: integer.id, streamId: integer.streams[0].streamId },
+      reference: { assetId: integer.assetId, streamId: integer.streams[0].streamId },
       text: "Integer input must be explicitly converted.",
     },
     { error: true },
@@ -317,7 +317,7 @@ try {
       operation: "place",
       clip: {
         trackId: { label: "video" },
-        assetId: image.id,
+        assetId: image.assetId,
         streamId: image.streams[0].streamId,
         source: { kind: "hold", atUs: 0 },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
@@ -459,13 +459,13 @@ try {
   });
   const undoReplacement = await call("edit.undo", {
     projectId: context.projectId,
-    expectedRevisionId: undoRoom.id,
+    expectedRevisionId: undoRoom.revisionId,
     requestId: "undo-replacement",
   });
   assert.deepEqual(
     await artifact(
       "audio.get",
-      { projectId: context.projectId, revisionId: undoReplacement.id },
+      { projectId: context.projectId, revisionId: undoReplacement.revisionId },
       "context-undo.wav",
     ),
     baseline,
@@ -496,7 +496,7 @@ try {
   await service.start();
   const opening = await call("package.open", { path: exported.output });
   const opened = await poll(
-    () => call("package.status", { admissionId: opening.id }),
+    () => call("package.status", { admissionId: opening.packageId }),
     (v) => v.state === "ready",
     "package",
   );
@@ -506,13 +506,13 @@ try {
     (v) => v.state === "ready",
     "adopt",
   );
-  await call("package.close", { admissionId: opening.id });
+  await call("package.close", { admissionId: opening.packageId });
   assert.deepEqual(
     await assetBytes(phrase.assetId, "portable-generated.wav"),
     await readFile(join(out, "phrase.wav")),
   );
   assert.deepEqual(
-    await assetBytes(reference.id, "portable-reference.wav"),
+    await assetBytes(reference.assetId, "portable-reference.wav"),
     await readFile(join(frozen, "reference.wav")),
   );
   assert(
@@ -525,7 +525,7 @@ try {
     { assetId: phrase.assetId, streamId: phrase.streamId },
     "portable-playable.wav",
   );
-  assert.equal((await call("model.status", { modelId: registered.modelId })).state, "absent");
+  assert.equal((await call("model.status", { modelId: registered.modelId })).state, "unavailable");
   report.checks.modelFreePortableOutputAndReference = true;
   report.passed = true;
 } finally {

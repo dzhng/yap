@@ -104,15 +104,19 @@ try {
       input.key,
     );
     const asset = await call("asset.get", { assetId: ready.published.output.assetId });
-    assert.equal(asset.id, input.sha256, "Admitted media differs from the frozen fixture bytes");
+    assert.equal(
+      asset.assetId,
+      input.sha256,
+      "Admitted media differs from the frozen fixture bytes",
+    );
     const streams = [];
     for (const stream of asset.streams) {
       const segments = [];
       let cursor;
       do {
         const page = await call("asset.segments", {
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           limit: 1000,
           ...(cursor ? { cursor } : {}),
         });
@@ -133,7 +137,7 @@ try {
     assets[input.key] = {
       ...asset,
       streams,
-      selected: choices[0] ? { assetId: asset.id, streamId: choices[0].id } : null,
+      selected: choices[0] ? { assetId: asset.assetId, streamId: choices[0].streamId } : null,
     };
     report.inputs.push({ ...input, request, admitted, asset: assets[input.key] });
     const replay = await call("asset.import", request);
@@ -142,7 +146,7 @@ try {
   const selected = (key) => assets[key].selected;
   const speech = bindMarkedSpeech(plan.marks, assets.workbenchNarration);
   const speechRows = assets.workbenchNarration.streams.find(
-    (v) => v.id === selected("workbenchNarration").streamId,
+    (v) => v.streamId === selected("workbenchNarration").streamId,
   ).segments;
   requireSupport(speechRows, speech.contextAssetRange);
   assert.equal(
@@ -186,7 +190,10 @@ try {
   for (const key of ["camera", "screen", "microphone"]) {
     const source = assets[key],
       range = { startUs: 10000000, endUs: 12000000 };
-    requireSupport(source.streams.find((v) => v.id === source.selected.streamId).segments, range);
+    requireSupport(
+      source.streams.find((v) => v.streamId === source.selected.streamId).segments,
+      range,
+    );
     report.bindings.interlude[key] = {
       source: source.selected,
       assetRange: range,
@@ -267,7 +274,7 @@ try {
   );
   const models = await call("model.list", {});
   report.models = models;
-  for (const model of models)
+  for (const model of models.models)
     report.modelStatus.push({
       modelId: model.modelId,
       ...(await call("model.status", { modelId: model.modelId })),
@@ -292,7 +299,7 @@ try {
           key,
           sha256,
           bytes,
-          assetId: asset.id,
+          assetId: asset.assetId,
           originUs: asset.originUs,
           selected: asset.selected,
           fontFaces: asset.fontFaces,

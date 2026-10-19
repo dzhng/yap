@@ -204,7 +204,11 @@ async function admit(path) {
   return call("asset.get", { assetId: ready.published.output.assetId });
 }
 async function audio(selection, name, range) {
-  const params = { ...selection, ...(range ? { range } : {}) };
+  // A source selection names its span sourceRange; a project selection names it range.
+  const params = {
+    ...selection,
+    ...(range ? { [selection.projectId ? "range" : "sourceRange"]: range } : {}),
+  };
   const ready = await poll(
     () => call("audio.get", params, { transport: "mcp" }),
     (v) => v.state === "ready",
@@ -216,8 +220,11 @@ async function audio(selection, name, range) {
     bytes = await readFile(path),
     h = waveHeader(bytes, bytes.length),
     pcm = bytes.subarray(h.offset, h.offset + h.bytes);
-  if (range && selection.projectId) assert.deepEqual(receipt.sampleRange, samples(range));
-  assert.equal(pcm.length, receipt.frames * 8);
+  if (range && selection.projectId) {
+    const { start, end } = samples(range);
+    assert.deepEqual(receipt.sampleRange, { startSamples: start, endSamples: end });
+  }
+  assert.equal(pcm.length, receipt.frameCount * 8);
   assert.equal(ready.published.generation, delivered.published.generation);
   report.receipts[name] = { ...receipt, pcmSha256: hash(pcm), file: path };
   await save();
@@ -408,17 +415,17 @@ async function eventRows(params) {
     (v) => v.state === "ready",
     "timeline evidence",
   );
-  const rows = [...page.page.rows],
-    coverage = page.page.coverage;
-  for (let n = 0; page.page.nextCursor; n++) {
+  const rows = [...page.rows],
+    coverage = page.coverage;
+  for (let n = 0; page.nextCursor; n++) {
     assert(n < 20, "Evidence pagination must make bounded progress");
     page = await call(
       "timeline.events",
-      { ...params, limit: 500, cursor: page.page.nextCursor },
+      { ...params, limit: 500, cursor: page.nextCursor },
       { transport: "mcp" },
     );
     assert.equal(page.state, "ready");
-    rows.push(...page.page.rows);
+    rows.push(...page.rows);
   }
   return { rows, coverage };
 }
@@ -437,7 +444,7 @@ async function tinyAdmission(source) {
       {
         operation: "place",
         clip: {
-          assetId: source.id,
+          assetId: source.assetId,
           streamId: source.streams.find((v) => v.kind === "audio").streamId,
           trackId: { label: "a" },
           source: { kind: "range", range: { startUs: 0, endUs: 2000 } },
@@ -498,7 +505,7 @@ try {
     replacement = await admit(join(out, "replacement.mov"));
   const markerAssets = await Promise.all(input.markers.map(admit));
   const media = (asset, kind, range) => ({
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams.find((s) => s.kind === kind).streamId,
     source: { kind: "range", range },
   });
@@ -532,7 +539,7 @@ try {
   );
   const base = selection();
   const raw = await audio(
-    { assetId: source.id, streamId: source.streams.find((s) => s.kind === "audio").streamId },
+    { assetId: source.assetId, streamId: source.streams.find((s) => s.kind === "audio").streamId },
     "source-raw",
     full,
   );
@@ -577,7 +584,7 @@ try {
         label: `marker${i}`,
         clip: {
           trackId: placed.edit.labels[`markers${i}`],
-          assetId: asset.id,
+          assetId: asset.assetId,
           streamId: asset.streams[0].streamId,
           source: { kind: "hold", atUs: 0 },
           placement:
@@ -699,7 +706,7 @@ try {
   const retainedLinked = await prepare(linkedSelection);
   const linkedEvidence = await eventRows(linkedSelection);
   const sourceEvidence = await eventRows({
-    assetId: source.id,
+    assetId: source.assetId,
     streamId: source.streams.find((v) => v.kind === "video").streamId,
   });
   assert(
@@ -829,7 +836,7 @@ try {
     targetRevisionId: linkedSelection.revisionId,
     requestId: "restore-linked",
   });
-  revisionId = restored.id;
+  revisionId = restored.revisionId;
   await edit(
     [
       { operation: "unlink", clipIds: [middleA] },
@@ -949,7 +956,7 @@ try {
     targetRevisionId: linkedSelection.revisionId,
     requestId: "restore-retimed-before-gain",
   });
-  revisionId = retimedRestore.id;
+  revisionId = retimedRestore.revisionId;
   const beforeGain = await prepare(selection());
   assert.deepEqual(
     (await audio(selection(), "retimed-before-gain", linkedRange)).pcm,
@@ -996,14 +1003,14 @@ try {
     "Real native work completes behind the existing reply barrier; public cancellation prevents publication and explicit retry succeeds. Native in-preparation cancellation belongs to retained native evidence.";
   assert.deepEqual(await prepare(linkedSelection), retainedLinked);
   const sourceAgain = await audio(
-    { assetId: source.id, streamId: source.streams.find((v) => v.kind === "audio").streamId },
+    { assetId: source.assetId, streamId: source.streams.find((v) => v.kind === "audio").streamId },
     "source-raw-after",
     full,
   );
   assert.deepEqual(sourceAgain.pcm, input.pcm);
   assert.deepEqual(
     await eventRows({
-      assetId: source.id,
+      assetId: source.assetId,
       streamId: source.streams.find((v) => v.kind === "video").streamId,
     }),
     sourceEvidence,
@@ -1011,9 +1018,9 @@ try {
   const waveform = await poll(
     () =>
       call("waveform.get", {
-        assetId: source.id,
+        assetId: source.assetId,
         streamId: source.streams.find((v) => v.kind === "audio").streamId,
-        range: full,
+        sourceRange: full,
         bucketFrames: 480,
       }),
     (v) => v.state === "ready",
@@ -1029,16 +1036,24 @@ try {
     ["end", 3016666, 90],
   ])
     await frame(
-      { assetId: source.id, streamId: source.streams.find((v) => v.kind === "video").streamId },
+      {
+        assetId: source.assetId,
+        streamId: source.streams.find((v) => v.kind === "video").streamId,
+      },
       "source-reference-" + name,
       atUs,
       counter,
     );
   await tinyAdmission(source);
-  const exportId = randomUUID();
-  await call(
+  const { exportId } = await call(
     "export.create",
-    { ...linkedSelection, exportId, kind: "video", directory: out, leaf: "linked-export.mp4" },
+    {
+      ...linkedSelection,
+      requestId: randomUUID(),
+      kind: "video",
+      directory: out,
+      leaf: "linked-export.mp4",
+    },
     { transport: "mcp" },
   );
   const exported = await poll(
@@ -1104,7 +1119,7 @@ try {
   }
   const opened = await call("package.open", { path: packaged.output });
   const ready = await poll(
-    () => call("package.status", { admissionId: opened.id }),
+    () => call("package.status", { admissionId: opened.packageId }),
     (v) => v.state === "ready",
     "package open",
   );
@@ -1117,7 +1132,7 @@ try {
     projectId: adopted.published.output.projectId,
     revisionId: adopted.published.output.revisionId,
   };
-  await call("package.close", { admissionId: opened.id });
+  await call("package.close", { admissionId: opened.packageId });
   const portableAudio = await audio(portable, "portable-retained-audio", linkedRange);
   assert.deepEqual(portableAudio.pcm, gained.pcm);
   const portablePrepared = await prepare(portable);

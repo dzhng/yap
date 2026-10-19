@@ -70,7 +70,7 @@ try {
           label: "clip",
           clip: {
             trackId: { label: "track" },
-            assetId: asset.id,
+            assetId: asset.assetId,
             streamId: asset.streams[0].streamId,
             source: { kind: "hold", atUs: 0 },
             placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -123,7 +123,7 @@ try {
     );
     decoded.push(raw.stdout);
     report.pictures.push({ padding, file, receipt, sha256: hash(await readFile(file)) });
-    await call("project.delete", { projectId });
+    await call("project.delete", { projectId, requestId: randomUUID() });
   }
   assert.equal(decoded[0].length, width * height * 3);
   assert.equal(decoded[1].length, decoded[0].length);

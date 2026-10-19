@@ -65,7 +65,7 @@ async function delivered(operation, params, expectedRate = rate) {
     assert.equal(contents[1].text, bytes.toString());
   }
   const metadata = receipt.published.output;
-  assert.equal(metadata.bytes, bytes.length);
+  assert.equal(metadata.sizeBytes, bytes.length);
   assert.deepEqual(metadata.sampleRange, ready.published.output.sampleRange);
   assert.equal(metadata.channels, 2);
   assert.equal(metadata.sampleRate, expectedRate);
@@ -78,6 +78,8 @@ async function delivered(operation, params, expectedRate = rate) {
     ...(image ? {} : { document: JSON.parse(bytes) }),
   };
 }
+// Receipts name sample bounds with their unit; the delivered JSON document keeps start/end.
+const samples = ({ start, end }) => ({ startSamples: start, endSamples: end });
 function verifyBuckets(document, gain = 1, range = { startUs: 0, endUs: 1000000 }) {
   const start = Math.floor((range.startUs * rate) / 1000000),
     end = Math.floor((range.endUs * rate) / 1000000);
@@ -126,7 +128,9 @@ async function verifyImages(waveform, spectrum, gain) {
   assert.equal(m.amplitudeLimit, limit);
   const x =
     m.plotLeft +
-    ((impulse - m.sampleRange.start) / (m.sampleRange.end - m.sampleRange.start)) * m.plotWidth;
+    ((impulse - m.sampleRange.startSamples) /
+      (m.sampleRange.endSamples - m.sampleRange.startSamples)) *
+      m.plotWidth;
   const peakY =
     m.plotTop + m.panelStride + m.panelHeight / 2 - (((0.75 * gain) / limit) * m.panelHeight) / 2;
   assert.ok(
@@ -160,7 +164,8 @@ async function verifyImages(waveform, spectrum, gain) {
     );
     const px =
       a.plotLeft +
-      ((0.41 * rate - a.sampleRange.start) / (a.sampleRange.end - a.sampleRange.start)) *
+      ((0.41 * rate - a.sampleRange.startSamples) /
+        (a.sampleRange.endSamples - a.sampleRange.startSamples)) *
         a.plotWidth;
     const py =
       a.plotTop +
@@ -185,11 +190,15 @@ async function unitRateJourney() {
   const asset = await call("asset.get", { assetId: hash(wave) }),
     stream = asset.streams.find((v) => v.kind === "audio");
   assert.ok(stream);
-  const selection = { assetId: asset.id, streamId: stream.id };
+  const selection = { assetId: asset.assetId, streamId: stream.streamId };
   const full = await delivered("waveform.get", { ...selection, bucketFrames: 48 });
   verifyBuckets(full.document);
   const range = { startUs: 333333, endUs: 799999 };
-  const detail = await delivered("waveform.get", { ...selection, range, bucketFrames: 48 });
+  const detail = await delivered("waveform.get", {
+    ...selection,
+    sourceRange: range,
+    bucketFrames: 48,
+  });
   verifyBuckets(detail.document, 1, range);
   for (const b of detail.document.buckets.filter((v) => !v.partial))
     assert.deepEqual(
@@ -198,17 +207,19 @@ async function unitRateJourney() {
     );
   const picture = await delivered("waveform.get", {
     ...selection,
-    range,
+    sourceRange: range,
     bucketFrames: 48,
     format: "image",
   });
-  assert.deepEqual(picture.metadata.sampleRange, detail.document.sampleRange);
+  assert.deepEqual(picture.metadata.sampleRange, samples(detail.document.sampleRange));
   assert.equal(picture.metadata.measurements.jobId, detail.jobId);
   const wp = await pixels(picture),
     wm = picture.metadata;
   const x =
     wm.plotLeft +
-    ((impulse - wm.sampleRange.start) / (wm.sampleRange.end - wm.sampleRange.start)) * wm.plotWidth;
+    ((impulse - wm.sampleRange.startSamples) /
+      (wm.sampleRange.endSamples - wm.sampleRange.startSamples)) *
+      wm.plotWidth;
   assert.ok(
     wp(x + 1, wm.plotTop + wm.panelStride + wm.panelHeight * 0.25)[2] < 230,
     "known right-channel click missing",
@@ -226,11 +237,11 @@ async function unitRateJourney() {
   assert.ok(sp(300, y(1, 3000))[0] > sp(300, y(1, 750))[0] + 10, "right tone misplaced");
   const spectralDetail = await delivered("spectrogram.get", {
     ...selection,
-    range,
+    sourceRange: range,
     fftFrames: 512,
     hopFrames: 512,
   });
-  assert.deepEqual(spectralDetail.metadata.sampleRange, detail.document.sampleRange);
+  assert.deepEqual(spectralDetail.metadata.sampleRange, samples(detail.document.sampleRange));
   report.checks.source = {
     absoluteImpulseSample: impulse,
     absoluteImpulseSeconds: impulse / rate,
@@ -262,15 +273,15 @@ async function unitRateJourney() {
   const contextRange = { startUs: 500000, endUs: 600000 };
   const cleanContext = await delivered("spectrogram.get", {
     ...selection,
-    range: contextRange,
+    sourceRange: contextRange,
     fftFrames: 1024,
     hopFrames: 512,
   });
   const maskedContext = await delivered("spectrogram.get", {
     assetId: binding.assetId,
     streamId: binding.streamId,
-    acquisitionId: acquisition.id,
-    range: contextRange,
+    acquisitionId: importedContext.target.acquisitionId,
+    sourceRange: contextRange,
     fftFrames: 1024,
     hopFrames: 512,
   });
@@ -338,8 +349,8 @@ async function unitRateJourney() {
         label: "voice-clip",
         clip: {
           trackId: ref("voice"),
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
         },
@@ -382,14 +393,14 @@ async function unitRateJourney() {
       for (const a of [png, spec]) {
         assert.equal(a.metadata.revisionId, revisionId);
         assert.deepEqual(a.metadata.tap, tap);
-        assert.deepEqual(a.metadata.sampleRange, json.document.sampleRange);
+        assert.deepEqual(a.metadata.sampleRange, samples(json.document.sampleRange));
         assert.ok(a.metadata.provenance.some((v) => v.includes(revisionId)));
       }
       assert.equal(png.metadata.measurements.jobId, json.jobId);
       await verifyImages(png, spec, gain);
       report.checks.taps.push({ label, mode, waveform: png.name, spectrum: spec.name });
     }
-  const retryParams = { ...selection, range, bucketFrames: 49 };
+  const retryParams = { ...selection, sourceRange: range, bucketFrames: 49 };
   await delivered("waveform.get", retryParams);
   const held = await service.arm("media.acousticImage");
   const pending = await call("waveform.get", { ...retryParams, format: "image" });
@@ -410,7 +421,7 @@ async function unitRateJourney() {
   assert.equal(repeated.reason, "canceled");
   const stillCanceled = await call("job.get", { jobId: pending.jobId });
   assert.equal(stillCanceled.state, "canceled");
-  assert.equal(stillCanceled.generation, canceledJob.generation);
+  assert.equal(stillCanceled.attemptGeneration, canceledJob.attemptGeneration);
   assert.deepEqual(
     await readdir(join(home, "library/render")),
     [],
@@ -458,7 +469,7 @@ async function unitRateJourney() {
   await service.start();
   const restarted = await delivered("spectrogram.get", {
     ...selection,
-    range,
+    sourceRange: range,
     fftFrames: 512,
     hopFrames: 512,
   });

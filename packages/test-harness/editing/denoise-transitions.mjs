@@ -118,7 +118,7 @@ export async function denoiseTransitions({
       label: "voiceClip",
       clip: {
         trackId: { label: "voice" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 5000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 5000000 } },
@@ -239,7 +239,7 @@ export async function denoiseTransitions({
       operation: "place",
       clip: {
         trackId: { label: "other" },
-        assetId: asset.id,
+        assetId: asset.assetId,
         streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
         placement: { kind: "project", range: { startUs: 1000000, endUs: 4000000 } },

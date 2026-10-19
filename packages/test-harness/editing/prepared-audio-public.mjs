@@ -46,13 +46,13 @@ async function inspect(prepared, gain, name) {
   const asset = await call("asset.get", { assetId: audio.assetId });
   const stream = asset.streams.find((value) => value.kind === "audio");
   assert(stream);
-  assert.equal(audio.frames, frames);
-  assert.deepEqual(audio.sampleRange, { start: 0, end: frames });
+  assert.equal(audio.frameCount, frames);
+  assert.deepEqual(audio.sampleRange, { startSamples: 0, endSamples: frames });
   const startUs = name === "historical-after-restart" ? durationUs - 250000 : 0;
   const selection = {
-    assetId: asset.id,
-    streamId: stream.id,
-    range: { startUs, endUs: durationUs },
+    assetId: asset.assetId,
+    streamId: stream.streamId,
+    sourceRange: { startUs, endUs: durationUs },
   };
   await poll(
     () => call("audio.get", selection),
@@ -80,7 +80,7 @@ async function inspect(prepared, gain, name) {
     pcmSha256: hash(decoded.stdout),
     frames: expected.length / 8,
     waveformReady: true,
-    assetId: asset.id,
+    assetId: asset.assetId,
   };
 }
 try {
@@ -121,7 +121,7 @@ try {
         label: "clip",
         clip: {
           trackId: { label: "audio" },
-          assetId: sourceAsset.id,
+          assetId: sourceAsset.assetId,
           streamId: sourceAsset.streams[0].streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: { kind: "project", range: { startUs: 0, endUs: 1000000 } },
@@ -158,7 +158,7 @@ try {
       (value) => value.state === "ready",
       "public retimed baseline",
     );
-    assert.equal(baseline.published.output.frames, frames);
+    assert.equal(baseline.published.output.frameCount, frames);
     assert.equal(baseline.published.output.retimeImplementationId, retimeImplementationId);
     const path = join(out, "baseline.wav");
     await call("audio.get", original, { output: path });
@@ -229,7 +229,7 @@ try {
   assert.deepEqual(retried.target, beforeCancel.target);
   assert.equal(retried.inputSha256, beforeCancel.inputSha256);
   assert.notEqual(retried.attemptId, beforeCancel.attemptId);
-  assert.equal(retried.generation, beforeCancel.generation + 1);
+  assert.equal(retried.attemptGeneration, beforeCancel.attemptGeneration + 1);
   report.checks.retryIdentity = { beforeCancel, canceled, retried };
   assert.notEqual(second.published.output.assetId, first.published.output.assetId);
   await inspect(second, 0.5, "gain");
@@ -260,8 +260,8 @@ try {
       ],
     });
     const prepared = await prepare({ projectId, revisionId: shortened.revision.revisionId });
-    assert.equal(prepared.published.output.frames, 24000);
-    assert.deepEqual(prepared.published.output.sampleRange, { start: 0, end: 24000 });
+    assert.equal(prepared.published.output.frameCount, 24000);
+    assert.deepEqual(prepared.published.output.sampleRange, { startSamples: 0, endSamples: 24000 });
     assert.equal(shortened.revision.document.clips[0].pitch, "preserve");
     report.checks.defaultPreserveRetime = prepared.published.output;
   } else {

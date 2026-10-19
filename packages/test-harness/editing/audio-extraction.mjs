@@ -95,11 +95,11 @@ async function ready(params, transport = "cli") {
 }
 async function delivered(status) {
   assert.ok(
-    status.delivery.bytes < 4 * 1024 ** 2,
+    status.delivery.sizeBytes < 4 * 1024 ** 2,
     "Only small fixtures may be assembled in memory",
   );
   const bytes = await readFile(status.output);
-  assert.equal(bytes.length, status.delivery.bytes);
+  assert.equal(bytes.length, status.delivery.sizeBytes);
   await rm(status.output);
   return bytes;
 }
@@ -132,7 +132,11 @@ async function context(path, name) {
   const acquired = await call("acquisition.get", { acquisitionId: job.target.acquisitionId });
   const binding = acquired.bindings.find((v) => v.sourceRoles.includes("narration"));
   assert.ok(binding);
-  return { assetId: binding.assetId, streamId: binding.streamId, acquisitionId: acquired.id };
+  return {
+    assetId: binding.assetId,
+    streamId: binding.streamId,
+    acquisitionId: job.target.acquisitionId,
+  };
 }
 async function sampleMemory() {
   if (!service.child?.pid) return;
@@ -201,7 +205,7 @@ try {
       [2, 1],
     );
     for (const stream of streams) {
-      const selection = { assetId: asset.id, streamId: stream.id };
+      const selection = { assetId: asset.assetId, streamId: stream.streamId };
       const full = await ready(selection);
       const fullBytes = await delivered(full);
       const mcp = await service.mcp.callTool({ name: "audio.get", arguments: selection });
@@ -225,7 +229,7 @@ try {
           assert.equal(
             actual,
             expected,
-            `independent signal oracle ${rate}/${stream.id}/${frame}/${channel}`,
+            `independent signal oracle ${rate}/${stream.streamId}/${frame}/${channel}`,
           );
         }
       for (const range of [
@@ -233,21 +237,24 @@ try {
         { startUs: 399997, endUs: 600013 },
         { startUs: 610013, endUs: 999981 },
       ]) {
-        const part = await ready({ ...selection, range });
+        const part = await ready({ ...selection, sourceRange: range });
         const first = Math.floor((range.startUs * rate) / 1e6),
           last = Math.floor((range.endUs * rate) / 1e6);
-        assert.deepEqual(part.published.output.sampleRange, { start: first, end: last });
+        assert.deepEqual(part.published.output.sampleRange, {
+          startSamples: first,
+          endSamples: last,
+        });
         sameBytes(
           wave(await delivered(part)).data,
           pcm.data.subarray(first * stream.channels * 4, last * stream.channels * 4),
         );
       }
-      const target = join(home, `${rate}-${stream.id.replace(":", "-")}.wav`);
+      const target = join(home, `${rate}-${stream.streamId.replace(":", "-")}.wav`);
       await call("audio.get", selection, { output: target });
       sameBytes(await readFile(target), fullBytes);
     }
     const masked = await context(path, `mask-${rate}`);
-    const full = await ready({ ...masked, range: { startUs: 0, endUs: 1000000 } });
+    const full = await ready({ ...masked, sourceRange: { startUs: 0, endUs: 1000000 } });
     const bytes = await delivered(full);
     sameBytes(wave(bytes).data, wave(await readFile(join(media, `full-${rate}.wav`))).data);
     assert.deepEqual(full.published.output.unavailable, [
@@ -260,11 +267,12 @@ try {
     originals.set(poisonPath, await digest(poisonPath));
     const poisoned = await context(poisonPath, `poison-mask-${rate}`);
     sameBytes(
-      wave(await delivered(await ready({ ...poisoned, range: { startUs: 0, endUs: 1000000 } })))
-        .data,
+      wave(
+        await delivered(await ready({ ...poisoned, sourceRange: { startUs: 0, endUs: 1000000 } })),
+      ).data,
       wave(bytes).data,
     );
-    const cancelInput = { ...masked, range: { startUs: 10, endUs: 900000 } };
+    const cancelInput = { ...masked, sourceRange: { startUs: 10, endUs: 900000 } };
     const hit = await service.arm("media.sourceAudio");
     const pending = await call("audio.get", cancelInput);
     await hit();
@@ -281,7 +289,7 @@ try {
     assert.equal((await call("audio.get", cancelInput)).jobId, pending.jobId);
     await call("job.retry", { jobId: canceledJob.jobId }, { transport: "mcp" });
     const retried = await ready(cancelInput);
-    assert.ok(retried.published.generation > canceledJob.generation);
+    assert.ok(Number(retried.published.generation) > canceledJob.attemptGeneration);
     const first = Math.floor((10 * rate) / 1e6),
       last = Math.floor((900000 * rate) / 1e6);
     sameBytes(wave(await delivered(retried)).data, wave(bytes).data.subarray(first * 8, last * 8));
@@ -330,7 +338,7 @@ try {
     );
   const asset = await imported(long, "long-marker");
   const selection = {
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: asset.streams.find((s) => s.kind === "audio").streamId,
   };
   monitor = setInterval(() => {
@@ -352,29 +360,29 @@ try {
   assert.equal(duplicate.structuredContent.data.published.generation, large.published.generation);
   await call("artifact.close", { token: duplicate.structuredContent.data.delivery.token });
   const audio = large.published.output;
-  assert.ok(large.delivery.bytes > 1024 ** 3);
+  assert.ok(large.delivery.sizeBytes > 1024 ** 3);
   assert.equal(audio.sampleRate, 48000);
   assert.equal(audio.channels, 2);
-  assert.equal(audio.frames, 3000 * 48000);
-  const { token, bytes } = large.delivery;
+  assert.equal(audio.frameCount, 3000 * 48000);
+  const { token, sizeBytes: bytes } = large.delivery;
   const first = await call(
     "artifact.read",
-    { token, offset: 0, maxBytes: 8192 },
+    { token, offsetBytes: 0, maxBytes: 8192 },
     { transport: "mcp" },
   );
   const header = wave(Buffer.from(first.data, "base64"));
-  assert.equal(header.dataBytes, audio.frames * 8);
+  assert.equal(header.dataBytes, audio.frameCount * 8);
   const chunks = [];
   for (let at = 0; at < referenceTail.length;) {
     const offset = header.dataOffset + reference.tailStartFrame * 8 + at;
     const tail = await call(
       "artifact.read",
-      { token, offset, maxBytes: Math.min(65536, referenceTail.length - at) },
+      { token, offsetBytes: offset, maxBytes: Math.min(65536, referenceTail.length - at) },
       { transport: "mcp" },
     );
     const block = Buffer.from(tail.data, "base64");
-    assert.equal(tail.offset, offset);
-    assert.equal(tail.nextOffset, offset + block.length);
+    assert.equal(tail.offsetBytes, offset);
+    assert.equal(tail.nextOffsetBytes, offset + block.length);
     assert.ok(block.length > 0 && block.length <= 65536);
     chunks.push(block);
     at += block.length;
@@ -383,9 +391,15 @@ try {
   const nativeTail = Buffer.concat(chunks);
   assert.equal(nativeTail.length, referenceTail.length);
   const referenceComparison = comparePcm(nativeTail, referenceTail, values.codec);
-  const late = await ready({ ...selection, range: { startUs: 2998000000, endUs: 3000000000 } });
-  assert.equal(late.published.output.frames, 96000);
-  assert.deepEqual(late.published.output.sampleRange, { start: 143904000, end: 144000000 });
+  const late = await ready({
+    ...selection,
+    sourceRange: { startUs: 2998000000, endUs: 3000000000 },
+  });
+  assert.equal(late.published.output.frameCount, 96000);
+  assert.deepEqual(late.published.output.sampleRange, {
+    startSamples: 143904000,
+    endSamples: 144000000,
+  });
   assert.equal(late.published.output.sampleRate, 48000);
   assert.equal(late.published.output.channels, 2);
   const lateWave = wave(await delivered(late));
@@ -404,8 +418,8 @@ try {
   }
   for (const frames of [1, 2, 1024, 2048, 2049]) {
     const startUs = Number((BigInt(144000000 - frames) * 1000000n + 47999n) / 48000n);
-    const terminal = await ready({ ...selection, range: { startUs, endUs: 3000000000 } });
-    assert.equal(terminal.published.output.frames, frames);
+    const terminal = await ready({ ...selection, sourceRange: { startUs, endUs: 3000000000 } });
+    assert.equal(terminal.published.output.frameCount, frames);
     assert.ok(terminal.published.output.decodedFrames <= 8192);
     comparePcm(
       wave(await delivered(terminal)).data,
@@ -457,13 +471,13 @@ try {
     decodedFrames: audio.decodedFrames,
     referenceComparison,
     rangeComparison,
-    assetId: asset.id,
+    assetId: asset.assetId,
     streamId: selection.streamId,
     extractionMs,
     transferMs,
     inputBytes: (await stat(long)).size,
     outputBytes: bytes,
-    frames: audio.frames,
+    frames: audio.frameCount,
     elapsedMs: performance.now() - started,
     mcpReadBytes: 8192 + referenceTail.length,
     markerRms: rms,

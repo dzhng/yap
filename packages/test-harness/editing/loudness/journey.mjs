@@ -61,8 +61,8 @@ try {
   console.log("source admitted");
   const asset = await call("asset.get", { assetId: job.published.output.assetId });
   const selected = {
-    assetId: asset.id,
-    streamId: asset.streams.find((s) => s.kind === "audio").id,
+    assetId: asset.assetId,
+    streamId: asset.streams.find((s) => s.kind === "audio").streamId,
   };
   const measure = (params, transport = "cli") =>
     poll(
@@ -74,7 +74,7 @@ try {
   report.checks.mcp = await measure(selected, "mcp");
   report.checks.dualmono = await measure({ ...selected, channelInterpretation: "dual-mono" });
   report.checks.sampleOnly = await measure({ ...selected, truePeak: false });
-  report.checks.short = await measure({ ...selected, range: { startUs: 0, endUs: 200000 } });
+  report.checks.short = await measure({ ...selected, sourceRange: { startUs: 0, endUs: 200000 } });
   console.log("source meter checks retained");
   const created = await call("project.create", {
     requestId: "project",
