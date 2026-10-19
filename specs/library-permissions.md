@@ -23,4 +23,4 @@ starting.
 2. A newly imported file is `0o444`.
 3. Existing `0o400` files keep working, with no migration.
 
-This is a single slice and independent of [library-deletion](library-deletion/README.md).
+This is a single slice and independent of [library-deletion](done/library-deletion/README.md).

@@ -64,6 +64,11 @@ missed-filler and pause evidence, and reversible speaker-attribution corrections
 receipt and pinned continuation that bring launch-video playback under ten
 seconds while preserving the full-quality export contract.
 
+[Library deletion](done/library-deletion/README.md) records why every deletable thing in
+Yap follows one rule (a refusal names what still uses it; `cascade` deletes those users),
+how a delete stays safe across crashes and concurrent use, and the one rule per concept
+the public API gained alongside it.
+
 ## Archived plans
 
 The [reliable autonomous video editing rationale](done/video-editing-feedback/README.md)
@@ -78,12 +83,8 @@ the mechanics; the archived document owns the reasons and explicit evidence limi
 route: the agent places the app, and the app installs and keeps current the `yap`
 command, the skill and the PATH line. It is built and awaiting its release-day checks.
 
-[Library deletion](library-deletion/README.md) makes everything a user would call a video
-in Yap deletable: imported videos, recordings with the copies made from them, projects
-and models. A refusal names what still uses the item, and `cascade` deletes those users
-too. It also gives the public API one rule per concept. Planned; start at its probes.
-[Library permissions](library-permissions.md) is its small, independent companion:
-library permissions only as strict as they need to be.
+[Library permissions](library-permissions.md) makes library permissions only as strict
+as they need to be: a small, independent companion to closed library deletion.
 
 ## Future proposals
 

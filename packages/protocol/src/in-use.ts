@@ -19,7 +19,7 @@ export const inUseDerivedAssetSchema = z.strictObject({
   assetId: id,
 });
 
-/** The structured details shared by every future IN_USE refusal. */
+/** The structured details shared by every IN_USE refusal. */
 export const inUseDetailsSchema = z
   .strictObject({
     assetId: id.optional(),

@@ -13,9 +13,23 @@ until they do).
   An unknown error may well be temporary. The audit's real problem was known,
   deterministic codes marked retryable, and the ledger fixes those.
 - **One code per condition, not per call site** (sound). Where one code had been thrown
-  both ways, the two meanings became two codes (table in
-  [slices/01-error-ledger.md](slices/01-error-ledger.md)). The established name keeps
-  its established meaning; the new name describes the other condition.
+  both ways, the two meanings became two codes. The established name keeps
+  its established meaning; the new name describes the other condition:
+
+  | Code | Retryable | Condition |
+  |---|---|---|
+  | `ARTIFACT_CHANGED` / `DEPENDENCY_LOST` | no / yes | a stale pinned identity / an evicted prerequisite that explicit retry rebuilds |
+  | `LIMIT_EXCEEDED` / `CAPACITY_EXCEEDED` | no / yes | a fixed size or work bound / temporary capacity (request admission, delivery leases, queue pressure) |
+  | `NOT_READY` / `PREREQUISITE_MISSING` | yes / no | a prerequisite that will still arrive / one retrying will not supply (a missing runtime or implementation, an unindexed generation, "prepare first") |
+  | `SERVICE_STOPPED` / `OWNER_CLOSED` | yes / no | a lifetime that can reopen / an owner that has closed (capture, delivery, package registry, project packages) |
+  | `INVALID_STORAGE` / `PACKAGE_STORAGE_UNAVAILABLE` | no / yes | invalid identity or shape / recoverable package I/O |
+  | `INVALID_RESPONSE` / `CONTROL_RESPONSE_INVALID` | no / yes | a malformed reply / an unreadable control answer whose outcome is unknown |
+  | `NOT_FOUND` / `ACQUISITION_NOT_FOUND` | no / yes | a durable absence / a donor that can reappear |
+  | `INVALID_PATH` / `ACQUISITION_PATH_UNAVAILABLE` | no / yes | a malformed path / donor access that can recover |
+  | `MEDIA_WORKER_UNAVAILABLE` / `MEDIA_WORKER_NOT_RUNNABLE` | yes / no | descriptor or process exhaustion / a worker that cannot run |
+  | `DEPENDENCY_FAILED` / `DEPENDENCY_REFUSED` | yes / no | a dependency failure explicit retry can repeat / one it cannot (via `dependencyRefusal`) |
+  | `RECOVERY_FAILED` / `RECOVERY_REFUSED` | yes / no | per Swift recovery's classification, cause in `details.cause` |
+
 - **Retryability was preserved site by site** (sound). The first draft guessed ledger
   values; a script then compared every literal call at the pre-slice revision with the
   ledger and found 70 sites whose behaviour had silently changed (`UNSUPPORTED_MEDIA`
