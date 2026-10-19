@@ -240,9 +240,7 @@ struct RecordingOverlayView: View {
     }
 
     private var controls: some View {
-        // The clear lens alone shows the backdrop as sharply as an empty pane, so a faint white
-        // wash inside it gives the controls a surface of their own.
-        Glass(kind: model.glass, content: row().background(.white.opacity(model.glass == .clear ? 0.12 : 0), in: Capsule()))
+        Glass(kind: model.glass, content: row())
             .overlay {
                 row(lit: true)
                     .environment(\.colorScheme, model.glass == .dark ? .dark : .light)
