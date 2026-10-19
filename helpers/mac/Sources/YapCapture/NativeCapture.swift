@@ -97,12 +97,7 @@ public final class NativeCapture {
 
     public init() {
         prepareInput = { request, check in
-            let camera = request.camera.map { selected in
-                let directory = URL(fileURLWithPath: selected.outputDirectory)
-                return CaptureCameraSelection(id: selected.binding.deviceId, directory: directory,
-                    observations: directory.appendingPathComponent(CameraMedia.mappingFile), binding: selected.binding)
-            }
-            return try await CaptureInputPreparation().prepare(request, camera: camera, checkInterruption: check)
+            try await CaptureInputPreparation().prepare(request, camera: request.camera?.selection, checkInterruption: check)
         }
     }
 
@@ -245,14 +240,6 @@ public final class NativeCapture {
     /// The running take's reserved companion camera and whether it is on. Nil when no take holds one.
     public var companionCamera: (deviceId: String, on: Bool)? {
         reservedCamera.map { ($0.deviceId, $0.isOn) }
-    }
-
-    /// Leaves this application's own windows out of the running take from now on. True once the
-    /// take is known to leave them out, which is what lets a window of this app be shown to other
-    /// captures while it records.
-    public func excludeOwnWindows() async -> Bool {
-        guard let input, sink != nil, failure == nil, state == .recording || state == .paused else { return false }
-        return await input.excludeOwnWindows()
     }
 
     /// Turns the running take's reserved companion camera on or off. Valid while the take is

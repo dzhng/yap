@@ -17,6 +17,16 @@ package struct CaptureCameraSelection {
     }
 }
 
+extension CaptureCameraRequest {
+    /// The companion camera this request reserves, as a take prepares it.
+    package var selection: CaptureCameraSelection {
+        let directory = URL(fileURLWithPath: outputDirectory)
+        return CaptureCameraSelection(id: binding.deviceId, directory: directory,
+            observations: directory.appendingPathComponent(CameraMedia.mappingFile), binding: binding,
+            startsOn: startsOn)
+    }
+}
+
 /// Probe orchestration controls; ordinary capture retains device cadence and cursor sampling.
 @MainActor
 package struct CameraCaptureMeasurement {
@@ -157,8 +167,6 @@ private final class PrimaryCameraCaptureInput: CaptureInputSession {
         try await acquisition.start(operations, checkInterruption: checkInterruption)
     }
     func startCursorSampling(writer: CaptureWriter) {}
-    /// A camera take records no screen, so no window of this app's can enter it.
-    func excludeOwnWindows() async -> Bool { true }
     func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         guard !observing else { return }; observing = true
         camera.observeDeviceLoss(onFailure: onFailure)
@@ -338,8 +346,6 @@ package final class CameraCaptureInput: CaptureInputSession, CompanionCameraSwit
     package func startCursorSampling(writer: CaptureWriter) {
         if measurement.samplesCursor { primary.startCursorSampling(writer: writer) }
     }
-    /// The camera records no screen; what the screen take records decides.
-    package func excludeOwnWindows() async -> Bool { await primary.excludeOwnWindows() }
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         guard !observing else { return }
         observing = true

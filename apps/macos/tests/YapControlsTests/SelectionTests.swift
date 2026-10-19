@@ -60,22 +60,6 @@ func runAwaitedMicrophoneTests() {
 }
 
 func runSelectionTests() {
-    var defaultCamera = ControlsState()
-    defaultCamera.observeSources(.init(cameras: [
-        .init(id: "external", name: "External"),
-        .init(id: "default", name: "Default camera", isDefault: true),
-    ]))
-    defaultCamera.selectDefaultCameraIfNeeded(enabled: false)
-    precondition(defaultCamera.selection.cameraDeviceId == nil, "Discovery must leave disabled camera capture off")
-    defaultCamera.selectDefaultCameraIfNeeded(enabled: true)
-    precondition(defaultCamera.selection.cameraDeviceId == "default", "Enabling camera capture chooses the native default, not the first device")
-    defaultCamera.selection.cameraDeviceId = "external"
-    defaultCamera.selectDefaultCameraIfNeeded(enabled: true)
-    precondition(defaultCamera.selection.cameraDeviceId == "external", "Refresh preserves a chosen camera identity")
-    precondition(CapturePresentation.cameraIsRequired(cameraOnly: true, selectedCameraIndex: 1) == false,
-                 "A selected camera does not carry a redundant Required label")
-    precondition(CapturePresentation.cameraIsRequired(cameraOnly: true, selectedCameraIndex: 0),
-                 "Camera-only mode keeps guidance while no usable camera is selected")
     let cameraData = Data(#"{"source":{"kind":"camera","deviceId":"selected-camera"},"microphone":false,"systemAudio":false}"#.utf8)
     guard let cameraStart = try? JSONDecoder().decode(ControlsState.CaptureSelection.Start.self, from: cameraData) else {
         preconditionFailure("A primary camera start crosses the shared controls boundary")
@@ -136,6 +120,7 @@ func runSelectionTests() {
         "A region start carries the display-local rectangle it was selected as")
     let active = try! JSONDecoder().decode(ControlsState.CaptureSelection.Start.self, from: Data(
         #"{"source":{"kind":"window","windowId":88},"microphone":false,"systemAudio":true,"cameraDeviceId":"selected-camera"}"#.utf8))
+    state.sources.cameras = [.init(id: "selected-camera", name: "Selected Camera")]
     state.selection.apply(active, catalog: state.sources)
     // An absent start state means "on", so the restart states it rather than changing it.
     precondition(state.start() == .init(source: active.source, microphone: false, microphoneDeviceId: nil,
@@ -325,6 +310,41 @@ func runCameraReservationTests() {
     precondition(live.setCamera(true) == nil && live.failure != nil,
                  "A take that reserved no camera has none to turn on, and says so")
     print("PASS a screen take reserves its camera with access and switches it with one action")
+}
+
+/// The camera and microphone switches only mean something when the Mac has that device: a Mac
+/// without one starts no take with it, and picking a camera never flips the switch.
+func runAvailableInputsTests() {
+    let external = ControlsState.Camera(id: "external", name: "External")
+    let facetime = ControlsState.Camera(id: "facetime", name: "FaceTime HD Camera", isDefault: true)
+    var state = ready(source: .window(window))
+    state.permissions = .init(screen: .granted, microphone: .granted, camera: .granted)
+    state.observeSources(.init(displays: [display], windows: [window], microphones: [builtIn, headset],
+                               cameras: [external, facetime]))
+    precondition(state.selection.cameraDeviceId == "facetime" && !state.selection.cameraOn,
+                 "Discovery picks the system's default camera and leaves the switch off")
+
+    state.chooseCamera(external.id)
+    precondition(state.selection.cameraDeviceId == "external" && !state.selection.cameraOn,
+                 "Picking a camera with the switch off keeps it off")
+    _ = state.setCamera(true)
+    state.chooseCamera(facetime.id)
+    precondition(state.selection.cameraDeviceId == "facetime" && state.selection.cameraOn,
+                 "Picking a camera with the switch on keeps it on")
+
+    // The switch was left on, and the Mac has no camera today.
+    state.observeSources(.init(displays: [display], windows: [window], microphones: [builtIn, headset], cameras: []))
+    precondition(!state.cameraAvailable, "A Mac with no camera has no camera to switch")
+    precondition(!state.cameraBlocksStart, "A camera that is not there does not stop a screen take")
+    let noCamera = state.start()
+    precondition(noCamera?.cameraDeviceId == nil && noCamera?.cameraAtStart == nil,
+                 "A take on a Mac with no camera asks for none: \(String(describing: noCamera))")
+
+    state.selection.microphone = .device(id: headset.id, name: headset.name)
+    state.observeSources(.init(displays: [display], windows: [window], microphones: [], cameras: []))
+    precondition(!state.microphoneAvailable, "A Mac with no microphone has none to switch")
+    precondition(state.start()?.microphone == false, "A take on a Mac with no microphone records none")
+    print("PASS inputs the Mac does not have are off, and picking a camera leaves its switch alone")
 }
 
 func runStartRequestTests() {

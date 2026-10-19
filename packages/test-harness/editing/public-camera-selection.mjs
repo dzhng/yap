@@ -53,7 +53,7 @@ try {
     const stopped = await service.call("capture.stop", params);
     assert.equal(stopped.publication.inputsClosed, false);
     await poll(
-      () => service.fixtureCall("inspect.open"),
+      () => service.fixtureCall("inspect"),
       (value) => value.stops === 1,
       "physical stop entered",
     );
@@ -93,7 +93,7 @@ try {
       acquisition,
     );
     assert.deepEqual((await service.call("project.list", {})).projects, []);
-    const inspections = await service.fixtureCall("inspect.open");
+    const inspections = await service.fixtureCall("inspect");
     assert.equal(inspections.stops, 1);
     assert.equal(inspections.closures, 1);
     assert.equal(inspections.requests.length, 1);
@@ -157,7 +157,7 @@ try {
       );
       assert.equal(complete.publication.camera, null);
       assert.equal(complete.sourceAdmissions.length, 1);
-      assert.equal((await service.fixtureCall("inspect.open")).requests[0].camera, undefined);
+      assert.equal((await service.fixtureCall("inspect")).requests[0].camera, undefined);
       report.checks[selection] = complete;
     } else {
       assert.equal(
@@ -169,7 +169,7 @@ try {
       });
       assert.equal(refused.camera.deviceId, request.cameraDeviceId);
       assert.deepEqual(refused.sourceAdmissions, []);
-      const inspected = await service.fixtureCall("inspect.open");
+      const inspected = await service.fixtureCall("inspect");
       assert.equal(inspected.requests.length, 1);
       assert.equal(inspected.requests[0].camera.binding.deviceId, request.cameraDeviceId);
       assert.equal(inspected.stops, 0);

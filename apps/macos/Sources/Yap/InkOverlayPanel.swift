@@ -8,9 +8,8 @@ import YapCapture
  ⇧ is held, each recorded stroke and pin, and the absence of whatever undo took back. Which input
  is a stroke, a pin or a click is the recognizer's decision, never this one's.
 
- The person sees the ink and the recording never does. Each display's panel is unshared from the
- moment it opens, whatever Settings lets screenshots see, and once on screen it also asks the
- running take to leave this app's windows out.
+ The person sees the ink and the recording never does: each display's panel is unshared from the
+ moment it opens, so no capture sees it.
  */
 @MainActor
 final class InkOverlayPanel {
@@ -33,11 +32,6 @@ final class InkOverlayPanel {
     private var fadeStarted: Date?
     private var strokeOpacity: CGFloat = 1
     private var fadeTimer: Timer?
-    private let excludeFromTake: @MainActor () async -> Bool
-
-    init(excludeFromTake: @escaping @MainActor () async -> Bool) {
-        self.excludeFromTake = excludeFromTake
-    }
 
     /// Opens a panel on each display while a take is live and takes them all down, ink and all,
     /// when it is not.
@@ -87,7 +81,6 @@ final class InkOverlayPanel {
             screens.append(Screen(display: CGDirectDisplayID(number.uint32Value), panel: panel, view: view))
         }
         guard !screens.isEmpty else { return }
-        Task { _ = await excludeFromTake() }
         redraw()
     }
 

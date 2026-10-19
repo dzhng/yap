@@ -6,7 +6,7 @@ import YapControls
 enum CaptureViewIntent: Equatable {
     case controls(ControlsAction)
     case chooseSource(CaptureViewInput.Source)
-    case camera(String?)
+    case camera(String)
     case countdown(Bool)
     case openLibrary
 }
@@ -36,9 +36,13 @@ struct CaptureViewInput: Equatable {
     let cameraChoices: [Choice]
     let selectedCamera: Int
     var cameraOn: Bool
+    /// Whether the Mac has a camera; without one the camera row is disabled and off.
+    var cameraAvailable = true
     let microphoneChoices: [Choice]
     let selectedMicrophone: Int
     let microphoneOn: Bool
+    /// Whether the Mac has a microphone; without one the microphone row is disabled and off.
+    var microphoneAvailable = true
     let systemAudio: Bool
     let countdown: Bool
     let inputsEnabled: Bool
@@ -229,6 +233,7 @@ final class CaptureView: NSView {
         }
         if popup.indexOfSelectedItem != selected { popup.selectItem(at: values.indices.contains(selected) ? selected : -1) }
         popup.isEnabled = input.inputsEnabled && !values.isEmpty && (id != "source.device" || input.screenSourcesEnabled)
+            && (id != "camera.device" || input.cameraAvailable) && (id != "microphone.device" || input.microphoneAvailable)
         popup.target = self
         popup.action = #selector(selectChoice(_:))
         popup.identifier = .init(id)
@@ -317,11 +322,11 @@ final class CaptureView: NSView {
                 label(id == "systemAudio" ? "System audio" : "3-second countdown", NSRect(x: 46, y: textY, width: 238, height: 18), size: 12, color: input.inputsEnabled ? .labelColor : .secondaryLabelColor)
             }
             if let subtitle { label(subtitle, NSRect(x: 46, y: y + 25, width: 232, height: 16), size: 10, color: .secondaryLabelColor) }
-            if id == "camera", CapturePresentation.cameraIsRequired(cameraOnly: input.selectedSource == .cameraOnly, selectedCameraIndex: input.selectedCamera) {
-                label("Required", NSRect(x: 280, y: centerY - 8, width: 56, height: 16), size: 10, weight: .medium, color: .systemBlue)
-            } else {
-                toggle(id == "systemAudio" ? "System audio" : id.capitalized, id: "\(id).toggle", frame: NSRect(x: 296, y: centerY - 9, width: 38, height: 18), intent: intent, on: on, enabled: input.inputsEnabled || (id == "camera" && input.liveCamera))
-            }
+            // A camera-only take's camera is its source, so its switch is on and cannot be turned off.
+            toggle(id == "systemAudio" ? "System audio" : id.capitalized, id: "\(id).toggle", frame: NSRect(x: 296, y: centerY - 9, width: 38, height: 18), intent: intent, on: on,
+                   enabled: (input.inputsEnabled || (id == "camera" && input.liveCamera))
+                       && (id != "camera" || (input.cameraAvailable && input.selectedSource != .cameraOnly))
+                       && (id != "microphone" || input.microphoneAvailable))
             y += rowHeight
         }
         y += 12

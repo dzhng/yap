@@ -52,7 +52,7 @@ try {
       microphone: false,
     };
     const take = await service.call("capture.start", request, { transport: "mcp" });
-    const inspection = await service.fixtureCall("inspect.open");
+    const inspection = await service.fixtureCall("inspect");
     assert.equal(inspection.inputBoundary, "CameraCaptureInput");
     assert.equal(inspection.cameraStarts, 1);
     assert.equal(inspection.stops, 0);
@@ -111,7 +111,7 @@ try {
     assert.equal(Object.hasOwn(independent, "currentRevisionId"), false);
     const replay = await service.call("capture.start", request);
     assert.equal(replay.recordingId, take.recordingId);
-    assert.equal((await service.fixtureCall("inspect.open")).requests.length, 0);
+    assert.equal((await service.fixtureCall("inspect")).requests.length, 0);
     await writeFile(releaseFile, "");
     const complete = await poll(
       () => service.call("recording.get", params),

@@ -20,11 +20,9 @@ import {
  * A take of a whole display must not record the recorder. This records the display twice, with the
  * floating controls left in a different place each time, and reads the frames back: if those
  * controls were in the take, the part of the picture each one covered would differ completely
- * between the two. It runs once as shipped, with no capture seeing the controls, and once with
- * screenshots allowed to see them, which must not let them into the take. The ink a person draws
- * over the screen is read the same way, from one take with pins in front of everything and one
- * without. Every take here is a few seconds long and lives in a scratch home the harness
- * deletes; nothing is activated and nothing is clicked.
+ * between the two. The ink a person draws over the screen is read the same way, from one take with
+ * pins in front of everything and one without. Every take here is a few seconds long and lives in
+ * a scratch home the harness deletes; nothing is activated and nothing is clicked.
  */
 const seconds = 2.5;
 /** Where the controls are left for each take, in screen points, far enough apart not to overlap. */
@@ -45,14 +43,13 @@ async function succeeds(home, operation, params) {
 }
 
 /** One take of a whole display, with this app's own floating controls on screen throughout. */
-async function displayTake(origin, inScreenshots) {
+async function displayTake(origin) {
   const home = temporary("/tmp/scr-exclusion-");
   const domain = join(home, "scratch-preferences");
   setDefault(domain, "showSettingsAtLaunch", "-bool", "NO");
   // The count is off so the take starts at once, and the controls go where this take wants them.
   setDefault(domain, "countdownBeforeRecording", "-bool", "NO");
   setDefault(domain, "overlayOrigin", "-string", origin);
-  setDefault(domain, "showControlsInScreenshots", "-bool", inScreenshots ? "YES" : "NO");
   const { instance } = await launchReady(home, { YAP_DEFAULTS: domain });
   const sources = await succeeds(home, "capture.sources");
   const display = sources.displays[0];
@@ -70,8 +67,6 @@ async function displayTake(origin, inScreenshots) {
     display.displayId,
     "The controls have to be on the display this take records, or this proves nothing",
   );
-  // Controls other captures may see have to be on screen that way for the frame this reads.
-  if (inScreenshots) await instance.waitFor(/recording overlay visible to captures/);
   await delay(seconds * 1000);
   await finishCapture((op, params) => succeeds(home, op, params), started.recordingId);
   instance.kill("SIGTERM");
@@ -205,80 +200,77 @@ function difference(first, second, rect) {
   return counted === 0 ? 0 : total / counted;
 }
 
-for (const inScreenshots of [false, true])
-  test(
-    inScreenshots
-      ? "a display take leaves out the floating controls that screenshots may see"
-      : "a display take leaves out this app's own floating controls",
-    { timeout: 180_000 },
-    async (t) => {
-      requireScreenPermission();
-      const takes = [];
-      for (const origin of origins) takes.push(await displayTake(origin, inScreenshots));
-      const frames = takes.map((take) => frame(take.video));
-      assert.equal(frames[0].width, frames[1].width);
-      assert.equal(frames[0].height, frames[1].height);
-      assert.notDeepEqual(
-        takes[0].controls,
-        takes[1].controls,
-        "The two takes must have had the controls in different places",
-      );
+test(
+  "a display take leaves out this app's own floating controls",
+  { timeout: 180_000 },
+  async (t) => {
+    requireScreenPermission();
+    const takes = [];
+    for (const origin of origins) takes.push(await displayTake(origin));
+    const frames = takes.map((take) => frame(take.video));
+    assert.equal(frames[0].width, frames[1].width);
+    assert.equal(frames[0].height, frames[1].height);
+    assert.notDeepEqual(
+      takes[0].controls,
+      takes[1].controls,
+      "The two takes must have had the controls in different places",
+    );
 
-      // The take is the display scaled to the recorded picture, so a rectangle of screen points
-      // becomes the same rectangle of frame pixels.
-      const scale = frames[0].width / takes[0].display.width;
-      // That only holds while a display take is the whole display at its own pixels: the source
-      // this app offers and the picture it records have to be the same rectangle.
+    // The take is the display scaled to the recorded picture, so a rectangle of screen points
+    // becomes the same rectangle of frame pixels.
+    const scale = frames[0].width / takes[0].display.width;
+    // That only holds while a display take is the whole display at its own pixels: the source
+    // this app offers and the picture it records have to be the same rectangle.
+    assert.ok(
+      Number.isInteger(scale) && scale >= 1,
+      `A display take must not rescale it, got ${scale}x`,
+    );
+    assert.equal(
+      frames[0].height,
+      takes[0].display.height * scale,
+      "A display take must keep the display's shape",
+    );
+    if (frames.some(blank)) {
+      t.skip("The display recorded a blank picture (asleep?), so nothing could show in it");
+      return;
+    }
+    const whole = { left: 0, top: 0, right: frames[0].width, bottom: frames[0].height };
+    const between = difference(frames[0], frames[1], whole);
+    // This compares how much the picture changed where the controls were against how much it
+    // changed everywhere, so it only means something while the screen behind them is reasonably
+    // still. On a desktop with a video or a scrolling terminal on it, everything differs by more
+    // than a leaked overlay would, and the comparison would pass while proving nothing.
+    if (between > 8) {
+      t.skip(
+        `The screen was changing too much between takes to prove anything: ${between.toFixed(2)} ` +
+          "mean difference across the whole picture",
+      );
+      return;
+    }
+    for (const [index, take] of takes.entries()) {
+      const { x, y, width, height } = take.controls;
+      const rect = {
+        left: Math.max(0, Math.floor(x * scale)),
+        top: Math.max(0, Math.floor(y * scale)),
+        right: Math.min(frames[0].width, Math.ceil((x + width) * scale)),
+        bottom: Math.min(frames[0].height, Math.ceil((y + height) * scale)),
+      };
+      assert.ok(rect.right > rect.left && rect.bottom > rect.top, JSON.stringify(rect));
+      const covered = difference(frames[0], frames[1], rect);
+      t.diagnostic(
+        `controls ${index} at ${x},${y} ${width}×${height}: ${covered.toFixed(2)} difference there, ` +
+          `${between.toFixed(2)} across the whole picture`,
+      );
+      // Where the controls sat in one take and not the other, the two takes differ no more than
+      // the screen as a whole does: the controls were never in either recording.
       assert.ok(
-        Number.isInteger(scale) && scale >= 1,
-        `A display take must not rescale it, got ${scale}x`,
+        covered < between + 3,
+        `The floating controls appear in the take: ${covered.toFixed(2)} difference where they were, ` +
+          `against ${between.toFixed(2)} across the whole picture`,
       );
-      assert.equal(
-        frames[0].height,
-        takes[0].display.height * scale,
-        "A display take must keep the display's shape",
-      );
-      if (frames.some(blank)) {
-        t.skip("The display recorded a blank picture (asleep?), so nothing could show in it");
-        return;
-      }
-      const whole = { left: 0, top: 0, right: frames[0].width, bottom: frames[0].height };
-      const between = difference(frames[0], frames[1], whole);
-      // This compares how much the picture changed where the controls were against how much it
-      // changed everywhere, so it only means something while the screen behind them is reasonably
-      // still. On a desktop with a video or a scrolling terminal on it, everything differs by more
-      // than a leaked overlay would, and the comparison would pass while proving nothing.
-      if (between > 8) {
-        t.skip(
-          `The screen was changing too much between takes to prove anything: ${between.toFixed(2)} ` +
-            "mean difference across the whole picture",
-        );
-        return;
-      }
-      for (const [index, take] of takes.entries()) {
-        const { x, y, width, height } = take.controls;
-        const rect = {
-          left: Math.max(0, Math.floor(x * scale)),
-          top: Math.max(0, Math.floor(y * scale)),
-          right: Math.min(frames[0].width, Math.ceil((x + width) * scale)),
-          bottom: Math.min(frames[0].height, Math.ceil((y + height) * scale)),
-        };
-        assert.ok(rect.right > rect.left && rect.bottom > rect.top, JSON.stringify(rect));
-        const covered = difference(frames[0], frames[1], rect);
-        t.diagnostic(
-          `controls ${index} at ${x},${y} ${width}×${height}: ${covered.toFixed(2)} difference there, ` +
-            `${between.toFixed(2)} across the whole picture`,
-        );
-        // Where the controls sat in one take and not the other, the two takes differ no more than
-        // the screen as a whole does: the controls were never in either recording.
-        assert.ok(
-          covered < between + 3,
-          `The floating controls appear in the take: ${covered.toFixed(2)} difference where they were, ` +
-            `against ${between.toFixed(2)} across the whole picture`,
-        );
-      }
-    },
-  );
+    }
+  },
+);
 
 test("a display take leaves out the ink drawn over it", { timeout: 180_000 }, async (t) => {
   requireScreenPermission();

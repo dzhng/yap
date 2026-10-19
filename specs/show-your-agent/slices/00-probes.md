@@ -11,7 +11,7 @@ built until both answers are known.
    made in another app? The app already uses a global monitor (`apps/macos/Sources/Yap/CapturePopover.swift:85`)
    and polls `NSEvent.mouseLocation`/`pressedMouseButtons` (`helpers/mac/Sources/YapCapture/CursorGeometry.swift:401-404,434`).
 2. Does a full-screen, click-through panel (`OverlayPanel` with `sharingType = .none`,
-   `ignoresMouseEvents = true`, plus `CaptureExclusion.excludeOwnWindows()`) stay out of a real
+   `ignoresMouseEvents = true`, as the floating controls are) stay out of a real
    ScreenCaptureKit display recording, and do clicks reach the app underneath?
 
 **Seam:** a throwaway probe subcommand on the existing `ControlsProbe`/`CaptureProbe` harness,

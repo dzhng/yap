@@ -98,9 +98,6 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         if model.controlsGlass != preferences.controlsGlass {
             model.controlsGlass = preferences.controlsGlass
         }
-        if model.showControlsInScreenshots != preferences.showControlsInScreenshots {
-            model.showControlsInScreenshots = preferences.showControlsInScreenshots
-        }
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
@@ -181,9 +178,6 @@ final class SettingsModel: ObservableObject {
     @Published var controlsGlass: ControlsGlass {
         didSet { preferences.controlsGlass = controlsGlass }
     }
-    @Published var showControlsInScreenshots: Bool {
-        didSet { preferences.showControlsInScreenshots = showControlsInScreenshots }
-    }
     @Published var setUpAgents: Bool {
         didSet {
             guard setUpAgents != oldValue else { return }
@@ -217,7 +211,6 @@ final class SettingsModel: ObservableObject {
         countdownBeforeRecording = preferences.countdownBeforeRecording
         showCameraPreview = preferences.showCameraPreview
         controlsGlass = preferences.controlsGlass
-        showControlsInScreenshots = preferences.showControlsInScreenshots
         setUpAgents = preferences.setUpAgents
         agentSummary = agentSetup.summary()
     }
@@ -400,12 +393,6 @@ struct SettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .fixedSize()
-            }
-            detailRow(
-                "Show Controls in Screenshots",
-                "Lets screenshots and screen sharing see the floating controls. Yap's own recordings always leave them out."
-            ) {
-                Toggle("", isOn: $model.showControlsInScreenshots).labelsHidden()
             }
         } header: {
             Text("Recording")

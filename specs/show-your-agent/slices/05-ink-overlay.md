@@ -3,8 +3,7 @@
 **Contract unlocked:** the person sees what they draw and pin, and the recording never does.
 
 **Seam:** a full-screen `OverlayPanel` per display (`apps/macos/Sources/Yap/OverlayPanel.swift`,
-`sharingType = .none`), `ignoresMouseEvents = true`, plus `excludeOwnWindows()` once it is on
-screen (`CaptureExclusion.swift:41-47`), as proven in slice 00. It consumes only the
+`sharingType = .none`), `ignoresMouseEvents = true`, as proven in slice 00. It consumes only the
 recognizer's output stream: strokes, numbered pin badges, retractions. It classifies nothing.
 
 **Slice variable:** the look of ink and pins only. Judge on crops of a stroke, a pin badge and
@@ -35,7 +34,9 @@ preference says. Ruled out (2026-10-18 probe): macOS 27 still lists an app whose
 `ScreenCaptureInput.excludeOwnWindows()` (`helpers/mac/Sources/YapCapture/CaptureInputSession.swift:239-250`):
 `video` nil, the take not yet `recording`, `ownApplications` identity not matching the dev
 build's bundle identifier, or `updateContentFilter` throwing (its error is swallowed). Add a
-diagnostic for each `false` return first.
+diagnostic for each `false` return first. Superseded 2026-10-19: `main` removed the mid-take
+exclusion and that preference (v0.1.61); every overlay, ink included, is unshared from the moment
+it opens, which is what keeps it out of captures.
 
 **Delegated:** stroke rendering technique, fade curve within the confirmed behaviour.
 **Out of scope:** any visible issue in the recording controls panel.

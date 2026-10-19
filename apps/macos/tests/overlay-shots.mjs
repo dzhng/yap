@@ -91,8 +91,7 @@ await waitFor(async () => {
   return Boolean(find((await send({ do: "snapshot" })).rows, `source.window.${windowId}`));
 }, 20_000);
 await send({ do: "choose", item: `source.window.${windowId}` });
-// The microphone switch starts on; turning it off records no audio device of any kind.
-await send({ do: "choose", item: "microphone.toggle" });
+// The fixture lists no microphone, so its switch is off and the take records no audio device.
 
 const status = async () => (await send({ do: "snapshot" })).status;
 const shoot = async (title, name) => {

@@ -48,13 +48,9 @@ package protocol CaptureInputSession: AnyObject {
     func stop() async -> CaptureFailure?
     func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure
     func discardMedia() async
-    /// Leaves this application's windows out of what the running take records from now on, and
-    /// answers whether the take is known to leave them out. An input that cannot say answers no.
-    func excludeOwnWindows() async -> Bool
 }
 
 extension CaptureInputSession {
-    package func excludeOwnWindows() async -> Bool { false }
     package var companionCamera: (any CompanionCameraSwitch)? { nil }
     package func closeMedia(clock: CaptureClock, failure: CaptureFailure?) async -> CaptureInputClosure { CaptureInputClosure() }
     package func discardMedia() async {}
@@ -233,35 +229,6 @@ package final class ScreenCaptureInput: CaptureInputSession {
     }
 
     package func startCursorSampling(writer: CaptureWriter) { writer.startCursorSampling() }
-
-    /// A window take records only the window it chose, so nothing else of this app's can enter it.
-    /// A display or region take reads what is on screen now and records the display without this
-    /// app, which is listed once any window of its own is on screen.
-    package func excludeOwnWindows() async -> Bool {
-        guard let display else { return true }
-        guard let video else {
-            Self.diagnose("capture exclusion refused: video stream is not ready")
-            return false
-        }
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-            guard let filter = CaptureExclusion.ownExcludingFilter(display, in: content) else {
-                Self.diagnose("capture exclusion refused: own application was not listed")
-                return false
-            }
-            try await video.updateContentFilter(filter)
-            return true
-        } catch {
-            Self.diagnose("capture exclusion refused: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    /// Each refusal says why on stderr, in the app's diagnostic form: a take that keeps the
-    /// controls hidden from captures otherwise looks the same whichever step said no.
-    private static func diagnose(_ message: String) {
-        FileHandle.standardError.write(Data("yap: \(message)\n".utf8))
-    }
 
     package func observeDeviceLoss(onFailure: @escaping @Sendable (CaptureFailure) -> Void) {
         if let microphone {

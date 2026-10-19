@@ -70,9 +70,6 @@ final class CaptureController {
         }
     }
 
-    /// Leaves this app's own windows out of the running take; true once the take is known to.
-    func excludeOwnWindows() async -> Bool { await capture.excludeOwnWindows() }
-
     /// Appends a retracting mark for the latest live mark. Shortcut bindings call this entry point.
     func undoMark() throws { try capture.undoMark() }
 
