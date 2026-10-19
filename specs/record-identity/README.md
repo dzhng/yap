@@ -49,6 +49,36 @@ stay; a store maps its row to its record as it always has. JSON that stores a pu
 record verbatim (revisions, replay receipts) is rewritten once by a catalog migration, so
 no reader accepts two shapes.
 
+## Public contract after this spec
+
+What a caller sees, operation by operation. Parameters keep `<noun>Id` throughout.
+
+- **Records name themselves `id`:** `project.get/list/create/duplicate` (`project.id`,
+  `revision.id`), `revision.get/history`, `edit.apply` and other edits (`revision.id`),
+  `inspect.open` (`history[].id`), `recording.get/list` and every `capture.*` result,
+  `asset.get/list` (and `streams[].id`), `export.create/status/recover/list` (and
+  `export.abandon` → `{id, abandoned}`), `preset.list/get/create/delete`,
+  `package.open/status/close`, `model.list/status/prepare/remove` and
+  `service.health.models[]`, `job.get/retry/cancel`, `correspondence.prepare/get`'s
+  receipt, transcript word rows (`rows[].id`, `caption.propose`'s `words[].id`),
+  `media.list` items, faces (`faces[].id`), observation regions (`regions[].id`, in
+  `frame.get`/`frame.batch`/`index.get` parameters too), and `capture.sources` displays,
+  windows, cameras and microphones.
+- **Deletes** return `{id, deleted, freedBytes}` (`asset`, `project`, `recording`, `model`
+  delete/remove); `preset.delete` returns `{id, trashed, trashedPaths, instructions}`.
+- **Polymorphic references are `{kind, id}`:** a job's `target` (`{kind: "project", id,
+  revisionId}` for project work), evidence `owner`, IN_USE details (`usedBy[]`,
+  `acquisitions[]`, `derivedAssets[]`), `media.list` items (`kind` is `"recording"` or
+  `"asset"`), and `capture.start`'s `source` (`{kind: "display"|"window"|"camera", id}`;
+  a region is `{kind: "region", displayId, x, y, width, height}`).
+- **Starting a job reports its work:** `asset.import`/`acquisition.import` return
+  `{target, state, jobId, attemptId, attemptGeneration, reason, retryable, published}`;
+  `job.get` returns the job itself, `{id, state, attemptGeneration, target, …}`. The CLI's
+  `--wait` output names the job it waited on as `wait.job.id`.
+- **References stay `<noun>Id`** wherever a record points at another: `revision.projectId`,
+  `project.currentRevisionId`, `export.projectId`/`jobId`, work statuses' `jobId`, refusal
+  details naming the subject, and every operation parameter.
+
 ## Decisions
 
 - **`{kind, id}` over `{kind, assetId}`** (user asked for the correct solution). The kind
@@ -195,5 +225,7 @@ service node suites ran:
   identity, no `edit.document`) so no reader needs them.
 - Preset request receipts (`<presets>/.request-receipts.json`) store raw results; a
   `preset.delete` receipt names its preset `presetId`. Slice 05 rewrites that file too.
+- `capture.start` request arguments are stored for replay; their `source` changes shape in
+  slice 04, so the migration rewrites stored capture request arguments as well.
 - Completeness check for slice 05: build catalogs with the format-29 code through the
   suites, migrate them, and assert that no JSON column anywhere still holds an old shape.
