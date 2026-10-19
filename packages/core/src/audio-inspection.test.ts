@@ -13,7 +13,11 @@ import { AssetStore } from "./assets.js";
 import { AcquisitionStore } from "./acquisitions.js";
 import { JobQueue } from "./jobs.js";
 import { DerivedCache } from "./cache.js";
-import { MediaAudioInspection, type SourceAudioRenderer } from "./audio-inspection.js";
+import {
+  MediaAudioInspection,
+  selectedRange,
+  type SourceAudioRenderer,
+} from "./audio-inspection.js";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -264,7 +268,7 @@ test("cancellation fences late renderer output and only explicit retry admits an
     },
   });
   cleanup.push(async () => release.resolve());
-  const input = { ...f.selection, range: { startUs: 71, endUs: 199991 } };
+  const input = { ...f.selection, sourceRange: { startUs: 71, endUs: 199991 } };
   const first = await f.inspection.request(input);
   await entered.promise;
   f.jobs.cancel(first.jobId!);
@@ -325,7 +329,7 @@ test("malformed native receipts and WAV files cannot publish and repeated reads 
         return value;
       },
     });
-    const input = { ...f.selection, range: { startUs: 0, endUs: 200000 } };
+    const input = { ...f.selection, sourceRange: { startUs: 0, endUs: 200000 } };
     await f.inspection.request(input);
     await f.jobs.idle();
     expect(await f.inspection.request(input), defect).toMatchObject({
@@ -345,7 +349,7 @@ test("a partly overlapping audio range is clamped to the source with range-clamp
   const f = await fixture();
   const clamped = await f.inspection.request({
     ...f.selection,
-    range: { startUs: 500000, endUs: 1000001 },
+    sourceRange: { startUs: 500000, endUs: 1000001 },
   });
   expect(clamped).toMatchObject({
     range: { startUs: 500000, endUs: 1000000 },
@@ -363,22 +367,29 @@ test("a partly overlapping audio range is clamped to the source with range-clamp
   await f.jobs.idle();
   // A later read of the same request still reports the clamp beside the published audio.
   expect(
-    await f.inspection.request({ ...f.selection, range: { startUs: 500000, endUs: 1000001 } }),
+    await f.inspection.request({
+      ...f.selection,
+      sourceRange: { startUs: 500000, endUs: 1000001 },
+    }),
   ).toMatchObject({
     state: "ready",
     published: { audio: { sourceRange: { startUs: 500000, endUs: 1000000 } } },
     issues: [{ code: "range-clamped" }],
   });
   expect(
-    (await f.inspection.request({ ...f.selection, range: { startUs: 500000, endUs: 1000000 } }))
-      .issues,
+    (
+      await f.inspection.request({
+        ...f.selection,
+        sourceRange: { startUs: 500000, endUs: 1000000 },
+      })
+    ).issues,
   ).toEqual([]);
 });
 
 test("invalid ranges and acquisition/stream mismatches refuse before queue admission", async () => {
   const f = await fixture();
   await expect(
-    f.inspection.request({ ...f.selection, range: { startUs: 1000000, endUs: 1000001 } }),
+    f.inspection.request({ ...f.selection, sourceRange: { startUs: 1000000, endUs: 1000001 } }),
   ).rejects.toThrow(
     expect.objectContaining({
       code: "INVALID_RANGE",
@@ -424,17 +435,18 @@ test("source WAV capacity is checked before queue admission using absolute floor
   );
   // floor(1042 * .048) - floor(1020 * .048) = 50 - 48 = 2 frames, not floor(22 * .048).
   await expect(
-    f.inspection.request({ ...f.selection, range: { startUs: 1020, endUs: 1042 } }),
+    f.inspection.request({ ...f.selection, sourceRange: { startUs: 1020, endUs: 1042 } }),
   ).rejects.toThrow("exceeds cache budget");
   expect(calls).toBe(0);
   expect(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM jobs").get()).toEqual({ n: 0 });
   const status = await f.inspection.request({
     ...f.selection,
-    range: { startUs: 1020, endUs: 1041 },
+    sourceRange: { startUs: 1020, endUs: 1041 },
   });
   await f.jobs.idle();
   expect(
-    (await f.inspection.request({ ...f.selection, range: { startUs: 1020, endUs: 1041 } })).state,
+    (await f.inspection.request({ ...f.selection, sourceRange: { startUs: 1020, endUs: 1041 } }))
+      .state,
   ).toBe("ready");
   expect(status.jobId).toBeTruthy();
   expect(calls).toBe(1);
@@ -447,12 +459,12 @@ test("long source capacity arithmetic rejects before rendering without losing hi
   await expect(
     f.inspection.request({
       ...f.selection,
-      range: { startUs: 9007199254740958, endUs: 9007199254740959 },
+      sourceRange: { startUs: 9007199254740958, endUs: 9007199254740959 },
     }),
   ).rejects.toThrow("exceeds cache budget");
   const small = await f.inspection.request({
     ...f.selection,
-    range: { startUs: 9007199254740959, endUs: 9007199254740960 },
+    sourceRange: { startUs: 9007199254740959, endUs: 9007199254740960 },
   });
   expect(small.jobId).toBeTruthy();
 });
@@ -495,7 +507,7 @@ test("acoustic images reuse cached measurements and explicit retry rebuilds evic
   );
   const input = {
     ...f.selection,
-    range: { startUs: 200000, endUs: 210000 },
+    sourceRange: { startUs: 200000, endUs: 210000 },
     format: "image" as const,
   };
   const prepare = async () => {
@@ -510,7 +522,8 @@ test("acoustic images reuse cached measurements and explicit retry rebuilds evic
   const first = await prepare();
   expect(first.published!.artifact.mediaType).toBe("image/png");
   const measurements = await f.waveform.request({ ...input, format: "json" });
-  const pcm = (await f.inspection.request({ ...f.selection, range: input.range })).published!.audio;
+  const pcm = (await f.inspection.request({ ...f.selection, sourceRange: input.sourceRange }))
+    .published!.audio;
   f.cache.remove(pcm.cacheId);
   f.cache.remove(first.published!.artifact.cacheId);
   const second = await prepare();
@@ -550,12 +563,12 @@ test("cached spectral jobs preserve full versus ranged measurements and survive 
     fftFrames: 256,
     hopFrames: 128,
   };
-  const prepare = async (range: { startUs: number; endUs: number }) => {
-    await f.waveform.request({ ...input, range });
+  const prepare = async (sourceRange: { startUs: number; endUs: number }) => {
+    await f.waveform.request({ ...input, sourceRange });
     await f.jobs.idle();
-    await f.waveform.request({ ...input, range });
+    await f.waveform.request({ ...input, sourceRange });
     await f.jobs.idle();
-    const result = await f.waveform.request({ ...input, range });
+    const result = await f.waveform.request({ ...input, sourceRange });
     expect(result.state, JSON.stringify(result)).toBe("ready");
     return result;
   };
@@ -578,7 +591,7 @@ test("cached spectral jobs preserve full versus ranged measurements and survive 
   }
   const audio = JSON.parse(f.jobs.status(f.jobs.job(narrow.dependency.jobId!)).published!.result);
   f.cache.remove(audio.cacheId);
-  expect((await f.waveform.request({ ...input, range: detail.range })).published).toEqual(
+  expect((await f.waveform.request({ ...input, sourceRange: detail.range })).published).toEqual(
     narrow.published,
   );
 });
@@ -588,12 +601,12 @@ test("audio context keeps source selection and expands to exact sample boundarie
   const input = {
     ...f.selection,
     acquisitionId: "mask",
-    range: { startUs: 333333, endUs: 533337 },
+    sourceRange: { startUs: 333333, endUs: 533337 },
   };
   const context = f.inspection.context(input, { start: 15967, end: 25632 });
   expect(context.selection).toEqual({
     ...input,
-    range: { startUs: { numerator: 1995875, denominator: 6 }, endUs: 534000 },
+    sourceRange: { startUs: { numerator: 1995875, denominator: 6 }, endUs: 534000 },
   });
   expect(context.sampleClock).toMatchObject({ sampleRange: { start: 15967, end: 25632 } });
   const pending = await f.inspection.request(context.selection);
@@ -607,10 +620,10 @@ test("audio context keeps source selection and expands to exact sample boundarie
   });
   expect(pending.jobId).toBeTruthy();
   const edge = f.inspection.context(
-    { ...f.selection, range: { startUs: 0, endUs: 1000000 } },
+    { ...f.selection, sourceRange: { startUs: 0, endUs: 1000000 } },
     { start: -32, end: 48032 },
   );
-  expect(edge.selection.range).toEqual({ startUs: 0, endUs: 1000000 });
+  expect(selectedRange(edge.selection)).toEqual({ startUs: 0, endUs: 1000000 });
   expect(() => f.inspection.context(input, { start: 16000, end: 25632 })).toThrow(/contain/);
 });
 
@@ -626,7 +639,7 @@ test("waveform jobs reuse bounded audio recipes, publish source axes and survive
   const input = {
     ...f.selection,
     acquisitionId: "mask",
-    range: { startUs: 333333, endUs: 533337 },
+    sourceRange: { startUs: 333333, endUs: 533337 },
   };
   const first = await f.waveform.request(input);
   expect(first.published).toBeNull();
@@ -642,7 +655,7 @@ test("waveform jobs reuse bounded audio recipes, publish source axes and survive
     domain: "source",
     assetId: f.asset.id,
     acquisitionId: "mask",
-    range: input.range,
+    range: input.sourceRange,
     sampleRange: { start: 15999, end: 25600 },
     sampleRate: 48000,
     channels: 2,
@@ -827,7 +840,7 @@ test("exact admitted endpoints drive full and late audio while explicit integer 
   const endUs = { numerator: 15404875, denominator: 3 };
   const f = await fixture(renderer, undefined, endUs);
   const full = f.inspection.recipe(f.selection);
-  expect(full.selection.range).toEqual({ startUs: 100000, endUs });
+  expect(selectedRange(full.selection)).toEqual({ startUs: 100000, endUs });
   expect(full.sampleClock?.sampleRange).toEqual({ start: 4800, end: 246478 });
   const requested = await f.inspection.request(f.selection);
   await f.jobs.idle();
@@ -837,21 +850,26 @@ test("exact admitted endpoints drive full and late audio while explicit integer 
     unavailable: [],
   });
   expect(f.jobs.job(requested.jobId!).state).toBe("ready");
-  const late = f.inspection.recipe({ ...f.selection, range: { startUs: 5134000, endUs } });
+  const late = f.inspection.recipe({ ...f.selection, sourceRange: { startUs: 5134000, endUs } });
   expect(late.sampleClock?.sampleRange).toEqual({ start: 246432, end: 246478 });
   const floor = f.inspection.recipe({
     ...f.selection,
-    range: { startUs: 5134000, endUs: 5134958 },
+    sourceRange: { startUs: 5134000, endUs: 5134958 },
   });
   expect(floor.sampleClock?.sampleRange).toEqual({ start: 246432, end: 246477 });
-  const over = f.inspection.recipe({ ...f.selection, range: { startUs: 5134000, endUs: 5134959 } });
-  expect(over.selection.range).toEqual({ startUs: 5134000, endUs });
+  const over = f.inspection.recipe({
+    ...f.selection,
+    sourceRange: { startUs: 5134000, endUs: 5134959 },
+  });
+  expect(selectedRange(over.selection)).toEqual({ startUs: 5134000, endUs });
   expect(over.issues).toMatchObject([{ code: "range-clamped" }]);
   expect(
-    f.inspection.context(
-      { ...f.selection, range: { startUs: 5134000, endUs } },
-      { start: 246430, end: 246480 },
-    ).selection.range,
+    selectedRange(
+      f.inspection.context(
+        { ...f.selection, sourceRange: { startUs: 5134000, endUs } },
+        { start: 246430, end: 246480 },
+      ).selection,
+    ),
   ).toEqual({
     startUs: { numerator: 15401875, denominator: 3 },
     endUs,
@@ -875,7 +893,7 @@ test("loudness retains selected PCM provenance and refuses integrated unavailabl
   const input = {
     ...f.selection,
     kind: "loudness" as const,
-    range: { startUs: 100000, endUs: 6000000 },
+    sourceRange: { startUs: 100000, endUs: 6000000 },
   };
   await f.waveform.request(input);
   await f.jobs.idle();
@@ -886,7 +904,7 @@ test("loudness retains selected PCM provenance and refuses integrated unavailabl
     domain: "source",
     assetId: f.asset.id,
     streamId: "a",
-    sourceRange: input.range,
+    sourceRange: input.sourceRange,
     sampleRange: { startSamples: 4800, endSamples: 288000 },
     unavailable: [],
     analysis: {

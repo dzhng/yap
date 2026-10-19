@@ -160,7 +160,7 @@ export class AudioExtraction {
                 "preparedResourceId" in recipe.options ? recipe.options.preparedResourceId : null,
             }
           : recipe.selection,
-      wholeSource: !("projectId" in selection) && selection.range === undefined,
+      wholeSource: !("projectId" in selection) && selection.sourceRange === undefined,
       rendition: audioRenditionSchema.parse(rendition),
       recipe: recipe.identity,
       processingSha256: "processingSha256" in recipe ? recipe.processingSha256 : null,

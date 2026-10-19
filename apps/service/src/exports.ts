@@ -452,9 +452,13 @@ export class MediaExports {
           ? {
               generation: audio.published.generation,
               issues: audio.published.issues,
+              // A WAV export is the project's PCM receipt; any other container is its encoding.
               preview: {
-                ...audio.published.audio,
-                bytes: (audio.published.audio as any).sizeBytes ?? audio.published.audio.bytes,
+                cacheId: audio.published.audio.cacheId,
+                bytes:
+                  "sizeBytes" in audio.published.audio
+                    ? audio.published.audio.sizeBytes
+                    : audio.published.audio.bytes,
               },
             }
           : null,

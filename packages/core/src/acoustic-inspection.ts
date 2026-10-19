@@ -23,6 +23,7 @@ import {
   type MediaAudioInput,
   type SourceAudioArtifact,
   type ProjectAudioArtifact,
+  selectedRange,
 } from "./audio-inspection.js";
 import { pauseIntervals, waveformBuckets, sampleGrid, validateAudioWave } from "./audio-wave.js";
 import { spectralLayout, spectralWindows } from "./audio-spectrum.js";
@@ -311,7 +312,7 @@ export class AcousticInspection {
                 : null,
             processingSha256: "processingSha256" in recipe ? recipe.processingSha256 : null,
           },
-          scope: isDeepStrictEqual(recipe.selection.range, recipe.fullRange)
+          scope: isDeepStrictEqual(selectedRange(recipe.selection), recipe.fullRange)
             ? ("full-signal" as const)
             : ("excerpt" as const),
         },
@@ -381,7 +382,7 @@ export class AcousticInspection {
         parameters: {
           fftFrames,
           hopFrames,
-          range: display.selection.range,
+          range: selectedRange(display.selection),
           sampleRange: clock.sampleRange,
           policy: "spectrum-density-v1" as const,
         },

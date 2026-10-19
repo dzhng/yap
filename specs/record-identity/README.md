@@ -6,7 +6,7 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* slices 01–05 and 07 landed; 06 (app) is in progress; next is 08. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01–08 landed; next is 09, the closeout. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
@@ -21,9 +21,9 @@ section and the TODO list before you end a pass.
 - [x] 03 Library records name themselves `id`
 - [x] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows (the app's side is in 06)
 - [x] 05 Catalog format 30 and package version 7, each with a tested migration
-- [ ] 06 macOS app decoders
+- [x] 06 macOS app decoders
 - [x] 07 CLI, skill, evals and docs
-- [ ] 08 Quantity names without translation: the audio/acoustic receipt converters and `internalAudioSelection`
+- [x] 08 Quantity names without translation: `internalAudioSelection` removed; receipt converters kept as the worker-to-public boundary, now typed truthfully
 - [ ] 09 Closeout: full run, close-spec, release
 
 ## The rule
@@ -184,16 +184,18 @@ controller journey, a real launch reading the library, the preview timeline show
 **07 CLI, skill, evals, docs.** `wait.ts` pins, skill scripts and references, eval
 fixtures, protocol and package readmes. Check: CLI suite, `test:tools`, eval tests.
 
-**08 Quantity names without translation.** Library deletion kept three translations "on
-purpose": typed converters in `audio-inspection.ts` and `acoustic-inspection.ts` that rename
-`bytes`/`frames`/`range`/`sampleRange.start` to `sizeBytes`/`frameCount`/`sourceRange`/
-`startSamples` between core and public receipts, and `internalAudioSelection` (public
-`sourceRange` → core `range`). Under the relaxed convention (a key may leave out what its
-parent says) they are translation layers like the identity renames: one name per field, held
-by the producer, with stored receipts in the old shape refusing `ARTIFACT_CHANGED` and
-regenerating as they already do. Found by `project-audio.test.ts` ("native mixer serves every
-project audio tap"), which runs only with `YAP_NATIVE` and has failed since slice 07b of
-library deletion.
+**08 Quantity names without translation (done).** `internalAudioSelection` renamed the public
+`sourceRange` to core's `range` at the service edge; core's source audio inputs now take
+`sourceRange`, and the edge passes parameters through. The owners' own job recipes keep
+their internal `range`, so no stored artifact changes. The audio and acoustic receipt
+converters are not edge renames: inside the owner they map the native worker's receipt
+(`bytes`, `frames`, `sampleRange.start/end`, `range`) to the public receipt, the same
+boundary every internal worker wire keeps. What was wrong was the type: the published
+receipt was typed as the worker's shape while carrying the public one, which hid that
+`project-audio.test.ts`'s native mixer test had failed since slice 07b of library deletion.
+Published audio is now typed `PublicSourceAudioReceipt`/`PublicProjectAudioReceipt`, the
+media math decodes it through its owner's parser, and an export's untyped
+`sizeBytes ?? bytes` read became a typed choice between the PCM receipt and an encoding.
 
 **09 Closeout.** Full repository check once; `close-spec`; release after the user's go.
 

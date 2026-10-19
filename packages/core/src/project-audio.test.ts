@@ -14,7 +14,11 @@ import { AssetStore } from "./assets.js";
 import { AcquisitionStore } from "./acquisitions.js";
 import { JobQueue } from "./jobs.js";
 import { DerivedCache } from "./cache.js";
-import { MediaAudioInspection, type ProjectAudioRenderer } from "./audio-inspection.js";
+import {
+  MediaAudioInspection,
+  parsePublicAudioArtifact,
+  type ProjectAudioRenderer,
+} from "./audio-inspection.js";
 import { normalizationTolerance } from "./audio-measurement.js";
 import type { ProcessingTap } from "@yap/composition";
 
@@ -601,7 +605,7 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
         const ready = await f.inspection.request(input);
         expect(ready.state, JSON.stringify(ready)).toBe("ready");
         const receipt = ready.published!.audio;
-        expect(receipt.sampleRange).toEqual({ start: 15, end: 47952 });
+        expect(receipt.sampleRange).toEqual({ startSamples: 15, endSamples: 47952 });
         const bytes = await readFile(receipt.file);
         let at = 12;
         while (bytes.toString("ascii", at, at + 4) !== "data") {
@@ -612,8 +616,8 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
         const gain =
           gains.slice(0, index).reduce((value, next) => value * next * 0.5, 1) *
           (mode === "dry" ? 1 : gains[index]! * (mode === "processed" ? 0.5 : 1));
-        const expectedPCM = Buffer.alloc(receipt.frames * 8);
-        for (let frame = 0; frame < receipt.frames; frame++) {
+        const expectedPCM = Buffer.alloc(receipt.frameCount * 8);
+        for (let frame = 0; frame < receipt.frameCount; frame++) {
           expectedPCM.writeFloatLE(0.25 * gain, frame * 8);
           expectedPCM.writeFloatLE(-0.125 * gain, frame * 8 + 4);
         }
@@ -628,7 +632,11 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
           projectId: f.projectId,
           revisionId: ready.revisionId,
           tap: input.tap,
-          sampleRange: receipt.sampleRange,
+          // The measurement document keeps the media math's own names.
+          sampleRange: {
+            start: receipt.sampleRange.startSamples,
+            end: receipt.sampleRange.endSamples,
+          },
           range: input.range,
           bucketFrames: 480,
           audio: { jobId: ready.jobId, generation: ready.published!.generation },
@@ -639,10 +647,12 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
             { min: -0.125 * gain, max: -0.125 * gain, rms: 0.125 * gain },
           ]);
         const lease = f.cache.acquire(receipt.cacheId)!;
+        // The media math reads the receipt through its owner's decoder, as acoustics does.
+        const samples = parsePublicAudioArtifact(receipt);
         try {
           const waveform = await waveformBuckets(
             lease,
-            receipt,
+            samples,
             { bucketFrames: 480 },
             new AbortController().signal,
           );
@@ -650,7 +660,7 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
           expect(waveform.buckets.at(-1)!.sampleRange).toEqual({ start: 47520, end: 47952 });
           const spectrum = await spectralWindows(
             lease,
-            receipt,
+            samples,
             {
               fftFrames: 32,
               hopFrames: 32,

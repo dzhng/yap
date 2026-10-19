@@ -112,20 +112,6 @@ function sourceRangeAsMicroseconds(value: SelectionRange | undefined) {
   return { startUs: endpoint(value.startUs), endUs: endpoint(value.endUs) };
 }
 
-type InternalAudioSelection<T> = T extends { assetId: string; sourceRange?: infer SourceRange }
-  ? Omit<T, "sourceRange"> & { range?: SourceRange }
-  : T;
-
-function internalAudioSelection<T>(params: T): InternalAudioSelection<T> {
-  if (!params || typeof params !== "object" || !("assetId" in params))
-    return params as InternalAudioSelection<T>;
-  const { sourceRange, ...selection } = params as T & { sourceRange?: SelectionRange };
-  return {
-    ...selection,
-    ...(sourceRange === undefined ? {} : { range: sourceRange }),
-  } as InternalAudioSelection<T>;
-}
-
 import {
   listenLocal,
   prepareRuntimeDirectory,
@@ -2913,7 +2899,7 @@ export async function startProjectService(options: {
           case "waveform.get":
           case "spectrogram.get": {
             const spectrum = operation.operation === "spectrogram.get";
-            const params = internalAudioSelection(operation.params);
+            const params = operation.params;
             const status = await acoustics.request(
               spectrum ? { ...params, kind: "spectrum", format: "image" } : params,
             );
@@ -2948,7 +2934,7 @@ export async function startProjectService(options: {
             };
           }
           case "audio.extract": {
-            const status = extractedAudio.request(internalAudioSelection(operation.params));
+            const status = extractedAudio.request(operation.params);
             return {
               ok: true,
               data: {
@@ -2978,7 +2964,7 @@ export async function startProjectService(options: {
           case "audio.measure": {
             const measureParams = operation.params;
             const status = await acoustics.request({
-              ...internalAudioSelection(measureParams),
+              ...measureParams,
               kind: "loudness",
             });
             return {
@@ -3006,7 +2992,7 @@ export async function startProjectService(options: {
               filters: pageFilters(operation.params),
             });
             const status = await acoustics.request({
-              ...internalAudioSelection(selection),
+              ...selection,
               kind: "pause",
             });
             const allIntervals =
@@ -3046,7 +3032,7 @@ export async function startProjectService(options: {
           }
           case "audio.get": {
             const params = operation.params;
-            const status = await mediaAudio.request(internalAudioSelection(params));
+            const status = await mediaAudio.request(params);
             return {
               ok: true,
               data: {
