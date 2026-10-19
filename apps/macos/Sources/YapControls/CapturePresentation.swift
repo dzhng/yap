@@ -4,12 +4,6 @@ import Foundation
 public enum CapturePresentation {
     public static let screenSelectionPermissionNotice = "Allow Screen Recording access to choose a display, window, or area."
 
-    /// Camera-only mode needs a prompt only until a usable camera has been selected. Once a
-    /// choice is visible, repeating “Required” beside it adds noise and makes the chooser look
-    /// like it is still waiting for input.
-    public static func cameraIsRequired(cameraOnly: Bool, selectedCameraIndex: Int) -> Bool {
-        cameraOnly && selectedCameraIndex == 0
-    }
     public static func statusTitle(for state: ControlsState) -> String {
         if case .unavailable(let message) = state.service { return "Unavailable — \(message)" }
         if state.take?.state == "finalizing" {

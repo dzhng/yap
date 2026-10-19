@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/readme/header.png" alt="Yap — just yap; your agent makes it a great video" width="100%">
+  <img src=".github/readme/header.png" alt="Yap — just yap. Your agent gets it." width="100%">
 </p>
 
 <p align="center">
@@ -11,19 +11,54 @@
 
 ---
 
-**Yap is a tool your AI agent uses to help you communicate.**
+**Just yap. Your agent gets it.**
 
-Some ideas are faster to show than to write: a bug you can see, a product you
-want to demo, an update for your team, a story for your podcast. With Yap you
-just talk and show. Record your screen or camera, or drop in any video, and say
-it however it comes out. Your agent turns it into what you meant.
+Some ideas are faster to show than to write: a bug you can see, a design you
+want changed, a product you want to demo, an update for your team. With Yap you
+just talk and show. Your agent, **Claude Code, Codex or any agent harness**,
+gets the recording with the eyes, ears and hands to understand it and act on it.
 
-Screen recording, transcripts, video editing and audio cleanup all serve that one
-job: getting your ideas across clearly. Yap gives **Claude Code, Codex, or any
-agent harness** the eyes, ears and hands to work with video. Your agent decides
-what makes your point land.
+**[Get started →](#get-started)** Your agent can install it for you.
 
-**Just yap. Your agent makes it a great video.**
+## Show your agent
+
+Instead of typing three paragraphs about a bug or a design, show it. Four keys:
+
+1. **⌥⇧S** starts recording the display under your pointer. No countdown.
+2. **Talk, and point.** Hold **⇧** and move to draw. **⇧-click** drops a
+   numbered pin, and the click still reaches the app. **⌥⇧Z** undoes the last
+   mark; **⌥⇧X** cancels.
+3. **⌥⇧S** again finishes it.
+4. **⌥⇧V** pastes a short prompt into your agent: the recording ID, what was
+   captured (screen, camera, microphone), and your marks, pins and clicks with
+   their times and the window each was on.
+
+Your agent takes it from there with the yap CLI and skill: it reads what you
+said, finds the frame where you said "this", sees what you pinned, and acts on
+it. Every recording is transcribed in the background, so it's ready by the time
+you paste. Hotkeys can be rebound in Settings. Yap needs no extra permission for
+this; grant Accessibility and ⌥⇧V pastes for you, otherwise it copies the prompt.
+
+Bug reports, design feedback, a pull request reviewed out loud, "watch me do it,
+then do it for me".
+
+## Show people
+
+When the audience is people, your agent turns one rough take into something worth
+their time: cut to the point, captioned, cleaned up and in the right format for
+where it's going.
+
+- **Messages for coworkers.** Async updates, walkthroughs and code-review
+  narrations that come back tight, with chapters, a summary and captions.
+- **Launch and demo videos.** One take of you showing the product becomes a
+  polished demo, cut per audience or per platform.
+- **Podcasts and talks.** Clean audio, consistent loudness, highlight clips with
+  captions, and transcripts your agent can turn into show notes or a post.
+- **You, at your best.** Rehearse a pitch and get evidence on pacing and filler
+  words, keep your best take, or fix a misspoken word in your own voice.
+
+The full picture, including what's possible today, what isn't yet and how Yap
+compares with the alternatives, is in [positioning](positioning.md).
 
 ## Yap is an agent toolkit, not a video editor
 
@@ -40,57 +75,39 @@ decide what to cut, what to keep or what should look good. That boundary is
 intentional. It keeps Yap composable, lets each agent follow the user's context
 and taste, and makes every decision explicit, reviewable and undoable.
 
-**[Get started →](#get-started)** Your agent can install it for you.
-
-## Communication in both directions
-
-**Show your agent.** Instead of typing three paragraphs about a bug or a design,
-record it and talk. Your agent sees what was on screen at the exact moment you
-said "this", hears what you meant, and acts on it.
-
-**Get your point across.** When the audience is people, your agent turns your
-rough take into something worth their time: cut to the point, captioned, cleaned
-up and in the right format for where it's going.
-
-## What people make with it
-
-- **Messages for coworkers.** Async updates, walkthroughs and code-review
-  narrations that come back tight, with chapters, a summary and captions.
-- **Bug reports and feedback for your agent.** "Watch me do this" becomes
-  instructions your agent can follow.
-- **Launch and demo videos.** One take of you showing the product becomes a
-  polished demo, cut per audience or per platform.
-- **Podcasts and talks.** Clean audio, consistent loudness, highlight clips with
-  captions, and transcripts your agent can turn into show notes or a post.
-- **You, at your best.** Rehearse a pitch and get evidence on pacing and filler
-  words, keep your best take, or fix a misspoken word in your own voice.
-
-The full picture, including what's possible today and what isn't yet, is in
-[positioning](positioning.md).
-
 ## How it works
 
 <p align="center">
   <img src=".github/readme/01-you-ask-agent-edits.png" alt="A person hands over a note in plain words while Xiaohei cuts the recorded film with huge scissors" width="85%">
 </p>
 
-1. **Yap.** Record from the menu bar (screen, microphone, system audio and an
-   optional camera), let your agent start a recording, or hand it a video you
-   already have.
-2. **Ask** your agent in plain words, for example "Cut this into a tight 60-second
-   demo with captions" or "Here's the bug, fix it." Attach a reference video if you
-   have a style in mind.
-3. **Your agent makes it clear.** It reads the transcript, looks at the frames and
-   listens to the audio to understand what you said. Then it acts on it, or cuts
-   around the stumbles, adds what you asked for, reviews the result and exports
-   the final video.
+1. **Yap.** Press ⌥⇧S, or record from the menu bar (screen, microphone, system
+   audio and an optional camera), let your agent start a recording, or hand it a
+   video you already have. Recordings and imports are transcribed automatically.
+2. **Ask** your agent in plain words. Paste the ⌥⇧V prompt and say "fix this",
+   or ask for "a tight 60-second demo with captions". Attach a reference video if
+   you have a style in mind.
+3. **Your agent gets it.** It reads the transcript, looks at the frames, your
+   marks and pins, and listens to the audio to understand what you meant. Then it
+   acts on it: fixes the bug you showed, or cuts around the stumbles, adds what
+   you asked for, reviews the result and exports the final video.
 
 Don't like a choice? Say so in one more sentence. Every edit is a revision you
 can undo.
 
 ## Things you can ask for
 
-> "Watch this recording of the checkout bug and fix it."
+**Show your agent**
+
+> "Here's the checkout bug. Fix the button I pinned."
+
+> "Watch me do this, then write a script that does it for me."
+
+> "I drew on the three spacing issues. Fix them in the CSS."
+
+> "Here's my review of the diff. Address each thing I pointed at."
+
+**Show people**
 
 > "Tighten this into a 60-second product demo. Cut the dead air and false starts."
 
@@ -151,7 +168,7 @@ and say:
 > Install Yap (the Mac app, which sets up the yap CLI and skill) by following
 > https://justyap.io/llms.txt
 
-Then record something and ask for the video you want.
+Then press ⌥⇧S, show your agent something, or ask for the video you want.
 
 Your agent installs the app; the app installs the rest. The [agent setup](#agent-setup)
 below is what it follows.

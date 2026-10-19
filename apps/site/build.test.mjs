@@ -48,13 +48,10 @@ test("the product page publishes complete crawler and social metadata", () => {
   assert.match(page, /<meta name="robots" content="index, follow">/);
   assert.match(
     page,
-    /<meta property="og:image:alt" content="Yap — agent-assisted video editing on Mac">/,
+    /<meta property="og:image:alt" content="Yap — just yap\. Your agent gets it\.">/,
   );
   assert.match(page, /<meta property="og:image" content="https:\/\/yap\.example\/og\.png">/);
-  assert.match(
-    page,
-    /<meta name="twitter:title" content="Yap — just yap; your agent makes it a great video">/,
-  );
+  assert.match(page, /<meta name="twitter:title" content="Yap — just yap\. Your agent gets it\.">/);
   assert.match(page, /<script type="application\/ld\+json">[\s\S]*"@type":"SoftwareApplication"/);
   assert.match(page, /"operatingSystem":"macOS"/);
 });

@@ -64,7 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let controller = CaptureController(fixtureWindow: fixture)
         self.controller = controller
-        controls?.excludeOwnWindowsFromTake = { [weak controller] in await controller?.excludeOwnWindows() ?? false }
         controller.onCameraFrame = { [weak self] frame in
             Task { @MainActor [weak self] in self?.controls?.receiveCameraFrame(frame) }
         }

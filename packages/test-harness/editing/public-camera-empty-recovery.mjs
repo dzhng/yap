@@ -34,7 +34,7 @@ try {
     .call("capture.start", request)
     .catch((error) => ({ failure: error.message }));
   report.inspection = await poll(
-    () => service.fixtureCall("inspect.open"),
+    () => service.fixtureCall("inspect"),
     (value) => value.requests.length === 1,
     "preparation held",
   );
@@ -82,7 +82,7 @@ try {
   assert.deepEqual((await service.call("project.list", {})).projects, []);
   const replay = await service.call("capture.start", request);
   assert.deepEqual(replay, report.recovered);
-  assert.equal((await service.fixtureCall("inspect.open")).requests.length, 0);
+  assert.equal((await service.fixtureCall("inspect")).requests.length, 0);
   report.passed = true;
 } finally {
   if (service) {

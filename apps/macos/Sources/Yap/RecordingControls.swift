@@ -82,10 +82,7 @@ final class RecordingControls: NSObject {
         preview: { [weak self] in self?.preview.open($0) },
         export: { [weak self] in self?.exports.export($0, kind: $1) })
     private lazy var overlay = RecordingOverlayPanel(
-        preferences: preferences, perform: { [weak self] action in self?.perform(action) },
-        excludeFromTake: { [weak self] in await self?.excludeOwnWindowsFromTake() ?? false })
-    /// Asks the capture session to leave this app's windows out of the running take.
-    var excludeOwnWindowsFromTake: @MainActor () async -> Bool = { false }
+        preferences: preferences, perform: { [weak self] action in self?.perform(action) })
     private let recordingPreview = PreviewWindow()
     private lazy var countdown = StartCountdown(shortcuts: shortcuts)
     private lazy var settings = SettingsWindow(
@@ -248,9 +245,6 @@ final class RecordingControls: NSObject {
                 render()
                 return
             }
-            if sourceMode == .cameraOnly, source != .cameraOnly, !state.selection.cameraOn {
-                state.selection.cameraDeviceId = nil
-            }
             emptySourceMode = source
             switch source {
             case .display: state.selection.source = state.sources.displays.first.map { .display($0) }
@@ -260,14 +254,11 @@ final class RecordingControls: NSObject {
                 perform(.selectRegion)
             case .cameraOnly:
                 state.selection.source = .camera
-                state.selectDefaultCameraIfNeeded(enabled: true)
             }
             render()
         case .camera(let id):
             guard !state.isLive, !state.counting, !updateFenced else { return }
-            if let id, !state.sources.cameras.contains(where: { $0.id == id }) { return }
-            state.selection.cameraDeviceId = id
-            if sourceMode != .cameraOnly { state.selection.cameraOn = id != nil }
+            state.chooseCamera(id)
             render()
         case .countdown(let enabled):
             guard !state.isLive, !state.counting, !updateFenced else { return }
@@ -420,7 +411,7 @@ final class RecordingControls: NSObject {
         // Asking to start while the count runs is asking to stop it: the menu says so, and this is
         // the only way to abandon a count for somebody whose Escape key this app could not hold.
         if countdown.isCounting { return countdown.abandon() }
-        guard !state.selection.cameraOn || state.selection.cameraDeviceId != nil else {
+        guard !state.cameraBlocksStart else {
             state.failure = "Choose a camera before recording."
             showCaptureIfClosed()
             return
@@ -706,7 +697,6 @@ final class RecordingControls: NSObject {
                     }, cameras: answer.cameras.map {
                         ControlsState.Camera(id: $0.cameraId, name: $0.name, isDefault: $0.isDefault ?? false)
                     }))
-            state.selectDefaultCameraIfNeeded(enabled: state.selection.cameraOn || sourceMode == .cameraOnly)
         } catch {
             state.sourcesUnavailable(description: error.localizedDescription)
         }
@@ -739,7 +729,6 @@ final class RecordingControls: NSObject {
         if !camera.recording { cameraPreviewImage = nil }
         overlay.updateCamera(camera, previewShown: preferences.showCameraPreview)
         overlay.updateGlass(preferences.controlsGlass)
-        overlay.updateCaptureVisibility(preferences.showControlsInScreenshots)
         overlay.updatePreview(cameraPreviewImage)
         settings.update(state, shortcuts: shortcuts)
         showStatusItem()
@@ -930,10 +919,14 @@ final class RecordingControls: NSObject {
         case .cameraOnly: selectedSource = -1
         }
         if sources.isEmpty { sources = [.init(title: mode == .window ? "No windows available" : "No displays available", intent: .chooseSource(mode))] }
-        var cameras: [CaptureViewInput.Choice] = [.init(title: mode == .cameraOnly || state.selection.cameraOn ? "Choose a camera…" : "Camera off", intent: .camera(nil))]
-        cameras += state.sources.cameras.map { .init(title: $0.name, intent: .camera($0.id)) }
-        var selectedCamera = state.selection.cameraDeviceId.flatMap { id in state.sources.cameras.firstIndex { $0.id == id }.map { $0 + 1 } } ?? 0
-        if let id = state.selection.cameraDeviceId, selectedCamera == 0 {
+        // The menu only says which camera; the switch beside it says whether it records. A Mac with
+        // no camera shows that in the menu, and the row is disabled.
+        var cameras: [CaptureViewInput.Choice] = state.sources.cameras.map { .init(title: $0.name, intent: .camera($0.id)) }
+        var selectedCamera = state.selection.cameraDeviceId.flatMap { id in state.sources.cameras.firstIndex { $0.id == id } } ?? -1
+        if !state.cameraAvailable {
+            cameras = [.init(title: "No camera", intent: .controls(.setCamera(false)))]
+            selectedCamera = 0
+        } else if let id = state.selection.cameraDeviceId, selectedCamera < 0 {
             cameras.append(.init(title: "Selected camera unavailable", intent: .camera(id)))
             selectedCamera = cameras.count - 1
         }
@@ -945,17 +938,23 @@ final class RecordingControls: NSObject {
                 microphones.append(.init(title: "\(name) — unavailable", intent: .controls(.selectMicrophone(id))))
             }
         }
-        let selectedMic: Int
+        var selectedMic: Int
         if case .device(let id, _) = state.selection.microphone { selectedMic = microphones.firstIndex { $0.intent == .controls(.selectMicrophone(id)) }! }
         else { selectedMic = 0 }
+        if !state.microphoneAvailable {
+            microphones = [.init(title: "No microphone", intent: .controls(.disableMicrophone))]
+            selectedMic = 0
+        }
         let transport = CapturePresentation.transport(for: state)
-        let missingCamera = !state.isLive && !state.counting && state.selection.cameraOn && state.selection.cameraDeviceId == nil
+        let missingCamera = !state.isLive && !state.counting && state.cameraBlocksStart
         let liveCamera = RecordingOverlay.camera(for: state)
         var input = CaptureViewInput(selectedSource: mode, selectedSourceChoice: selectedSource,
             sourceChoices: sources, cameraChoices: cameras, selectedCamera: selectedCamera,
-            cameraOn: mode == .cameraOnly || (state.isLive ? liveCamera.recording : state.selection.cameraOn),
+            cameraOn: state.isLive ? liveCamera.recording : state.cameraAvailable && (mode == .cameraOnly || state.selection.cameraOn),
+            cameraAvailable: state.cameraAvailable,
             microphoneChoices: microphones, selectedMicrophone: selectedMic,
-            microphoneOn: state.selection.microphone != .off, systemAudio: state.selection.systemAudio,
+            microphoneOn: state.microphoneAvailable && state.selection.microphone != .off,
+            microphoneAvailable: state.microphoneAvailable, systemAudio: state.selection.systemAudio,
             countdown: preferences.countdownBeforeRecording,
             inputsEnabled: !state.isLive && !state.counting && !updateFenced,
             startEnabled: transport[0].enabled && !missingCamera && !updateFenced,
