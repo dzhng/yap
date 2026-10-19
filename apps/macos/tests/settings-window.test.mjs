@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { callLocal } from "@yap/client";
 import { controlsProbe, launchReady, setDefault, temporary, waitFor } from "./harness.mjs";
 
 const title = "Yap Settings";
@@ -24,7 +25,7 @@ async function launchWith(preferences = []) {
   const send = controlsProbe(commands);
   const settings = async () =>
     (await send({ do: "windows" })).windows.find((window) => window.title === title);
-  return { instance, send, settings };
+  return { home, instance, send, settings };
 }
 
 function find(rows, item) {
@@ -70,3 +71,30 @@ test(
     await instance.exited;
   },
 );
+
+test("shortcut fields apply a live binding and refuse a duplicate in Yap", { timeout: 60_000 }, async () => {
+  const { home, instance } = await launchWith();
+  const socket = join(home, "run", "app.sock");
+  await waitFor(() => existsSync(socket), 20_000);
+  const rebound = await callLocal(socket, {
+    id: "settings-rebind",
+    operation: "shortcuts.set",
+    params: {
+      bindings: { "capture.startOrStop": { keyCode: 2, modifiers: 2560, label: "⌥⇧D" } },
+    },
+  });
+  assert.equal(rebound.ok, true, JSON.stringify(rebound));
+  assert.equal(rebound.data.bindings["capture.startOrStop"].label, "⌥⇧D");
+
+  const duplicate = await callLocal(socket, {
+    id: "settings-duplicate",
+    operation: "shortcuts.set",
+    params: {
+      bindings: { "capture.startOrStop": { keyCode: 9, modifiers: 2560, label: "⌥⇧V" } },
+    },
+  });
+  assert.equal(duplicate.ok, false, JSON.stringify(duplicate));
+  assert.equal(duplicate.error.code, "DUPLICATE_SHORTCUT");
+  instance.kill("SIGTERM");
+  await instance.exited;
+});

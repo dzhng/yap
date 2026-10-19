@@ -19,6 +19,33 @@ func runShortcutTests() {
     print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
 }
 
+func runShortcutPresentationTests() {
+    let recording = ShortcutBindings.defaults[.undoMark]!
+    precondition(
+        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: false)
+            == .active,
+        "An idle recording-lifetime shortcut has no warning state")
+    precondition(
+        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: true)
+            == .refusedByMacOS,
+        "An unavailable shortcut says macOS refused it")
+    precondition(
+        ShortcutPresentation.state(for: recording, registered: true, recording: true, unavailable: false)
+            == .active,
+        "A registered shortcut says it is active")
+    precondition(
+        ShortcutPresentation.label(keyCode: 1, modifiers: 2_560, key: "s") == "⌥⇧S",
+        "A captured key gets the same modifier glyphs as the defaults")
+    precondition(
+        ShortcutPresentation.label(keyCode: 42, modifiers: 0, key: "") == "Key 42",
+        "An unnamed captured key includes its physical key code")
+    precondition(
+        ShortcutPresentation.statusTitle(.duplicateInYap) == "Duplicate in Yap"
+            && ShortcutPresentation.statusTitle(.refusedByMacOS) == "Refused by macOS",
+        "Rejected shortcut states use their Settings wording")
+    print("PASS shortcut presentation distinguishes active, refused and duplicate states")
+}
+
 /// What macOS itself holds, read the way it stores it.
 func runSystemShortcutTests() {
     // Spotlight as this Mac writes it: command-space, switched on.

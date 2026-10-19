@@ -36,6 +36,7 @@ final class RecordingControls: NSObject {
     private var bindings = ShortcutBindings.defaults
     private var held: Set<String> = []
     private var shortcutsRecording = false
+    private var shortcutsSuspended = false
     private weak var host: ServiceHost?
     var updateProgress: (() -> Void)?
     private var updateFenced = false
@@ -93,6 +94,13 @@ final class RecordingControls: NSObject {
         preferences: preferences,
         perform: { [weak self] action in self?.perform(action) },
         update: { [weak self] operation, params in self?.sendUpdate(operation, params) },
+        suspendShortcuts: { [weak self] in self?.suspendShortcutsForSettings() },
+        resumeShortcuts: { [weak self] in self?.resumeShortcutsForSettings() },
+        setShortcut: { [weak self] action, shortcut in
+            guard let self else { return false }
+            if case .success = self.setShortcutFromSettings(action, shortcut) { return true }
+            return false
+        },
         refreshPermissions: { [weak self] in
             self?.readPermissions()
             self?.render()
@@ -122,7 +130,6 @@ final class RecordingControls: NSObject {
         state = ControlsState(recording: preferences.recording)
         let overridePath = GlobalShortcuts.overridePath(home: home)
         super.init()
-        state.shortcutOverridePath = overridePath
         bindings.merge(
             ShortcutBindings.decode(FileManager.default.contents(atPath: overridePath))) {
                 _, replacement in replacement
@@ -187,8 +194,9 @@ final class RecordingControls: NSObject {
                 decoded, recording: shortcutsRecording,
                 perform: { [weak self] action in self?.perform(action) })
             bindings = decoded
-            held = outcome.held
+            held = shortcutsSuspended ? [] : outcome.held
             state.unavailableShortcuts = outcome.unavailable
+            if shortcutsSuspended { shortcuts.suspend() }
             let path = GlobalShortcuts.overridePath(home: home)
             try FileManager.default.createDirectory(
                 atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
@@ -206,6 +214,45 @@ final class RecordingControls: NSObject {
         } catch {
             return .failure(ServiceFailure(code: "SHORTCUTS_WRITE_FAILED", message: error.localizedDescription))
         }
+    }
+
+    /// Settings submits through the same public handler as the CLI, so validation, registration,
+    /// persistence and the response shown in the window cannot drift apart.
+    private func setShortcutFromSettings(
+        _ action: ControlsAction, _ shortcut: Shortcut
+    ) -> Result<Data, ServiceFailure> {
+        var next = bindings
+        let lifetime = next[action]?.lifetime ?? .app
+        next[action] = ShortcutBindings.Binding(shortcut: shortcut, lifetime: lifetime)
+        guard let encoded = ShortcutBindings.encode(next),
+            let object = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any],
+            let stated = object["bindings"] as? [String: Any],
+            let params = try? JSONSerialization.data(withJSONObject: ["bindings": stated])
+        else {
+            return .failure(ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts."))
+        }
+        return handleShortcuts("shortcuts.set", params)
+    }
+
+    private func suspendShortcutsForSettings() {
+        shortcutsSuspended = true
+        shortcuts.suspend()
+    }
+
+    private func resumeShortcutsForSettings() {
+        shortcutsSuspended = false
+        do {
+            let recording = state.isLive || state.counting
+            let outcome = try shortcuts.apply(
+                bindings, recording: recording,
+                perform: { [weak self] action in self?.perform(action) })
+            held = outcome.held
+            state.unavailableShortcuts = outcome.unavailable
+            shortcutsRecording = recording
+        } catch let error {
+            state.failure = "Duplicate shortcuts: \(error)"
+        }
+        render()
     }
 
     /// Service-initiated inspect.open uses the same PreviewController as Library actions.
@@ -804,6 +851,7 @@ final class RecordingControls: NSObject {
     }
 
     private func syncShortcutLifetime() {
+        guard !shortcutsSuspended else { return }
         let recording = state.isLive || state.counting
         guard recording != shortcutsRecording else { return }
         do {
