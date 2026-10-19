@@ -40,10 +40,13 @@ type Service = {
 };
 
 /** Starts the real packaged entrypoint as its own process, outside the repository. */
-async function startService(home: string): Promise<Service> {
+async function startService(
+  home: string,
+  environment: Record<string, string> = {},
+): Promise<Service> {
   const child = spawn(process.execPath, [entry], {
     cwd: "/",
-    env: { ...process.env, YAP_HOME: home, YAP_AUTO_PREPARE_MODELS: "0" },
+    env: { ...process.env, YAP_HOME: home, YAP_AUTO_PREPARE_MODELS: "0", ...environment },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const messages: ControlMessage[] = [];
@@ -149,6 +152,27 @@ async function temporaryHome(): Promise<string> {
 function results(messages: ControlMessage[]) {
   return messages.flatMap((message) => (message.event === "result" ? [message.response] : []));
 }
+
+it("starts when automatic model preparation settles at once", async () => {
+  const home = await temporaryHome();
+  const first = await startService(home);
+  expect((await first.awaiting(1))[0]).toMatchObject({ event: "started" });
+  first.closeInput();
+  expect(await first.exit).toEqual({ code: 0, signal: null });
+  // A removed model is skipped, so preparing the automatic models settles within a few ticks,
+  // as it does on a Mac whose models are already installed.
+  const catalog = new DatabaseSync(join(home, "library/catalog.sqlite"));
+  catalog
+    .prepare(
+      "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs) VALUES('parakeet',?,0,0,0)",
+    )
+    .run(randomUUID());
+  catalog.close();
+  const service = await startService(home, { YAP_AUTO_PREPARE_MODELS: "1" });
+  expect((await service.awaiting(1))[0]).toMatchObject({ event: "started" });
+  service.request("health");
+  expect(await service.answered("health")).toMatchObject({ ok: true });
+});
 
 it("prepares a private replacement permit and reopens only for its current owner", async () => {
   const service = await startService(await temporaryHome());

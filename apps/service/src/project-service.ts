@@ -375,6 +375,15 @@ export async function startProjectService(options: {
         throw new CatalogError("NOT_FOUND", "Unsupported source evidence owner");
       acquisitions.intent(identity.owner.id);
     });
+    // Work that settles during startup feeds the backlog; it drains once transcription exists.
+    let transcriptionStarted = false;
+    const transcriptBacklog = new TranscriptBacklog(catalog, {
+      readiness: () => transcriptionStarted && transcripts.recognitionReadiness().state === "ready",
+      status: (selection) => transcripts.sourceStatus(selection),
+      submit: (selection) => transcripts.prepareSource(selection, "background"),
+      retry: (selection) => transcripts.retrySource(selection),
+      report: (error) => console.error(error),
+    });
     const acquisitionImports = new AcquisitionImporter(
       catalog,
       acquisitions,
@@ -387,13 +396,13 @@ export async function startProjectService(options: {
             .get(binding.assetId)
             .streams.find((candidate) => candidate.id === binding.streamId);
           if (stream?.kind !== "audio" || !options.autoTranscribe) continue;
-          transcriptBacklog?.enqueue({
+          transcriptBacklog.enqueue({
             assetId: binding.assetId,
             streamId: binding.streamId,
             acquisitionId: acquisition.id,
           });
         }
-        transcriptBacklog?.wake();
+        transcriptBacklog.wake();
       },
     );
     const capture = new CaptureSourceRead(assets, acquisitions, evidence);
@@ -431,7 +440,7 @@ export async function startProjectService(options: {
       modelPreparations.add(automaticModels);
       void automaticModels.finally(() => {
         modelPreparations.delete(automaticModels);
-        transcriptBacklog?.wake();
+        transcriptBacklog.wake();
         admission.progress();
       });
     }
@@ -539,7 +548,6 @@ export async function startProjectService(options: {
     let projectEvidence: ProjectEvidenceInspection;
     let mediaAudio: MediaAudioInspection;
     let preparedAudio: PreparedAudioStore;
-    let transcriptBacklog: TranscriptBacklog;
     let extractedAudio: AudioExtraction;
     let renderedSpeech: RenderedSpeech;
     let generatedVoice: VoiceGenerationJobs;
@@ -563,7 +571,7 @@ export async function startProjectService(options: {
       onCapacity: () => {
         resumeCaptureSources();
         for (const error of exports?.resumeRecovery() ?? []) console.error(error);
-        transcriptBacklog?.wake();
+        transcriptBacklog.wake();
       },
       execute: async ({ job, signal }) => {
         if (job.artifact === "asset-conversion") return convertedAssets.execute({ job, signal });
@@ -728,13 +736,7 @@ export async function startProjectService(options: {
           }),
         ) as SpeechTranscriptionReceipt,
     });
-    transcriptBacklog = new TranscriptBacklog(catalog, {
-      readiness: () => transcripts.recognitionReadiness().state === "ready",
-      status: (selection) => transcripts.sourceStatus(selection),
-      submit: (selection) => transcripts.prepareSource(selection, "background"),
-      retry: (selection) => transcripts.retrySource(selection),
-      report: (error) => console.error(error),
-    });
+    transcriptionStarted = true;
     transcriptBacklog.drain();
     /** The review model's status, as work with no job of its own. */
     const ensureReviewModel = () => {
