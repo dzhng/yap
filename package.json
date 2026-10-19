@@ -32,7 +32,8 @@
     "lab:pause-audio": "bun run --cwd packages/test-harness lab:pause-audio",
     "lab:exports": "bun run build && bun run --cwd packages/test-harness lab:exports",
     "lab:personal-release": "node packages/test-harness/personal-release.mjs",
-    "test:tools": "node --test scripts/*.test.mjs presets/kit/*.test.mjs helpers/ffmpeg/*.test.mjs helpers/model-runtime/*.test.mjs helpers/speaker/*.test.mjs helpers/alignment/*.test.mjs && node scripts/presets-index.mjs --check"
+    "test:tools": "node --test scripts/*.test.mjs presets/kit/*.test.mjs helpers/ffmpeg/*.test.mjs helpers/model-runtime/*.test.mjs helpers/speaker/*.test.mjs helpers/alignment/*.test.mjs && node scripts/presets-index.mjs --check",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
@@ -40,10 +41,16 @@
     "oxlint": "1.83.0",
     "turbo": "2.10.13",
     "typescript": "7.0.2",
-    "vitest": "5.0.0"
+    "vitest": "5.0.0",
+    "linguist-languages": "9.5.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.0"
   },
   "engines": {
     "node": ">=24 <25"
   },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "bun@1.3.14",
+  "lint-staged": {
+    "*": "node scripts/check-file-size.mjs"
+  }
 }

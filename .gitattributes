@@ -13,3 +13,8 @@ fixtures/launch-video/**/*.mov filter=lfs diff=lfs merge=lfs -text
 fixtures/launch-video/**/*.wav filter=lfs diff=lfs merge=lfs -text
 fixtures/launch-video/session/**/*.MP4 filter=lfs diff=lfs merge=lfs -text
 fixtures/launch-video/session/**/*.jsonl filter=lfs diff=lfs merge=lfs -text
+
+# Ratchet exclusions: generated and vendored source is maintained by its producer.
+**/generated/** linguist-generated
+**/*.generated.* linguist-generated
+**/vendor/** linguist-vendored
