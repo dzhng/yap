@@ -107,8 +107,8 @@ public final class CaptureJournal {
 
     package func recordPCMOrigin(_ origin: JournalPCMOrigin, placedPauses: [PauseEvent] = []) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
         }
         try next.origin(origin)
         try append("pcmOrigin", data: origin, durable: true)
@@ -117,8 +117,8 @@ public final class CaptureJournal {
     }
     package func recordPCMTrack(_ track: JournalPCMTrack) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
         }
         try next.track(track, header: header)
         try append("pcmTrack", data: track, durable: true)
@@ -126,8 +126,8 @@ public final class CaptureJournal {
     }
     package func recordPCMAppend(_ accepted: JournalPCMAppend) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard header.schemaVersion == 2 || header.schemaVersion == 3 else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2 or schema3.")
         }
         try next.append(accepted)
         try append("pcmAppend", data: accepted)
@@ -191,6 +191,29 @@ public final class CaptureJournal {
         try append(
             "displaySpace",
             data: JournalDisplaySpace(hostUs: hostUs, zeroOriginHeight: zeroOriginHeight))
+    }
+    /// Appends one capture-time mark. Schema 3 is the first journal version that carries marks.
+    /// A long stroke is decimated only as needed to keep this single record below the journal cap.
+    public func recordMark(_ mark: JournalMark) throws {
+        guard header.schemaVersion == 3 else {
+            throw CaptureFailure("INVALID_JOURNAL", "Marks require schema3.")
+        }
+        var bounded = mark
+        while true {
+            do {
+                try append("mark", data: bounded)
+                return
+            } catch let failure as CaptureFailure where failure.code == "JOURNAL_FAILED" && bounded.points.count > 2 {
+                let retained = bounded.points.enumerated().compactMap { index, point in
+                    index == 0 || index == bounded.points.count - 1 || index.isMultiple(of: 2) ? point : nil
+                }
+                bounded = JournalMark(hostUs: bounded.hostUs, sourceUs: bounded.sourceUs,
+                    epoch: bounded.epoch, id: bounded.id, kind: bounded.kind, pin: bounded.pin,
+                    points: retained, window: bounded.window, retracts: bounded.retracts)
+            } catch {
+                throw error
+            }
+        }
     }
     /// Records one device transition this take reports to its service and hands back the journal
     /// sequence that carries it. The journal is the single producer of these numbers, so a live
@@ -290,12 +313,14 @@ public final class CaptureJournal {
         samples: ([CursorSample]) throws -> Void = { _ in },
         displaySpace: (JournalDisplaySpace) throws -> Void = { _ in },
         pause: (PauseEvent) throws -> Void = { _ in },
-        audioAcquired: (JournalAudioSamples) throws -> Void = { _ in }
+        audioAcquired: (JournalAudioSamples) throws -> Void = { _ in },
+        mark: (JournalMark) throws -> Void = { _ in }
     ) throws -> CaptureJournalSummary {
-        try readEvidence(
+        let layout = try CaptureJournal.layout(directory: directory)
+        return try readEvidence(
             directory: directory, maximumBytes: nil, retainTiming: false,
             geometry: geometry, samples: samples, displaySpace: displaySpace,
-            pause: pause, audioAcquired: audioAcquired)
+            pause: pause, audioAcquired: audioAcquired, mark: mark, layout: layout)
     }
 
     /// Mapping evidence only. It is not proof of committed media or acquired source support.
@@ -306,10 +331,11 @@ public final class CaptureJournal {
         track: (JournalPCMTrack) throws -> Void = { _ in },
         accepted: @escaping (JournalPCMAppend) throws -> Void
     ) throws -> CaptureJournalSummary {
-        try readEvidence(
+        let layout = try CaptureJournal.layout(directory: directory)
+        return try readEvidence(
             directory: directory, maximumBytes: nil, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
-            pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted, through: prefix, layout: 2)
+            pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted, through: prefix, layout: layout)
     }
 
     /// Callbacks are provisional until this returns: discard staged work on prefix or identity failure.
@@ -320,11 +346,12 @@ public final class CaptureJournal {
         accepted: @escaping (JournalPCMAppend) throws -> Void
     ) throws -> CaptureJournalSummary {
         try lease.check()
+        let layout = try CaptureJournal.layout(directory: lease.directory)
         let summary = try readEvidence(
             directory: lease.directory, maximumBytes: nil, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted,
-            through: prefix, descriptor: lease.descriptor, layout: 2)
+            through: prefix, descriptor: lease.descriptor, layout: layout)
         try lease.check()
         return summary
     }
@@ -337,6 +364,7 @@ public final class CaptureJournal {
         displaySpace: (JournalDisplaySpace) throws -> Void,
         pause: (PauseEvent) throws -> Void = { _ in },
         audioAcquired: (JournalAudioSamples) throws -> Void = { _ in },
+        mark: (JournalMark) throws -> Void = { _ in },
         pcmOrigin: (JournalPCMOrigin) throws -> Void = { _ in },
         pcmTrack: (JournalPCMTrack) throws -> Void = { _ in },
         pcmAppend: ((JournalPCMAppend) throws -> Void)? = nil, retainPrefix: Bool = false,
@@ -386,23 +414,27 @@ public final class CaptureJournal {
                 }
                 switch record.event {
                 case .pcmOrigin(let origin):
-                    guard schema == 2 else {
+                    guard schema == 2 || schema == 3 else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM origin.")
                     }
                     try pcm.origin(origin)
                 case .pcmTrack(let track):
-                    guard schema == 2, let header = summary.header else {
+                    guard (schema == 2 || schema == 3), let header = summary.header else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM track.")
                     }
                     try pcm.track(track, header: header)
                 case .pcmAppend(let append):
-                    guard schema == 2 else {
+                    guard schema == 2 || schema == 3 else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM append.")
                     }
                     try pcm.append(append)
                 case .origin, .audioSamples, .other:
                     guard schema == 1 else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected legacy journal event.")
+                    }
+                case .mark(let mark):
+                    guard schema == 3, validMark(mark) else {
+                        throw CaptureFailure("INVALID_JOURNAL", "Invalid schema3 mark.")
                     }
                 default: break
                 }
@@ -453,6 +485,8 @@ public final class CaptureJournal {
             case .displaySpace(let space):
                 summary.zeroOriginHeight = space.zeroOriginHeight
                 try displaySpace(space)
+            case .mark(let observed):
+                try mark(observed)
             case .lifecycle(let lifecycle): summary.lastLifecycle = lifecycle
             case .finished(let finished):
                 summary.finished = true
@@ -540,6 +574,7 @@ private struct JournalEntry: Decodable {
         case geometry(JournalGeometry)
         case cursorSamples([CursorSample])
         case displaySpace(JournalDisplaySpace)
+        case mark(JournalMark)
         case lifecycle(JournalLifecycle)
         case finished(JournalFinished)
         case other
@@ -572,12 +607,12 @@ private struct JournalEntry: Decodable {
         switch name {
         case "header":
             let header = try payload(CaptureJournalHeader.self)
-            guard [1, 2].contains(header.schemaVersion) else { throw invalid("Invalid journal header.") }
+            guard [1, 2, 3].contains(header.schemaVersion) else { throw invalid("Invalid journal header.") }
             event = .header(header)
         case "pcmOrigin": event = .pcmOrigin(try payload(JournalPCMOrigin.self))
         case "pcmTrack": event = .pcmTrack(try payload(JournalPCMTrack.self))
         case "pcmAppend": event = .pcmAppend(try payload(JournalPCMAppend.self))
-        case "trackStarted" where decoder.userInfo[.journalSchema] as? Int == 2:
+        case "trackStarted" where decoder.userInfo[.journalSchema] as? Int == 2 || decoder.userInfo[.journalSchema] as? Int == 3:
             let track = try payload(JournalTrackStart.self)
             guard track.role == "video", track.file == "video.mov", track.firstSourceUs >= 0 else {
                 throw invalid("Invalid schema2 video track.")
@@ -614,6 +649,7 @@ private struct JournalEntry: Decodable {
                 finished.state != "complete" || finished.failure == nil
             else { throw invalid("Invalid journal completion.") }
             event = .finished(finished)
+        case "mark": event = .mark(try payload(JournalMark.self))
         default: event = .other
         }
     }
@@ -675,6 +711,61 @@ struct JournalCursorSamples: Codable {
 public struct JournalDisplaySpace: Codable, Sendable {
     public let hostUs: Int64
     public let zeroOriginHeight: Double
+}
+
+public struct JournalMarkPoint: Codable, Sendable, Equatable {
+    public let x: Double
+    public let y: Double
+    public let hostUs: Int64
+    public init(x: Double, y: Double, hostUs: Int64) {
+        self.x = x; self.y = y; self.hostUs = hostUs
+    }
+}
+
+public struct JournalMarkWindow: Codable, Sendable, Equatable {
+    public let app: String
+    public let title: String
+    public let bounds: GeometryRect
+    public init(app: String, title: String, bounds: GeometryRect) {
+        self.app = app; self.title = title; self.bounds = bounds
+    }
+}
+
+public struct JournalMark: Codable, Sendable, Equatable {
+    public let hostUs: Int64
+    public let sourceUs: Int64
+    public let epoch: Int
+    public let id: String
+    public let kind: String
+    public let pin: Int?
+    public let points: [JournalMarkPoint]
+    public let window: JournalMarkWindow?
+    public let retracts: String?
+    public init(
+        hostUs: Int64, sourceUs: Int64, epoch: Int, id: String, kind: String, pin: Int? = nil,
+        points: [JournalMarkPoint], window: JournalMarkWindow? = nil, retracts: String? = nil
+    ) {
+        self.hostUs = hostUs; self.sourceUs = sourceUs; self.epoch = epoch; self.id = id
+        self.kind = kind; self.pin = pin; self.points = points; self.window = window
+        self.retracts = retracts
+    }
+}
+
+private func validMark(_ mark: JournalMark) -> Bool {
+    guard mark.hostUs >= 0, mark.sourceUs >= 0, mark.epoch >= 0,
+        !mark.id.isEmpty, mark.id.utf8.count <= 256,
+        ["stroke", "pin", "click"].contains(mark.kind),
+        mark.retracts == nil || (!mark.retracts!.isEmpty && mark.retracts!.utf8.count <= 256),
+        mark.retracts == nil ? !mark.points.isEmpty : mark.points.isEmpty,
+        mark.kind == "pin" ? (mark.pin ?? 0) > 0 : mark.pin == nil else { return false }
+    guard mark.points.allSatisfy({ $0.hostUs >= 0 && $0.x.isFinite && $0.y.isFinite }) else { return false }
+    if let window = mark.window {
+        guard !window.app.isEmpty, window.app.utf8.count <= 256,
+            window.title.utf8.count <= 4096,
+            window.bounds.x.isFinite, window.bounds.y.isFinite,
+            window.bounds.width.isFinite, window.bounds.height.isFinite else { return false }
+    }
+    return true
 }
 
 /// The finalized capture/video source endpoint, not the wall-clock instant a failure began.

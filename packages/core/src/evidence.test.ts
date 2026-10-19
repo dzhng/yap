@@ -3,12 +3,110 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CaptureStore } from "./capture-store.js";
-import { cameraProofIntervals, recordingEvidenceOwner, SourceEvidenceStore } from "./evidence.js";
+import {
+  cameraProofIntervals,
+  recordingEvidenceOwner,
+  SourceEvidenceStore,
+  sourceEvidenceRecords,
+  validateSourceReceipt,
+  validateRecord,
+} from "./evidence.js";
 const roots: string[] = [];
 const stores: CaptureStore[] = [];
 afterEach(() => {
   stores.splice(0).forEach((s) => s.close());
   roots.splice(0).forEach((p) => rmSync(p, { recursive: true, force: true }));
+});
+
+test("schema 3 mark fixture is accepted and counted in the evidence receipt", () => {
+  const fixture = readFileSync(
+    new URL("../../../fixtures/journal/schema3-marks.jsonl", import.meta.url),
+    "utf8",
+  );
+  const records = fixture
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  const marks = records.filter((record) => record.event === "mark");
+  expect(marks).toHaveLength(4);
+  for (const record of marks) validateRecord("mark", record.data);
+});
+
+test("portable schema 3 receipts retain the acquisition journal contract", () => {
+  expect(() =>
+    validateSourceReceipt(
+      {
+        file: "source.jsonl",
+        journal: "capture.journal.jsonl",
+        header: { sessionID: "schema3-marks", schemaVersion: 3, source: { kind: "display" } },
+        cursorSamples: 0,
+        geometryRecords: 2,
+        displaySpaces: 0,
+        pauseEvents: 1,
+        audioIntervals: 0,
+        markEvents: 4,
+        lastSequence: 9,
+        incompleteTail: false,
+        finished: false,
+        publications: {},
+        bytes: 1,
+      },
+      "schema3-marks",
+    ),
+  ).not.toThrow();
+});
+
+test("normalized mark evidence matches the markEvents receipt count", async () => {
+  const f = fixture();
+  const body = [
+    {
+      event: "mark",
+      data: {
+        hostUs: 10,
+        sourceUs: 0,
+        epoch: 1,
+        id: "m1",
+        kind: "click",
+        points: [{ hostUs: 10, x: 1, y: 2 }],
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 20,
+        sourceUs: 10,
+        epoch: 1,
+        id: "undo",
+        kind: "click",
+        points: [],
+        retracts: "m1",
+      },
+    },
+  ]
+    .map((record) => JSON.stringify(record) + "\n")
+    .join("");
+  writeFileSync(f.file, body);
+  const receipt = {
+    ...f.receipt,
+    header: { sessionID: f.identity.sourceId, schemaVersion: 3, source: { kind: "display" } },
+    cursorSamples: 0,
+    firstCursorSourceUs: null,
+    lastCursorSourceUs: null,
+    markEvents: 2,
+    lastSequence: 2,
+    bytes: Buffer.byteLength(body),
+  };
+  const rows = [];
+  for await (const row of sourceEvidenceRecords(f.file, receipt)) rows.push(row);
+  expect(rows.map((row) => row.event)).toEqual(["mark", "mark"]);
+  await expect(
+    (async () => {
+      const legacy = { ...receipt, header: { sessionID: f.identity.sourceId, schemaVersion: 2 } };
+      for await (const _row of sourceEvidenceRecords(f.file, legacy)) {
+        // The stream must reject before exposing a legacy mark.
+      }
+    })(),
+  ).rejects.toThrow("schema 3");
 });
 function fixture(times = [0, 10, 10, 20]) {
   const root = mkdtempSync(join(tmpdir(), "evidence-"));

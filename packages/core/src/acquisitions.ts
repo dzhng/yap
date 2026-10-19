@@ -1108,7 +1108,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            receipt.header?.schemaVersion === 2 &&
+            (receipt.header?.schemaVersion === 2 || receipt.header?.schemaVersion === 3) &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )

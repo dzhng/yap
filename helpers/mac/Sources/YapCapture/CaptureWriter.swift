@@ -64,7 +64,8 @@ private final class TrackWriter {
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
     private let journal: CaptureJournal
-    package var packedJournalLease: CaptureJournalLease? { journal.schemaVersion == 2 ? journal.lease : nil }
+    package var packedJournalLease: CaptureJournalLease? { (journal.schemaVersion == 2 || journal.schemaVersion == 3) ? journal.lease : nil }
+    package var journalSchemaVersion: Int { journal.schemaVersion }
     package var requestedAudioRoles: [String] {
         (request.microphone ? ["narration"] : []) + (request.systemAudio ? ["system"] : [])
     }
@@ -115,7 +116,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         journal = try CaptureJournal(
             directory: request.outputDirectory,
             header: CaptureJournalHeader(
-                schemaVersion: 2, sessionID: sessionID, source: request.source, width: width,
+                schemaVersion: 3, sessionID: sessionID, source: request.source, width: width,
                 height: height,
                 microphone: request.microphone, systemAudio: request.systemAudio))
         tracks["video"] = try TrackWriter(
@@ -674,7 +675,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             queue.async {
                 do {
                     try lease.synchronize()
-                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: 2)
+                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: self.journalSchemaVersion)
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }

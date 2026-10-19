@@ -379,7 +379,7 @@ public final class NativeCapture {
                     try await sink.freezePublicationJournal()
                     let evidence = try await CaptureSourcePublication.publish(kind: .primary,
                         durationUs: result.durationUs, originHostUs: result.hostOriginUs,
-                        tracks: result.tracks, diagnostic: result.failure, lease: lease, layout: 2)
+                        tracks: result.tracks, diagnostic: result.failure, lease: lease, layout: sink.journalSchemaVersion)
                     publication?.primary = .published(evidence)
                 } else {
                     publication?.primary = .unavailable(CaptureFailure(bounded: result.failure
