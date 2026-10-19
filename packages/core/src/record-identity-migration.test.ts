@@ -269,3 +269,25 @@ test.for(["format-29-editing", "format-29-deletion"])(
       });
   },
 );
+
+test("a format-29 catalog a development build already gave job priorities still migrates", async () => {
+  const home = await mkdtemp(join(tmpdir(), "yap-format-29-priority-"));
+  cleanup.push(() => rm(home, { recursive: true, force: true }));
+  const path = join(home, "catalog.sqlite");
+  await copyFile(new URL("../fixtures/format-29-editing.sqlite", import.meta.url), path);
+  const touched = new DatabaseSync(path);
+  touched.exec(
+    "ALTER TABLE jobs ADD COLUMN priority TEXT NOT NULL DEFAULT 'interactive' CHECK(priority IN ('interactive','background'))",
+  );
+  touched.exec("UPDATE jobs SET priority='background' WHERE rowid=(SELECT min(rowid) FROM jobs)");
+  touched.close();
+  const catalog = new Catalog(path);
+  cleanup.push(async () => catalog.close());
+  expect(catalog.catalog.prepare("PRAGMA user_version").get()).toEqual({
+    user_version: catalogFormat,
+  });
+  expect(oldShapes(catalog.catalog)).toEqual([]);
+  expect(
+    catalog.catalog.prepare("SELECT count(*) AS n FROM jobs WHERE priority='background'").get(),
+  ).toEqual({ n: 1 });
+});
