@@ -25,7 +25,6 @@ import { CatalogError, type Catalog } from "./catalog.js";
 
 export const selectionPolicy = Object.freeze({
   id: "sampled-evidence-selection-v2",
-  coverageUs: 5_000_000,
   ordinarySpacingUs: 1_000_000,
   idleUs: 300_000,
   continuousUs: 2_000_000,

@@ -16,13 +16,14 @@ like "I recorded my screen to show you something" and names a `Recording:` ID.
 It says what was captured (screen, camera, microphone, system audio) and lists the
 marks they made while talking: numbered pins and strokes, or clicks, each with a
 time and the window it was on. It names no operations; exploring is yours:
-- Read what they said first. The transcript is already being prepared in the
-  background; `transcript.review` returns it, or reports it pending, without
-  starting a second run.
+- Read what they said first. The transcript is usually being prepared in the
+  background, and the prompt says when it is; `transcript.review` returns it, or
+  reports it pending, without starting a second run.
 - Each mark is a moment they point at. `timeline.events` lists the marks for the
   recording's acquisition (pin numbers match the badges they saw), and `index.get`
-  has a frame at every mark, pin and click. Use `cursor.render` around a mark to see
-  exactly where they pointed.
+  has a frame at every mark, pin and click when its selection names that
+  `acquisitionId`. Use `cursor.render` around a mark to see exactly where they
+  pointed.
 - Act on what they asked. A shown recording is evidence, not footage to edit.
 
 The user does not want to edit video. They record, then hand you a prompt —

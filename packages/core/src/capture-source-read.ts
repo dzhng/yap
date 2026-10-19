@@ -49,7 +49,7 @@ export type CaptureContext = {
   supportDigest: string;
   evidence: SourceEvidenceMetadata | null;
   coverage: CaptureCoverage[];
-  marks: IndexedCaptureMark[];
+  marks: JournalMark[];
 };
 export type CaptureMarkPoint = {
   hostUs: number;
@@ -58,8 +58,9 @@ export type CaptureMarkPoint = {
   x: number | null;
   y: number | null;
 };
+/** A live mark as callers read it: `assetUs` is asset microseconds, the clock every reader uses. */
 export type CaptureMark = {
-  sourceUs: number;
+  assetUs: number;
   hostUs: number;
   epoch: number;
   id: string;
@@ -68,7 +69,8 @@ export type CaptureMark = {
   pin?: number;
   window?: Record<string, unknown>;
 };
-type IndexedCaptureMark = CaptureMark & { sequence: number };
+// The journal's own form: capture-clock `sourceUs` and the order it was written in.
+type JournalMark = Omit<CaptureMark, "assetUs"> & { sourceUs: number; sequence: number };
 export type CaptureRow = {
   kind: PointKind;
   sourceAtUs: TimeValue;
@@ -99,6 +101,19 @@ export const capturePositionSchema = z.strictObject({
 });
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+/** The one capture-to-asset clock conversion: assetUs = captureUs + sourceToAssetOffsetUs. */
+function captureToAsset(captureUs: number, sourceToAssetOffsetUs: SignedTimeValue): TimeValue {
+  return toTime(add(fromTime(captureUs), fromTime(sourceToAssetOffsetUs)));
+}
+/** The same conversion as a plain number, for readers that compare and sort times. */
+export function captureToAssetUs(
+  captureUs: number,
+  sourceToAssetOffsetUs: SignedTimeValue,
+): number {
+  const value = captureToAsset(captureUs, sourceToAssetOffsetUs);
+  return typeof value === "number" ? value : value.numerator / value.denominator;
+}
+
 /** Explicit capture authority and clock conversion, shared by source and project inspection. */
 export class CaptureSourceRead {
   constructor(
@@ -117,7 +132,7 @@ export class CaptureSourceRead {
     const sources = new SourceSelectionRead(this.assets, this.acquisitions, selections);
     return selections.map((selection) => this.resolve(selection, domain, sources));
   }
-  /** A take's live marks in capture order, retractions applied: the one reader of marks. */
+  /** A take's live marks in capture order, retractions applied, in asset time: the one reader of marks. */
   marks(selection: SourceSelection): CaptureMark[] {
     const context = this.resolve(selection, "events");
     if (
@@ -125,7 +140,10 @@ export class CaptureSourceRead {
       !context.coverage.some((item) => item.kind === "mark" && item.state === "ready")
     )
       return [];
-    return this.readMarks(context.evidence).map(({ sequence: _sequence, ...mark }) => mark);
+    return this.readMarks(context.evidence).map(({ sequence: _sequence, sourceUs, ...mark }) => ({
+      assetUs: captureToAssetUs(sourceUs, context.sourceToAssetOffsetUs),
+      ...mark,
+    }));
   }
   private context(
     selected: ReturnType<SourceSelectionRead["get"]>,
@@ -176,7 +194,7 @@ export class CaptureSourceRead {
               reason: "unsupported",
             })),
           ];
-    const marks: IndexedCaptureMark[] = [];
+    const marks: JournalMark[] = [];
     return {
       selection: selected.selection,
       domain,
@@ -188,7 +206,7 @@ export class CaptureSourceRead {
       marks,
     };
   }
-  private readMarks(identity: SourceEvidenceMetadata): IndexedCaptureMark[] {
+  private readMarks(identity: SourceEvidenceMetadata): JournalMark[] {
     const rows = [] as { sequence: number; sourceUs: number; data: Record<string, unknown> }[];
     let after: [number, number] | null = null;
     for (;;) {
@@ -304,7 +322,7 @@ export class CaptureSourceRead {
         }
         position.row = {
           kind,
-          sourceAtUs: toTime(add(fromTime(next.sourceUs), fromTime(context.sourceToAssetOffsetUs))),
+          sourceAtUs: captureToAsset(next.sourceUs, context.sourceToAssetOffsetUs),
           captureAtUs: next.sourceUs,
           sourceSequence: next.sequence,
           observation: (() => {
@@ -318,9 +336,8 @@ export class CaptureSourceRead {
         position.done = true;
         const completion = context.evidence.receipt.completion;
         if (completion?.state === "interrupted") {
-          const source = add(
-            fromTime(completion.durationUs),
-            fromTime(context.sourceToAssetOffsetUs),
+          const source = fromTime(
+            captureToAsset(completion.durationUs, context.sourceToAssetOffsetUs),
           );
           if (
             compare(source, fromTime(range.startUs)) > 0 &&
@@ -363,7 +380,7 @@ export class CaptureSourceRead {
       const captureAtUs = row.sourceUs!;
       position.row = {
         kind,
-        sourceAtUs: toTime(add(fromTime(captureAtUs), fromTime(context.sourceToAssetOffsetUs))),
+        sourceAtUs: captureToAsset(captureAtUs, context.sourceToAssetOffsetUs),
         captureAtUs,
         sourceSequence: row.sequence,
         observation: JSON.parse(row.content),

@@ -238,6 +238,87 @@ test("project moments select mark, pin and click reasons and merge with scene ev
   );
 });
 
+// A long clip whose observed points carry the given stillness runs and no scene boundaries.
+function coverageScan(points: [atUs: number, runUs: number][]) {
+  const f = fixture([clip("c", 0, 60_000_000, "v", "capture")]);
+  const stream = f.assets[0]!.streams[0]!;
+  stream.bounds = { startUs: 0, endUs: 60_000_000 };
+  stream.available = [{ startUs: 0, endUs: 60_000_000 }];
+  const chunk: SourceSceneChunk = {
+    ...sceneChunk(),
+    durationUs: 60_000_000,
+    range: { startUs: 0, endUs: 60_000_000 },
+    comparisons: [],
+    coverage: points.map(([at, run], index) => ({
+      requestedSourceUs: at,
+      actualSourceUs: at,
+      status: "available",
+      sample: {
+        value: String(at),
+        timescale: 1_000_000,
+        endValue: String(at + 1),
+        endTimescale: 1_000_000,
+      },
+      width: 1,
+      height: 1,
+      continuousFromPrevious: index > 0,
+      stillnessRunStartUs: run,
+    })),
+  };
+  const acquisitions = [
+    {
+      id: "capture",
+      bindings: [
+        { assetId: "asset", streamId: "video", available: [{ startUs: 0, endUs: 60_000_000 }] },
+      ],
+    },
+  ];
+  return { f, chunk, acquisitions };
+}
+const coverageAt = (result: Awaited<ReturnType<typeof selectProjectIndex>>) =>
+  result.flatMap((candidate) =>
+    candidate.reasons.flatMap((reason) => (reason.kind === "coverage" ? [reason.projectAtUs] : [])),
+  );
+
+test("project coverage waits thirty seconds after any chosen picture, a mark included", async () => {
+  const { f, chunk, acquisitions } = coverageScan([
+    [0, 0],
+    [31_000_000, 31_000_000],
+    [51_000_000, 51_000_000],
+  ]);
+  const result = await select(
+    f,
+    () => ({
+      generation: "scenes",
+      chunks: [chunk],
+      moments: [{ sourceUs: 20_000_000, kind: "mark", markId: "m" }],
+    }),
+    undefined,
+    undefined,
+    acquisitions,
+  );
+  // 31 s is only 11 s after the mark; 51 s is 31 s after it.
+  expect(coverageAt(result)).toEqual([51_000_000]);
+});
+
+test("project coverage compares the picture with the last chosen one, not the previous sample", async () => {
+  const { f, chunk, acquisitions } = coverageScan([
+    [0, 0],
+    [10_000_000, 10_000_000],
+    [39_000_000, 10_000_000],
+    [40_000_000, 10_000_000],
+  ]);
+  const result = await select(
+    f,
+    () => ({ generation: "scenes", chunks: [chunk] }),
+    undefined,
+    undefined,
+    acquisitions,
+  );
+  // The picture at 39 s matches the 10 s sample but not the first frame chosen at 0.
+  expect(coverageAt(result)).toEqual([39_000_000]);
+});
+
 test("project moments are ignored when the clip has no acquisition authority", async () => {
   const f = fixture([clip("c", 0, 1_000_000)]);
   const result = await select(f, () => ({

@@ -186,3 +186,35 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
   is; only Yap writes the file. Verdict: sound.
 - **A duplicate binding in `shortcuts.json` at launch registers the defaults** and shows the
   duplicate failure, so Settings never shows bindings that are not held. Verdict: sound.
+
+- **A take that has not published is refused with the existing retryable `NOT_READY`**, not a
+  new `RECORDING_NOT_READY`. Why: `NOT_READY` already means "this will exist, ask again" and is
+  what `CaptureStore.publishedSource` throws for the same unpublished source; a take that will
+  never publish keeps its final `UNAVAILABLE`. The latest take is never swapped for an older
+  one. Verdict: sound.
+- **The prompt's duration is the bound stream's length** (screen or camera video, else the
+  microphone), the asset clock its marks use, not the capture's `sourceDurationUs`. Verdict:
+  sound.
+- **`CaptureSourceRead.marks()` answers in asset time (`assetUs`)**; the journal's capture-clock
+  `sourceUs` stays inside the reader and in `timeline.events` observations, which are unchanged.
+  The index reads its pointer offset from the same reader instead of a binding lookup that fell
+  back to 0. Verdict: sound.
+- **Transcript backlog rows are presence only** (plus a retry count). Retryable failures are
+  retried automatically at most three times, then the row leaves; terminal failures leave at
+  once, so the prompt says nothing about them (P5). `CAPACITY_EXCEEDED` ends a pass quietly; any
+  other row failure is reported and the pass continues. Why three: an update-interrupted job
+  succeeds on the first retry; a failure that keeps returning is the caller's to retry. The
+  table changed shape without a migration because no release carried it; a development catalog
+  from earlier slices needs its `transcript_backlog` table dropped. Verdict: provisional.
+- **Coverage counts every chosen picture, in source and project indexes alike.** One
+  `CoverageTracker` owns the last choice, pointer travel since it and the stillness run it showed;
+  choices may arrive ahead of the scan (a project knows its last frame first) and count once the
+  scan reaches them. Source output is unchanged; project coverage changes (it also never fired on
+  time before, the elapsed time was `NaN`), so the project policy id moves to
+  `project-picture-selection-v4`. Verdict: sound.
+- **The travel threshold is `pictureLongEdgePx`, the larger captured dimension in pixels**, and
+  the never-supplied display-width override is gone. Verdict: sound; see slice 11's note above.
+- **`packedSchema` also governs the primary camera rule**: a camera-only take's packed journal
+  needs no camera binding at schema 3 as at 2. The native writer gives every primary take schema
+  3, so this was refusing camera-only takes. Verdict: sound; the test that pinned the refusal now
+  pins admission.

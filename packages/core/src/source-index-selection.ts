@@ -6,7 +6,7 @@ import { observedSceneBoundary, type SourceSceneChunk } from "./source-scene-chu
 import type { SceneSampleClock } from "./source-scenes.js";
 import type { TimeRange } from "./presentation-time.js";
 import { selectionPolicy } from "./screenshot-index.js";
-import { coverageDue } from "./index-coverage.js";
+import { CoverageTracker } from "./index-coverage.js";
 
 /** Raw pictures have no cursor overlay; presentation samples, not nearest frames, anchor changes. */
 export const sourceIndexPolicy = {
@@ -72,11 +72,8 @@ export async function* selectSourceIndex(
     supportIndex = 0;
   let previous: Point | undefined, previousSupport: TimeRange | undefined;
   let through = -1,
-    lastRequest = -Infinity,
-    representativeRun: number | undefined,
-    pointerTravel = 0,
-    pointerIndex = 0,
     momentIndex = 0;
+  const coverage = new CoverageTracker(pointerSamples);
   function add(at: number, range: TimeRange, reason: SourceIndexReason) {
     let request = pending.get(at);
     if (!request) {
@@ -89,11 +86,7 @@ export async function* selectSourceIndex(
       pending.set(at, request);
     }
     if (request.kind === "picture") request.reasons.push(reason);
-    if (at > lastRequest) {
-      lastRequest = at;
-      representativeRun = undefined;
-      pointerTravel = 0;
-    }
+    coverage.chosen(at);
   }
   function edges(throughUs: number) {
     while (support[edgeIndex]) {
@@ -121,19 +114,7 @@ export async function* selectSourceIndex(
       signal?.throwIfAborted();
       const at = point.requestedSourceUs;
       if (at <= through) continue;
-      while (pointerSamples[pointerIndex] && pointerSamples[pointerIndex]!.sourceUs <= at) {
-        const sample = pointerSamples[pointerIndex++];
-        const previous = pointerSamples[pointerIndex - 2];
-        if (
-          sample &&
-          previous &&
-          sample.x !== null &&
-          sample.y !== null &&
-          previous.x !== null &&
-          previous.y !== null
-        )
-          pointerTravel += Math.hypot(sample.x - previous.x, sample.y - previous.y);
-      }
+      coverage.advance(at);
       edges(at);
       while (support[supportIndex] && support[supportIndex]!.endUs <= at) supportIndex++;
       const possible = support[supportIndex];
@@ -147,7 +128,7 @@ export async function* selectSourceIndex(
               support: range,
               observation: point,
             });
-          representativeRun = undefined;
+          coverage.shown(undefined);
         } else {
           while (moments[momentIndex] && moments[momentIndex]!.sourceUs <= at) {
             const moment = moments[momentIndex++];
@@ -173,19 +154,11 @@ export async function* selectSourceIndex(
             add(before!.requestedSourceUs, range, { ...reason, side: "before" });
             add(at, range, { ...reason, side: "after" });
           }
-          const pictureChanged =
-            representativeRun === undefined || representativeRun !== point.stillnessRunStartUs;
           if (
-            Number.isFinite(lastRequest) &&
-            coverageDue({
-              sinceLastChosenUs: at - lastRequest,
-              pictureChanged,
-              pointerTravelPt: pointerTravel,
-              displayWidthPt: Math.max(chunk.sourceWidth, chunk.sourceHeight),
-            })
+            coverage.due(point.stillnessRunStartUs, Math.max(chunk.sourceWidth, chunk.sourceHeight))
           )
             add(at, range, { kind: "coverage", eventSourceUs: at });
-          if (lastRequest === at) representativeRun = point.stillnessRunStartUs;
+          coverage.shown(point.stillnessRunStartUs);
         }
       }
       // The next scene comparison can still select this point as its known earlier side.

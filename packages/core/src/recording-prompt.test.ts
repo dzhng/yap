@@ -167,9 +167,9 @@ test("voice-only and empty takes keep the same voice", () => {
 function sources(
   options: {
     marks?: CaptureMark[];
-    backlog?: "none" | "pending" | "submitted";
+    backlog?: boolean;
     status?: { state: string; retryable: boolean } | Error;
-    offsetUs?: number;
+    published?: boolean;
   } = {},
 ): RecordingPromptSources {
   return {
@@ -183,9 +183,11 @@ function sources(
       get: () => {
         throw new Error("an omitted id resolves the latest recording");
       },
+      publishedSource: () => ({}),
     } as never,
     acquisitions: {
       captureIntent: () => ({ acquisitionId: "acq" }),
+      ready: () => options.published ?? true,
       get: () => ({
         evidence: { receipt: { header: { source: { kind: "display", displayID: 3 } } } },
         bindings: [
@@ -193,7 +195,7 @@ function sources(
             assetId: "asset",
             streamId: "video",
             sourceRoles: ["video"],
-            sourceToAssetOffsetUs: options.offsetUs ?? 0,
+            sourceToAssetOffsetUs: 500_000,
           },
           {
             assetId: "asset",
@@ -207,15 +209,21 @@ function sources(
     assets: {
       get: () => ({
         streams: [
-          { id: "video", kind: "video", orientedWidth: 800, orientedHeight: 600 },
-          { id: "mic", kind: "audio" },
+          {
+            id: "video",
+            kind: "video",
+            orientedWidth: 800,
+            orientedHeight: 600,
+            endUs: 4_500_000,
+          },
+          { id: "mic", kind: "audio", endUs: 4_500_000 },
         ],
       }),
     } as never,
     capture: {
       marks: () => options.marks ?? [],
     },
-    backlog: { state: () => options.backlog ?? "none" },
+    backlog: { pending: () => options.backlog ?? false },
     transcripts: {
       sourceStatus: () => {
         if (options.status instanceof Error) throw options.status;
@@ -225,34 +233,34 @@ function sources(
   };
 }
 const mark = (
-  value: Partial<CaptureMark> & Pick<CaptureMark, "kind" | "sourceUs">,
+  value: Partial<CaptureMark> & Pick<CaptureMark, "kind" | "assetUs">,
 ): CaptureMark => ({
-  hostUs: value.sourceUs,
+  hostUs: value.assetUs,
   epoch: 0,
-  id: `${value.kind}-${value.sourceUs}`,
+  id: `${value.kind}-${value.assetUs}`,
   points: [],
   ...value,
 });
 
-test("facts read the take's display, the reader's active marks and clicks in asset time", async () => {
+test("facts read the take's display, the reader's active marks and clicks, all on the asset clock", async () => {
   const read = await recordingPromptFacts(
     sources({
-      offsetUs: 500_000,
       marks: [
-        mark({ kind: "stroke", sourceUs: 1_000_000 }),
+        mark({ kind: "stroke", assetUs: 1_500_000 }),
         mark({
           kind: "pin",
           pin: 2,
-          sourceUs: 2_000_000,
+          assetUs: 2_500_000,
           window: { app: "Safari", title: "Live", bounds: { x: 0, y: 0, width: 1, height: 1 } },
         }),
-        mark({ kind: "click", sourceUs: 3_000_000, window: { app: "Safari", title: "" } }),
+        mark({ kind: "click", assetUs: 3_500_000, window: { app: "Safari", title: "" } }),
       ],
     }),
   );
   expect(read).toEqual({
     recordingId: "rec_latest",
-    durationUs: 4_000_000,
+    // The bound stream's length, the clock its marks use; not the capture clock's 4 s.
+    durationUs: 4_500_000,
     display: { displayId: 3, width: 800, height: 600 },
     captured: { screen: true, camera: false, mic: true, system: false },
     transcript: "none",
@@ -264,27 +272,33 @@ test("facts read the take's display, the reader's active marks and clicks in ass
   });
 });
 
-test("the transcript is claimed only while it is pending, submitted, running or ready", async () => {
+test("the transcript is claimed only while the backlog owes it, a job runs it, or it is ready", async () => {
   const transcript = async (options: Parameters<typeof sources>[0]) =>
     (await recordingPromptFacts(sources(options))).transcript;
-  expect(await transcript({ backlog: "none" })).toBe("none");
-  expect(await transcript({ backlog: "pending" })).toBe("pending");
-  expect(
-    await transcript({ backlog: "submitted", status: { state: "queued", retryable: false } }),
-  ).toBe("pending");
-  expect(
-    await transcript({ backlog: "none", status: { state: "processing", retryable: false } }),
-  ).toBe("pending");
-  expect(await transcript({ backlog: "none", status: { state: "ready", retryable: false } })).toBe(
-    "ready",
+  expect(await transcript({ backlog: false })).toBe("none");
+  expect(await transcript({ backlog: true })).toBe("pending");
+  expect(await transcript({ backlog: true, status: { state: "queued", retryable: false } })).toBe(
+    "pending",
   );
   expect(
-    await transcript({ backlog: "submitted", status: { state: "failed", retryable: false } }),
-  ).toBe("none");
+    await transcript({ backlog: false, status: { state: "processing", retryable: false } }),
+  ).toBe("pending");
+  expect(await transcript({ backlog: false, status: { state: "ready", retryable: false } })).toBe(
+    "ready",
+  );
+  expect(await transcript({ backlog: true, status: { state: "failed", retryable: false } })).toBe(
+    "none",
+  );
   expect(
     await transcript({
-      backlog: "pending",
+      backlog: true,
       status: new CatalogError("ASSET_DELETED", "source is gone"),
     }),
   ).toBe("none");
+});
+
+test("a take whose source has not been imported is refused, not described as empty", async () => {
+  await expect(recordingPromptFacts(sources({ published: false }))).rejects.toMatchObject({
+    code: "NOT_READY",
+  });
 });

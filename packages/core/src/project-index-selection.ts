@@ -17,15 +17,14 @@ import {
   type ValidatedComposition,
 } from "@yap/composition";
 import { CatalogError } from "./catalog.js";
-import { selectionPolicy } from "./screenshot-index.js";
-import { coverageDue } from "./index-coverage.js";
+import { CoverageTracker } from "./index-coverage.js";
 import type { IndexMoment, IndexPointerSample } from "./source-index-selection.js";
 import { observedSceneBoundary, type SourceSceneChunk } from "./source-scene-chunks.js";
 import type { SceneSampleClock } from "./source-scenes.js";
 import type { TimeRange } from "./presentation-time.js";
 
 export const projectIndexPolicy = Object.freeze({
-  id: "project-picture-selection-v3",
+  id: "project-picture-selection-v4",
   maximumCandidates: 20000,
   maximumReasons: 100000,
   maximumOccurrences: 10000,
@@ -70,7 +69,6 @@ export async function selectProjectIndex(input: {
     chunks: AsyncIterable<SourceSceneChunk> | Iterable<SourceSceneChunk>;
     moments?: readonly IndexMoment[];
     pointerSamples?: readonly IndexPointerSample[];
-    displayWidthPt?: number;
   } | null;
   signal?: AbortSignal | undefined;
 }): Promise<ProjectIndexCandidate[]> {
@@ -103,9 +101,14 @@ export async function selectProjectIndex(input: {
   bound("maximumOccurrences", clips.length);
   const compiler = createCompiler(model, input.revisionId);
   const candidates = new Map<number, Omit<ProjectIndexCandidate, "ordinal">>();
+  // Every chosen frame counts toward coverage, at the project time its reason names.
+  const coverage = new CoverageTracker();
+  const microseconds = (value: TimeValue) => {
+    const exact = fromTime(value);
+    return Number(exact.numerator) / Number(exact.denominator);
+  };
   let reasonCount = 0,
-    work = 0,
-    lastChosenProjectUs = 0;
+    work = 0;
   async function checkpoint() {
     signal?.throwIfAborted();
     bound("maximumWork", ++work);
@@ -121,6 +124,7 @@ export async function selectProjectIndex(input: {
     }
     bound("maximumReasons", ++reasonCount);
     candidate.reasons.push(reason);
+    coverage.chosen(microseconds(reason.projectAtUs));
   }
   async function boundary(
     projectAtUs: TimeValue,
@@ -186,31 +190,13 @@ export async function selectProjectIndex(input: {
           add(frame, { kind: moment.kind, markId: moment.markId, projectAtUs });
         }
       }
-      let pointerIndex = 0,
-        pointerTravel = 0;
-      const pointers = source.pointerSamples ?? [];
+      coverage.scan(source.pointerSamples ?? []);
       let previous: SourceSceneChunk["coverage"][number] | undefined;
       for await (const chunk of source.chunks) {
         await checkpoint();
         for (const point of chunk.coverage) {
           await checkpoint();
           if (previous && point.requestedSourceUs <= previous.requestedSourceUs) continue;
-          while (
-            pointers[pointerIndex] &&
-            pointers[pointerIndex]!.sourceUs <= point.requestedSourceUs
-          ) {
-            const sample = pointers[pointerIndex++];
-            const prior = pointers[pointerIndex - 2];
-            if (
-              sample &&
-              prior &&
-              sample.x !== null &&
-              sample.y !== null &&
-              prior.x !== null &&
-              prior.y !== null
-            )
-              pointerTravel += Math.hypot(sample.x - prior.x, sample.y - prior.y);
-          }
           const change = observedSceneBoundary(previous, point, chunk);
           if (change) {
             for (const [side, observation] of [
@@ -259,25 +245,14 @@ export async function selectProjectIndex(input: {
             compare(mapped.project, fragment.project.end) < 0
           ) {
             const projectAtUs = toTime(mapped.project);
-            const projectUs = Number(fromTime(projectAtUs));
-            const pictureChanged =
-              point.status === "available" &&
-              (!previous ||
-                previous.status !== "available" ||
-                previous.stillnessRunStartUs !== point.stillnessRunStartUs);
-            const due = coverageDue({
-              sinceLastChosenUs: Math.max(0, projectUs - lastChosenProjectUs),
-              pictureChanged,
-              pointerTravelPt: pointerTravel,
-              displayWidthPt:
-                source.displayWidthPt ?? Math.max(chunk.sourceWidth, chunk.sourceHeight),
-            });
-            if (due) {
-              const frame = compiler.frameBoundary(projectAtUs).after;
-              add(frame, { kind: "coverage", projectAtUs });
-              lastChosenProjectUs = projectUs;
-              pointerTravel = 0;
-            }
+            coverage.advance(microseconds(projectAtUs), point.requestedSourceUs);
+            const run = point.status === "available" ? point.stillnessRunStartUs : undefined;
+            if (
+              run !== undefined &&
+              coverage.due(run, Math.max(chunk.sourceWidth, chunk.sourceHeight))
+            )
+              add(compiler.frameBoundary(projectAtUs).after, { kind: "coverage", projectAtUs });
+            coverage.shown(run);
           }
           previous = point;
         }
