@@ -1799,8 +1799,8 @@ real(
       });
       const excerptJob = await job(excerpt.jobId);
       expect(excerptJob.published?.output).toMatchObject({
-        frames: 4800,
-        sampleRange: { start: 336000, end: 340800 },
+        frameCount: 4800,
+        sampleRange: { startSamples: 336000, endSamples: 340800 },
         processingEvidence: ready.published!.output.processingEvidence,
       });
       requireRetainedMix = true;
@@ -1847,14 +1847,15 @@ real(
           throw Error(JSON.stringify(status));
         await delay(10);
       }
-      const admission = await call<{ id: string }>("package.open", {
+      const admission = await call<{ packageId: string }>("package.open", {
         path: join(home, "prepared.zip"),
+        requestId: "open-prepared",
       });
       let packageHandle: string | undefined;
       const packageDeadline = performance.now() + 10000;
       for (;;) {
         const status = await call<{ state: string; packageHandle?: string }>("package.status", {
-          admissionId: admission.id,
+          admissionId: admission.packageId,
         });
         if (status.state === "ready") {
           packageHandle = status.packageHandle;
@@ -1885,7 +1886,7 @@ real(
           throw Error(JSON.stringify(status));
         await delay(10);
       }
-      await call("package.close", { admissionId: admission.id });
+      await call("package.close", { admissionId: admission.packageId });
       const adoptedAudio = await call<Prepared>("audio.prepare", adopted!);
       expect(adoptedAudio).toMatchObject({
         state: "ready",

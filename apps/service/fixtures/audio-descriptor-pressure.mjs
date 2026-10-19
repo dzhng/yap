@@ -128,7 +128,7 @@ try {
   let recovered = failed;
   if (process.env.YAP_PRESSURE_EXPECT_FAILURE === "1") {
     assert.equal(failed.state, "failed", JSON.stringify(failed));
-    assert.equal(failed.retryable, true);
+    assert.equal(failed.retryable, true, JSON.stringify(failed));
     assert.match(
       failed.reason,
       /Too many open files|EMFILE|ENFILE|error -42/i,
@@ -147,7 +147,7 @@ try {
         (call) => call.operation === "media.prepareCompositionAudioDomain" && !call.result.ok,
       ),
     );
-    assert.equal(failed.result, null);
+    assert.equal(failed.published, null);
     assert.equal((await call("audio.prepare", selection)).published, null);
     assert.deepEqual(await readdir(join(home, "library", "render")), []);
     assert.deepEqual(await readFile(source), bytes);

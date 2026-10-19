@@ -52,7 +52,7 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
             modelSha256: request.engine.modelSha256,
             pcm: pcmPath,
             pcmSha256: pcm.sha256,
-            frameCount: pcm.frames,
+            frames: pcm.frames,
             sampleRate: pcm.sampleRate,
             text: request.selected.text,
             output,

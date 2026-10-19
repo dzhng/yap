@@ -45,7 +45,7 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
             model: request.checkpoint,
             pcm: pcmPath,
             pcmSha256: receipt.sha256,
-            frameCount: receipt.frames,
+            frames: receipt.frames,
             sampleRate: receipt.sampleRate,
             output,
           },

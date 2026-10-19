@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "vitest";
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Catalog } from "@yap/core/catalog";
 import { AssetStore } from "@yap/core/assets";
 import { AcquisitionStore } from "@yap/core/acquisitions";
@@ -15,7 +16,8 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
-async function fixture(failure = false) {
+/** `worker` runs the real speaker worker instead of the controlled one, to check the request contract. */
+async function fixture(failure = false, worker?: string) {
   const home = await mkdtemp("/tmp/speaker-observer-");
   const catalog = new Catalog(join(home, "catalog.sqlite"));
   cleanup.push(async () => {
@@ -52,14 +54,15 @@ async function fixture(failure = false) {
   });
   const workspace = join(home, "render");
   await mkdir(workspace, { mode: 0o700 });
-  const entry = join(home, "controlled-worker.py"),
+  const entry = worker ?? join(home, "controlled-worker.py"),
     checkpoint = join(home, "model.nemo");
   await writeFile(checkpoint, "controlled checkpoint");
   const raw = nativeOutput();
-  await writeFile(
-    entry,
-    `import json,sys,pathlib\nr=json.loads(sys.stdin.readline())\np=r['params']\nraw=${JSON.stringify(raw.nativeReceipt)}\nreport=json.loads(${JSON.stringify(raw.report)})\nreport['pcmSha256']=p['pcmSha256']\nout=pathlib.Path(p['output'])\npathlib.Path(str(out)+'.native-unverified.json').write_text(raw)\n${failure ? "print(json.dumps({'ok':False,'error':{'code':'MODEL_CONTRACT_CHANGED','message':'Controlled native refusal','details':{'rawFile':str(out)+'.native-unverified.json','verified':False},'retryable':False}}))" : "out.write_text(json.dumps(report))\nprint(json.dumps({'ok':True,'data':report}))"}\n`,
-  );
+  if (!worker)
+    await writeFile(
+      entry,
+      `import json,sys,pathlib\nr=json.loads(sys.stdin.readline())\np=r['params']\nraw=${JSON.stringify(raw.nativeReceipt)}\nreport=json.loads(${JSON.stringify(raw.report)})\nreport['pcmSha256']=p['pcmSha256']\nout=pathlib.Path(p['output'])\npathlib.Path(str(out)+'.native-unverified.json').write_text(raw)\n${failure ? "print(json.dumps({'ok':False,'error':{'code':'MODEL_CONTRACT_CHANGED','message':'Controlled native refusal','details':{'rawFile':str(out)+'.native-unverified.json','verified':False},'retryable':False}}))" : "out.write_text(json.dumps(report))\nprint(json.dumps({'ok':True,'data':report}))"}\n`,
+    );
   const pcm = Buffer.alloc(480000 * 4);
   for (let frame = 0; frame < 480000; frame++) pcm.writeFloatLE(0.25, frame * 4);
   const native: MediaWorker = async (operation, params) => {
@@ -116,6 +119,16 @@ async function fixture(failure = false) {
     raw,
   };
 }
+
+test("the real speaker worker admits the observer's request and stops only at the model", async () => {
+  const f = await fixture(
+    false,
+    fileURLToPath(new URL("../../../helpers/speaker/worker.py", import.meta.url)),
+  );
+  const observed = await f.observer(f.request, new AbortController().signal);
+  // The controlled checkpoint is not the pinned model; every request field was accepted first.
+  expect(observed.failure).toMatchObject({ code: "MODEL_NOT_PREPARED" });
+});
 
 test("the offline source observer returns original operands before its render attempt retires", async () => {
   const f = await fixture();

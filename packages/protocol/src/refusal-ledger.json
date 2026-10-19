@@ -247,6 +247,7 @@
         "apps/service/src/exports.ts": 2,
         "apps/service/src/index.ts": 1,
         "apps/service/src/package-registry.ts": 2,
+        "helpers/mac/Sources/YapAudio/AudioWave.swift": 1,
         "packages/core/src/files.ts": 1,
         "packages/core/src/jobs.ts": 4
       }

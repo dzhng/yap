@@ -118,7 +118,7 @@ type Held = {
     identity: ReturnType<typeof fileIdentity>;
     bytes: number;
     dataOffset: number;
-    frameCount: number;
+    frames: number;
     range: { start: number; end: number };
     unavailable: never[];
   };
@@ -419,7 +419,7 @@ export async function withAudioProcessing<T>(
                   identity: artifact.identity,
                   bytes: artifact.bytes,
                   dataOffset: artifact.evidence.audio.dataOffset,
-                  frameCount: frames,
+                  frames,
                   range: { start: 0, end: frames },
                   unavailable: [],
                 },
