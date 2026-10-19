@@ -81,7 +81,7 @@ export const directions = [
 
 export const heroArt = {
   image: "header.png",
-  alt: "A person just talks; Xiaohei, the agent, irons the tangle into a finished video",
+  alt: "A person just yaps and circles a pin on their laptop; Xiaohei, the agent, gets it through a magnifying glass and turns it into a fix and a great video",
 };
 
 /**

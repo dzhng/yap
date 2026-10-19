@@ -23,7 +23,10 @@
 - User feedback: it's one product, so "show people" uses the same keys: Record `⌥⇧S`,
   Ask `⌥⇧V`. `positioning.md`'s messaging rules now say so.
 
-**Remaining:** regenerate the images that draw the old tagline: `.github/readme/header.png`
+**Done 2026-10-19:** `header.png` and `og.png` regenerated with the new line ([art](../assets/art/README.md)).
+`launch-poster.jpg` is a frame of the launch film, which shows the site as it was then; it stays.
+
+**Was remaining:** regenerate the images that draw the old tagline: `.github/readme/header.png`
 (also the site hero art; it says "Just yap. Your agent makes it a great video." and "agent
 edits"), `apps/site/og.png`, `apps/site/launch-poster.jpg`. Follow the house style in
 `apps/site/README.md:17-22`. Then `screenshot-critique`, `compare-screenshots` against the

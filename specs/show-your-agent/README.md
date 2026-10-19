@@ -15,8 +15,6 @@ test package, tools). One macOS test, `recording-overlays.test.mjs` "with the co
 once under `--concurrency=2` (another package's app tests took focus) and passed 3/3 twice alone.
 
 What is left needs the user or a signed, installed build, so pick these up with them:
-- M: regenerate `.github/readme/header.png`, `apps/site/og.png`, `apps/site/launch-poster.jpg`
-  (old tagline drawn in; no image generator is set up here).
 - Review the taste calls at the top of [choices.md](choices.md) (ink look, Settings shortcuts,
   paste notice, prompt wording).
 - Slice 15 on a signed, installed build: time ⌥⇧S → talk and draw → ⌥⇧S → ⌥⇧V (under 2 s
@@ -51,7 +49,7 @@ Global TODO (each item is owned by its slice):
 - [x] 12 `recording.prompt` operation; replaces Copy agent prompt
 - [x] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)
 - [x] 14 Skill, DEVELOPMENT.md, catalog, release notes
-- [ ] M  Messaging: copy done on this branch; regenerate `header.png`, `og.png`, `launch-poster.jpg`
+- [x] M  Messaging: copy and art ([art](assets/art/README.md)); the launch-film poster keeps the old frame
 - [ ] 15 Closeout: full run, D18 timing, fresh-agent acceptance
 
 Warnings: ad-hoc-signed dev builds lose Accessibility trust on every rebuild (test slice 13's
