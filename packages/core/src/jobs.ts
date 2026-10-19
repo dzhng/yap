@@ -1,4 +1,5 @@
 import { omit, type Issue } from "@yap/composition";
+import { storedWork } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ResourceReferences, type ResourceKind } from "./references.js";
@@ -809,7 +810,7 @@ export class JobQueue {
           | { generation: number; attemptId: string; result: string }
           | undefined)
       : undefined;
-    return {
+    return storedWork({
       ...summary,
       target,
       retryable: Boolean(retryable),
@@ -822,7 +823,7 @@ export class JobQueue {
             issues: this.issues(publication),
           }
         : null,
-    };
+    });
   }
 
   /** Whether a running job's input pins this model content digest, as every model consumer does. */
@@ -943,7 +944,7 @@ export class JobQueue {
     const job = this.existing(identity);
     const present = this.targets.isAvailable(identity.target);
     const published = present ? this.publication(identity) : null;
-    return {
+    return storedWork({
       state:
         !present || job?.state === "canceled"
           ? "not_requested"
@@ -960,7 +961,7 @@ export class JobQueue {
       reason: job?.reason ?? null,
       retryable: job?.retryable ?? false,
       published: published ? { ...toArtifact(published), issues: this.issues(published) } : null,
-    };
+    });
   }
 
   /** What was reported with one publication, including one retained by attempt. */

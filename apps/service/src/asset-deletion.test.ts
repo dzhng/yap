@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { projectServiceFixture } from "./project-service.fixture.js";
+import { FaultingDeletionPlans } from "./deletion-faults.fixture.js";
 import type { Catalog } from "@yap/core/catalog";
 import { DeletionPlans } from "@yap/core/deletion-plans";
 
@@ -766,7 +767,7 @@ test("asset.delete cascade retires an acquisition and its managed evidence", asy
 });
 
 test("asset.delete resumes a cascaded plan after every coordinator boundary", async () => {
-  const boundaries = ["check", "plan", "tombstone", "drain", "files", "rows", "clear"] as const;
+  const boundaries = ["plan", "tombstone", "drain", "files", "rows", "clear"] as const;
   const timings = ["before", "after"] as const;
   for (const boundary of boundaries)
     for (const timing of timings) {
@@ -807,12 +808,13 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
               : { ok: true, data: {} },
         undefined,
         {
-          deletionFault: (phase, _subject, when) => {
-            if (!fired && phase === boundary && when === timing) {
-              fired = true;
-              throw new Error(`fault:${phase}:${when}`);
-            }
-          },
+          deletionPlans: (catalog) =>
+            new FaultingDeletionPlans(catalog, (phase, _subject, when) => {
+              if (!fired && phase === boundary && when === timing) {
+                fired = true;
+                throw new Error(`fault:${phase}:${when}`);
+              }
+            }),
         },
       );
       const imported = await fixture.call("asset.import", {

@@ -3,11 +3,8 @@ import { mkdtemp, rm, writeFile, access } from "node:fs/promises";
 import { join } from "node:path";
 import { AcquisitionStore } from "@yap/core/acquisitions";
 import { DeletionPlans } from "@yap/core/deletion-plans";
-import {
-  LibraryDeletion,
-  type DeletionPhase,
-  type DeletionRegistration,
-} from "./library-deletion.js";
+import { LibraryDeletion, type DeletionRegistration } from "./library-deletion.js";
+import { FaultingDeletionPlans, type DeletionBoundary } from "./deletion-faults.fixture.js";
 import { Catalog, CatalogError } from "@yap/core/catalog";
 import { recordingRetirement } from "./recording-retirement.js";
 import { DerivativeDelivery } from "./delivery.js";
@@ -16,15 +13,7 @@ import type { CaptureStore } from "@yap/core/capture-store";
 import type { JobQueue } from "@yap/core/jobs";
 
 test("a failed phase resumes from its durable plan without reporting success early", async () => {
-  const boundaries: DeletionPhase[] = [
-    "check",
-    "plan",
-    "tombstone",
-    "drain",
-    "files",
-    "rows",
-    "clear",
-  ];
+  const boundaries: DeletionBoundary[] = ["plan", "tombstone", "drain", "files", "rows", "clear"];
   for (const failedBoundary of boundaries) {
     const home = await mkdtemp("/tmp/yap-library-deletion-");
     const path = join(home, "catalog.sqlite");
@@ -59,18 +48,17 @@ test("a failed phase resumes from its durable plan without reporting success ear
       freedBytes: () => 0,
     };
     let fail = true;
-    let deletion = new LibraryDeletion(plans, {
-      fault: (boundary) => {
+    let deletion = new LibraryDeletion(
+      new FaultingDeletionPlans(catalog, (boundary) => {
         if (fail && boundary === failedBoundary) throw new Error(`fault:${boundary}`);
-      },
-    });
+      }),
+    );
     deletion.register(registration);
     await expect(deletion.delete({ kind: "fixture", id: "one" })).rejects.toMatchObject({
       code: "DELETE_FAILED",
     });
-    expect(tombstoned || failedBoundary === "check" || failedBoundary === "plan").toBe(true);
-    if (!["check", "plan"].includes(failedBoundary))
-      expect(plans.get("fixture", "one")).not.toBeNull();
+    expect(tombstoned || failedBoundary === "plan").toBe(true);
+    if (failedBoundary !== "plan") expect(plans.get("fixture", "one")).not.toBeNull();
     await deletion.close();
     catalog.close();
 
@@ -84,7 +72,7 @@ test("a failed phase resumes from its durable plan without reporting success ear
         throw error;
       }),
     ).resolves.toBeUndefined();
-    if (["check", "plan"].includes(failedBoundary))
+    if (failedBoundary === "plan")
       await expect(deletion.delete({ kind: "fixture", id: "one" })).resolves.toEqual({
         fixtureId: "one",
         deleted: true,
@@ -129,11 +117,11 @@ test("recording source admission stays fenced between file and row phases", asyn
     },
     forget: () => {},
   } as unknown as CaptureSources;
-  const deletion = new LibraryDeletion(new DeletionPlans(catalog), {
-    fault: (phase, _subject, timing) => {
+  const deletion = new LibraryDeletion(
+    new FaultingDeletionPlans(catalog, (phase, _subject, timing) => {
       if (phase === "files" && timing === "after") expect(sourceAdmissionAllowed).toBe(false);
-    },
-  });
+    }),
+  );
   const delivery = new DerivativeDelivery();
   deletion.register(
     recordingRetirement({
@@ -217,4 +205,24 @@ test("a member's IN_USE refusal reaches the caller as IN_USE in every error mode
     });
     await f.close();
   }
+});
+
+test("a finished delete's requestId keeps returning its first result after the subject is gone", async () => {
+  let runs = 0;
+  let bytes = 7;
+  const f = await fixtureDeletion({
+    tombstone: () => {
+      runs += 1;
+      return true;
+    },
+    freedBytes: () => bytes,
+  });
+  const first = await f.deletion.delete({ kind: "fixture", id: "one" }, { requestId: "kept" });
+  bytes = 0;
+  await expect(
+    f.deletion.delete({ kind: "fixture", id: "one" }, { requestId: "kept" }),
+  ).resolves.toEqual(first);
+  expect(first).toEqual({ fixtureId: "one", deleted: true, freedBytes: 7 });
+  expect(runs).toBe(1);
+  await f.close();
 });

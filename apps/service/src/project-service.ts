@@ -1,7 +1,7 @@
 import { verifyJoin } from "./join-verification.js";
 import { AssetConversionJobs, assetConversionRuntime } from "./asset-conversion.js";
 import { UpdateAdmission } from "./update-admission.js";
-import { LibraryDeletion, type DeletionFault } from "./library-deletion.js";
+import { LibraryDeletion } from "./library-deletion.js";
 import { recordingRetirement } from "./recording-retirement.js";
 import { projectRetirement } from "./project-retirement.js";
 import { assetRetirement } from "./asset-retirement.js";
@@ -80,7 +80,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
 import { MediaListing } from "@yap/core/media-listing";
-import { CatalogError, dependencyRefusal } from "@yap/core/catalog";
+import { CatalogError, dependencyRefusal, type Catalog } from "@yap/core/catalog";
 import { DeletionPlans } from "@yap/core/deletion-plans";
 import { LibraryUsers } from "@yap/core/library-users";
 import { CaptureStore, isSettled } from "@yap/core/capture-store";
@@ -103,10 +103,9 @@ import {
   type UpdateStatus,
   type UpdateBlocker,
   appOperations,
-  mapWorkState,
-  edgeWorkState,
-  transientWorkState,
-  publicationWorkState,
+  markedWorkState,
+  storedWork,
+  type StoredWorkState,
 } from "@yap/protocol";
 
 function sourceRangeAsMicroseconds(value: SelectionRange | undefined) {
@@ -211,14 +210,14 @@ function importedAlignmentView(
     if (!status.published)
       return {
         ...cue,
-        alignment: {
+        alignment: storedWork({
           state: status.state,
           reason: status.reason,
           retryable: status.retryable,
           modelId: input.modelId,
           channel: input.channel,
           sourceRange: cue.source,
-        },
+        }),
       };
     const evidence = status.published.evidence;
     return {
@@ -247,7 +246,8 @@ export async function startProjectService(options: {
   presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
-  deletionFault?: DeletionFault;
+  /** Tests substitute deletion plans that fail a chosen durable write. */
+  deletionPlans?: (catalog: Catalog) => DeletionPlans;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
 }) {
   const started = performance.now();
@@ -357,7 +357,7 @@ export async function startProjectService(options: {
       newId: randomUUID,
     });
     const captures = catalog;
-    const plans = new DeletionPlans(captures);
+    const plans = options.deletionPlans?.(captures) ?? new DeletionPlans(captures);
     const presetsRoot = join(options.home, "presets");
     const remote = options.presets?.refresh;
     if (remote) {
@@ -1148,10 +1148,7 @@ export async function startProjectService(options: {
     await speakers.cleanup(modelLifetime.signal);
     await alignments.cleanup(modelLifetime.signal);
     await indexes.cleanup(modelLifetime.signal);
-    const libraryDeletion = new LibraryDeletion(
-      plans,
-      options.deletionFault === undefined ? {} : { fault: options.deletionFault },
-    );
+    const libraryDeletion = new LibraryDeletion(plans);
     deletion = libraryDeletion;
     const assetRetirementRegistration = assetRetirement({
       catalog: captures,
@@ -1204,7 +1201,6 @@ export async function startProjectService(options: {
             }
           : job.published,
         attemptGeneration: generation,
-        state: mapWorkState(value.state, edgeWorkState),
         jobId,
       };
     };
@@ -1235,72 +1231,18 @@ export async function startProjectService(options: {
       return owner ? mediaExports.status(owner.exportId) : status(jobId);
     };
 
-    // Domain owners retain their stored vocabulary. Only values carrying a job identity
-    // cross this boundary as WorkState; nested evidence labels remain domain facts.
-    const workMapping = {
-      ...edgeWorkState,
-      ...transientWorkState,
-      ...publicationWorkState,
-    } as const;
-    const domainStates = new Set([
-      "recording",
-      "paused",
-      "finalizing",
-      "interrupted",
-      "captured",
-      "observed",
-      "missing",
-      "not_applicable",
-      "unknown",
-      "named",
-      "attributed",
-      "overlap",
-      "closed",
-      "settled",
-      "conflicted",
-      "published",
-      "retained",
-      "ingest",
-      "stopped",
-      "available",
-      "measured",
-      "sampled",
-      "skipped",
-      "outside_project",
-      "on",
-      "off",
-      "transcribed",
-    ]);
-    const normalizeWork = (value: unknown): unknown => {
-      if (Array.isArray(value)) return value.map(normalizeWork);
+    /** Responses carry plain JSON numbers, and every status an owner marked reports WorkState. */
+    const toWire = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(toWire);
       if (typeof value === "bigint") return Number(value);
       if (!value || typeof value !== "object") return value;
-      const record = value as Record<string, unknown>;
-      const mapped = Object.fromEntries(
-        Object.entries(record).map(([key, child]) => [key, normalizeWork(child)]),
+      const mapped: Record<string, unknown> = Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [key, toWire(child)]),
       );
-      if (typeof record.state === "string") {
-        const asyncShape =
-          !("recordingId" in record || "finalizationError" in record) &&
-          ("jobId" in record ||
-            [
-              "published",
-              "reason",
-              "retryable",
-              "dependencies",
-              "context",
-              "page",
-              "report",
-              "refresh",
-              "operationId",
-              "receivedBytes",
-              "availableVersion",
-              "delivery",
-            ].some((key) => key in record));
-        if (asyncShape && !domainStates.has(record.state)) {
-          mapped.state = mapWorkState(record.state, workMapping);
-          if (!("jobId" in mapped)) mapped.jobId = null;
-        }
+      const state = markedWorkState(value);
+      if (state) {
+        mapped.state = state;
+        if (!("jobId" in mapped)) mapped.jobId = null;
       }
       return mapped;
     };
@@ -2038,13 +1980,13 @@ export async function startProjectService(options: {
             if (!candidate) {
               return {
                 ok: true,
-                data: {
+                data: storedWork({
                   ...request,
                   state: "unavailable",
                   reason: "continuity_candidate_required",
                   retryable: false,
                   receipt: null,
-                },
+                }),
               };
             }
             const receipt = evaluateSpeakerContinuity(candidate);
@@ -2062,13 +2004,13 @@ export async function startProjectService(options: {
             );
             return {
               ok: true,
-              data: {
+              data: storedWork({
                 ...request,
                 state: "ready",
                 reason: receipt.status === "accepted" ? null : "continuity_quality_gate",
                 retryable: false,
                 receipt,
-              },
+              }),
             };
           }
           case "speaker.continuity.get": {
@@ -2090,7 +2032,7 @@ export async function startProjectService(options: {
                 );
               return {
                 ok: true,
-                data: {
+                data: storedWork({
                   ...operation.params,
                   state: "ready",
                   reason:
@@ -2099,18 +2041,18 @@ export async function startProjectService(options: {
                       : "continuity_quality_gate",
                   retryable: false,
                   receipt: retained.receipt,
-                },
+                }),
               };
             }
             return {
               ok: true,
-              data: {
+              data: storedWork({
                 ...operation.params,
                 state: "unavailable",
                 reason: "continuity_not_published",
                 retryable: false,
                 receipt: null,
-              },
+              }),
             };
           }
           case "speaker.observe": {
@@ -3248,11 +3190,11 @@ export async function startProjectService(options: {
                 throw new CatalogError(
                   "NOT_READY",
                   "The selected project transcript is not ready",
-                  {
-                    state: transcript.state,
+                  storedWork({
+                    state: transcript.state as StoredWorkState,
                     reason: "reason" in transcript ? transcript.reason : null,
                     dependencies: transcript.dependencies,
-                  },
+                  }),
                 );
               }
               if (transcript.page.nextCursor !== null) {
@@ -3705,7 +3647,7 @@ export async function startProjectService(options: {
     };
     const serve: LocalHandler = (request, signal) => {
       const task = Promise.resolve(handle(request, signal)).then(
-        (result) => normalizeWork(result) as OperationResult,
+        (result) => toWire(result) as OperationResult,
       );
       pending.add(task);
       void task.then(

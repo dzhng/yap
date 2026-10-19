@@ -8,8 +8,15 @@ import {
   skillStatusSchema,
   jobStatusSchema,
   artifactStatusSchema,
+  artifactWorkState,
+  evidenceWorkState,
+  exportWorkState,
   jobWorkState,
   mapWorkState,
+  markedWorkState,
+  modelWorkState,
+  packageWorkState,
+  storedWork,
   publishedOutput,
   publishedOutputSchema,
   workStateSchema,
@@ -99,4 +106,34 @@ test("status facts stay separate from WorkState", () => {
   expect(artifactStatusSchema.parse({ state: "idle", jobId: null, retryable: true }).state).toBe(
     "idle",
   );
+});
+
+test("only a record its owner marked maps to WorkState, through spreads and never into JSON", () => {
+  const status = storedWork({ state: "processing" as const, jobId: "job-1" });
+  expect(markedWorkState(status)).toBe("running");
+  // Test equality elsewhere ignores the mark by this name.
+  expect(Object.getOwnPropertySymbols(status).map((key) => key.description)).toEqual([
+    "storedWork",
+  ]);
+  expect(markedWorkState({ ...status, reason: null })).toBe("running");
+  expect(markedWorkState({ state: "processing", jobId: "job-1" })).toBeUndefined();
+  expect(JSON.parse(JSON.stringify(status))).toEqual({ state: "processing", jobId: "job-1" });
+  expect(() => markedWorkState({ ...status, state: "syncing" })).toThrow(
+    "Unknown stored work state: syncing",
+  );
+});
+
+test("owners that share a stored word mean the same lifecycle by it", () => {
+  const owners = [
+    jobWorkState,
+    artifactWorkState,
+    modelWorkState,
+    packageWorkState,
+    exportWorkState,
+    evidenceWorkState,
+  ] as Record<string, string>[];
+  for (const table of owners)
+    for (const [word, state] of Object.entries(table))
+      for (const other of owners)
+        if (word in other) expect([word, other[word]]).toEqual([word, state]);
 });

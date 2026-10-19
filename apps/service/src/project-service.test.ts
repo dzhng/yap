@@ -939,7 +939,7 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   });
   const progress = once(f.events, "update.progress");
   events.emit("release");
-  expect(await closing).toMatchObject({ ok: true, data: { state: "closed" } });
+  expect(await closing).toMatchObject({ ok: true, data: { state: "idle" } });
   await progress;
   expect(await f.control("update.prepare")).toMatchObject({ ok: true, data: { kind: "prepared" } });
 });

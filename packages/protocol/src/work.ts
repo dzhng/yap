@@ -129,81 +129,67 @@ export const modelWorkState = {
   failed: "failed",
 } as const satisfies Record<ModelStoredState, WorkState>;
 
-export type SkillStoredState =
-  | "installed"
-  | "missing"
-  | "unmanaged"
-  | "disabled"
-  | "needs_attention"
-  | "updating";
-export const skillWorkState = {
-  installed: "ready",
-  missing: "unavailable",
-  unmanaged: "unavailable",
-  disabled: "unavailable",
-  needs_attention: "failed",
-  updating: "running",
-} as const satisfies Record<SkillStoredState, WorkState>;
-
-export type CliStoredState =
-  | "installed"
-  | "missing"
-  | "different"
-  | "unavailable"
-  | "needs_attention";
-export const cliWorkState = {
-  installed: "ready",
-  missing: "unavailable",
-  different: "unavailable",
-  unavailable: "unavailable",
-  needs_attention: "failed",
-} as const satisfies Record<CliStoredState, WorkState>;
-
-export type UpdateStoredState =
-  | "unavailable"
-  | "disabled"
-  | "idle"
-  | "checking"
-  | "downloading"
-  | "waiting"
-  | "installing"
-  | "failed";
-export const updateWorkState = {
-  unavailable: "unavailable",
-  disabled: "unavailable",
-  idle: "idle",
-  checking: "running",
-  downloading: "running",
-  waiting: "queued",
-  installing: "running",
-  failed: "failed",
-} as const satisfies Record<UpdateStoredState, WorkState>;
-
-export const edgeWorkState = {
-  ...jobWorkState,
-  ...artifactWorkState,
-  ...modelWorkState,
-  ...skillWorkState,
-  ...cliWorkState,
-  ...updateWorkState,
-} as const;
-
-export const transientWorkState = {
-  not_ready: "queued",
+export type PackageStoredState =
+  | "queued"
+  | "opening"
+  | "ready"
+  | "closing"
+  | "cleanup_failed"
+  | "failed"
+  | "canceled"
+  | "closed";
+/** A closed package admission holds nothing open and runs nothing. */
+export const packageWorkState = {
+  queued: "queued",
   opening: "running",
+  ready: "ready",
   closing: "running",
-  cleanup_pending: "running",
-  pending: "queued",
-} as const satisfies Record<
-  "not_ready" | "opening" | "closing" | "cleanup_pending" | "pending",
+  cleanup_failed: "failed",
+  failed: "failed",
+  canceled: "canceled",
+  closed: "idle",
+} as const satisfies Record<PackageStoredState, WorkState>;
+
+/** An export's own word for a committed file; its job and recovery report the job vocabulary. */
+export const exportWorkState = { committed: "ready" } as const satisfies Record<
+  "committed",
   WorkState
 >;
 
-export const publicationWorkState = {
-  complete: "ready",
-  completed: "ready",
-  committed: "ready",
-} as const satisfies Record<"complete" | "completed" | "committed", WorkState>;
+/** Evidence that waits for its sources to be read reports `not_ready`. */
+export const evidenceWorkState = { not_ready: "queued" } as const satisfies Record<
+  "not_ready",
+  WorkState
+>;
+
+/** Every owner's stored words. Owners that share a word mean the same lifecycle by it. */
+export const storedWorkState = {
+  ...jobWorkState,
+  ...artifactWorkState,
+  ...modelWorkState,
+  ...packageWorkState,
+  ...exportWorkState,
+  ...evidenceWorkState,
+} as const;
+export type StoredWorkState = keyof typeof storedWorkState;
+
+const workMark = Symbol("storedWork");
+
+/**
+ * An owner marks the status record it returns as work in its stored vocabulary. The mark survives
+ * object spread and never serializes; the service edge maps exactly the marked records.
+ */
+export function storedWork<T extends { state: StoredWorkState }>(record: T): T {
+  Object.assign(record, { [workMark]: true });
+  return record;
+}
+
+/** The WorkState of a record an owner marked, or undefined for every other record. */
+export function markedWorkState(record: object): WorkState | undefined {
+  return workMark in record
+    ? mapWorkState(String(Reflect.get(record, "state")), storedWorkState)
+    : undefined;
+}
 
 /**
  * Retained publication identity is separate from a replacement job's attempt. Every publication

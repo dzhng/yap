@@ -13,7 +13,12 @@ import { CaptureService } from "./capture.js";
 import { DerivativeDelivery } from "./delivery.js";
 import { openDirectoryLease } from "@yap/core/files";
 import { DeletionPlans } from "@yap/core/deletion-plans";
-import { LibraryDeletion, type DeletionFault, type DeletionPhase } from "./library-deletion.js";
+import { LibraryDeletion } from "./library-deletion.js";
+import {
+  FaultingDeletionPlans,
+  type DeletionBoundary,
+  type DeletionFault,
+} from "./deletion-faults.fixture.js";
 import { recordingRetirement } from "./recording-retirement.js";
 
 function deferred<T>() {
@@ -99,7 +104,9 @@ async function fixture(
       },
     },
   };
-  const deletion = new LibraryDeletion(new DeletionPlans(store), fault ? { fault } : {});
+  const deletion = new LibraryDeletion(
+    fault ? new FaultingDeletionPlans(store, fault) : new DeletionPlans(store),
+  );
   deletion.register(
     recordingRetirement({
       ...owners,
@@ -342,8 +349,7 @@ test("delete removes donor files but never sibling donors or prepared speech mod
 });
 
 test("recording plans resume every phase boundary with the real retirement registration", async () => {
-  const boundaries: Array<[DeletionPhase, "before" | "after"]> = [
-    ["check", "before"],
+  const boundaries: Array<[DeletionBoundary, "before" | "after"]> = [
     ["plan", "before"],
     ["plan", "after"],
     ["tombstone", "before"],
@@ -377,7 +383,7 @@ test("recording plans resume every phase boundary with the real retirement regis
     const resumed = await fixture(undefined, undefined, home);
     const failures: unknown[] = [];
     await resumed.deletion.resume((error) => failures.push(error));
-    if (failedPhase === "check" || failedPhase === "plan")
+    if (failedPhase === "plan")
       await expect(
         resumed.deletion.delete({ kind: "recording", id: target.recordingId }),
       ).resolves.toMatchObject({ recordingId: target.recordingId, deleted: true });

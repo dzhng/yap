@@ -1,3 +1,4 @@
+import { storedWork, type StoredWorkState } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { z } from "zod";
@@ -125,7 +126,7 @@ type Dependency = {
   transcript: TranscriptMetadata | null;
   /** The issues published with `transcript`; a project read reports its sources' problems. */
   issues?: Issue[];
-  state: string;
+  state: StoredWorkState;
   reason: string | null;
   retryable: boolean;
   jobId: string | null;
@@ -354,15 +355,17 @@ export class ProjectEvidenceInspection {
         throw new CatalogError("UNAVAILABLE", "Speaker inspection is unavailable");
       return this.options.speakers
         .resolveMany(selections, { channel: query.channel!, modelId: query.modelId! })
-        .map((speaker) => ({
-          selection: speaker.selection,
-          speaker,
-          transcript: null,
-          state: speaker.state,
-          reason: speaker.reason,
-          retryable: speaker.retryable,
-          jobId: speaker.jobId,
-        }));
+        .map((speaker) =>
+          storedWork({
+            selection: speaker.selection,
+            speaker,
+            transcript: null,
+            state: speaker.state,
+            reason: speaker.reason,
+            retryable: speaker.retryable,
+            jobId: speaker.jobId,
+          }),
+        );
     }
     if (domain === "events" || domain === "cursor") {
       if (!this.options.events)
@@ -370,7 +373,7 @@ export class ProjectEvidenceInspection {
       return this.options.events.resolveMany(selections, domain, prepare).map((capture, index) => {
         const selection = selections[index]!;
         const ready = capture.coverage.some((value) => value.state === "ready");
-        return {
+        return storedWork({
           selection,
           transcript: null,
           capture,
@@ -383,7 +386,7 @@ export class ProjectEvidenceInspection {
           reason: ready ? null : capture.coverage[0]!.reason,
           retryable: capture.scene?.retryable ?? false,
           jobId: capture.scene?.jobId ?? null,
-        };
+        });
       });
     }
     return selections.map((selection) => {
@@ -411,16 +414,16 @@ export class ProjectEvidenceInspection {
           status.published && status.published.evidence.generation === speakerSelector.generation
             ? [status.published.evidence]
             : [];
-        speaker = {
+        speaker = storedWork({
           selection,
           evidence,
           state: evidence.length ? "ready" : status.state,
           reason: evidence.length ? null : (status.reason ?? "speaker_evidence_changed"),
           retryable: evidence.length ? false : status.retryable,
           jobId: null,
-        };
+        });
       }
-      return {
+      return storedWork({
         selection,
         transcript: status.published?.transcript ?? null,
         ...(speaker === undefined ? {} : { speaker }),
@@ -429,7 +432,7 @@ export class ProjectEvidenceInspection {
         reason: status.published ? null : status.reason,
         retryable: status.published ? false : status.retryable,
         jobId: status.jobId,
-      };
+      });
     });
   }
   private pins(dependencies: Dependency[]) {
@@ -461,7 +464,7 @@ export class ProjectEvidenceInspection {
           (!dependency.speaker && !dependency.transcript && dependency.reason !== "no_audio"),
     );
     if (pending.length)
-      return {
+      return storedWork({
         ...plan.query,
         issues: plan.issues,
         state: "not_ready",
@@ -470,7 +473,7 @@ export class ProjectEvidenceInspection {
         jobId: null,
         published: null,
         dependencies,
-      };
+      });
     const status = submitCachedDerivative<{ cacheId: string }>(
       this.options.jobs,
       this.options.cache,

@@ -1,3 +1,4 @@
+import { storedWork, type StoredWorkState } from "@yap/protocol";
 import { z } from "zod";
 import { toTime, type TimeValue } from "@yap/composition";
 import { CatalogError } from "./catalog.js";
@@ -12,7 +13,7 @@ import type { SceneProcessing } from "./scene-processing.js";
 import type { SceneEvidenceStore, SceneEvidenceMetadata } from "./scene-evidence.js";
 import { sceneSampleSourceTime } from "./source-scenes.js";
 export type SceneContext = {
-  state: string;
+  state: StoredWorkState;
   reason: string | null;
   retryable: boolean;
   jobId: string | null;
@@ -68,13 +69,13 @@ export class SourceSceneRead {
     const status = prepare
       ? this.options.processing.publishedSource(selection)
       : this.options.processing.sourceStatus(selection, sources);
-    return {
+    return storedWork({
       state: status.state,
       reason: status.reason,
       retryable: status.retryable,
       jobId: status.jobId,
       evidence: status.published?.evidence ?? null,
-    };
+    });
   }
   coverage(
     context: SceneContext,

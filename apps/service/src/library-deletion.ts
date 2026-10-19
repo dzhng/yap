@@ -3,13 +3,6 @@ import { CatalogError } from "@yap/core/catalog";
 import type { DeletionPlan, DeletionPlans } from "@yap/core/deletion-plans";
 
 export type LibrarySubject = { kind: string; id: string };
-export type DeletionPhase = "check" | "plan" | "tombstone" | "drain" | "files" | "rows" | "clear";
-export type DeletionBoundaryTiming = "before" | "after";
-export type DeletionFault = (
-  boundary: DeletionPhase,
-  subject: LibrarySubject,
-  timing: DeletionBoundaryTiming,
-) => void | Promise<void>;
 export type DeletionLifetime = { readonly fd: number } | undefined;
 
 export type DeletionRegistration = {
@@ -72,10 +65,7 @@ export class LibraryDeletion {
   private readonly lifetime = new AbortController();
   private readonly registrations = new Map<string, DeletionRegistration>();
 
-  constructor(
-    private readonly plans: DeletionPlans,
-    private readonly options: { fault?: DeletionFault } = {},
-  ) {}
+  constructor(private readonly plans: DeletionPlans) {}
 
   get updateBlocked(): boolean {
     return this.active.size > 0;
@@ -209,13 +199,9 @@ export class LibraryDeletion {
         const checked = registration.checkUsers?.(subject, cascade);
         const members =
           checked === undefined ? [] : checked instanceof Promise ? await checked : checked;
-        if (this.options.fault) await this.boundary("check", subject, "before");
-        if (this.options.fault) await this.boundary("check", subject, "after");
-        if (this.options.fault) await this.boundary("plan", subject, "before");
         plan = this.plans.create(subject.kind, subject.id, cascade, members);
         if (requestId && !storedRequest)
           this.plans.recordRequest(requestId, subject.kind, subject.id, cascade, freedBytes);
-        if (this.options.fault) await this.boundary("plan", subject, "after");
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
@@ -229,9 +215,7 @@ export class LibraryDeletion {
           this.plans.saveSubjectRequestResults(subject.kind, subject.id, result);
           return result;
         }
-        if (this.options.fault) await this.boundary("tombstone", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "tombstoned");
-        if (this.options.fault) await this.boundary("tombstone", subject, "after");
         plan = { ...plan, phase: "tombstoned" };
       }
       if (requestId && !storedRequest)
@@ -273,24 +257,18 @@ export class LibraryDeletion {
         this.plans.clear(subject.kind, subject.id);
         return;
       }
-      if (this.options.fault) await this.boundary("tombstone", subject, "before");
       this.plans.setPhase(subject.kind, subject.id, "tombstoned");
-      if (this.options.fault) await this.boundary("tombstone", subject, "after");
       plan = { ...plan, phase: "tombstoned" };
     }
     const run = async (lifetime: DeletionLifetime) => {
       if (plan.phase === "tombstoned") {
         await registration.drain(subject, this.lifetime.signal, lifetime);
-        if (this.options.fault) await this.boundary("drain", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "drained");
-        if (this.options.fault) await this.boundary("drain", subject, "after");
         plan = { ...plan, phase: "drained" };
       }
       if (plan.phase === "drained") {
         await registration.files(subject, this.lifetime.signal, lifetime);
-        if (this.options.fault) await this.boundary("files", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "files");
-        if (this.options.fault) await this.boundary("files", subject, "after");
         plan = { ...plan, phase: "files" };
       }
       if (plan.phase === "files") {
@@ -299,9 +277,7 @@ export class LibraryDeletion {
           if (await registration.rows(subject, this.lifetime.signal, lifetime)) break;
           await setImmediate();
         }
-        if (this.options.fault) await this.boundary("rows", subject, "before");
         this.plans.setPhase(subject.kind, subject.id, "rows");
-        if (this.options.fault) await this.boundary("rows", subject, "after");
         plan = { ...plan, phase: "rows" };
       }
       if (plan.phase === "rows") {
@@ -316,8 +292,6 @@ export class LibraryDeletion {
             (member, options) => this.delete(member, { cascade: options?.cascade ?? plan.cascade }),
           );
         await registration.clearTombstone?.(subject);
-        if (this.options.fault) await this.boundary("clear", subject, "before");
-        if (this.options.fault) await this.boundary("clear", subject, "after");
         this.plans.clear(subject.kind, subject.id);
       }
     };
@@ -326,14 +300,6 @@ export class LibraryDeletion {
         await registration.beforeScope?.(subject, this.lifetime.signal);
       await registration.scope(subject, this.lifetime.signal, run);
     } else await run(undefined);
-  }
-
-  private async boundary(
-    boundary: DeletionPhase,
-    subject: LibrarySubject,
-    timing: DeletionBoundaryTiming,
-  ): Promise<void> {
-    await this.options.fault?.(boundary, subject, timing);
   }
 
   private requireRegistration(kind: string): DeletionRegistration {

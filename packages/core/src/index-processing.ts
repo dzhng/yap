@@ -1,4 +1,5 @@
 import {
+  storedWork,
   faceObservationRequestSchema,
   type FaceObservationRequest,
   pictureObservationRequestSchema,
@@ -137,7 +138,7 @@ export class IndexProcessing {
         (value) => !value.published && ["failed", "unavailable"].includes(value.state),
       ) ?? dependencies.find((value) => !value.published);
     if (waiting)
-      return {
+      return storedWork({
         ...plan.identity,
         state: waiting.state,
         reason: waiting.reason,
@@ -145,7 +146,7 @@ export class IndexProcessing {
         jobId: null,
         published: null,
         dependencies,
-      };
+      });
     const recipe = projectRecipe({
       ...plan.identity,
       scenes: dependencies.map((value) => value.published!.evidence),
@@ -532,7 +533,7 @@ export class IndexProcessing {
     selection = plan.source.selection;
     const dependency = this.asset.scenes.publishedSource(selection);
     if (!dependency.published)
-      return {
+      return storedWork({
         ...selection,
         state: dependency.state,
         reason: dependency.reason,
@@ -540,7 +541,7 @@ export class IndexProcessing {
         jobId: null,
         published: null,
         dependencies: [{ artifact: "source-scenes", ...dependency }],
-      };
+      });
     const input = this.sourceRecipe(plan.options, dependency.published.evidence);
     const identity = {
       target: { kind: "asset" as const, assetId: input.assetId },

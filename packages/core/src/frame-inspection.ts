@@ -1,4 +1,5 @@
 import {
+  storedWork,
   pictureObservationRequestSchema,
   pictureObservationsSchema,
   type PictureObservationRequest,
@@ -538,7 +539,7 @@ export class MediaFrameInspection {
   private requestImage(input: SourceImageInput) {
     const { options } = this.imagePlan(input);
     const status = this.sourceDerivative<SourceImageArtifact>(options);
-    return {
+    return storedWork({
       ...options.selection,
       kind: options.kind,
       maxLongEdge: options.maxLongEdge,
@@ -560,7 +561,7 @@ export class MediaFrameInspection {
             frame: status.published.value,
           }
         : null,
-    };
+    });
   }
 
   sourcePlan(input: SourceFrameInput) {
@@ -613,7 +614,7 @@ export class MediaFrameInspection {
           published: null,
         }
       : this.sourceDerivative<SourceFrameArtifact>(options);
-    return {
+    return storedWork({
       ...options.selection,
       atUs: options.atUs,
       maxLongEdge: options.maxLongEdge,
@@ -637,7 +638,7 @@ export class MediaFrameInspection {
             frame: status.published.value,
           }
         : null,
-    };
+    });
   }
   /** Snapshots only a native no-picture observation; ordinary failures never become missing pixels. */
   sourceUnavailable(input: SourceFrameInput): SourceFrameUnavailable {
@@ -924,7 +925,7 @@ export class MediaFrameInspection {
       "frame",
       { deferred: pointerSources.length > 0 },
     );
-    return {
+    return storedWork({
       projectId: input.projectId,
       revisionId,
       ...options,
@@ -939,7 +940,7 @@ export class MediaFrameInspection {
             frame: status.published.value,
           }
         : null,
-    };
+    });
   }
 
   request(input: SourceFrameInput): ReturnType<MediaFrameInspection["requestSource"]>;

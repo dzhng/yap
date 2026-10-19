@@ -24,7 +24,11 @@ import { DerivativeDelivery } from "./delivery.js";
 import { DeletionPlans } from "@yap/core/deletion-plans";
 import { LibraryDeletion } from "./library-deletion.js";
 import { projectRetirement } from "./project-retirement.js";
-import { type DeletionFault, type DeletionPhase } from "./library-deletion.js";
+import {
+  FaultingDeletionPlans,
+  type DeletionBoundary,
+  type DeletionFault,
+} from "./deletion-faults.fixture.js";
 
 function deferred() {
   let resolve!: () => void;
@@ -301,8 +305,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
 });
 
 test("project plans resume every phase boundary with the real retirement registration", async () => {
-  const boundaries: Array<[DeletionPhase, "before" | "after"]> = [
-    ["check", "before"],
+  const boundaries: Array<[DeletionBoundary, "before" | "after"]> = [
     ["plan", "before"],
     ["plan", "after"],
     ["tombstone", "before"],
@@ -343,7 +346,7 @@ test("project plans resume every phase boundary with the real retirement registr
     const resumed = await projectPlanFixture(home);
     const failures: unknown[] = [];
     await resumed.deletion.resume((error) => failures.push(error));
-    if (failedPhase === "check" || failedPhase === "plan")
+    if (failedPhase === "plan")
       await expect(
         resumed.deletion.delete({ kind: "project", id: project.projectId }),
       ).resolves.toMatchObject({ projectId: project.projectId, deleted: true });
@@ -402,7 +405,9 @@ async function projectPlanFixture(home: string, fault?: DeletionFault) {
     projects.get(owner.projectId);
   });
   await cache.reconcile();
-  const deletion = new LibraryDeletion(new DeletionPlans(catalog), fault ? { fault } : {});
+  const deletion = new LibraryDeletion(
+    fault ? new FaultingDeletionPlans(catalog, fault) : new DeletionPlans(catalog),
+  );
   deletion.register(
     projectRetirement({
       catalog,

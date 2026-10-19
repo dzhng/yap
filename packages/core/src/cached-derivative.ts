@@ -1,3 +1,4 @@
+import { storedWork } from "@yap/protocol";
 import type { Job, JobLane, JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 
@@ -21,7 +22,7 @@ export function submitCachedDerivative<Value extends { cacheId: string }>(
       status = jobs.status(identity);
     }
   }
-  return {
+  return storedWork({
     state: status.state,
     reason: status.reason,
     retryable: status.retryable,
@@ -33,5 +34,5 @@ export function submitCachedDerivative<Value extends { cacheId: string }>(
           value: JSON.parse(status.published.result) as Value,
         }
       : null,
-  };
+  });
 }

@@ -1,3 +1,4 @@
+import { storedWork } from "@yap/protocol";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
@@ -5,6 +6,7 @@ import type { AcquisitionStore } from "./acquisitions.js";
 import { CatalogError } from "./catalog.js";
 import {
   retainedPublicationSchema,
+  type ArtifactState,
   type JobExecution,
   type JobQueue,
   type StagedJobResult,
@@ -104,14 +106,14 @@ export class SpeakerProcessing {
         durationUs: selected.durationUs,
         engine,
       });
-      return {
+      return storedWork({
         selection,
         evidence,
-        state: evidence.length ? "ready" : "unavailable",
+        state: (evidence.length ? "ready" : "unavailable") as ArtifactState,
         reason: evidence.length ? null : "source_evidence_unobserved",
         retryable: false,
         jobId: null,
-      };
+      });
     });
   }
   sourceStatus(input: SpeakerSourceInput) {

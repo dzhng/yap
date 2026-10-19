@@ -1,3 +1,4 @@
+import { storedWork } from "@yap/protocol";
 import { admitMicrosecondRange, ceil, sourceAvailability } from "@yap/composition";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -180,7 +181,7 @@ export class SourceEvents {
         const at = fromTime(row.sourceAtUs);
         if ((row.kind === "interruption" ? support.before(at) : support(at)).length) rows.push(row);
       }
-    const result = {
+    const result = storedWork({
       ...selected.selection,
       state: pending ? "not_ready" : ready ? "ready" : "unavailable",
       context,
@@ -212,7 +213,7 @@ export class SourceEvents {
                   }
                 : null,
             },
-    };
+    });
     boundSourceEvidenceResponse(result);
     return result;
   }

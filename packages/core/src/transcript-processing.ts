@@ -1,3 +1,4 @@
+import { storedWork } from "@yap/protocol";
 import {
   admitReadRange,
   fromTime,
@@ -306,7 +307,7 @@ export class TranscriptProcessing {
       : status.state === "not_requested" && models.state !== "ready"
         ? "model_not_prepared"
         : null;
-    return {
+    return storedWork({
       ...selected.selection,
       state: reason ? "unavailable" : status.state,
       reason: reason ?? status.reason,
@@ -323,7 +324,7 @@ export class TranscriptProcessing {
       models,
       dependencies: [],
       issues,
-    };
+    });
   }
 
   prepareSource(selection: TranscriptPreparation): void {
