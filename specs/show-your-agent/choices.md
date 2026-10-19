@@ -37,6 +37,10 @@ verdict, least confident first.
   paste notice.
 - **Paste posts the physical V key with Command only.** Layouts that move V may not paste.
 - **Displays are fixed at take start**: a display connected mid-take gets no ink panel.
+- **An undo during a pause is timed where the pause began**, the last moment the recording has;
+  retractions apply whatever their time.
+- **A shortcuts file with one bad entry is refused whole at launch**, with the defaults
+  registered and the reason in the menu; the next `shortcuts.set` writes over it.
 - **`shortcuts.json` and `shortcuts.set` store modifiers as the Carbon mask** (⌥⇧ = 2560); the
   label carries the human form. Fine for one platform; revisit if the CLI wants portable names.
 - **The travel threshold is the picture's long edge in pixels** (`pictureLongEdgePx`), not a
@@ -61,7 +65,10 @@ Capture and marks
 - `CaptureSourceRead.marks()` is the one reader of marks, retractions applied, answering in
   asset time from one capture-to-asset conversion.
 - The capture side publishes one ordered mark stream (live stroke, committed, retracted); the
-  ink overlay classifies nothing and is hidden from every capture.
+  ink overlay classifies nothing and is hidden from every capture by its unshared panels alone
+  (`main` removed the mid-take window exclusion in v0.1.61).
+- The ink is up from the moment a start answers that its take is live (`ControlsState.showsInk`),
+  not only once a status read says so, and keeps marks that arrive before its panels open.
 - The capture-exclusion test skips with a reason when the display is asleep: black frames
   passed even with the ink deliberately leaked.
 
@@ -69,7 +76,8 @@ Index
 - One selection-policy bump per index (source v3, project v4); old generations are reclaimed even
   when referenced, current ones stay protected; package import drops other-policy records.
 - One `CoverageTracker` owns the last chosen picture, travel since it and picture change for
-  both indexes; every chosen picture counts.
+  both indexes; every chosen picture counts, and travel since a choice is measured from the
+  choice's own time, even when it is reported after the scan passed it.
 - Index evidence asks the capture reader for the bare selection; a whole index identity is
   refused by the strict parser.
 
@@ -101,6 +109,7 @@ Shortcuts and controls
 
 Process
 - Codex hit "model at capacity" repeatedly; slices 05, 12 and 13 and the review fixes were
-  finished by Claude subagents under the same contract and review.
+  finished by Claude subagents under the same contract and review. The final review ran both a
+  Claude and a Codex pass; Codex found the paused undo, early ink and coverage travel bugs.
 - Fixtures and spec evidence came from the shared local LFS cache; a pre-existing lint error on
   `main` (`blend-public.mjs`) was fixed.
