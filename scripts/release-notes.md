@@ -2,7 +2,7 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
-## Unreleased
+## 0.1.66
 
 Settings has a "Reset All Shortcuts to Defaults" button, and `yap shortcuts.reset` does the
 same. Recording a shortcut in Settings now ends as soon as you press one, and Escape leaves
