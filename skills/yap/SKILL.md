@@ -48,7 +48,9 @@ question, report the exact error instead of guessing or downloading.
 ## Removing media and reclaiming space
 
 1. Delete what the user named with `asset.delete`, `recording.delete`,
-   `project.delete` or `model.remove`.
+   `project.delete` or `model.remove`. Yap always keeps a transcription model:
+   removing `parakeet` frees its space only until the next `transcript.review`
+   prepares it again, so tell the user that before removing it.
 2. An `IN_USE` refusal lists the projects using the item and the bytes each
    choice frees. Report those users and byte totals to the user. Use
    `cascade: true` or delete a project only when the user asked for it.

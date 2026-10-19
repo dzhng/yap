@@ -1114,7 +1114,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({ operation: z.literal("transcript.review"), params: transcriptReviewParams })
     .strict()
     .describe(
-      "Review a bounded source or pinned-project transcript in one agent-friendly call. This convenience operation combines transcript.transcribe when retained evidence is missing with transcript.get for the bounded page; it may return pending while transcription runs. If the optional model/runtime is unavailable, return retryable MODEL_NOT_PREPARED details so the agent can ask the user before model.prepare. The operation returns readiness, exact transcript rows, generation, continuation and the issues published with the transcript it reads. It never invents words or edits a project.",
+      "Review a bounded source or pinned-project transcript in one agent-friendly call. This convenience operation combines transcript.transcribe when retained evidence is missing with transcript.get for the bounded page; it may return pending while transcription runs. A missing parakeet transcription model is prepared automatically, even after model.remove, and the call reports pending meanwhile. If a model or runtime it needs is otherwise unavailable, return retryable MODEL_NOT_PREPARED details so the agent can ask the user before model.prepare. The operation returns readiness, exact transcript rows, generation, continuation and the issues published with the transcript it reads. It never invents words or edits a project.",
     ),
   z
     .object({
@@ -1234,7 +1234,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Remove every prepared file for the selected registered model, including its compiler cache and staging bytes. A running job that names the model is a retryable MODEL_IN_USE refusal. Removal persists across service restarts; call model.prepare explicitly to acquire it again.",
+      "Remove every prepared file for the selected registered model, including its compiler cache and staging bytes. This is for a user who no longer wants the model, such as before uninstalling Yap. A running job that uses the model is a retryable MODEL_IN_USE refusal. Startup does not prepare a removed model again, but Yap always keeps a transcription model: transcript.review prepares parakeet again whenever it needs it. Call model.prepare to acquire any other removed model.",
     ),
   z
     .object({

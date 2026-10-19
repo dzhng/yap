@@ -101,6 +101,10 @@ A transport request ID correlates one exchange. A durable mutation request ID
 identifies an explicitly replayable domain write; changing correlation cannot
 turn an uncertain mutation into a new safe request. Structured failures preserve
 that distinction rather than implying a disconnected request was rolled back.
+A mutation request ID stays replayable for the life of the library: replay records
+are never pruned, including those of a deleted subject, so repeating a delete or a
+model removal still returns its first result. Each record is one small row per
+request, so the tables need no retention rule.
 
 [Framing](src/framing.ts) owns byte and time bounds. Measure encoded UTF-8, not
 character count, and keep diagnostics outside the response channel. Complete

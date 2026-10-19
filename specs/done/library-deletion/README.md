@@ -62,8 +62,10 @@ while freeing a clip that only old history holds.
 - **One owner answers "who uses this?" and "how much would this free?"**
   `LibraryUsers` (`packages/core/src/library-users.ts`) owns `usersOf`, `hasUsers` and
   the byte counts. The refusal, the result and `media.list`'s sizes all ask it.
-- **Model removal is one flight per model, and only an explicit `model.prepare`
-  clears it.** `Models.remove` (`packages/core/src/models.ts`) refuses
+- **Model removal is one flight per model, and only `model.prepare` clears it.**
+  It is for a user who no longer wants a model, such as before uninstalling Yap; Yap always
+  keeps a transcription model, so `transcript.review` prepares `parakeet` again when it needs
+  it (the removal row stays, so startup still skips it). `Models.remove` (`packages/core/src/models.ts`) refuses
   `MODEL_IN_USE` while a running job pins the model's content digest
   (`JobQueue.runsModel`). Transcription, rendered speech and voice pin it in their job
   input, speaker and alignment inside `engine`. The removal persists in
@@ -81,14 +83,17 @@ Each concept has one owner, and the operation schemas are the reference:
   default 100. `pageParams`/`pageResult` (`packages/protocol/src/paging.ts`) shape the
   schemas, and `pageCursor` (`packages/core/src/page-cursor.ts`) binds each cursor to
   its operation and filters. Library listings are newest first.
-- **Async state:** one vocabulary, `workStateSchema` (`packages/protocol/src/work.ts`),
-  mapped from the owners' stored words at the service edge by one response-wide rewriter
-  (see [Sharp edges](#sharp-edges-known-accepted)); `job.get`, `job.retry` and
+- **Async state:** one vocabulary, `workStateSchema` (`packages/protocol/src/work.ts`).
+  Each owner keeps its stored words and marks the status it returns with `storedWork`; the
+  service edge maps exactly the marked records through the owners' tables in `work.ts`, so no
+  other `state` field is touched. `job.get`, `job.retry` and
   `job.cancel` own polling and recovery, replacing the ten `*.retry` operations. A
   take keeps its own capture lifecycle (`finalizing`, `complete`, `interrupted`).
 - **Identity and replay:** every operation that creates or changes something takes a
   `requestId`; repeating it returns the first result, and reusing it with different
-  parameters refuses `REQUEST_CONFLICT`. Read-only operations, and operations whose
+  parameters refuses `REQUEST_CONFLICT`. Replay records live as long as the library, like
+  every other replay table, so a repeated delete returns its first result after the subject
+  is gone. Read-only operations, and operations whose
   repeat joins the same work or changes nothing, take none; `naming.test.ts` holds every
   operation to one of the three.
 - **Errors:** each code has one category and one retryability, both in
@@ -132,6 +137,11 @@ Each concept has one owner, and the operation schemas are the reference:
   took sibling assets it never listed. Both led to the invariants above.
 - **The in-use check for models moved to content digests.** Matching a `modelId` key
   in job input never matched transcription, which names its model by repository.
+- **Internal wires kept their own names.** Slice 07b had renamed fields the service sends to
+  the native worker and the Python model workers, which still read the old names, so 0.1.60
+  could not render prepared or typed-processed audio and refused every alignment and speaker
+  observation. The fix restored each worker's own names; the naming rule covers public
+  results only. See [choices.md](choices.md#follow-up-2026-10-18).
 - **A still screen keeps reaching disk.** Outside this spec's contract, the final full
   run found that a force-quit take of a still screen lost all of it, on main too. The
   native capture writer (`helpers/mac/Sources/YapCapture/CaptureWriter.swift`) repeats
@@ -159,12 +169,10 @@ Each concept has one owner, and the operation schemas are the reference:
   replaying the `requestId` returns its result.
 - **Removing a model in the middle of a job** fails only that job; each native call is
   its own short-lived process.
-- **`transcript.review` prepares its review model on demand**, even after
-  `model.remove`. It leaves the removal recorded, so startup still skips the model.
-- **Follow-ups not done:** the service maps work states with a response-wide rewriter
-  that guesses from neighbouring keys, where each owner should map its own; test fault
-  hooks sit in the production delete path; and the replay tables have no retention rule.
-  See [choices.md](choices.md#release-review-2026-10-18).
+- **Not every public result follows the naming rule yet.** The response guard runs only on
+  the service fixture's calls; a trace over every suite found `acquisition.get`'s `id`,
+  `bytes` in published outputs and receipts, and `start`/`end` sample ranges in processing
+  evidence. See [choices.md](choices.md#follow-up-2026-10-18).
 
 ## Visual provenance
 
