@@ -461,13 +461,13 @@ final class RecordingControls: NSObject {
         case .playRecording(let recordingId):
             playRecording(recordingId)
         case .copyRecordingPrompt(let recordingId):
-            copyAgentPrompt(.recording(recordingId))
+            copyPrompt(.recording(recordingId))
         case .copyProjectPrompt(let projectId):
-            copyAgentPrompt(.project(projectId))
+            copyPrompt(.project(projectId))
         case .playAsset(let assetId):
             playAsset(assetId)
         case .copyAssetPrompt(let assetId):
-            copyAgentPrompt(.asset(assetId))
+            copyPrompt(.asset(assetId))
         case .deleteRecording, .deleteAsset,
             .previewProject, .exportProject, .deleteProject, .nextProjects, .previousProjects, .nextRecordings, .previousRecordings, .refreshLibrary:
             break // LibraryController handles these before capture selections.
@@ -932,11 +932,21 @@ final class RecordingControls: NSObject {
     }
     private struct AssetFile: Decodable { let assetId: String; let fileName: String }
 
-    private func copyAgentPrompt(_ target: MediaTarget) {
-        let prompt = LibraryPresentation.agentPrompt(for: target)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(prompt, forType: .string)
+    /// The service owns the handoff text; the app only copies what `recording.prompt` returns.
+    private func copyPrompt(_ target: MediaTarget) {
+        Task { @MainActor in
+            do throws(ServiceFailure) {
+                let answer = try await service().call("recording.prompt", target.parameters, as: PromptAnswer.self)
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(answer.text, forType: .string)
+            } catch {
+                state.failure = error.localizedDescription
+                render()
+            }
+        }
     }
+
+    private struct PromptAnswer: Decodable { let text: String }
 
     var captureRows: [[String: Any]] {
         guard let view = captureView else { return [] }

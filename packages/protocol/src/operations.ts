@@ -1614,6 +1614,19 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("recording.prompt"),
+      params: z.union([
+        z.object({ recordingId: id.optional() }).strict(),
+        z.object({ projectId: id }).strict(),
+        z.object({ assetId: id }).strict(),
+      ]),
+    })
+    .strict()
+    .describe(
+      "Return the text a person pastes to hand media to an agent, with the facts it was written from. For a recording (omit recordingId for the latest take) the text describes what was captured: sources, duration, display or camera, marks or clicks, and whether a transcript is being prepared; it never waits for transcription. A projectId or assetId returns that item's one-line ID handoff.",
+    ),
+  z
+    .object({
       operation: z.literal("revision.get"),
       params: project.extend({ revisionId: id.optional() }).strict(),
     })
@@ -1703,6 +1716,7 @@ export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationN
   "recording.list",
   "media.list",
   "recording.get",
+  "recording.prompt",
   "revision.get",
   "revision.history",
 ]);

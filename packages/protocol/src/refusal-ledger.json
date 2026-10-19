@@ -1621,6 +1621,7 @@
         "packages/core/src/models.ts": 1,
         "packages/core/src/prepared-audio.ts": 1,
         "packages/core/src/projects.ts": 3,
+        "packages/core/src/recording-prompt.ts": 1,
         "packages/core/src/rendered-speech.ts": 1,
         "packages/core/src/screenshot-index-read.ts": 1,
         "packages/core/src/screenshot-index.ts": 1,

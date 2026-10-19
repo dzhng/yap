@@ -2,15 +2,6 @@ import Foundation
 
 /// Shared saved-media facts and action applicability; renderers consume these directly.
 public enum LibraryPresentation {
-    /// What a person pastes into their agent to hand it a recording or project.
-    public static func agentPrompt(for target: MediaTarget) -> String {
-        switch target {
-        case .recording(let id): "I want you to use this recording with this ID with the Yap CLI: \(id)"
-        case .asset(let id): "I want you to use this imported video with this asset ID with the Yap CLI: \(id)"
-        case .project(let id): "I want you to use this project with this ID with the Yap CLI: \(id)"
-        }
-    }
-
     public static func recordings(for state: ControlsState) -> SavedPage {
         let library = state.library
         // The page is media.list's order; a deletion still pending stays listed after its row leaves.
@@ -43,7 +34,7 @@ public enum LibraryPresentation {
                 return .init(id: id, kind: .imported, title: row.title, badge: "Imported",
                     status: request == nil ? nil : pending ? "Deleting" : "Attention", details: details, actions: [
                         .init(.playAsset(id), "Play", enabled: usable),
-                        .init(.copyAssetPrompt(id), "Copy agent prompt", enabled: !pending),
+                        .init(.copyAssetPrompt(id), "Copy agent prompt", enabled: usable),
                         .init(.deleteAsset(id), deleteTitle, enabled: usable),
                     ], opens: .playAsset(id), attention: request?.failure != nil)
             case .recording(let id):
@@ -63,7 +54,7 @@ public enum LibraryPresentation {
                 return .init(id: id, kind: .recording, title: ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt),
                     status: status, details: details, actions: [
                         .init(.playRecording(id), "Play", enabled: usable && state != "canceled"),
-                        .init(.copyRecordingPrompt(id), "Copy agent prompt", enabled: !pending),
+                        .init(.copyRecordingPrompt(id), "Copy agent prompt", enabled: usable),
                         .init(.deleteRecording(id), deleteTitle, enabled: usable),
                     ], opens: .playRecording(id), attention: status == "Attention")
             case .project:
@@ -93,7 +84,7 @@ public enum LibraryPresentation {
             items.append(.init(id: project.projectId, kind: .project, title: project.title,
                 details: ["Created \(ElapsedTime.shortTime(of: project.createdAt))"], actions: [
                 .init(.previewProject(project.projectId), "Preview", enabled: usable),
-                .init(.copyProjectPrompt(project.projectId), "Copy agent prompt", enabled: true),
+                .init(.copyProjectPrompt(project.projectId), "Copy agent prompt", enabled: usable),
                 .init(.exportProject(project.projectId, .video), "Export Video…", enabled: usable && exports.choosing == nil),
                 .init(.exportProject(project.projectId, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
                 .init(.deleteProject(project.projectId), "Delete Project", enabled: usable),

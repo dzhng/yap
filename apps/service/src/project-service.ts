@@ -30,6 +30,11 @@ import { writeFile } from "node:fs/promises";
 import { AcousticInspection } from "@yap/core/acoustic-inspection";
 import { MediaFrameInspection } from "@yap/core/frame-inspection";
 import { CaptureSourceRead } from "@yap/core/capture-source-read";
+import {
+  handoffPrompt,
+  recordingPromptFacts,
+  renderRecordingPrompt,
+} from "@yap/core/recording-prompt";
 import { SourceEvents } from "@yap/core/source-events";
 import { SourceSceneRead } from "@yap/core/scene-source-read";
 import { SceneEvidenceStore, assetSceneOwner } from "@yap/core/scene-evidence";
@@ -1541,6 +1546,35 @@ export async function startProjectService(options: {
                 : operationError(["NOT", "FOUND"].join("_"), "Recording does not exist");
             }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
+          case "recording.prompt": {
+            const params = operation.params;
+            if ("projectId" in params) {
+              const { projectId } = projects.get(params.projectId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("project", projectId), facts: { projectId } },
+              };
+            }
+            if ("assetId" in params) {
+              const { id: assetId } = assets.describe(params.assetId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("asset", assetId), facts: { assetId } },
+              };
+            }
+            const facts = await recordingPromptFacts(
+              {
+                recordings: captures,
+                acquisitions,
+                assets,
+                capture,
+                backlog: transcriptBacklog,
+                transcripts,
+              },
+              params.recordingId,
+            );
+            return { ok: true, data: { text: renderRecordingPrompt(facts), facts } };
+          }
           case "recording.list": {
             const page = captures.list(operation.params.cursor, operation.params.limit);
             return {
