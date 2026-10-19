@@ -6,6 +6,9 @@ import {
 } from "./preset-install.js";
 import { presetId, scaffold } from "./preset-scaffold.js";
 import { presetReceiptsFrom0161 } from "./record-identity-migration.js";
+
+type Receipt = { input: string; result: unknown };
+const receiptFileVersion = 2;
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
@@ -60,14 +63,16 @@ export class Presets {
     this.requestReceiptPath = join(this.store.root, ".request-receipts.json");
     if (existsSync(this.requestReceiptPath)) {
       try {
-        const stored = JSON.parse(readFileSync(this.requestReceiptPath, "utf8")) as Record<
-          string,
-          { input: string; result: unknown }
-        >;
-        const migrated = presetReceiptsFrom0161(stored);
-        for (const [id, receipt] of Object.entries(migrated ?? stored))
-          this.requestReceipts.set(id, receipt);
-        if (migrated) this.writeRequestReceipts();
+        const stored = JSON.parse(readFileSync(this.requestReceiptPath, "utf8")) as
+          | { version: typeof receiptFileVersion; receipts: Record<string, Receipt> }
+          | Record<string, Receipt>;
+        // 0.1.61 wrote the receipts unversioned; they are converted once and rewritten.
+        const current = stored.version === receiptFileVersion;
+        const receipts = current
+          ? (stored.receipts as Record<string, Receipt>)
+          : presetReceiptsFrom0161(stored as Record<string, Receipt>);
+        for (const [id, receipt] of Object.entries(receipts)) this.requestReceipts.set(id, receipt);
+        if (!current) this.writeRequestReceipts();
       } catch {
         // A damaged receipt file cannot authorize a replay; the preset files remain the source.
       }
@@ -79,7 +84,11 @@ export class Presets {
   }
   private writeRequestReceipts(): void {
     const temporary = `${this.requestReceiptPath}.tmp`;
-    writeFileSync(temporary, JSON.stringify(Object.fromEntries(this.requestReceipts)), {
+    const file = {
+      version: receiptFileVersion,
+      receipts: Object.fromEntries(this.requestReceipts),
+    };
+    writeFileSync(temporary, JSON.stringify(file), {
       mode: 0o600,
     });
     renameSync(temporary, this.requestReceiptPath);

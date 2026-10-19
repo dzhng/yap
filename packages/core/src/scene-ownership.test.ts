@@ -12,7 +12,6 @@ import {
   SceneEvidenceStore,
   assetSceneOwner,
   recordingSceneOwner,
-  recordingSceneMetadata,
   type SceneEvidenceIdentity,
   type SceneSource,
 } from "./scene-evidence.js";
@@ -162,9 +161,9 @@ test("real recording and asset owners with identical IDs and attempts retain the
   const asset = f.evidence.finish(f.identity),
     captured = f.evidence.finish(recording);
   expect(asset.source).toEqual(f.descriptor());
-  expect(recordingSceneMetadata(captured)).toMatchObject({
-    recordingId: f.asset.id,
-    durationUs: 1000000,
+  expect(captured).toMatchObject({
+    owner: { kind: "recording", id: f.asset.id },
+    source: { kind: "recording", durationUs: 1000000 },
     boundaryCount: 1,
   });
   async function* capturedChunks() {

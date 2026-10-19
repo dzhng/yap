@@ -122,7 +122,8 @@ describe("presets facade", () => {
         ...result,
       });
       expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
-        "delete-gone": { input, result: { id: "gone", ...result } },
+        version: 2,
+        receipts: { "delete-gone": { input, result: { id: "gone", ...result } } },
       });
     } finally {
       await rm(root, { recursive: true, force: true });

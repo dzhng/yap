@@ -102,8 +102,6 @@ export const portableSceneMetadataSchema = z
     "Scene source identity differs from its owner",
   );
 export type PortableSceneMetadata = z.infer<typeof portableSceneMetadataSchema>;
-export type RecordingSceneEvidenceMetadata = RecordingSceneEvidenceIdentity &
-  SceneDetails & { durationUs: number };
 export function recordingSceneIdentity({
   recordingId,
   sourceId,
@@ -111,15 +109,6 @@ export function recordingSceneIdentity({
   policy,
 }: RecordingSceneEvidenceIdentity): SceneEvidenceIdentity {
   return { sourceId, generation, policy, owner: { kind: "recording", id: recordingId } };
-}
-export function recordingSceneMetadata({
-  owner,
-  source,
-  ...metadata
-}: SceneEvidenceMetadata): RecordingSceneEvidenceMetadata {
-  if (owner.kind !== "recording" || source.kind !== "recording")
-    invalid("Recording scene view requires a recording source");
-  return { ...metadata, recordingId: owner.id, durationUs: source.durationUs };
 }
 export function recordingSceneOwner(store: CaptureStore) {
   return (identity: SceneEvidenceIdentity, source: SceneSource): void => {

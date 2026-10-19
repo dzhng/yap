@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
 /**
- * Record identity (specs/record-identity): every stored record names itself `id` and every
+ * Record identity (specs/done/record-identity): every stored record names itself `id` and every
  * owner reference is `{kind, id}`. This module is the one place older stored shapes are
  * rewritten: catalog format 29 → 30 once, and a version-6 project package's members as it is
  * imported. No reader accepts two shapes.
@@ -199,21 +199,20 @@ function deleted(value: Json): Json {
 }
 
 /**
- * Preset request receipts, as 0.1.61 stored them: a `preset.delete` result named its preset
- * `presetId`. Returns null when every receipt already has the current shape.
+ * Preset request receipts as 0.1.61 stored them (an unversioned file): a `preset.delete`
+ * result named its preset `presetId`.
  */
 export function presetReceiptsFrom0161(
   receipts: Record<string, { input: string; result: unknown }>,
-): Record<string, { input: string; result: unknown }> | null {
-  let changed = false;
-  const next = Object.fromEntries(
-    Object.entries(receipts).map(([requestId, receipt]) => {
-      if (!isObject(receipt.result) || !("presetId" in receipt.result)) return [requestId, receipt];
-      changed = true;
-      return [requestId, { ...receipt, result: renamed(receipt.result, "presetId", "id") }];
-    }),
+): Record<string, { input: string; result: unknown }> {
+  return Object.fromEntries(
+    Object.entries(receipts).map(([requestId, receipt]) => [
+      requestId,
+      isObject(receipt.result)
+        ? { ...receipt, result: renamed(receipt.result, "presetId", "id") }
+        : receipt,
+    ]),
   );
-  return changed ? next : null;
 }
 
 /** A member of a version-6 project package, in the version-7 shape. */

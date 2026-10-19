@@ -1193,10 +1193,6 @@ export async function startProjectService(options: {
           : { exportId: job.input, recovery: false };
       }
     };
-    const itemStatus = (jobId: string) => {
-      const owner = exportOf(jobId);
-      return owner ? mediaExports.status(owner.exportId) : status(jobId);
-    };
 
     /** Work is a record with a `state` and a `jobId`; its state reports WorkState. */
     const toWire = (value: unknown): unknown => {
@@ -3506,7 +3502,7 @@ export async function startProjectService(options: {
           }
           case "job.cancel":
             await queue.drainJob(operation.params.jobId);
-            return { ok: true, data: itemStatus(operation.params.jobId) };
+            return { ok: true, data: status(operation.params.jobId) };
           default:
             return operationError(
               "PREREQUISITE_MISSING",

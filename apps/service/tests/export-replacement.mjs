@@ -283,10 +283,12 @@ test(
     assert.equal(canceled.code, 0, JSON.stringify(canceled));
     assert.equal(canceled.response.ok, true, JSON.stringify(canceled));
     assert.equal(canceled.response.data.id, request.requestId);
-    assert.equal(canceledRecord.id, request.requestId);
+    // job.cancel answers with the job itself; the export reports the same outcome.
+    assert.equal(canceledRecord.id, pending.jobId);
     assert.equal(canceledRecord.state, "canceled");
-    assert.equal(canceledRecord.jobId, pending.jobId);
-    assert.equal(canceledRecord.snapshot.revisionId, request.revisionId);
+    assert.equal(canceled.response.data.state, "canceled");
+    assert.equal(canceled.response.data.jobId, pending.jobId);
+    assert.equal(canceled.response.data.snapshot.revisionId, request.revisionId);
     assert.deepEqual(await readFile(first.output), before);
     await f.good("job.retry", { jobId: pending.jobId }, true);
     const retried = await f.good("export.status", { exportId: request.requestId }, true);
