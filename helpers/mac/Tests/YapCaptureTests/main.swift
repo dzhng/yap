@@ -125,6 +125,8 @@ if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
   try await runCanonicalRecoveryTests()
   try await runCaptureTerminationTests()
   try await runCaptureWriterTests()
+  try await runIdleScreenFragmentTest()
+  try await runLateScreenFrameTest()
   runCaptureClockTests()
   try await runIndependentCameraClockTests()
   try await runCameraAvailabilityTests()

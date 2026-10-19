@@ -86,6 +86,16 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var failure: CaptureFailure?
     private var finishing = false
     private var lastVideo: CMSampleBuffer?
+    /// A still screen delivers no frames, and the video writer only indexes media on disk once
+    /// encoded samples pass its fragment interval. While the screen is still, the last frame repeats
+    /// at 10 frames a second, so an open take keeps reaching disk and a killed process loses only
+    /// its last seconds. The encoder holds several frames before writing any, so a slower floor
+    /// leaves a short take with no index at all. The repeated pixels are the ones already on screen.
+    private static let idleRepeatUs: Int64 = 100_000
+    private var idleRepeat: DispatchSourceTimer?
+    /// Host time the last video frame was written, real or repeated. Stillness is time without a
+    /// delivery, not a gap in timestamps: a frame can arrive stamped well before it is delivered.
+    private var lastVideoWrittenHostUs: Int64?
     private let requestedSourceRect: CGRect?
     private var cursor = CursorTrack()
     private var sampler: CursorSampler?
@@ -195,6 +205,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     package func seal() {
         queue.sync {
             sampler?.stop()
+            idleRepeat?.cancel()
             if stopHostUs == nil {
                 let endpoint = CaptureHostTime.nowUs()
                 stopHostUs = endpoint
@@ -208,6 +219,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     package func cancel() {
         queue.sync {
             sampler?.stop()
+            idleRepeat?.cancel()
             finishing = true
             tracks.values.forEach { $0.writer.cancelWriting() }
             journal.lease.release()
@@ -319,6 +331,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             // The first usable primary picture establishes zero before screen geometry is placed.
             if usable, clock.start(at: hostUs, durationUs: durationUs) {
                 publishClock()
+                if screenInfo != nil { startIdleRepeat() }
                 guard record({
                     try self.journal.recordPCMOrigin(JournalPCMOrigin(rawPTS: pts, declaredHostUs: hostUs),
                         placedPauses: self.clock.pauses)
@@ -332,6 +345,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         guard var sourceUs = clock.sourceTime(for: hostUs, durationUs: role == "video" ? durationUs : 0) else {
             omitted[role, default: 0] += 1
             return
+        }
+        if role == "video", let lastUs = tracks["video"]?.lastAcceptedUs, sourceUs <= lastUs {
+            // A screen change delivered after a repeat of the still frame plays right after it.
+            sourceUs = lastUs + 1
         }
         do {
             if tracks[role] == nil {
@@ -434,12 +451,62 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     declaredFirstFrame: placement.firstFrame, rawPTS: pts, removedPauseUs: placement.removedPauseUs)) }) else { return }
             } else {
                 lastVideo = retimed
+                lastVideoWrittenHostUs = CaptureHostTime.nowUs()
                 if firstAppend {
                     guard record({ try self.journal.recordTrackStarted(
                         role: role, file: track.file, firstSourceUs: sourceUs,
                         sampleRate: track.sampleRate, channelCount: track.channelCount) }) else { return }
                 }
             }
+        } catch {
+            let reason =
+                (error as? CaptureFailure)
+                ?? CaptureFailure("WRITE_FAILED", error.localizedDescription)
+            failure = reason
+            onFailure(reason)
+        }
+    }
+
+    private func startIdleRepeat() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + .milliseconds(50), repeating: .milliseconds(50))
+        timer.setEventHandler { [weak self] in self?.repeatIdleFrame() }
+        idleRepeat = timer
+        timer.resume()
+    }
+
+    /// Repeats the last written frame once the screen has been still for `idleRepeatUs`, that long
+    /// after the previous frame's end and never past the take's clock, which excludes pauses.
+    private func repeatIdleFrame() {
+        let hostNowUs = CaptureHostTime.nowUs()
+        guard !finishing, failure == nil, let video = tracks["video"], let last = lastVideo,
+            let end = video.end, let writtenUs = lastVideoWrittenHostUs,
+            hostNowUs - writtenUs >= Self.idleRepeatUs,
+            let sourceNowUs = clock.sourceTime(for: hostNowUs), video.input.isReadyForMoreMediaData
+        else { return }
+        let endUs = min(end + hostNowUs - writtenUs, sourceNowUs)
+        let ptsUs = endUs - 33_333
+        guard ptsUs > video.lastAcceptedUs ?? -1 else { return }
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 33_333, timescale: 1_000_000),
+            presentationTimeStamp: CMTime(value: ptsUs, timescale: 1_000_000),
+            decodeTimeStamp: .invalid)
+        do {
+            var repeated: CMSampleBuffer?
+            let status = CMSampleBufferCreateCopyWithNewTiming(
+                allocator: kCFAllocatorDefault, sampleBuffer: last, sampleTimingEntryCount: 1,
+                sampleTimingArray: &timing, sampleBufferOut: &repeated)
+            guard status == noErr, let repeated else {
+                throw CaptureFailure("RETIME_FAILED", "Cannot retime an idle frame: \(status).")
+            }
+            guard video.input.append(repeated) else {
+                throw video.writer.error
+                    ?? CaptureFailure("WRITE_FAILED", "Cannot append a repeated idle frame.")
+            }
+            video.lastAcceptedUs = ptsUs
+            video.end = endUs
+            video.samples += 1
+            lastVideoWrittenHostUs = hostNowUs
         } catch {
             let reason =
                 (error as? CaptureFailure)
@@ -483,6 +550,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             queue.async {
                 self.finishing = true
                 self.sampler?.stop()
+                self.idleRepeat?.cancel()
                 self.flushCursorSamples()
                 let endHost = self.stopHostUs ?? CaptureHostTime.nowUs()
                 self.resumeClock(at: endHost)

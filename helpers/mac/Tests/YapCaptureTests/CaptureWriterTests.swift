@@ -47,23 +47,8 @@ func runCaptureDurationTests() async throws {
                 outputDirectory: directory.path, microphone: false, systemAudio: false),
             width: 32, height: 32, sessionID: "writer-duration",
             requestedSourceRect: nil, onFailure: { _ in })
-        let stream = SCStream(filter: SCContentFilter(), configuration: SCStreamConfiguration(), delegate: nil)
-        var pixel: CVPixelBuffer?
-        CVPixelBufferCreate(nil, 32, 32, kCVPixelFormatType_32BGRA, nil, &pixel)
-        CVPixelBufferLockBaseAddress(pixel!, [])
-        memset(CVPixelBufferGetBaseAddress(pixel!)!, 127, CVPixelBufferGetDataSize(pixel!))
-        CVPixelBufferUnlockBaseAddress(pixel!, [])
-        var description: CMVideoFormatDescription?
-        CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixel!, formatDescriptionOut: &description)
-        let origin = CaptureHostTime.nowUs() - elapsedUs
-        var timing = CMSampleTimingInfo(duration: time(microseconds: 33_333),
-            presentationTimeStamp: time(microseconds: origin), decodeTimeStamp: .invalid)
-        var sample: CMSampleBuffer?
-        CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: pixel!,
-            formatDescription: description!, sampleTiming: &timing, sampleBufferOut: &sample)
-        let attachments = CMSampleBufferGetSampleAttachmentsArray(sample!, createIfNecessary: true)! as NSArray
-        (attachments[0] as! NSMutableDictionary)[SCStreamFrameInfo.status.rawValue] = SCFrameStatus.complete.rawValue
-        writer.queue.sync { writer.stream(stream, didOutputSampleBuffer: sample!, of: .screen) }
+        let sample = completeScreenFrame(atHostUs: CaptureHostTime.nowUs() - elapsedUs)
+        writer.queue.sync { writer.ingest(sample, of: .screen) }
         writer.seal()
         let closed = await writer.finish(failure: interrupted
             ? CaptureFailure("INTERRUPTED", "Generated interruption") : nil)
@@ -90,6 +75,80 @@ func runCaptureDurationTests() async throws {
     }
 }
 
+/// One complete 32x32 screen frame presented at `hostUs`, as ScreenCaptureKit delivers it.
+private func completeScreenFrame(atHostUs hostUs: Int64, grey: Int32 = 127) -> CMSampleBuffer {
+    var pixel: CVPixelBuffer?
+    CVPixelBufferCreate(nil, 32, 32, kCVPixelFormatType_32BGRA, nil, &pixel)
+    CVPixelBufferLockBaseAddress(pixel!, [])
+    memset(CVPixelBufferGetBaseAddress(pixel!)!, grey, CVPixelBufferGetDataSize(pixel!))
+    CVPixelBufferUnlockBaseAddress(pixel!, [])
+    var description: CMVideoFormatDescription?
+    CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixel!, formatDescriptionOut: &description)
+    var timing = CMSampleTimingInfo(duration: time(microseconds: 33_333),
+        presentationTimeStamp: time(microseconds: hostUs), decodeTimeStamp: .invalid)
+    var sample: CMSampleBuffer?
+    CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: pixel!,
+        formatDescription: description!, sampleTiming: &timing, sampleBufferOut: &sample)
+    let attachments = CMSampleBufferGetSampleAttachmentsArray(sample!, createIfNecessary: true)! as NSArray
+    (attachments[0] as! NSMutableDictionary)[SCStreamFrameInfo.status.rawValue] = SCFrameStatus.complete.rawValue
+    return sample!
+}
+
+/// A screen that stops changing stops sending frames. The take must still reach disk as it records,
+/// so a process killed mid-take leaves media up to its last few seconds, not a file with no index.
+func runIdleScreenFragmentTest() async throws {
+    let directory = RecoveryFixture.directory("idle-screen")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try CaptureWriter(
+        request: CaptureRequest(source: CaptureSource(kind: "window", windowID: 1),
+            outputDirectory: directory.path, microphone: false, systemAudio: false),
+        width: 32, height: 32, sessionID: "idle-screen",
+        requestedSourceRect: nil, onFailure: { _ in })
+    defer { writer.cancel() }
+    // One frame, then a still screen; the writer stays open, as it is when the process dies. How
+    // many frames the encoder holds before writing depends on the machine, so this waits for the
+    // index rather than timing it; the app's kill test owns the deadline.
+    writer.queue.sync { writer.ingest(completeScreenFrame(atHostUs: CaptureHostTime.nowUs()), of: .screen) }
+    var durationUs: Int64 = 0
+    for _ in 0..<40 where durationUs < 1_000_000 {
+        try await Task.sleep(for: .milliseconds(250))
+        let snapshot = directory.deletingLastPathComponent().appendingPathComponent(UUID().uuidString + ".mov")
+        defer { try? FileManager.default.removeItem(at: snapshot) }
+        try FileManager.default.copyItem(at: directory.appendingPathComponent("video.mov"), to: snapshot)
+        let asset = AVURLAsset(url: snapshot, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+        guard let tracks = try? await asset.loadTracks(withMediaType: .video), !tracks.isEmpty,
+            let duration = try? await asset.load(.duration) else { continue }
+        durationUs = CMTimeConvertScale(duration, timescale: 1_000_000, method: .roundTowardZero).value
+    }
+    precondition(durationUs >= 1_000_000,
+        "A still screen's open take must reach disk with an index, got \(durationUs)us after 10s")
+    print("PASS a still screen's open take keeps writing media (\(durationUs)us on disk)")
+}
+
+/// A screen change that arrives late, after the still screen's last frame has already been
+/// repeated past its timestamp, is still recorded and the take still finishes.
+func runLateScreenFrameTest() async throws {
+    let directory = RecoveryFixture.directory("late-screen-frame")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try CaptureWriter(
+        request: CaptureRequest(source: CaptureSource(kind: "window", windowID: 1),
+            outputDirectory: directory.path, microphone: false, systemAudio: false),
+        width: 32, height: 32, sessionID: "late-screen-frame",
+        requestedSourceRect: nil, onFailure: { _ in })
+    let originUs = CaptureHostTime.nowUs()
+    writer.queue.sync { writer.ingest(completeScreenFrame(atHostUs: originUs), of: .screen) }
+    try await Task.sleep(for: .milliseconds(400))
+    let late = writer.queue.sync {
+        writer.ingestObserved(completeScreenFrame(atHostUs: originUs + 150_000, grey: 255), of: .screen)
+    }
+    precondition(late.disposition == "accepted",
+        "A late screen change must be recorded, got \(late.disposition)")
+    writer.seal()
+    let result = writer.recordPublishedResult(await writer.finish(failure: nil))
+    writer.releaseJournal()
+    precondition(result.state == "complete", "A late frame must not fail the take: \(result.failure as Any)")
+    print("PASS a late screen change after a repeated still frame is recorded")
+}
 
 func runFractionalRecoveryDurationTest() async throws {
     let directory = RecoveryFixture.directory("fractional-duration")

@@ -13,33 +13,20 @@ models, which were 95% of a real library.
 
 ## Next Agent Prompt
 
-*Last updated 2026-10-17.* You are resuming this feature. Read this README, then
+*Last updated 2026-10-18.* You are resuming this feature. Read this README, then
 the slice you pick up. Hard cutover: no compatibility aliases, no catalog
 migration (format stays 29; see [Contracts](#contracts)).
 
-**Status.** Slices 00 to 07 done.
-Choices made along the way are in [choices.md](choices.md).
+**Status.** Slices 00 to 15 are done, and slice 16's full run, review and real-bytes
+check are recorded in [choices.md](choices.md), with every choice made along the way.
+The full run's one red test (a force-quit take of a still screen lost all its media)
+was a defect on main too, and is fixed in the native capture writer.
 
-Slice 01 evidence: protocol, core, CLI and service suites, every package build and
-typecheck, the Swift build and the native node suites are green. The `YapCaptureTests`
-camera flake seen then is fixed (`b6237bda`), outside this spec's slices.
-Slice 02 adds the shared `LibraryDeletion` coordinator and idempotent deletion-plan
-tables while keeping catalog format 29. Slice 03 fences tombstoned assets and
-acquisitions from new references, job admission and asset publish. Slice 04 adds the
-read-only `LibraryUsers.usersOf` query and the `inUseDetailsSchema` refusal shape.
-Slice 05 gives every listing and evidence read one opaque-cursor paging contract.
-Slice 06 makes every public `state` a `WorkState` word, moves domain facts to
-`installation`, `presence` and `availability`, and replaces the ten `*.retry`
-operations with `job.retry`, each with a recovery test.
-Slice 07 names every identity `<noun>Id` and every quantity with its unit, gives
-every changing operation a replayed `requestId` (read-only and idempotent operations
-are listed in `operations.ts`), and makes deletes return `freedBytes`.
-`packages/protocol/src/naming.test.ts` enforces this for every new operation; don't
-edit it to make a slice pass. Evidence stored before the rename is refused as
-`ARTIFACT_CHANGED` and regenerated, never migrated.
-
-**Pick up at** slices 08, 10, 11 and 12. They are independent and can run in
-parallel; 09 waits for 08.
+**Pick up at** slice 16's release. It publishes to every user, so it needs the user's
+explicit go-ahead; follow the repository's `release` skill, and write release notes
+that call out the breaking API changes (renamed fields, removed `recording.latest`,
+`inspect` and `*.retry` operations, `requestId` on every write). Then mark slice 16
+done and run close-spec.
 
 **Warnings.**
 - Slices 05–07 (API consistency) and 02–04 (deletion substrate) don't depend on
