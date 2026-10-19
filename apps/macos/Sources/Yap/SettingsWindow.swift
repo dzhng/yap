@@ -229,8 +229,8 @@ final class SettingsModel: ObservableObject {
         resumeShortcuts()
     }
 
-    /// Restore Defaults: every action back on Yap's own keys, through `shortcuts.reset`.
-    func restoreDefaultShortcuts() {
+    /// Reset All Shortcuts to Defaults: every action back on Yap's own keys, through `shortcuts.reset`.
+    func resetAllShortcuts() {
         shortcutErrorAction = nil
         resetShortcuts()
     }
@@ -423,7 +423,7 @@ struct SettingsView: View {
             // Below both groups, and named for all of them, since it restores every shortcut.
             HStack {
                 Spacer()
-                Button("Reset All Shortcuts to Defaults") { model.restoreDefaultShortcuts() }
+                Button("Reset All Shortcuts to Defaults") { model.resetAllShortcuts() }
                     .disabled(model.shortcuts == ShortcutBindings.defaults)
             }
             .padding(.bottom, 8)

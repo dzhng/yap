@@ -1450,7 +1450,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({ operation: z.literal("shortcuts.reset"), params: z.object({}).strict() })
     .strict()
     .describe(
-      "Put every shortcut back on Yap's default keys, as Settings' Restore Defaults does. Answers like shortcuts.get.",
+      "Put every shortcut back on Yap's default keys, as Settings' Reset All Shortcuts to Defaults does. Answers like shortcuts.get.",
     ),
   z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
