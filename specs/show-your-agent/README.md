@@ -9,12 +9,11 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-18:* plan written; no slice started. Messaging (M) is drafted on this branch
-except the regenerated images.
+*Status, 2026-10-18:* slice 00 passed (both probes). Messaging copy is on `main` and live;
+the images still show the old tagline. Next: slices 01, 06 and 09 in parallel.
 
-You are picking this feature up. Read this README, then [slice 00](slices/00-probes.md) and
-start there: it proves the two assumptions the whole ladder rests on. **If either probe fails,
-stop and report to the user before writing product code.** Work slices in the order of the
+You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
+the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
 graph below; independent tracks may run in parallel in separate checkouts (AGENTS.md: never
 share build output between checkouts whose sources differ). For every slice: invoke
 `write-tests` first, run only that slice's narrow checks, and for any visual shot run
@@ -25,7 +24,7 @@ end your pass.
 
 Global TODO (each item is owned by its slice):
 
-- [ ] 00 Probes: polling modifiers and a global mouse monitor need no permission; the overlay stays out of a real capture
+- [x] 00 Probes: both pass ([evidence](assets/probes/README.md))
 - [ ] 01 Journal schema 3 `mark` contract, Swift and TS, golden fixture
 - [ ] 02 Marks readable through `timeline.events`
 - [ ] 03 `MarkRecognizer`: the Q6 gesture rules, pure

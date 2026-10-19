@@ -25,5 +25,11 @@ a light window, a stroke on a dark window, two pins, an undo.
 - `preview-shots` for the user; wait about five minutes; if silent, decide on the evidence,
   record it here, close the shots and continue.
 
+**Pre-existing failure to fix first:** with "show controls in screenshots" on, a display take
+never logs `recording overlay visible to captures` and `capture-exclusion.test.mjs`'s second
+case times out ([probe evidence](../assets/probes/README.md)). Reproduce and fix it before
+judging the overlay; the ink overlay itself is always hidden from captures, whatever that
+preference says.
+
 **Delegated:** stroke rendering technique, fade curve within the confirmed behaviour.
 **Out of scope:** any visible issue in the recording controls panel.
