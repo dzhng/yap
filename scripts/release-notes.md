@@ -2,6 +2,19 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.61
+
+The camera now stays off unless you turn it on. Since the camera switch arrived, every screen
+recording quietly started the camera, with its light on and its picture in the floating
+controls, even with the switch off. Now the switch alone decides: the camera menu only picks
+which camera, and the "Camera off" choice is gone. A Mac with no camera or no microphone shows
+that row as "No camera" or "No microphone", switched off, and records without it.
+
+The floating controls are always hidden from screenshots and screen sharing, as they are from
+Yap's own recordings; the Show Controls in Screenshots setting is gone. Clear controls choose
+their look again whenever their window is redrawn, aimed at the clear capsule that sometimes
+turned black.
+
 ## 0.1.60
 
 You can now delete anything that takes up space, and see what it frees first. The
