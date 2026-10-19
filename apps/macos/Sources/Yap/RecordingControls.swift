@@ -91,6 +91,8 @@ final class RecordingControls: NSObject {
     /// Asks the capture session to leave this app's windows out of the running take.
     var excludeOwnWindowsFromTake: @MainActor () async -> Bool = { false }
     private let recordingPreview = PreviewWindow()
+    private let paster = Paster()
+    private lazy var pasteNotice = PasteNotice()
     private lazy var countdown = StartCountdown(shortcuts: shortcuts)
     private lazy var settings = SettingsWindow(
         preferences: preferences,
@@ -468,7 +470,8 @@ final class RecordingControls: NSObject {
         case .startOrStop:
             state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
         case .pastePrompt:
-            break // Prompt behavior lands in its own slice.
+            // The newest recording: the service picks it when no target is named.
+            copyPrompt(nil, paste: true)
         case .undoMark:
             guard state.isLive else { return render() }
             do { try captureController?.undoMark() }
@@ -512,6 +515,8 @@ final class RecordingControls: NSObject {
             request(.microphone)
         case .requestCameraPermission:
             request(.camera)
+        case .requestAccessibilityPermission:
+            request(.accessibility)
         case .openLibrary:
             capturePopover.close()
             libraryWindow.show()
@@ -742,7 +747,8 @@ final class RecordingControls: NSObject {
         state.permissions = ControlsProbe.displayedPermissions ?? ControlsState.Permissions(
             screen: NativeCapture.screenPermission ? .granted : screenRequestRefused ? .denied : .undetermined,
             microphone: .init(authorization: NativeCapture.microphonePermission),
-            camera: .init(authorization: NativeCapture.cameraPermission))
+            camera: .init(authorization: NativeCapture.cameraPermission),
+            accessibility: AXIsProcessTrusted() ? .granted : .denied)
     }
 
     // MARK: reading
@@ -972,13 +978,18 @@ final class RecordingControls: NSObject {
     }
     private struct AssetFile: Decodable { let assetId: String; let fileName: String }
 
-    /// The service owns the handoff text; the app only copies what `recording.prompt` returns.
-    private func copyPrompt(_ target: MediaTarget) {
+    /// The service owns the handoff text; the app only copies what `recording.prompt` returns, or
+    /// pastes it into the front app for the paste shortcut. No target means the newest recording.
+    private func copyPrompt(_ target: MediaTarget?, paste: Bool = false) {
         Task { @MainActor in
             do throws(ServiceFailure) {
-                let answer = try await service().call("recording.prompt", target.parameters, as: PromptAnswer.self)
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(answer.text, forType: .string)
+                let answer = try await service().call(
+                    "recording.prompt", target?.parameters ?? [:], as: PromptAnswer.self)
+                if !paste {
+                    paster.copy(answer.text)
+                } else if paster.paste(answer.text) == .copied {
+                    pasteNotice.show()
+                }
             } catch {
                 state.failure = error.localizedDescription
                 render()
@@ -1151,6 +1162,7 @@ final class RecordingControls: NSObject {
             case .screen: !input.screenSourcesEnabled || mode != .cameraOnly || state.selection.systemAudio
             case .microphone: state.selection.microphone != .off
             case .camera: mode == .cameraOnly || input.cameraOn
+            case .accessibility: false
             }
         }
         input.permissionActions = required.compactMap { kind in

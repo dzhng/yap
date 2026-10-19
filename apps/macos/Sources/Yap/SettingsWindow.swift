@@ -321,11 +321,17 @@ struct SettingsView: View {
                     .labelStyle(StatusLabelStyle(tint: .green))
             case let missing?:
                 HStack(spacing: 10) {
-                    Label(kind.statusTitle(for: missing), systemImage: "exclamationmark.circle.fill")
-                        .labelStyle(StatusLabelStyle(tint: .orange))
+                    // An optional access that is off is a choice, not a problem to fix.
+                    if kind.isOptional {
+                        Text(kind.statusTitle(for: missing)).foregroundStyle(.secondary)
+                    } else {
+                        Label(kind.statusTitle(for: missing), systemImage: "exclamationmark.circle.fill")
+                            .labelStyle(StatusLabelStyle(tint: .orange))
+                    }
                     // The same action as the menu's: it prompts, or opens the privacy pane once a
                     // prompt was already answered.
-                    Button(missing == .denied ? "Open System Settings…" : "Allow…") {
+                    // Optional access is always granted in System Settings, so its button needs no longer name.
+                    Button(missing == .denied && !kind.isOptional ? "Open System Settings…" : "Allow…") {
                         model.perform(kind.action)
                     }
                 }

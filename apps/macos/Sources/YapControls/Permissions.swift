@@ -5,20 +5,28 @@ extension ControlsState {
 
     /// What this app may capture, as native capture reads it. Reading it asks for nothing.
     public struct Permissions: Equatable, Sendable {
-        public init(screen: Access, microphone: Access, camera: Access = .undetermined) {
+        public init(
+            screen: Access, microphone: Access, camera: Access = .undetermined,
+            accessibility: Access = .denied
+        ) {
             self.screen = screen
             self.microphone = microphone
             self.camera = camera
+            self.accessibility = accessibility
         }
         public let screen: Access
         public let microphone: Access
         public let camera: Access
+        /// Trusted or not: macOS has no prompt for it that this app would show, so anything short
+        /// of trusted is changed only in System Settings.
+        public let accessibility: Access
 
         public func access(to kind: PermissionKind) -> Access {
             switch kind {
             case .screen: screen
             case .microphone: microphone
             case .camera: camera
+            case .accessibility: accessibility
             }
         }
     }
@@ -60,12 +68,19 @@ public enum PermissionKind: String, CaseIterable, Sendable {
     case screen
     case microphone
     case camera
+    /// Lets the paste shortcut press ⌘V in the front app. Optional: without it the prompt is
+    /// copied and the person presses ⌘V, so nothing ever waits on it or asks for it.
+    case accessibility
+
+    /// Nothing needs it to record, so no recording control asks for it.
+    public var isOptional: Bool { self == .accessibility }
 
     public var name: String {
         switch self {
         case .screen: "Screen Recording"
         case .microphone: "Microphone"
         case .camera: "Camera"
+        case .accessibility: "Accessibility"
         }
     }
 
@@ -75,6 +90,7 @@ public enum PermissionKind: String, CaseIterable, Sendable {
         case .screen: "Needed to record your screen."
         case .microphone: "Needed to record narration."
         case .camera: "Needed to record your selected camera."
+        case .accessibility: "Lets Paste Prompt paste for you; without it, it copies."
         }
     }
 
@@ -83,6 +99,7 @@ public enum PermissionKind: String, CaseIterable, Sendable {
         case .screen: .requestScreenPermission
         case .microphone: .requestMicrophonePermission
         case .camera: .requestCameraPermission
+        case .accessibility: .requestAccessibilityPermission
         }
     }
 
@@ -92,6 +109,7 @@ public enum PermissionKind: String, CaseIterable, Sendable {
         case .screen: "Screen recording access is not granted."
         case .microphone: "Microphone access is not granted."
         case .camera: "Camera access is not granted."
+        case .accessibility: "Accessibility access is not granted."
         }
     }
 
@@ -104,6 +122,8 @@ public enum PermissionKind: String, CaseIterable, Sendable {
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
         case .camera:
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")!
+        case .accessibility:
+            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         }
     }
 
@@ -117,12 +137,14 @@ public enum PermissionKind: String, CaseIterable, Sendable {
             case .screen: "Allow Screen Recording…"
             case .microphone: "Allow Microphone Access…"
             case .camera: "Allow Camera Access…"
+            case .accessibility: "Allow Accessibility…"
             }
         }
     }
 
     public func statusTitle(for access: ControlsState.Access) -> String {
-        switch access {
+        if isOptional, access != .granted { return "Optional" }
+        return switch access {
         case .granted: "Allowed"
         case .undetermined: "Not allowed yet"
         case .denied: "Not allowed"

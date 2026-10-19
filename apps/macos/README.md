@@ -39,6 +39,10 @@ Authorization is read from native capture and requested only through an explicit
 action. Screen source controls remain disabled until access is granted and explain
 which permission enables them; camera-only capture stays independent of screen access.
 Permission denial remains actionable without choosing another device.
+Accessibility is optional and only ever granted in System Settings: with it the paste shortcut
+presses ⌘V in the front app, with Command alone whatever the person is still holding; without it
+the prompt is copied and a non-activating notice says to press ⌘V. Every prompt copy, button or
+shortcut, goes through one [paster](Sources/YapControls/Paster.swift).
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves

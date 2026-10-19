@@ -48,6 +48,8 @@ public enum ControlsAction: Hashable, Sendable {
     case requestScreenPermission
     case requestMicrophonePermission
     case requestCameraPermission
+    /// Opens the Accessibility privacy pane; there is no prompt to show.
+    case requestAccessibilityPermission
     case openSettings
     case quit
 
@@ -93,6 +95,7 @@ public enum ControlsAction: Hashable, Sendable {
         case .requestScreenPermission: "permission.screen"
         case .requestMicrophonePermission: "permission.microphone"
         case .requestCameraPermission: "permission.camera"
+        case .requestAccessibilityPermission: "permission.accessibility"
         case .openSettings: "app.settings"
         case .quit: "app.quit"
         }

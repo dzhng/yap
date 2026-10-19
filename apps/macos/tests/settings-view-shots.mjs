@@ -38,13 +38,16 @@ enum ControlsProbe { static let observed = true }
             ("failure", .init(available: true, enabled: true, status: "Update failed: the download could not be verified. Your current version is unchanged.", canCheck: true)),
             ("manual", .init()),
             ("notice", .init(available: true, enabled: true, canCheck: true)),
+            ("accessibility-allowed", .init(available: true, enabled: true, canCheck: true)),
         ]
         for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for (name, updates) in states {
                 let preferences = Preferences(defaults: UserDefaults(suiteName: "\(scratch)/\(theme)-\(name)")!)
                 let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
                 model.registered = [ControlsAction.startOrStop.id, ControlsAction.pastePrompt.id]
-                model.state.permissions = ControlsState.Permissions(screen: .granted, microphone: .granted)
+                model.state.permissions = ControlsState.Permissions(
+                    screen: .granted, microphone: .granted,
+                    accessibility: name == "accessibility-allowed" ? .granted : .denied)
                 model.state.updates = updates
                 if name == "notice" {
                     model.state.adminMessage = "Yap 0.1.41 cannot update itself. Back up ~/.yap, then reinstall Yap from justyap.io."
