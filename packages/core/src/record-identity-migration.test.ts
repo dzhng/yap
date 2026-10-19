@@ -241,6 +241,12 @@ test.for(["format-29-editing", "format-29-deletion"])(
       user_version: catalogFormat,
     });
     expect(oldShapes(catalog.catalog)).toEqual([]);
+    // Background transcription queues behind interactive work, so every job carries a priority.
+    expect(
+      catalog.catalog
+        .prepare("SELECT dflt_value FROM pragma_table_info('jobs') WHERE name='priority'")
+        .get(),
+    ).toEqual({ dflt_value: "'interactive'" });
     const projects = new ProjectStore(
       catalog,
       new AssetStore(catalog, home),

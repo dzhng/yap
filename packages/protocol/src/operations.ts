@@ -133,6 +133,7 @@ const captureHeads = z.strictObject({
   cursor: capturePosition,
   pause: capturePosition,
   geometry: capturePosition,
+  mark: capturePosition,
   interruption: capturePosition,
 });
 const sourceCaptureParams = (maximum: number, events = false) =>
@@ -1396,7 +1397,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Read measured source scene changes, captured pause/geometry and explicit capture-end interruption markers for a selected asset stream or project. Source selectors use sourceRange; project selectors use range/revisionId/trackIds. Capture identity requires explicit acquisitionId; missing metadata is unavailable, not an empty success. Timed geometry belongs to captured video; pauses follow each bound timed occurrence. Normal completion contributes no interruption marker. Capture-end markers require trustworthy timed completion; missing, damaged or conflicting termination is explicitly unavailable. These closing boundaries use left support and (start,end] query ownership; ordinary observations stay [start,end). A shorter selected audio stream never relocates the capture endpoint. Video scenes use retained physical picture clocks without requiring capture metadata. Initial reads may be queued during scene preparation; inspect returned dependency/job state and use job.retry for explicit recovery. Project cut rows describe track-local editorial mapping transitions with exact projectAtUs, audio/video mediaKind and nullable before/after sides; they are not measured scene changes or proof of a visible composite change. Continuous pure splits do not create cuts; internal entrances/exits and rate changes do. Cut queries use [start,end), while physical support gaps remain availability evidence. Cut coverage is supplied by the pinned project revision, independently of source cut availability. Preserve first-page coverage and exact projectAtUs values across continuations. Continue while nextCursor exists, even if rows is empty. Adjacent rows with equal atUs form one logical group and may span pages. A cursor pins its target, revision and source/scene generations.",
+      "Read measured source scene changes, captured pause/geometry, show-your-agent marks and explicit capture-end interruption markers for a selected asset stream or project. Marks are returned as active stroke, pin and click rows with retractions applied and points projected through their captured geometry epoch. Source selectors use sourceRange; project selectors use range/revisionId/trackIds. Capture identity requires explicit acquisitionId; missing metadata is unavailable, not an empty success. Timed geometry belongs to captured video; pauses follow each bound timed occurrence. Normal completion contributes no interruption marker. Capture-end markers require trustworthy timed completion; missing, damaged or conflicting termination is explicitly unavailable. These closing boundaries use left support and (start,end] query ownership; ordinary observations stay [start,end). A shorter selected audio stream never relocates the capture endpoint. Video scenes use retained physical picture clocks without requiring capture metadata. Initial reads may be queued during scene preparation; inspect returned dependency/job state and use job.retry for explicit recovery. Project cut rows describe track-local editorial mapping transitions with exact projectAtUs, audio/video mediaKind and nullable before/after sides; they are not measured scene changes or proof of a visible composite change. Continuous pure splits do not create cuts; internal entrances/exits and rate changes do. Cut queries use [start,end), while physical support gaps remain availability evidence. Cut coverage is supplied by the pinned project revision, independently of source cut availability. Preserve first-page coverage and exact projectAtUs values across continuations. Continue while nextCursor exists, even if rows is empty. Adjacent rows with equal atUs form one logical group and may span pages. A cursor pins its target, revision and source/scene generations.",
     ),
   z
     .object({
@@ -1422,6 +1423,30 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .describe(
       "Register or unregister Yap as a macOS login item after the user explicitly confirms the choice.",
     ),
+  z
+    .object({ operation: z.literal("shortcuts.get"), params: z.object({}).strict() })
+    .strict()
+    .describe("Read Yap's version 2 global shortcut bindings."),
+  z
+    .object({
+      operation: z.literal("shortcuts.set"),
+      params: z
+        .object({
+          bindings: z.record(
+            z.string().min(1),
+            z
+              .object({
+                keyCode: z.int().nonnegative(),
+                modifiers: z.int().nonnegative(),
+                label: z.string().min(1),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    })
+    .strict()
+    .describe("Apply global shortcut bindings immediately and persist them."),
   z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
     .strict()
@@ -1589,6 +1614,19 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("recording.prompt"),
+      params: z.union([
+        z.object({ recordingId: id.optional() }).strict(),
+        z.object({ projectId: id }).strict(),
+        z.object({ assetId: id }).strict(),
+      ]),
+    })
+    .strict()
+    .describe(
+      "Return the text a person pastes to hand media to an agent, with the facts it was written from. For a recording (omit recordingId for the latest take) the text describes what was captured: sources, duration, display or camera, marks or clicks, and whether a transcript is being prepared; it never waits for transcription. A projectId or assetId returns that item's one-line ID handoff.",
+    ),
+  z
+    .object({
       operation: z.literal("revision.get"),
       params: project.extend({ revisionId: id.optional() }).strict(),
     })
@@ -1667,6 +1705,7 @@ export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationN
   "timeline.events",
   "cursor.raw",
   "login.status",
+  "shortcuts.get",
   "update.status",
   "skill.status",
   "cli.status",
@@ -1677,6 +1716,7 @@ export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationN
   "recording.list",
   "media.list",
   "recording.get",
+  "recording.prompt",
   "revision.get",
   "revision.history",
 ]);
@@ -1706,6 +1746,7 @@ export const idempotentOperations: ReadonlySet<OperationName> = new Set<Operatio
   "artifact.close", // closing an already closed token changes nothing.
   "login.setEnabled", // setting the existing login-item preference changes nothing.
   "update.setEnabled", // setting the existing updater preference changes nothing.
+  "shortcuts.set", // setting the existing bindings changes nothing.
   "skill.install", // installing an already installed skill is a no-op.
   "skill.uninstall", // uninstalling an absent skill is a no-op.
   "skill.update", // updating an already current skill is a no-op.
@@ -1725,7 +1766,7 @@ export const idempotentOperations: ReadonlySet<OperationName> = new Set<Operatio
  * is how a broken service gets fixed.
  */
 export const appOperations: ReadonlySet<string> = new Set(
-  [...operationNames].filter((name) => /^(update|skill|cli|login)\./.test(name)),
+  [...operationNames].filter((name) => /^(update|skill|cli|login|shortcuts)\./.test(name)),
 );
 
 const nativeCall = DEFAULT_CALL_TIMEOUT_MS;
@@ -1735,6 +1776,8 @@ const drain = 180_000;
 const waits: Partial<Record<OperationName, number>> = {
   "login.status": nativeCall,
   "login.setEnabled": nativeCall,
+  "shortcuts.get": nativeCall,
+  "shortcuts.set": nativeCall,
   "update.status": nativeCall,
   "update.check": nativeCall,
   "update.setEnabled": nativeCall,

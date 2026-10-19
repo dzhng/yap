@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AppKit
 import Foundation
 import Synchronization
 @preconcurrency import ScreenCaptureKit
@@ -60,11 +61,21 @@ private final class TrackWriter {
     }
 }
 
+/// What a live take tells the person drawing on it, in the order it happened: the stroke still
+/// being drawn, each mark once it is recorded, and each mark undo takes back. It carries the
+/// recognizer's decisions, so whoever draws them classifies nothing.
+public enum CaptureMarkUpdate: Equatable, Sendable {
+    case liveStroke([MarkPoint])
+    case committed(JournalMark)
+    case retracted(String)
+}
+
 // All writer and clock mutations run on this queue, including control boundaries.
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
     private let journal: CaptureJournal
-    package var packedJournalLease: CaptureJournalLease? { journal.schemaVersion == 2 ? journal.lease : nil }
+    package var packedJournalLease: CaptureJournalLease? { CaptureJournal.isPacked(journal.schemaVersion) ? journal.lease : nil }
+    package var journalSchemaVersion: Int { journal.schemaVersion }
     package var requestedAudioRoles: [String] {
         (request.microphone ? ["narration"] : []) + (request.systemAudio ? ["system"] : [])
     }
@@ -100,6 +111,14 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var cursor = CursorTrack()
     private var sampler: CursorSampler?
     private var zeroOriginHeight: Double?
+    private var markRecognizer: MarkRecognizer?
+    private var markMonitorTokens: [Any] = []
+    private var recordedMarks: [(id: String, kind: String, pin: Int?)] = []
+    private var retractedMarkIDs = Set<String>()
+    package var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
+    /// Points of the live stroke the overlay was last told about. A stroke only grows until it
+    /// ends, so its length is enough to know whether there is anything new to say.
+    private var publishedStrokePoints = 0
 
     package init(
         request: CaptureRequest, width: Int, height: Int, sessionID: String,
@@ -110,12 +129,14 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         self.width = width
         self.height = height
         self.requestedSourceRect = requestedSourceRect
+        self.markRecognizer = request.source.kind == "camera"
+            ? nil : MarkRecognizer(windowUnderPoint: LiveWindowSource())
         try FileManager.default.createDirectory(
             atPath: request.outputDirectory, withIntermediateDirectories: true)
         journal = try CaptureJournal(
             directory: request.outputDirectory,
             header: CaptureJournalHeader(
-                schemaVersion: 2, sessionID: sessionID, source: request.source, width: width,
+                schemaVersion: 3, sessionID: sessionID, source: request.source, width: width,
                 height: height,
                 microphone: request.microphone, systemAudio: request.systemAudio))
         tracks["video"] = try TrackWriter(
@@ -140,6 +161,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             self.sampler = sampler
             sampler.start()
         }
+        guard request.source.kind != "camera" else { return }
+        installMarkMonitors()
     }
 
     package func pause() {
@@ -148,6 +171,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             let hostUs = CaptureHostTime.nowUs()
             clock.pause(at: hostUs)
             publishClock()
+            markRecognizer?.updateCaptureState(
+                paused: true, hasFirstFrame: clock.originUs != nil)
             _ = record { try self.journal.recordPauseBegan(hostUs: hostUs) }
         }
     }
@@ -162,6 +187,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         let count = clock.pauses.count
         clock.resume(at: hostUs)
         publishClock()
+        markRecognizer?.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
         if paused {
             let pause = clock.pauses.count > count ? clock.pauses.last : nil
             _ = record { try self.journal.recordPauseEnded(hostUs: hostUs, pause: pause) }
@@ -203,6 +230,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     }
 
     package func seal() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
             idleRepeat?.cancel()
@@ -217,6 +245,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         }
     }
     package func cancel() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
             idleRepeat?.cancel()
@@ -240,10 +269,117 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     hostUs: reading.hostUs, zeroOriginHeight: reading.zeroOriginHeight)
             }
         }
-        guard failure == nil,
-            let batch = cursor.accept(reading, sourceUs: clock.sourceTime(for: reading.hostUs))
-        else { return }
-        _ = record { try self.journal.recordCursorSamples(batch) }
+        let sourceUs = clock.sourceTime(for: reading.hostUs)
+        guard failure == nil else { return }
+        if let batch = cursor.accept(reading, sourceUs: sourceUs) {
+            _ = record { try self.journal.recordCursorSamples(batch) }
+        }
+        guard let markRecognizer, sourceUs != nil else { return }
+        var recognizer = markRecognizer
+        recognizer.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
+        let events = recognizer.feed(
+            sample: MarkSample(
+                hostUs: reading.hostUs, shift: reading.shift, otherModifiers: reading.otherModifiers,
+                point: reading.global, buttonDown: reading.buttons != 0))
+        self.markRecognizer = recognizer
+        append(events)
+        publishActiveStroke(recognizer)
+    }
+
+    /// Appends a retracting mark for the most recent mark that has not already been undone.
+    package func undoMark() throws {
+        try queue.sync {
+            guard !finishing, failure == nil, request.source.kind != "camera" else {
+                throw CaptureFailure("INVALID_STATE", "No screen capture is recording marks.")
+            }
+            guard let target = recordedMarks.last(where: { !retractedMarkIDs.contains($0.id) })
+            else { return }
+            let hostUs = CaptureHostTime.nowUs()
+            // A paused take has no source time now; its undo lands where the pause began.
+            guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs)
+            else { return }
+            let mark = JournalMark(
+                hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
+                id: UUID().uuidString, kind: target.kind, pin: target.pin, points: [], retracts: target.id)
+            let written = record { try journal.recordMark(mark) }
+            guard written else { return }
+            retractedMarkIDs.insert(target.id)
+            onMarkUpdate?(.retracted(target.id))
+        }
+    }
+
+    private func installMarkMonitors() {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp]
+        let register = { [weak self] in
+            NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+                guard let self else { return }
+                let isDown = event.type == .leftMouseDown
+                let shift = event.modifierFlags.contains(.shift)
+                let point = GlobalPointSpace.flip(
+                    appKit: NSEvent.mouseLocation, zeroOriginHeight: GlobalPointSpace.zeroOriginHeight())
+                let hostUs = CaptureHostTime.nowUs()
+                self.queue.async {
+                    guard !self.finishing, self.failure == nil, var recognizer = self.markRecognizer else { return }
+                    guard self.clock.sourceTime(for: hostUs) != nil else { return }
+                    recognizer.updateCaptureState(
+                        paused: self.clock.isPaused, hasFirstFrame: self.clock.originUs != nil)
+                    let events: [MarkEvent]
+                    if isDown {
+                        events = recognizer.feed(
+                            press: MarkPress(
+                                hostUs: hostUs, point: point, shift: shift))
+                    } else {
+                        events = recognizer.feed(release: MarkRelease(hostUs: hostUs, point: point))
+                    }
+                    self.markRecognizer = recognizer
+                    self.append(events)
+                    self.publishActiveStroke(recognizer)
+                }
+            }
+        }
+        let token: Any? = Thread.isMainThread ? register() : DispatchQueue.main.sync(execute: register)
+        if let token { markMonitorTokens = [token] }
+    }
+
+    private func removeMarkMonitors() {
+        let tokens = markMonitorTokens
+        let remove = { for token in tokens { NSEvent.removeMonitor(token) } }
+        if Thread.isMainThread { remove() } else { DispatchQueue.main.sync(execute: remove) }
+        markMonitorTokens.removeAll()
+    }
+
+    private func append(_ events: [MarkEvent]) {
+        for event in events {
+            guard let first = event.points.first else { continue }
+            guard let sourceUs = clock.sourceTime(for: first.hostUs) else { continue }
+            let mark = JournalMark(
+                hostUs: first.hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
+                id: UUID().uuidString, kind: event.kind.rawValue, pin: event.pin,
+                points: event.points.map { point in
+                    let projection = cursor.projection(
+                        forGlobalPoint: CGPoint(x: point.x, y: point.y), hostUs: point.hostUs)
+                    let pixel = projection.inside ? projection.pixel : nil
+                    return JournalMarkPoint(
+                        globalX: point.x, globalY: point.y,
+                        x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
+                        hostUs: point.hostUs)
+                },
+                window: event.window)
+            let written = record { try journal.recordMark(mark) }
+            guard written else { return }
+            recordedMarks.append((mark.id, mark.kind, mark.pin))
+            onMarkUpdate?(.committed(mark))
+        }
+    }
+
+    /// Tells the overlay about the live stroke only when it changed. It follows any mark the same
+    /// reading recorded, so an ended stroke is drawn as its mark before its live line goes.
+    private func publishActiveStroke(_ recognizer: MarkRecognizer) {
+        let stroke = recognizer.activeStroke
+        guard stroke.count != publishedStrokePoints else { return }
+        publishedStrokePoints = stroke.count
+        onMarkUpdate?(.liveStroke(stroke))
     }
 
     private func flushCursorSamples() {
@@ -674,7 +810,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             queue.async {
                 do {
                     try lease.synchronize()
-                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: 2)
+                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: self.journalSchemaVersion)
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }

@@ -120,6 +120,10 @@
       "types": "./dist/transcript-processing.d.ts",
       "default": "./dist/transcript-processing.js"
     },
+    "./transcript-backlog": {
+      "types": "./dist/transcript-backlog.d.ts",
+      "default": "./dist/transcript-backlog.js"
+    },
     "./transcript-import": {
       "types": "./dist/transcript-import.d.ts",
       "default": "./dist/transcript-import.js"
@@ -179,6 +183,10 @@
     "./capture-source-read": {
       "types": "./dist/capture-source-read.d.ts",
       "default": "./dist/capture-source-read.js"
+    },
+    "./recording-prompt": {
+      "types": "./dist/recording-prompt.d.ts",
+      "default": "./dist/recording-prompt.js"
     },
     "./frame-inspection": {
       "types": "./dist/frame-inspection.d.ts",

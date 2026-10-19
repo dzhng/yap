@@ -2,42 +2,94 @@ import Foundation
 import YapControls
 
 func runShortcutTests() {
-    precondition(Shortcut(display: "⌘,") == Shortcut(command: true, key: ","),
-        "The standard Settings shortcut retains its binding")
-    let suggested = ShortcutDefaults.suggested
-    precondition(
-        suggested[.startOrStop]?.display == "⌃⌥⌘R" && suggested[.pauseOrResume]?.display == "⌃⌥⌘P"
-            && suggested[.cancel]?.display == "⌃⌥⌘X" && suggested[.restart]?.display == "⌃⌥⌘N",
-        "The suggested combinations are the ones the product asked for")
+    let defaults = ShortcutBindings.defaults
+    precondition(defaults[.startOrStop]?.shortcut == Shortcut(keyCode: 1, modifiers: 2560, label: "⌥⇧S"), "Start uses physical S")
+    precondition(defaults[.pastePrompt]?.shortcut.keyCode == 9, "Paste uses physical V")
+    precondition(defaults[.undoMark]?.shortcut.keyCode == 6, "Undo uses physical Z")
+    precondition(defaults[.cancel]?.shortcut.keyCode == 7, "Cancel uses physical X")
+    precondition(defaults[.pauseOrResume]?.shortcut.keyCode == 35, "Pause uses physical P")
+    precondition(defaults[.restart]?.shortcut.keyCode == 15, "Restart uses physical R")
+    precondition(defaults[.startOrStop]?.lifetime == .app && defaults[.pastePrompt]?.lifetime == .app, "Start and paste live for the app")
+    precondition(defaults[.undoMark]?.lifetime == .recording && defaults[.restart]?.lifetime == .recording, "In-take actions live for the recording")
 
-    let none = ShortcutDefaults(registered: [])
-    precondition(
-        none.display(of: .startOrStop) == nil,
-        "A combination this app does not hold is not advertised as if pressing it would work")
-    let held = ShortcutDefaults(registered: ["capture.startOrStop"])
-    precondition(held.display(of: .startOrStop) == "⌃⌥⌘R", "A held combination is shown where it acts")
-    precondition(held.display(of: .cancel) == nil, "Holding one combination says nothing about another")
+    let encoded = Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"}}}"#.utf8)
+    let decoded = try? ShortcutBindings.decode(encoded)
+    precondition(decoded?[.startOrStop]?.shortcut.keyCode == 1, "Version 2 stores a physical key code")
+    precondition((try? ShortcutBindings.decode(Data(#"{"version":1,"bindings":{"capture.startOrStop":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))) == defaults, "Version 1 overrides are ignored")
+    // A version 2 file with a bad entry is refused out loud, so the person learns why their
+    // bindings are not in effect before a later change overwrites the file.
+    do {
+        let accepted = try ShortcutBindings.decode(Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"},"capture.unknown":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))
+        preconditionFailure("A version 2 file with an invalid entry is adopted silently, got \(accepted)")
+    } catch {
+        precondition(!error.message.isEmpty, "The refused file says why")
+    }
+    print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
+}
 
-    var contested = ready()
-    contested.unavailableShortcuts = ["⌃⌥⌘R"]
-    let notes = CapturePresentation.noticeLines(for: contested)
-    precondition(
-        notes.contains { $0.contains("⌃⌥⌘R") && $0.contains("in use") },
-        "A combination another application owns is named rather than silently dropped")
+/// `shortcuts.set` changes only the actions it names, and refuses the whole call for one bad entry.
+func runShortcutSetTests() {
+    var current = ShortcutBindings.defaults
+    current[.startOrStop] = .init(shortcut: .init(keyCode: 2, modifiers: 2_560, label: "⌥⇧D"), lifetime: .app)
+    let paste: [String: Any] = ["keyCode": 11, "modifiers": 2_560, "label": "⌥⇧B"]
 
-    let overridden = ShortcutDefaults.overridden(
-        by: Data(#"{"capture.startOrStop":"⇧⌘8","capture.cancel":""}"#.utf8))
-    precondition(overridden[.startOrStop]?.display == "⇧⌘8", "A stated combination replaces the default")
-    precondition(overridden[.cancel] == nil, "An empty combination asks for no binding at all")
-    precondition(overridden[.restart]?.display == "⌃⌥⌘N", "Unstated actions keep their default")
+    let merged = try? ShortcutBindings.merging([ControlsAction.pastePrompt.id: paste], into: current)
+    precondition(merged?[.pastePrompt]?.shortcut.keyCode == 11, "The named action takes its new key")
+    precondition(merged?[.startOrStop] == current[.startOrStop],
+        "Setting one action keeps every other custom binding, got \(String(describing: merged?[.startOrStop]))")
+    precondition(merged?[.pastePrompt]?.lifetime == .app, "An action keeps its own lifetime")
+
+    for (stated, why) in [
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.undoMark.id: ["modifiers": 2_560, "label": "⌥⇧U"]],
+            "an entry with no key code"),
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.cancel.id: ["keyCode": 7, "modifiers": 2_560, "label": ""]],
+            "an entry with no label"),
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.restart.id: "⌥⇧R"], "an entry that is not an object"),
+        (["capture.unknown": paste], "an unknown action"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": true, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a boolean key code"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 11.5, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a fractional key code"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 11, "modifiers": -1, "label": "⌥⇧B"]],
+            "negative modifiers"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 4_294_967_296, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a key code past 32 bits"),
+    ] as [([String: Any], String)] {
+        do {
+            let accepted = try ShortcutBindings.merging(stated, into: current)
+            preconditionFailure("shortcuts.set accepts \(why), got \(accepted)")
+        } catch {
+            precondition(!error.message.isEmpty, "The refusal of \(why) says why")
+        }
+    }
+    print("PASS shortcuts.set merges into the current bindings and refuses any invalid entry")
+}
+
+func runShortcutPresentationTests() {
+    let recording = ShortcutBindings.defaults[.undoMark]!
     precondition(
-        ShortcutDefaults.overridden(by: Data("not json".utf8))[.startOrStop]?.display == "⌃⌥⌘R",
-        "An unreadable override leaves every suggested combination in place")
+        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: false)
+            == .active,
+        "An idle recording-lifetime shortcut has no warning state")
     precondition(
-        ShortcutDefaults.overridden(by: Data(#"{"capture.restart":"F"}"#.utf8))[.restart]?.display
-            == "⌃⌥⌘N",
-        "A combination with no modifier is refused rather than claiming a bare key")
-    print("PASS shortcuts are advertised only where this app actually holds them")
+        ShortcutPresentation.state(for: recording, registered: false, recording: false, unavailable: true)
+            == .refusedByMacOS,
+        "An unavailable shortcut says macOS refused it")
+    precondition(
+        ShortcutPresentation.state(for: recording, registered: true, recording: true, unavailable: false)
+            == .active,
+        "A registered shortcut says it is active")
+    precondition(
+        ShortcutPresentation.label(keyCode: 1, modifiers: 2_560, key: "s") == "⌥⇧S",
+        "A captured key gets the same modifier glyphs as the defaults")
+    precondition(
+        ShortcutPresentation.label(keyCode: 42, modifiers: 0, key: "") == "Key 42",
+        "An unnamed captured key includes its physical key code")
+    precondition(
+        ShortcutPresentation.statusTitle(.duplicateInYap) == "Duplicate in Yap"
+            && ShortcutPresentation.statusTitle(.refusedByMacOS) == "Refused by macOS",
+        "Rejected shortcut states use their Settings wording")
+    print("PASS shortcut presentation distinguishes active, refused and duplicate states")
 }
 
 /// What macOS itself holds, read the way it stores it.

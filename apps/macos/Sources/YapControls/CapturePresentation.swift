@@ -76,7 +76,11 @@ public enum CapturePresentation {
             let detail = take.interruptionMessage.map { ": \($0)" } ?? ""
             lines.append("Last take interrupted — \(take.interruptionReason ?? "reason unavailable")\(detail)")
         }
-        if !state.unavailableShortcuts.isEmpty { lines.append("\(state.unavailableShortcuts.joined(separator: " and ")) is already in use elsewhere.") }
+        let refused = ShortcutBindings.catalog.filter { state.unavailableShortcuts.contains($0.action.id) }
+        if !refused.isEmpty {
+            let names = refused.map(\.name).joined(separator: " and ")
+            lines.append("The \(names) shortcut\(refused.count == 1 ? " was" : "s were") refused by macOS.")
+        }
         return lines
     }
 }

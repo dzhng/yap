@@ -29,6 +29,11 @@ import { writeFile } from "node:fs/promises";
 import { AcousticInspection } from "@yap/core/acoustic-inspection";
 import { MediaFrameInspection } from "@yap/core/frame-inspection";
 import { CaptureSourceRead } from "@yap/core/capture-source-read";
+import {
+  handoffPrompt,
+  recordingPromptFacts,
+  renderRecordingPrompt,
+} from "@yap/core/recording-prompt";
 import { SourceEvents } from "@yap/core/source-events";
 import { SourceSceneRead } from "@yap/core/scene-source-read";
 import { SceneEvidenceStore, assetSceneOwner } from "@yap/core/scene-evidence";
@@ -51,6 +56,7 @@ import {
   type SpeechTranscriptionReceipt,
 } from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
+import { TranscriptBacklog } from "@yap/core/transcript-backlog";
 import { SourceTranscriptRead } from "@yap/core/transcript-read";
 import { wordKind } from "@yap/core/word-kind";
 import {
@@ -230,6 +236,9 @@ export async function startProjectService(options: {
   presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
+  /** Transcribe every recording and import in the background. The installed service turns it
+   * on; library callers and tests get only the transcription they ask for unless they opt in. */
+  autoTranscribe?: boolean;
   /** Tests substitute deletion plans that fail a chosen durable write. */
   deletionPlans?: (catalog: Catalog) => DeletionPlans;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
@@ -372,6 +381,20 @@ export async function startProjectService(options: {
       assets,
       evidence,
       library,
+      (acquisition) => {
+        for (const binding of acquisition.bindings) {
+          const stream = assets
+            .get(binding.assetId)
+            .streams.find((candidate) => candidate.id === binding.streamId);
+          if (stream?.kind !== "audio" || !options.autoTranscribe) continue;
+          transcriptBacklog?.enqueue({
+            assetId: binding.assetId,
+            streamId: binding.streamId,
+            acquisitionId: acquisition.id,
+          });
+        }
+        transcriptBacklog?.wake();
+      },
     );
     const capture = new CaptureSourceRead(assets, acquisitions, evidence);
     const sceneRecords = new SceneEvidenceStore(catalog, assetSceneOwner(assets, acquisitions));
@@ -408,6 +431,7 @@ export async function startProjectService(options: {
       modelPreparations.add(automaticModels);
       void automaticModels.finally(() => {
         modelPreparations.delete(automaticModels);
+        transcriptBacklog?.wake();
         admission.progress();
       });
     }
@@ -515,6 +539,7 @@ export async function startProjectService(options: {
     let projectEvidence: ProjectEvidenceInspection;
     let mediaAudio: MediaAudioInspection;
     let preparedAudio: PreparedAudioStore;
+    let transcriptBacklog: TranscriptBacklog;
     let extractedAudio: AudioExtraction;
     let renderedSpeech: RenderedSpeech;
     let generatedVoice: VoiceGenerationJobs;
@@ -538,6 +563,7 @@ export async function startProjectService(options: {
       onCapacity: () => {
         resumeCaptureSources();
         for (const error of exports?.resumeRecovery() ?? []) console.error(error);
+        transcriptBacklog?.wake();
       },
       execute: async ({ job, signal }) => {
         if (job.artifact === "asset-conversion") return convertedAssets.execute({ job, signal });
@@ -577,7 +603,11 @@ export async function startProjectService(options: {
           return alignments.execute({ job, signal });
         if (job.target.kind === "asset" && job.artifact === "source-speakers")
           return speakers.execute({ job, signal });
-        if (job.artifact === "transcript") return transcripts.execute({ job, signal });
+        if (job.artifact === "transcript") {
+          const result = await transcripts.execute({ job, signal });
+          transcriptBacklog.wake();
+          return result;
+        }
         if (job.artifact === "export-media" || job.artifact === "export-recovery")
           return exports!.execute({ job, signal });
         if (job.target.kind === "project" && job.artifact === "preview")
@@ -597,10 +627,18 @@ export async function startProjectService(options: {
         }
         if (job.target.kind !== "import" || job.artifact !== "asset.import")
           throw new CatalogError("PREREQUISITE_MISSING", "Unsupported preparation job");
-        const asset = await assets.executeImport(job.target.id, probe, signal, {
-          kind: "job",
-          id: job.jobId,
-        });
+        const asset = await assets.executeImport(
+          job.target.id,
+          probe,
+          signal,
+          { kind: "job", id: job.jobId },
+          (published) => {
+            for (const stream of published.streams)
+              if (stream.kind === "audio" && options.autoTranscribe)
+                transcriptBacklog.enqueue({ assetId: published.id, streamId: stream.id });
+            transcriptBacklog.wake();
+          },
+        );
         return JSON.stringify({ assetId: asset.id });
       },
     });
@@ -690,6 +728,14 @@ export async function startProjectService(options: {
           }),
         ) as SpeechTranscriptionReceipt,
     });
+    transcriptBacklog = new TranscriptBacklog(catalog, {
+      readiness: () => transcripts.recognitionReadiness().state === "ready",
+      status: (selection) => transcripts.sourceStatus(selection),
+      submit: (selection) => transcripts.prepareSource(selection, "background"),
+      retry: (selection) => transcripts.retrySource(selection),
+      report: (error) => console.error(error),
+    });
+    transcriptBacklog.drain();
     /** The review model's status, as work with no job of its own. */
     const ensureReviewModel = () => {
       const modelId = "parakeet";
@@ -708,6 +754,7 @@ export async function startProjectService(options: {
         modelPreparations.add(flight);
         void flight.finally(() => {
           modelPreparations.delete(flight!);
+          transcriptBacklog.wake();
           admission.progress();
         });
       }
@@ -1031,6 +1078,8 @@ export async function startProjectService(options: {
         index: projectIndex,
         scenes,
         records: sceneRecords,
+        evidence,
+        capture,
         frames: mediaFrames,
         cache,
       },
@@ -1041,6 +1090,8 @@ export async function startProjectService(options: {
         index: sourceIndex,
         scenes,
         records: sceneRecords,
+        evidence,
+        capture,
         frames: mediaFrames,
         cache,
       },
@@ -1406,6 +1457,35 @@ export async function startProjectService(options: {
                 : operationError(["NOT", "FOUND"].join("_"), "Recording does not exist");
             }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
+          case "recording.prompt": {
+            const params = operation.params;
+            if ("projectId" in params) {
+              const { id: projectId } = projects.get(params.projectId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("project", projectId), facts: { projectId } },
+              };
+            }
+            if ("assetId" in params) {
+              const { id: assetId } = assets.describe(params.assetId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("asset", assetId), facts: { assetId } },
+              };
+            }
+            const facts = await recordingPromptFacts(
+              {
+                recordings: captures,
+                acquisitions,
+                assets,
+                capture,
+                backlog: transcriptBacklog,
+                transcripts,
+              },
+              params.recordingId,
+            );
+            return { ok: true, data: { text: renderRecordingPrompt(facts), facts } };
+          }
           case "recording.list": {
             const page = captures.list(operation.params.cursor, operation.params.limit);
             return {
@@ -1708,10 +1788,12 @@ export async function startProjectService(options: {
               modelPreparations.add(preparing);
               void preparing.finally(() => {
                 modelPreparations.delete(preparing);
+                transcriptBacklog.wake();
                 admission.progress();
               });
             }
             const model = await models.status(modelId);
+            transcriptBacklog.wake();
             return {
               ok: true,
               data: {

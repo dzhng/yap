@@ -9,12 +9,21 @@ and leaves out its iPhone `M` key. Reference stills are in
 
 ## Next Agent Prompt
 
-*Status, 2026-10-18:* plan written; no slice started. Messaging (M) is drafted on this branch
-except the regenerated images.
+*Status, 2026-10-19:* every slice (00–14) is implemented and merged on this branch, the whole-feature
+review's 15 findings are fixed, and the full repository check passes (format, lint, build, types, every
+test package, tools). One macOS test, `recording-overlays.test.mjs` "with the countdown off…", failed
+once under `--concurrency=2` (another package's app tests took focus) and passed 3/3 twice alone.
 
-You are picking this feature up. Read this README, then [slice 00](slices/00-probes.md) and
-start there: it proves the two assumptions the whole ladder rests on. **If either probe fails,
-stop and report to the user before writing product code.** Work slices in the order of the
+What is left needs the user or a signed, installed build, so pick these up with them:
+- Review the taste calls at the top of [choices.md](choices.md) (ink look, Settings shortcuts,
+  paste notice, prompt wording).
+- Slice 15 on a signed, installed build: time ⌥⇧S → talk and draw → ⌥⇧S → ⌥⇧V (under 2 s
+  overhead, D18); paste with Accessibility granted lands ⌘V in the front app; the light paste
+  notice reads on a real screen; a fresh Claude Code and Codex session act on a real pasted
+  prompt without a follow-up question. Then run close-spec.
+
+You are picking this feature up. Read this README, then the next open slice. Slice 00 proved the two assumptions
+the ladder rests on ([evidence](assets/probes/README.md)). Work slices in the order of the
 graph below; independent tracks may run in parallel in separate checkouts (AGENTS.md: never
 share build output between checkouts whose sources differ). For every slice: invoke
 `write-tests` first, run only that slice's narrow checks, and for any visual shot run
@@ -25,22 +34,22 @@ end your pass.
 
 Global TODO (each item is owned by its slice):
 
-- [ ] 00 Probes: polling modifiers and a global mouse monitor need no permission; the overlay stays out of a real capture
-- [ ] 01 Journal schema 3 `mark` contract, Swift and TS, golden fixture
-- [ ] 02 Marks readable through `timeline.events`
-- [ ] 03 `MarkRecognizer`: the Q6 gesture rules, pure
-- [ ] 04 Live marks recorded during a take
-- [ ] 05 Ink overlay (visual: colour, fade, pin badges)
-- [ ] 06 Shortcut bindings model, live registration, `shortcuts.get`/`shortcuts.set`
-- [ ] 07 Settings click-to-record field (visual)
-- [ ] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
-- [ ] 09 Background job priority
-- [ ] 10 Transcript backlog: automatic transcription of recordings and imports
-- [ ] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
-- [ ] 12 `recording.prompt` operation; replaces Copy agent prompt
-- [ ] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)
-- [ ] 14 Skill, DEVELOPMENT.md, catalog, release notes
-- [ ] M  Messaging: copy done on this branch; regenerate `header.png`, `og.png`, `launch-poster.jpg`
+- [x] 00 Probes: both pass ([evidence](assets/probes/README.md))
+- [x] 01 Journal schema 3 `mark` contract, Swift and TS, golden fixture
+- [x] 02 Marks readable through `timeline.events`
+- [x] 03 `MarkRecognizer`: the Q6 gesture rules, pure
+- [x] 04 Live marks recorded during a take
+- [x] 05 Ink overlay (visual: colour, fade, pin badges)
+- [x] 06 Shortcut bindings model, live registration, `shortcuts.get`/`shortcuts.set`
+- [x] 07 Settings click-to-record field (visual)
+- [x] 08 Start routing: display under pointer, restart on take source, countdown off, in-take keys
+- [x] 09 Background job priority
+- [x] 10 Transcript backlog: automatic transcription of recordings and imports
+- [x] 11 Index: mark/pin/click reasons and stricter coverage, one policy bump
+- [x] 12 `recording.prompt` operation; replaces Copy agent prompt
+- [x] 13 `⌥⇧V` paste with optional Accessibility (visual: notice)
+- [x] 14 Skill, DEVELOPMENT.md, catalog, release notes
+- [x] M  Messaging: copy and art ([art](assets/art/README.md)); the launch-film poster keeps the old frame
 - [ ] 15 Closeout: full run, D18 timing, fresh-agent acceptance
 
 Warnings: ad-hoc-signed dev builds lose Accessibility trust on every rebuild (test slice 13's
@@ -98,8 +107,8 @@ Decisions made while synthesizing the plan (record any user correction here):
 |---|---|---|
 | P1 | Undo (`⌥⇧Z`) appends a mark carrying `retracts: <id>`; readers apply it. The journal is never rewritten. | The journal is append-only and single-writer. |
 | P2 | Plain clicks are recorded during every screen take (not just while ⇧ is held), as `click` marks. The sampler's privacy note changes from "no key observation" to "modifier state and clicks only, never keys". | The N prompt ("I clicked 6 times…") needs them; it is new evidence, so it is stated. |
-| P3 | Marks follow the cursor-sample convention: global points plus geometry epoch, projected to output pixels by the reader, as `cursor.raw` does. | One coordinate convention for pointer evidence. |
-| P4 | The prompt operation covers recordings. Projects keep their existing one-line ID handoff, moved behind the same operation so the app has one prompt owner. | `LibraryPresentation.agentPrompt` serves both today. |
+| P3 | Marks follow the cursor-sample convention: each point keeps its global position and, like a cursor sample, the output pixels the native writer projects through the take's geometry (`CursorGeometry.swift`), or null outside the picture. Readers pass both through; no TS code projects. | One coordinate convention and one projection owner for pointer evidence. Corrected during slice 02: cursor samples are projected natively at write time, not by the reader. |
+| P4 | The prompt operation covers recordings. Projects keep their existing one-line ID handoff, moved behind the same operation so the app has one prompt owner. | One prompt owner: the app calls `recording.prompt` (`RecordingControls.copyPrompt`) for recordings, projects and imports alike, and composes no handoff text itself. |
 | P5 | The prompt says "transcript is being prepared" only when a transcript is actually pending or ready; otherwise it says nothing about transcripts. | The prompt must not promise what the backlog can't deliver (no model, failed job). |
 | P6 | Marks are recognized in-process in `YapCapture`, next to the cursor sampler, and appended on the capture writer's queue. No new service control. | `YapCapture` is linked into the app (`apps/macos/Package.swift:19`); the sampler already polls `NSEvent`. |
 | P7 | A second `⌥⇧S` within 0.4 s of a start is ignored, so a double press never leaves an empty take (Scrawl's guard). | Otherwise the implementer would invent a debounce. |
@@ -113,7 +122,7 @@ Decisions made while synthesizing the plan (record any user correction here):
 | Reading marks | core capture-marks reader, exposed through `timeline.events` | read marks from the journal directly |
 | Frame selection reasons | `source-index-selection.ts` / `project-index-selection.ts` | pick keyframes elsewhere |
 | Prompt text | core prompt facts + renderer behind `recording.prompt` | compose a handoff string (the app only calls) |
-| Shortcut bindings | `ShortcutBindings` in `YapControls`; `GlobalShortcuts` registers; Settings and `shortcuts.*` share one handler | keep a second action list (today Settings has its own, `SettingsWindow.swift:459-462`: delete it) |
+| Shortcut bindings | `ShortcutBindings` in `YapControls`; `GlobalShortcuts` registers; Settings and `shortcuts.*` share one handler | keep a second action list (Settings reads the list `ShortcutBindings` owns) |
 | Automatic transcription | core transcript backlog | submit transcription jobs on their own |
 | Job priority | `jobs.ts` admission | reorder heavy work elsewhere |
 

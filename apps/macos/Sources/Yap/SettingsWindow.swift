@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import YapControls
 import ServiceManagement
 import SwiftUI
@@ -37,13 +38,19 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
     init(
         preferences: Preferences, perform: @escaping (ControlsAction) -> Void,
         update: @escaping (String, [String: Any]) -> Void,
+        suspendShortcuts: @escaping () -> Void,
+        resumeShortcuts: @escaping () -> Void,
+        setShortcut: @escaping (ControlsAction, Shortcut) -> Bool,
         refreshPermissions: @escaping () -> Void,
         agentSetup: AgentSetup = NoAgentSetup()
     ) {
         self.preferences = preferences
         self.refreshPermissions = refreshPermissions
         self.agentSetup = agentSetup
-        model = SettingsModel(preferences: preferences, perform: perform, update: update, agentSetup: agentSetup)
+        model = SettingsModel(
+            preferences: preferences, perform: perform, update: update,
+            suspendShortcuts: suspendShortcuts, resumeShortcuts: resumeShortcuts,
+            setShortcut: setShortcut, agentSetup: agentSetup)
         super.init()
         // Returning from System Settings activates this app again; that is when access changes.
         NotificationCenter.default.addObserver(
@@ -75,9 +82,13 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
     }
 
-    func update(_ state: ControlsState, shortcuts: ShortcutDefaults) {
+    func update(
+        _ state: ControlsState, shortcuts: [ControlsAction: ShortcutBindings.Binding],
+        registered: Set<String>
+    ) {
         if model.state != state { model.state = state }
         if model.shortcuts != shortcuts { model.shortcuts = shortcuts }
+        if model.registered != registered { model.registered = registered }
         if model.countdownBeforeRecording != preferences.countdownBeforeRecording {
             model.countdownBeforeRecording = preferences.countdownBeforeRecording
         }
@@ -148,7 +159,10 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 @MainActor
 final class SettingsModel: ObservableObject {
     @Published var state = ControlsState()
-    @Published var shortcuts = ShortcutDefaults()
+    @Published var shortcuts = ShortcutBindings.defaults
+    @Published var registered: Set<String> = []
+    @Published var recordingAction: ControlsAction?
+    @Published var shortcutErrorAction: ControlsAction?
     /// Read from the system each time the window is shown or comes forward.
     @Published private(set) var loginItem = SMAppService.Status.notRegistered
     @Published private(set) var loginFailure: String?
@@ -175,18 +189,23 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var agentSummary = ""
     let perform: (ControlsAction) -> Void
     private let update: (String, [String: Any]) -> Void
+    private let suspendShortcuts: () -> Void
+    private let resumeShortcuts: () -> Void
+    private let setShortcut: (ControlsAction, Shortcut) -> Bool
     private let preferences: Preferences
     private let agentSetup: AgentSetup
 
-    /// Where a person states combinations of their own, as the controls state names it.
-    var shortcutFile: String { state.shortcutOverridePath ?? "" }
-
     init(preferences: Preferences, perform: @escaping (ControlsAction) -> Void,
          update: @escaping (String, [String: Any]) -> Void,
+         suspendShortcuts: @escaping () -> Void = {}, resumeShortcuts: @escaping () -> Void = {},
+         setShortcut: @escaping (ControlsAction, Shortcut) -> Bool = { _, _ in false },
          agentSetup: AgentSetup = NoAgentSetup()) {
         self.preferences = preferences
         self.perform = perform
         self.update = update
+        self.suspendShortcuts = suspendShortcuts
+        self.resumeShortcuts = resumeShortcuts
+        self.setShortcut = setShortcut
         self.agentSetup = agentSetup
         showAtLaunch = preferences.showSettingsAtLaunch
         countdownBeforeRecording = preferences.countdownBeforeRecording
@@ -198,6 +217,26 @@ final class SettingsModel: ObservableObject {
 
     /// The row's status line reads the disk, so it is re-read whenever Settings may be looked at.
     func refreshAgentSummary() { agentSummary = agentSetup.summary() }
+
+    func beginShortcutRecording(_ action: ControlsAction) {
+        shortcutErrorAction = nil
+        recordingAction = action
+        suspendShortcuts()
+    }
+
+    func endShortcutRecording(_ action: ControlsAction) {
+        guard recordingAction == action else { return }
+        recordingAction = nil
+        resumeShortcuts()
+    }
+
+    func captureShortcut(_ action: ControlsAction, shortcut: Shortcut) {
+        if setShortcut(action, shortcut) {
+            shortcutErrorAction = nil
+        } else {
+            shortcutErrorAction = action
+        }
+    }
 
     func setAutomaticUpdates(_ enabled: Bool) {
         guard state.updates.available, enabled != state.updates.enabled else { return }
@@ -228,13 +267,6 @@ final class SettingsModel: ObservableObject {
         readLoginItem()
     }
 
-    func revealShortcutFile() {
-        if FileManager.default.fileExists(atPath: shortcutFile) {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: shortcutFile)])
-        } else {
-            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: (shortcutFile as NSString).deletingLastPathComponent)
-        }
-    }
 }
 
 struct SettingsView: View {
@@ -282,11 +314,17 @@ struct SettingsView: View {
                     .labelStyle(StatusLabelStyle(tint: .green))
             case let missing?:
                 HStack(spacing: 10) {
-                    Label(kind.statusTitle(for: missing), systemImage: "exclamationmark.circle.fill")
-                        .labelStyle(StatusLabelStyle(tint: .orange))
+                    // An optional access that is off is a choice, not a problem to fix.
+                    if kind.isOptional {
+                        Text(kind.statusTitle(for: missing)).foregroundStyle(.secondary)
+                    } else {
+                        Label(kind.statusTitle(for: missing), systemImage: "exclamationmark.circle.fill")
+                            .labelStyle(StatusLabelStyle(tint: .orange))
+                    }
                     // The same action as the menu's: it prompts, or opens the privacy pane once a
                     // prompt was already answered.
-                    Button(missing == .denied ? "Open System Settings…" : "Allow…") {
+                    // Optional access is always granted in System Settings, so its button needs no longer name.
+                    Button(missing == .denied && !kind.isOptional ? "Open System Settings…" : "Allow…") {
                         model.perform(kind.action)
                     }
                 }
@@ -366,32 +404,77 @@ struct SettingsView: View {
         }
     }
 
+    @ViewBuilder
     private var shortcutsSection: some View {
         Section {
-            ForEach(Self.shortcutActions, id: \.0.id) { action, name in
-                LabeledContent(name) { shortcutValue(action) }
-            }
-            detailRow("Custom Shortcuts", (model.shortcutFile as NSString).abbreviatingWithTildeInPath) {
-                Button("Show in Finder") { model.revealShortcutFile() }
-            }
+            shortcutRows(for: .app)
         } header: {
             Text("Shortcuts")
-        } footer: {
-            Text("Edits to the shortcuts file apply the next time Yap starts.")
-                .foregroundStyle(.secondary)
+        }
+        Section {
+            shortcutRows(for: .recording)
+        } header: {
+            Text("While Recording")
+        }
+    }
+
+    @ViewBuilder
+    private func shortcutRows(for lifetime: ShortcutLifetime) -> some View {
+        ForEach(ShortcutBindings.catalog.filter {
+            model.shortcuts[$0.action]?.lifetime == lifetime
+        }, id: \.action.id) { entry in
+            LabeledContent(entry.name) { shortcutValue(entry.action) }
         }
     }
 
     @ViewBuilder
     private func shortcutValue(_ action: ControlsAction) -> some View {
-        if let held = model.shortcuts.display(of: action) {
-            // Modifier glyphs set solid read as one mark; a thin space keeps each one legible.
-            Text(held.map(String.init).joined(separator: "\u{2009}")).monospaced()
-        } else if let bound = model.shortcuts.bindings[action] {
-            Label("\(bound.display) is in use elsewhere", systemImage: "exclamationmark.triangle.fill")
-                .labelStyle(StatusLabelStyle(tint: .orange))
-        } else {
-            Text("Off").foregroundStyle(.secondary)
+        let binding = model.shortcuts[action]
+        let unavailable = model.state.unavailableShortcuts.contains(action.id)
+        let status = binding.map {
+            ShortcutPresentation.state(
+                for: $0, registered: model.registered.contains(action.id),
+                recording: model.state.isLive || model.state.counting,
+                unavailable: unavailable,
+                duplicate: model.shortcutErrorAction == action)
+        } ?? .refusedByMacOS
+        HStack(alignment: .center, spacing: 8) {
+            if status != .active {
+                shortcutStatus(status)
+            }
+            // The text sizes the field; the AppKit recorder lies over it as an overlay, so its own
+            // fitting size never reaches the row's layout and the row stays one line tall.
+            Text(model.recordingAction == action
+                ? "Type shortcut"
+                : binding.map { $0.shortcut.label.map(String.init).joined(separator: "\u{2009}") } ?? "Off")
+                .font(.system(size: 13))
+                .foregroundStyle(model.recordingAction == action ? .secondary : .primary)
+                .lineLimit(1)
+                .frame(width: 104, height: 24)
+                .overlay {
+                    ShortcutRecorderField(
+                        recording: model.recordingAction == action,
+                        focusChanged: { focused in
+                            if focused { model.beginShortcutRecording(action) }
+                            else { model.endShortcutRecording(action) }
+                        },
+                        captured: { shortcut in model.captureShortcut(action, shortcut: shortcut) })
+                }
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 5))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(
+                model.recordingAction == action ? Color.accentColor : status == .active ? Color(nsColor: .separatorColor) : Color.orange,
+                lineWidth: model.recordingAction == action ? 2 : 1))
+        }
+    }
+
+    @ViewBuilder
+    private func shortcutStatus(_ status: ShortcutPresentation.State) -> some View {
+        switch status {
+        case .active:
+            EmptyView()
+        case .refusedByMacOS, .duplicateInYap:
+            Label(ShortcutPresentation.statusTitle(status), systemImage: "exclamationmark.triangle.fill")
+                .labelStyle(StatusLabelStyle(tint: .orange, titleTint: .orange))
         }
     }
 
@@ -442,11 +525,6 @@ struct SettingsView: View {
             }
         }
     }
-
-    private static let shortcutActions: [(ControlsAction, String)] = [
-        (.startOrStop, "Start or Finish Recording"), (.pauseOrResume, "Pause or Resume Recording"),
-        (.cancel, "Cancel Take"), (.restart, "Restart Take"),
-    ]
 
     private var loginItemDescription: String {
         switch model.loginItem {
@@ -513,13 +591,84 @@ struct SettingsView: View {
     }
 }
 
+/// A small AppKit responder embedded in the SwiftUI row. It owns event capture and focus only;
+/// labels and shortcut state remain in YapControls so Settings and other adapters share them.
+private struct ShortcutRecorderField: NSViewRepresentable {
+    let recording: Bool
+    let focusChanged: (Bool) -> Void
+    let captured: (Shortcut) -> Void
+
+    func makeNSView(context: Context) -> ShortcutRecorderNativeView {
+        let view = ShortcutRecorderNativeView()
+        view.focusChanged = focusChanged
+        view.captured = captured
+        return view
+    }
+
+    func updateNSView(_ view: ShortcutRecorderNativeView, context: Context) {
+        view.focusChanged = focusChanged
+        view.captured = captured
+        if recording, view.window?.firstResponder !== view {
+            view.window?.makeFirstResponder(view)
+        } else if !recording, view.window?.firstResponder === view {
+            view.window?.makeFirstResponder(nil)
+        }
+    }
+}
+
+private final class ShortcutRecorderNativeView: NSView {
+    var focusChanged: ((Bool) -> Void)?
+    var captured: ((Shortcut) -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { focusChanged?(true) }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { focusChanged?(false) }
+        return resigned
+    }
+
+    override func keyDown(with event: NSEvent) {
+        // Modifier-only presses do not identify a shortcut. Keep the field focused until a
+        // physical key arrives, so a person can chord modifiers in any order.
+        let modifierOnly: Set<UInt16> = [54, 55, 56, 58, 59, 60, 61, 62, 63]
+        guard !modifierOnly.contains(event.keyCode) else { return }
+        var modifiers: UInt32 = 0
+        if event.modifierFlags.contains(.control) { modifiers |= UInt32(controlKey) }
+        if event.modifierFlags.contains(.option) { modifiers |= UInt32(optionKey) }
+        if event.modifierFlags.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        if event.modifierFlags.contains(.command) { modifiers |= UInt32(cmdKey) }
+        let key = event.charactersIgnoringModifiers ?? ""
+        let label = ShortcutPresentation.label(
+            keyCode: UInt32(event.keyCode), modifiers: modifiers, key: key)
+        captured?(Shortcut(keyCode: UInt32(event.keyCode), modifiers: modifiers, label: label))
+    }
+}
+
 /// A status word with a tinted symbol, the way System Settings states an access.
 private struct StatusLabelStyle: LabelStyle {
     let tint: Color
+    var titleTint: Color?
+
+    init(tint: Color, titleTint: Color? = nil) {
+        self.tint = tint
+        self.titleTint = titleTint
+    }
+
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 4) {
             configuration.icon.foregroundStyle(tint)
-            configuration.title.foregroundStyle(.secondary)
+            configuration.title.foregroundStyle(titleTint ?? .secondary)
         }
     }
 }

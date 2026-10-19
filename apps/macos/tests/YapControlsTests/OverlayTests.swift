@@ -43,6 +43,25 @@ func runRecordingOverlayTests() {
         RecordingOverlay.presentation(for: lost) == nil,
         "A service that cannot answer leaves no controls offering operations it cannot carry")
     print("PASS the floating controls appear exactly while a take is live")
+
+    // The ink is up from the moment a start answers that its take is live: marks come straight
+    // from the capture and can arrive before a status read says the device is recording.
+    var started = ready()
+    precondition(!started.showsInk, "An idle app draws no ink")
+    started.observeTake(.init(id: "take-1", state: "recording", interruptionReason: nil, sourceDurationUs: nil))
+    precondition(started.showsInk, "A take the start answered as live shows ink before any status read")
+    precondition(live(.paused).showsInk, "A paused take keeps its ink")
+    started.device = .init(state: .recording, recordingId: "take-1", elapsedUs: 0)
+    precondition(started.showsInk, "A recording device shows its ink")
+    // Stopping finalizes the device at once, while the stored take still says recording until
+    // the stop answers: once the device has reported a take, it alone decides.
+    started.device = .init(state: .finalizing, recordingId: "take-1", elapsedUs: 0)
+    precondition(!started.showsInk, "A stopped take takes its ink down while it finalizes")
+    started.device = .init(state: .idle, recordingId: nil, elapsedUs: nil)
+    precondition(!started.showsInk, "A stale take the device already ended shows no ink")
+    started.observeTake(.init(id: "take-1", state: "ready", interruptionReason: nil, sourceDurationUs: nil))
+    precondition(!started.showsInk, "A take that ended takes its ink with it")
+    print("PASS the ink is up while a take is live, from its start's answer on")
 }
 
 func runCountdownTests() {

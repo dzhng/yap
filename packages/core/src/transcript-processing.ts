@@ -16,6 +16,7 @@ import { CatalogError, dependencyRefusal } from "./catalog.js";
 import {
   retainedPublicationSchema,
   type JobExecution,
+  type JobPriority,
   type JobQueue,
   type StagedJobResult,
 } from "./jobs.js";
@@ -326,13 +327,19 @@ export class TranscriptProcessing {
     };
   }
 
-  prepareSource(selection: TranscriptPreparation): void {
+  prepareSource(selection: TranscriptPreparation, priority: JobPriority = "interactive"): void {
     const status = this.sourceStatus(selection);
-    if (status.state !== "not_requested" || status.reason !== null) return;
+    if (status.reason !== null || status.state === "ready") return;
+    if (status.state !== "not_requested" && !(priority === "interactive" && status.jobId !== null))
+      return;
     this.jobs.submit(
       () => {
         const { selected, scope } = this.admitSource(selection);
-        return { ...this.sourceIdentity(selected, this.execution(), scope), lane: "heavy" };
+        return {
+          ...this.sourceIdentity(selected, this.execution(), scope),
+          lane: "heavy",
+          priority,
+        };
       },
       (job) => {
         const owner = { kind: "job" as const, id: job.jobId };

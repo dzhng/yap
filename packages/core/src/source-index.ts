@@ -35,7 +35,7 @@ import {
   type MediaFrameInspection,
 } from "./frame-inspection.js";
 import type { IndexDomain } from "./screenshot-index.js";
-import { sourceIndexPolicy, type SourceIndexReason } from "./source-index-selection.js";
+import type { SourceIndexReason } from "./source-index-selection.js";
 import type { TimeRange } from "./presentation-time.js";
 import { validateSceneSampleClock, type SourceVisualPoint } from "./source-scenes.js";
 export type SourceIndexIdentity = SourceSelection & {
@@ -80,7 +80,7 @@ export const portableSourceIndexMetadataSchema = sourceSelectionSchema
   .extend({
     generation: z.string().min(1).max(256),
     scenes: portableSceneMetadataSchema,
-    selectionPolicy: z.literal(sourceIndexPolicy.id),
+    selectionPolicy: z.string().min(1).max(256),
     implementationId: z.string().min(1).max(256),
     maxLongEdge: z.int().min(1).max(8192),
     observationRequest: pictureObservationRequestSchema.optional(),
@@ -104,6 +104,11 @@ export const portableSourceIndexRecordSchema = z.discriminatedUnion("kind", [
             z.strictObject({
               kind: z.enum(["first", "last", "availability", "coverage"]),
               eventSourceUs: portableTime,
+            }),
+            z.strictObject({
+              kind: z.enum(["mark", "pin", "click"]),
+              eventSourceUs: portableTime,
+              markId: z.string().min(1),
             }),
             z.strictObject({
               kind: z.literal("scene"),

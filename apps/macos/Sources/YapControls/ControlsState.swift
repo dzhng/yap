@@ -22,7 +22,12 @@ public struct ControlsState: Equatable, Sendable {
         }
     }
     /// What the capture device reports about itself, once a status answer has arrived.
-    public var device: DeviceStatus?
+    public var device: DeviceStatus? {
+        didSet { if let id = device?.recordingId { deviceReportedTake = id } }
+    }
+    /// The last take the device itself reported. Until it reports a take, the start's answer is
+    /// all that says that take is live.
+    private var deviceReportedTake: String?
     /// The take native or service recovery is finalizing, as the library holds it.
     public var take: TakeStatus?
     /// Read from native capture in this process, so it is known before the service is.
@@ -43,14 +48,19 @@ public struct ControlsState: Equatable, Sendable {
     public var storageFailure: String?
     /// The last failure a person's own action produced, kept visible until the next action.
     public var failure: String?
-    /// Shortcuts whose key combination this app could not claim, so nothing was stolen.
+    /// The action ids whose key combination this app could not claim, so nothing was stolen.
     public var unavailableShortcuts: [String] = []
-    /// Where a person can state their own key combinations when a default is taken.
-    public var shortcutOverridePath: String?
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
     public private(set) var unansweredStart: StartRequest?
     /// Whether any source was ever selected. Only before then is a display offered by default.
     private var sourceWasSelected = false
+    /// The start this app made for a take, under that take's ID.
+    private var activeStart: ActiveStart?
+
+    private struct ActiveStart: Equatable, Sendable {
+        let recordingId: String
+        let start: CaptureSelection.Start
+    }
 
     public enum ServiceState: Equatable, Sendable {
         case starting
@@ -124,16 +134,21 @@ public struct ControlsState: Equatable, Sendable {
     }
 
     public struct Display: Equatable, Sendable {
-        public init(id: Int, name: String, width: Int, height: Int) {
+        public init(id: Int, name: String, width: Int, height: Int, frame: CGRect? = nil) {
             self.id = id
             self.name = name
             self.width = width
             self.height = height
+            self.frame = frame
         }
         public let id: Int
         public let name: String
         public let width: Int
         public let height: Int
+        /// The display's global AppKit frame, when the native app has observed it. Source
+        /// discovery supplies identity and dimensions; the app adds this geometry for pointer
+        /// routed starts, while controls tests can inject it deterministically.
+        public let frame: CGRect?
     }
 
     public struct Window: Equatable, Sendable {
@@ -306,6 +321,24 @@ public struct ControlsState: Equatable, Sendable {
         guard let device else { return false }
         return device.state == .recording || device.state == .paused || device.state == .selecting || device.state == .finalizing
     }
+
+    /// Whether the ink is up: while the device records or pauses, and from the moment a start
+    /// answers that its take is live, since marks come straight from the capture and can arrive
+    /// before a status read says the device is recording. Once the device has reported a take it
+    /// alone decides, so a stopped take's ink comes down while the stored take still says recording.
+    public var showsInk: Bool {
+        if device?.state == .recording || device?.state == .paused { return true }
+        guard let take, take.id != deviceReportedTake else { return false }
+        return take.state == "recording" || take.state == "paused"
+    }
+
+    /// The source owned by the live take, retained before the next catalog poll can refresh the
+    /// menu selection. A restart must use this identity when a hotkey chose another display. It
+    /// belongs to one take: a later take, however it was started, restarts on its own selection.
+    public var restartStart: CaptureSelection.Start? {
+        if let activeStart, activeStart.recordingId == device?.recordingId { return activeStart.start }
+        return start()
+    }
 }
 
 extension ControlsState.CaptureSelection {
@@ -390,14 +423,26 @@ extension ControlsState.CaptureSelection {
 }
 
 extension ControlsState {
+    public enum StartOrigin: Equatable, Sendable {
+        case menu
+        case hotkey(pointer: CGPoint)
+    }
+
     /// What a start of the current selection asks for; nil until a source is selected.
     ///
     /// A screen take reserves a companion camera whenever camera access is granted: the picked
     /// camera, or the system default. It starts on or off as the switch says, and can be turned
     /// on later either way. Without access nothing is reserved, unless the switch is on: a camera
     /// a person asked for is still asked for, so the refusal names the missing permission.
-    public func start() -> CaptureSelection.Start? {
-        guard let source = selection.source else { return nil }
+    public func start(origin: StartOrigin = .menu) -> CaptureSelection.Start? {
+        let selectedSource: SelectedSource?
+        switch origin {
+        case .menu:
+            selectedSource = selection.source
+        case .hotkey(let pointer):
+            selectedSource = display(under: pointer).map { .display($0) }
+        }
+        guard let source = selectedSource else { return nil }
         let chosen: CaptureSelection.Start.Source
         switch source {
         case .display(let display): chosen = .display(id: display.id)
@@ -418,6 +463,27 @@ extension ControlsState {
             source: chosen, microphone: selection.microphone != .off && microphoneAvailable,
             microphoneDeviceId: microphoneAvailable ? microphoneDeviceId : nil,
             systemAudio: selection.systemAudio, cameraDeviceId: companion, cameraAtStart: cameraAtStart)
+    }
+
+    /// Picks the display containing a pointer, falling back to the nearest display when the
+    /// pointer is on a boundary or in the gap between displays. Catalog order is the final tie
+    /// break, keeping an injected catalog deterministic.
+    private func display(under pointer: CGPoint) -> Display? {
+        sources.displays.enumerated().min { left, right in
+            let leftContains = left.element.frame?.contains(pointer) == true
+            let rightContains = right.element.frame?.contains(pointer) == true
+            if leftContains != rightContains { return leftContains }
+            let leftDistance = left.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            let rightDistance = right.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            if leftDistance != rightDistance { return leftDistance < rightDistance }
+            return left.offset < right.offset
+        }?.element
+    }
+
+    private func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return hypot(dx, dy)
     }
 
     /// The camera the system prefers, or the first listed.
@@ -552,6 +618,7 @@ extension ControlsState {
     public struct StartRequest: Equatable, Sendable {
         public let requestId: String
         public let start: CaptureSelection.Start
+        public let origin: StartOrigin
         /// Whether this asks again for a start whose answer had not arrived.
         public let repeatsUnanswered: Bool
     }
@@ -580,13 +647,17 @@ extension ControlsState {
     /// The request for a start of the current selection, or nil with the reason when there is none.
     /// A start whose answer has not arrived is asked for again under its own request ID, so the
     /// service resolves the take it already allocated instead of allocating another.
-    public mutating func beginStart(newRequestId: String) -> StartRequest? {
-        guard let start = self.start() else {
+    public mutating func beginStart(
+        newRequestId: String, origin: StartOrigin = .menu
+    ) -> StartRequest? {
+        guard let start = self.start(origin: origin) else {
             failure = "Choose a source before recording."
             return nil
         }
         if let unansweredStart, unansweredStart.start == start {
-            let replay = StartRequest(requestId: unansweredStart.requestId, start: start, repeatsUnanswered: true)
+            let replay = StartRequest(
+                requestId: unansweredStart.requestId, start: start, origin: unansweredStart.origin,
+                repeatsUnanswered: true)
             self.unansweredStart = replay
             return replay
         }
@@ -597,7 +668,8 @@ extension ControlsState {
                 return nil
             }
         }
-        let request = StartRequest(requestId: newRequestId, start: start, repeatsUnanswered: false)
+        let request = StartRequest(
+            requestId: newRequestId, start: start, origin: origin, repeatsUnanswered: false)
         unansweredStart = request
         return request
     }
@@ -608,7 +680,15 @@ extension ControlsState {
     public mutating func finishStart(_ request: StartRequest, _ answer: StartAnswer) -> Bool {
         guard answer != .unanswered else { return false }
         if unansweredStart?.requestId == request.requestId { unansweredStart = nil }
+        // The answer's take has just been observed, so it names the take this start made.
+        if answer == .live, let recordingId = take?.id { activeStart = ActiveStart(recordingId: recordingId, start: request.start) }
+        else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }
         return answer == .ended && request.repeatsUnanswered
+    }
+
+    /// A restart replaces the take under a new ID; the start it was made from moves to that take.
+    public mutating func restarted(recordingId: String, start: CaptureSelection.Start) {
+        activeStart = ActiveStart(recordingId: recordingId, start: start)
     }
 }
 

@@ -157,6 +157,79 @@ func runSelectionTests() {
     print("PASS a selection becomes exactly the take it describes")
 }
 
+func runStartRoutingTests() {
+    let menuDisplay = ControlsState.Display(
+        id: 3, name: "Menu Display", width: 1000, height: 800,
+        frame: CGRect(x: 0, y: 0, width: 1000, height: 800))
+    let pointerDisplay = ControlsState.Display(
+        id: 4, name: "Pointer Display", width: 1200, height: 900,
+        frame: CGRect(x: 1000, y: 0, width: 1200, height: 900))
+    var state = ready(source: .display(menuDisplay))
+    state.sources.displays = [menuDisplay, pointerDisplay]
+    state.selection.microphone = .off
+    state.selection.systemAudio = true
+
+    guard let start = state.start(origin: .hotkey(pointer: CGPoint(x: 1_500, y: 400))) else {
+        preconditionFailure("A hotkey start resolves the display under the pointer")
+    }
+    precondition(start.source == .display(id: pointerDisplay.id),
+        "A hotkey records the display under the pointer, not the menu's selected display")
+    precondition(!start.microphone && start.systemAudio,
+        "A hotkey keeps the menu's microphone and system-audio choices")
+
+    let menuStart = state.start(origin: .menu)
+    precondition(menuStart?.source == .display(id: menuDisplay.id),
+        "A menu start keeps the menu's selected display")
+
+    let left = ControlsState.Display(
+        id: 5, name: "Left", width: 100, height: 100,
+        frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+    let right = ControlsState.Display(
+        id: 6, name: "Right", width: 100, height: 100,
+        frame: CGRect(x: 200, y: 0, width: 100, height: 100))
+    state.sources.displays = [left, right]
+    precondition(state.start(origin: .hotkey(pointer: CGPoint(x: 180, y: 50)))?.source == .display(id: right.id),
+        "A pointer in a display gap resolves to the nearest display")
+    precondition(state.start(origin: .hotkey(pointer: CGPoint(x: 200, y: 50)))?.source == .display(id: right.id),
+        "A pointer on a display edge resolves to the display whose frame contains it")
+
+    guard let request = state.beginStart(
+        newRequestId: "hotkey", origin: .hotkey(pointer: CGPoint(x: 180, y: 50))) else {
+        preconditionFailure("A hotkey routing request starts")
+    }
+    precondition(request.origin == .hotkey(pointer: CGPoint(x: 180, y: 50)),
+        "The start request retains the origin for replay and countdown placement")
+    guard let replay = state.beginStart(
+        newRequestId: "replay", origin: .hotkey(pointer: CGPoint(x: 180, y: 50))) else {
+        preconditionFailure("An unanswered hotkey start can be replayed")
+    }
+    precondition(replay.repeatsUnanswered && replay.origin == request.origin,
+        "A replay keeps the original hotkey origin")
+
+    state.observeTake(.init(id: "rec-hotkey", state: "recording", interruptionReason: nil, sourceDurationUs: nil))
+    precondition(!state.finishStart(replay, .live), "A live replay settles the take")
+    state.device = .init(state: .recording, recordingId: "rec-hotkey", elapsedUs: 0)
+    state.selection.source = .display(menuDisplay)
+    precondition(state.restartStart?.source == request.start.source,
+        "Restart reuses the live take's resolved source after a hotkey start")
+    // A restart gives the take a new identity; the start moves with it, so restarting again
+    // still records the hotkey's display, not the menu's.
+    guard let restarted = state.restartStart else { preconditionFailure("A live take restarts") }
+    state.restarted(recordingId: "rec-hotkey-2", start: restarted)
+    state.device = .init(state: .recording, recordingId: "rec-hotkey-2", elapsedUs: 0)
+    precondition(state.restartStart?.source == request.start.source,
+        "A second restart reuses the hotkey's source, got \(String(describing: state.restartStart?.source))")
+
+    // That take ends normally; another client (the CLI's capture.start) starts the next one, and
+    // status reports its source as the selection.
+    state.device = .init(state: .idle, recordingId: nil, elapsedUs: nil)
+    state.device = .init(state: .recording, recordingId: "rec-cli", elapsedUs: 0)
+    state.selection.source = .display(left)
+    precondition(state.restartStart?.source == .display(id: left.id),
+        "A take not started here restarts on its own source, not an earlier take's, got \(String(describing: state.restartStart?.source))")
+    print("PASS hotkey starts route to the display under the pointer")
+}
+
 /// A screen take reserves a camera whenever camera access is granted, so it can be turned on
 /// mid-take; the start switch only decides whether it starts on.
 func runCameraReservationTests() {

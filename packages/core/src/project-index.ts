@@ -57,7 +57,7 @@ export const portableProjectIndexMetadataSchema = projectPictureOptionsSchema
     projectId: z.string().min(1),
     revisionId: z.string().min(1),
     generation: z.string().min(1).max(256),
-    selectionPolicy: z.literal(projectIndexPolicy.id),
+    selectionPolicy: z.string().min(1).max(256),
     scenes: z.array(portableSceneMetadataSchema).max(25000),
     durationUs: portableTime,
     candidateCount: portableTime.max(25000),
@@ -88,6 +88,11 @@ export const portableProjectIndexRecordSchema = z.discriminatedUnion("kind", [
             }),
             z.strictObject({
               kind: z.enum(["first", "last", "coverage"]),
+              projectAtUs: timeValueSchema,
+            }),
+            z.strictObject({
+              kind: z.enum(["mark", "pin", "click"]),
+              markId: z.string().min(1),
               projectAtUs: timeValueSchema,
             }),
             z.strictObject({

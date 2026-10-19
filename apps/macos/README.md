@@ -16,10 +16,30 @@ and do not activate the app over the source being recorded. Opening the capture
 panel from the menu bar activates its window, so its native glass and controls
 are ready before the first content click.
 
+## Show your agent
+
+The global shortcuts are one catalog, [ShortcutBindings](Sources/YapControls/ShortcutBindings.swift),
+shared by Settings, registration and the `shortcuts.get`/`shortcuts.set` app operations, so a key
+means the same thing however it was set. Bindings are physical key codes, and they apply as soon as
+they change. A set names only the actions it changes and keeps every other binding; one invalid
+entry refuses the whole set. A key macOS refuses is reported by its action, never by its label. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
+pause, restart) only while a take or countdown is live, so they take no characters away otherwise.
+A hotkey start records the display under the pointer, whatever the menu has selected, and a
+restart reuses the running take's own source; the menu's Start keeps the menu's source. The
+countdown is off unless someone turns it on.
+
+Marks are drawn and recorded without any new permission: ⇧ is read with the pointer, and clicks
+come from a global mouse monitor, which needs no Accessibility. The recognizer and the journal
+live in [native capture](../../helpers/mac/Sources/YapCapture/README.md); the app only draws what
+it is told and hides that ink from every capture.
+
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
 controls share that one preference.
 No capture sees the floating controls: not Yap's own recording, screenshots or screen sharing.
+The ink and numbered pins a person draws during a screen take float over every display and
+are never visible to any capture either. They draw only the mark stream the capture recognizes
+(the live stroke, recorded marks, undos) and classify nothing.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
 turned on and off during the take; the menu's switch only decides how it starts. A reserved
 camera that starts off is not opened, so its light stays off until it is turned on. The menu's
@@ -38,6 +58,11 @@ Authorization is read from native capture and requested only through an explicit
 action. Screen source controls remain disabled until access is granted and explain
 which permission enables them; camera-only capture stays independent of screen access.
 Permission denial remains actionable without choosing another device.
+Accessibility is optional and only ever granted in System Settings: with it the paste shortcut
+presses ⌘V in the front app, with Command alone whatever the person is still holding; without it
+the prompt is copied and a non-activating notice says to press ⌘V. Every prompt copy, button or
+shortcut, goes through one [paster](Sources/YapControls/Paster.swift), and its text comes from the
+service's `recording.prompt`, so the app never writes a prompt of its own.
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves
@@ -195,7 +220,7 @@ shows what would be recorded rather than Yap's own panel. The window list, in th
 [window rule](Sources/YapControls/WindowSource.swift) owns what that means, and takes Yap's own
 windows from the same exclusion.
 When a recording is available, the popover appends the latest library item below its transport
-actions and routes Play and Copy agent prompt through the same controls actions as Library.
+actions and routes Play and **Copy prompt** through the same controls actions, and the same label, as Library.
 
 Run `node apps/macos/tests/capture-view-shots.mjs` from the repository root for
 focused native interaction, applicability and scroll checks plus offscreen images.

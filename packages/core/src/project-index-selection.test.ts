@@ -14,11 +14,13 @@ const clip = (
   start: number,
   end: number,
   trackId = "v",
+  acquisitionId?: string,
 ): Composition["clips"][number] => ({
   id,
   trackId,
   assetId: "asset",
   streamId: "video",
+  ...(acquisitionId ? { acquisitionId } : {}),
   source: { kind: "range", range: { startUs: start, endUs: end } },
   placement: { kind: "project", range: { startUs: start, endUs: end } },
 });
@@ -64,8 +66,9 @@ async function select(
   scenes: Parameters<typeof selectProjectIndex>[0]["scenes"] = () => null,
   tap: ProcessingTap = { target: { kind: "output" }, point: { kind: "processed" } },
   signal?: AbortSignal,
+  acquisitions: unknown[] = [],
 ) {
-  const model = validateComposition(f.document, f.assets);
+  const model = validateComposition(f.document, f.assets, acquisitions);
   const compiler = createCompiler(model, "revision");
   const processing = model.durationUs
     ? compiler.videoWindow({
@@ -78,16 +81,14 @@ async function select(
 }
 test("project cadence and authored boundaries deduplicate images while retaining their reasons", async () => {
   const result = await select(fixture([clip("a", 0, 6000000), clip("b", 6000000, 12000000)]));
-  expect(result.map((candidate) => candidate.sampleAtUs)).toEqual([
-    0, 5000000, 5966666, 6000000, 10000000, 11966666,
-  ]);
+  expect(result.map((candidate) => candidate.sampleAtUs)).toEqual([0, 5966666, 6000000, 11966666]);
   expect(result.find((candidate) => candidate.sampleAtUs === 6000000)?.reasons).toEqual([
     { kind: "clip", clipId: "a", edge: "end", projectAtUs: 6000000, side: "after" },
     { kind: "availability", clipId: "a", edge: "end", projectAtUs: 6000000, side: "after" },
     { kind: "clip", clipId: "b", edge: "start", projectAtUs: 6000000, side: "after" },
     { kind: "availability", clipId: "b", edge: "start", projectAtUs: 6000000, side: "after" },
   ]);
-  expect(result.map((candidate) => candidate.ordinal)).toEqual([0, 1, 2, 3, 4, 5]);
+  expect(result.map((candidate) => candidate.ordinal)).toEqual([0, 1, 2, 3]);
 });
 
 function sceneChunk(beforeAt = 200000, afterAt = 400000, changeAt = 350000): SourceSceneChunk {
@@ -178,6 +179,156 @@ test("scene sides retain actual observations and choose old/new pictures directi
     "old",
     "new",
   ]);
+});
+
+test("project moments select mark, pin and click reasons and merge with scene evidence", async () => {
+  const f = fixture([clip("c", 0, 1_000_000, "v", "capture")]);
+  f.document.canvas.fps = { numerator: 3, denominator: 1 };
+  const result = await select(
+    f,
+    () => ({
+      generation: "scenes-1",
+      chunks: [sceneChunk(200_000, 400_000, 350_000)],
+      moments: [
+        { sourceUs: 400_000, kind: "mark", markId: "m" },
+        { sourceUs: 700_000, kind: "pin", markId: "p" },
+        { sourceUs: 900_000, kind: "click", markId: "c" },
+      ],
+    }),
+    undefined,
+    undefined,
+    [
+      {
+        id: "capture",
+        bindings: [
+          { assetId: "asset", streamId: "video", available: [{ startUs: 0, endUs: 1_000_000 }] },
+        ],
+      },
+    ],
+  );
+  expect(
+    result.flatMap((candidate) =>
+      candidate.reasons.filter(
+        (reason) =>
+          reason.kind === "mark" ||
+          reason.kind === "pin" ||
+          reason.kind === "click" ||
+          reason.kind === "scene",
+      ),
+    ),
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ kind: "mark", markId: "m" }),
+      expect.objectContaining({ kind: "pin", markId: "p" }),
+      expect.objectContaining({ kind: "click", markId: "c" }),
+    ]),
+  );
+  const sceneAndMark = result.filter((candidate) =>
+    candidate.reasons.some((reason) => reason.kind === "scene" || reason.kind === "mark"),
+  );
+  expect(sceneAndMark).toHaveLength(2);
+  expect(
+    sceneAndMark.find((candidate) => candidate.reasons.some((reason) => reason.kind === "mark"))
+      ?.reasons,
+  ).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ kind: "mark", markId: "m" }),
+      expect.objectContaining({ kind: "scene", side: "after" }),
+    ]),
+  );
+});
+
+// A long clip whose observed points carry the given stillness runs and no scene boundaries.
+function coverageScan(points: [atUs: number, runUs: number][]) {
+  const f = fixture([clip("c", 0, 60_000_000, "v", "capture")]);
+  const stream = f.assets[0]!.streams[0]!;
+  stream.bounds = { startUs: 0, endUs: 60_000_000 };
+  stream.available = [{ startUs: 0, endUs: 60_000_000 }];
+  const chunk: SourceSceneChunk = {
+    ...sceneChunk(),
+    durationUs: 60_000_000,
+    range: { startUs: 0, endUs: 60_000_000 },
+    comparisons: [],
+    coverage: points.map(([at, run], index) => ({
+      requestedSourceUs: at,
+      actualSourceUs: at,
+      status: "available",
+      sample: {
+        value: String(at),
+        timescale: 1_000_000,
+        endValue: String(at + 1),
+        endTimescale: 1_000_000,
+      },
+      width: 1,
+      height: 1,
+      continuousFromPrevious: index > 0,
+      stillnessRunStartUs: run,
+    })),
+  };
+  const acquisitions = [
+    {
+      id: "capture",
+      bindings: [
+        { assetId: "asset", streamId: "video", available: [{ startUs: 0, endUs: 60_000_000 }] },
+      ],
+    },
+  ];
+  return { f, chunk, acquisitions };
+}
+const coverageAt = (result: Awaited<ReturnType<typeof selectProjectIndex>>) =>
+  result.flatMap((candidate) =>
+    candidate.reasons.flatMap((reason) => (reason.kind === "coverage" ? [reason.projectAtUs] : [])),
+  );
+
+test("project coverage waits thirty seconds after any chosen picture, a mark included", async () => {
+  const { f, chunk, acquisitions } = coverageScan([
+    [0, 0],
+    [31_000_000, 31_000_000],
+    [51_000_000, 51_000_000],
+  ]);
+  const result = await select(
+    f,
+    () => ({
+      generation: "scenes",
+      chunks: [chunk],
+      moments: [{ sourceUs: 20_000_000, kind: "mark", markId: "m" }],
+    }),
+    undefined,
+    undefined,
+    acquisitions,
+  );
+  // 31 s is only 11 s after the mark; 51 s is 31 s after it.
+  expect(coverageAt(result)).toEqual([51_000_000]);
+});
+
+test("project coverage compares the picture with the last chosen one, not the previous sample", async () => {
+  const { f, chunk, acquisitions } = coverageScan([
+    [0, 0],
+    [10_000_000, 10_000_000],
+    [39_000_000, 10_000_000],
+    [40_000_000, 10_000_000],
+  ]);
+  const result = await select(
+    f,
+    () => ({ generation: "scenes", chunks: [chunk] }),
+    undefined,
+    undefined,
+    acquisitions,
+  );
+  // The picture at 39 s matches the 10 s sample but not the first frame chosen at 0.
+  expect(coverageAt(result)).toEqual([39_000_000]);
+});
+
+test("project moments are ignored when the clip has no acquisition authority", async () => {
+  const f = fixture([clip("c", 0, 1_000_000)]);
+  const result = await select(f, () => ({
+    generation: "scenes-1",
+    chunks: [sceneChunk()],
+    moments: [{ sourceUs: 400_000, kind: "mark" as const, markId: "m" }],
+  }));
+  expect(result.flatMap((candidate) => candidate.reasons)).not.toEqual(
+    expect.arrayContaining([expect.objectContaining({ kind: "mark" })]),
+  );
 });
 test("fractional retiming and repeated sources preserve each occurrence and exact projected observation", async () => {
   const f = fixture([clip("first", 0, 1000000), clip("again", 0, 1000000, "overlay")]);
@@ -287,7 +438,7 @@ test("holds, empty projects and audio-only timelines need no scene dependency", 
     available: [{ startUs: 0, endUs: 20000000 }],
   };
   expect((await select(audio, unexpectedRead)).map((candidate) => candidate.sampleAtUs)).toEqual([
-    0, 5000000, 10000000, 11966666,
+    0, 11966666,
   ]);
 });
 test("source stillness and overlapping chunk lookback neither suppress cadence nor duplicate scene reasons", async () => {
@@ -300,7 +451,7 @@ test("source stillness and overlapping chunk lookback neither suppress cadence n
     result
       .filter((candidate) => candidate.reasons.some((reason) => reason.kind === "coverage"))
       .map((candidate) => candidate.sampleAtUs),
-  ).toEqual([5000000, 10000000]);
+  ).toEqual([]);
   expect(
     result
       .flatMap((candidate) => candidate.reasons.filter((reason) => reason.kind === "scene"))
@@ -314,21 +465,27 @@ test("source stillness and overlapping chunk lookback neither suppress cadence n
   const stillPoint = unchanged.coverage[1]!;
   if (stillPoint.status === "available") stillPoint.stillnessRunStartUs = 0;
   const still = await select(f, () => ({ generation: "still", chunks: [unchanged] }));
-  expect(still.map((candidate) => candidate.sampleAtUs)).toEqual([0, 5000000, 10000000, 11966666]);
+  expect(still.map((candidate) => candidate.sampleAtUs)).toEqual([0, 11966666]);
 });
 
 test("selection refuses oversized storyboards without returning a partial candidate list", async () => {
-  const f = fixture();
-  f.document.tracks[0]!.kind = "audio";
-  f.document.clips = [
-    {
-      id: "long",
-      trackId: "v",
-      source: { kind: "silence" },
-      placement: { kind: "project", range: { startUs: 0, endUs: 100005000000 } },
-    },
-  ];
-  await expect(select(f)).rejects.toMatchObject({
+  const f = fixture([clip("c", 0, 12000000, "v", "capture")]);
+  f.document.canvas.fps = { numerator: 1_000_000, denominator: 1 };
+  const moments = Array.from({ length: 20_001 }, (_, i) => ({
+    sourceUs: i * 500,
+    kind: "click" as const,
+    markId: `click-${i}`,
+  }));
+  await expect(
+    select(f, () => ({ generation: "g", chunks: [], moments }), undefined, undefined, [
+      {
+        id: "capture",
+        bindings: [
+          { assetId: "asset", streamId: "video", available: [{ startUs: 0, endUs: 20_000_000 }] },
+        ],
+      },
+    ]),
+  ).rejects.toMatchObject({
     code: "LIMIT_EXCEEDED",
     details: {
       revisionId: "revision",
@@ -409,7 +566,7 @@ test("windowed opacity retains both neighboring pictures and respects the reques
   ];
   const result = await select(f);
   expect(result.map((value) => value.sampleAtUs)).toEqual([
-    0, 200000, 233333, 266666, 300000, 5000000, 10000000, 11966666,
+    0, 200000, 233333, 266666, 300000, 11966666,
   ]);
   expect(
     result.flatMap((value) => value.reasons.filter((reason) => reason.kind === "processing")),
@@ -420,7 +577,7 @@ test("windowed opacity retains both neighboring pictures and respects the reques
     { kind: "processing", projectAtUs: 299999, side: "after" },
   ]);
   const dry = await select(f, () => null, { target: { kind: "output" }, point: { kind: "dry" } });
-  expect(dry.map((value) => value.sampleAtUs)).toEqual([0, 5000000, 10000000, 11966666]);
+  expect(dry.map((value) => value.sampleAtUs)).toEqual([0, 11966666]);
 });
 
 test("scene membership uses exact frame time when its label precedes a fractional clip start", async () => {

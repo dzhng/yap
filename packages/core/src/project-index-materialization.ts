@@ -1,6 +1,7 @@
 import { setImmediate } from "node:timers/promises";
 import type { Issue } from "@yap/composition";
 import { CatalogError, dependencyRefusal } from "./catalog.js";
+import { indexCaptureEvidence, type IndexCaptureOwners } from "./index-capture-evidence.js";
 import { JobDependencyLost, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import {
@@ -19,6 +20,9 @@ import type {
   projectIndexPlan,
 } from "./project-index.js";
 import type { TimeRange } from "./presentation-time.js";
+import type { IndexMoment, IndexPointerSample } from "./source-index-selection.js";
+import type { AcquisitionStore } from "./acquisitions.js";
+import type { SourceEvidenceReader } from "./evidence-read.js";
 
 async function* observedChunks(
   records: SceneEvidenceStore,
@@ -81,6 +85,9 @@ export async function materializeProjectIndex(
   owners: {
     index: ScreenshotIndexStore<ProjectIndexRecords>;
     records: SceneEvidenceStore;
+    acquisitions: AcquisitionStore;
+    evidence?: SourceEvidenceReader;
+    capture?: IndexCaptureOwners["capture"];
     frames: MediaFrameInspection;
     cache: DerivedCache;
     jobs: JobQueue;
@@ -105,6 +112,25 @@ export async function materializeProjectIndex(
       ];
     }),
   );
+  const momentCache = new Map<
+    string,
+    { moments: IndexMoment[]; pointerSamples: IndexPointerSample[] }
+  >();
+  const captureEvidence = (selection: {
+    assetId: string;
+    streamId: string;
+    acquisitionId?: string;
+  }) => {
+    if (!selection.acquisitionId) return { moments: [], pointerSamples: [] };
+    // Keyed only by the source identity: the occurrence itself carries more than a key needs.
+    const key = JSON.stringify([selection.assetId, selection.streamId, selection.acquisitionId]),
+      cached = momentCache.get(key);
+    if (cached) return cached;
+    const { moments, pointerSamples } = indexCaptureEvidence(selection, owners);
+    const result = { moments, pointerSamples };
+    momentCache.set(key, result);
+    return result;
+  };
   const candidates = await selectProjectIndex({
     model: plan.model,
     revisionId: identity.revisionId,
@@ -117,6 +143,7 @@ export async function materializeProjectIndex(
         ? {
             generation: scene.generation,
             chunks: observedChunks(owners.records, scene, range, signal),
+            ...captureEvidence(occurrence),
           }
         : null;
     },

@@ -36,7 +36,7 @@ an empty history; it is distinct from the clip-level `duplicate` edit operation.
 
 `acquisition.import`, `acquisition.get`, `asset.import`, `asset.convert`,
 `asset.get`, `asset.delete`, `asset.segments`, `asset.origins`, `asset.list`, `recording.get`,
-`recording.list`, `media.list`, `recording.delete`,
+`recording.list`, `media.list`, `recording.prompt`, `recording.delete`,
 `recording.cleanup`, and `storage.usage` discover admitted media, retain
 source identities, and reclaim only verified working files. `storage.usage` also
 reports `modelBytes` for every regular file under the model directory, including
@@ -46,6 +46,12 @@ model cache and staging files.
 retires capture-origin copies with the recording. A project-held copy returns
 `IN_USE` with the shared usage details; `cascade: true` also retires those projects.
 Imports made from inside a recording folder are separate acquisitions and survive.
+
+`recording.prompt` returns the handoff text the app's Copy prompt copies,
+with the `facts` it was written from: what a recording captured, its marks or
+clicks, and whether a transcript is being prepared. Omit `recordingId` for the
+latest take; a take that has not finished importing is refused as retryable
+`NOT_READY`. Pass `projectId` or `assetId` for that item's one-line handoff.
 
 ## Packages and jobs
 
@@ -120,7 +126,9 @@ cleanup.
 
 These operations belong to the app and are answered on its own socket, so they
 work while the service is down. `update.status`, `update.check`, and
-`update.setEnabled` expose the native app updater. `login.status` reads macOS login-item state and `login.setEnabled`
+`update.setEnabled` expose the native app updater. `shortcuts.get` reads the
+version-2 live global bindings and `shortcuts.set` applies and persists them
+immediately. `login.status` reads macOS login-item state and `login.setEnabled`
 registers or unregisters Yap after explicit user consent. `cli.status`, `cli.install`
 and `cli.uninstall` expose the app-managed
 `~/.local/bin/yap`: install writes the app's bundled launcher as fresh bytes and adds

@@ -2,6 +2,32 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## Unreleased
+
+Show your agent, in four keys. Press ⌥⇧S to record the display under your pointer, talk,
+hold ⇧ and move to draw, ⇧-click to drop a numbered pin, and press ⌥⇧S again. ⌥⇧V pastes a
+short prompt into your agent describing what you captured and where you pointed; allow
+Accessibility in Settings and it pastes for you, otherwise it is copied. ⌥⇧Z undoes a mark,
+⌥⇧X cancels and ⌥⇧P pauses. Shortcuts are recorded right in Settings and apply at once. The
+countdown is now off unless you turn it on. Every recording and import is transcribed in the
+background, without slowing anything you ask for.
+
+For scripts and agents: new operations `recording.prompt`, `shortcuts.get` and
+`shortcuts.set`. `timeline.events` lists a recording's marks, and screenshot indexes take a
+frame at every mark, pin and click while adding fewer frames over long still stretches;
+existing indexes rebuild on their next request. Recordings now carry capture journal
+schema 3, which older Yap versions cannot open in packages.
+
+This release also changes how results name things. A record calls its own identity `id`
+(`asset.get {assetId}` answers `{id, …}`), a reference to another record is still
+`<noun>Id`, and a reference that can point at several kinds is `{kind, id}`: job targets,
+`IN_USE` details, `media.list` items and `capture.start`'s `source` (for example
+`{kind: "display", id: 1}`). Deletes answer `{id, deleted, freedBytes}`. `job.get`,
+`job.retry` and `job.cancel` answer with the job, and `asset.import`, `acquisition.import`
+and `recording.cleanup` answer with the status of the work they started and its `jobId`.
+Libraries and packages from 0.1.61 are converted once when opened; packages this version
+exports cannot be opened by older versions.
+
 ## 0.1.61
 
 The camera now stays off unless you turn it on. Since the camera switch arrived, every screen

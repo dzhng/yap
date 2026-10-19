@@ -67,6 +67,7 @@ test("worker exports display-space observations and preserves source", (t) => {
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.data.finished, true);
   assert.equal(r.data.displaySpaces, 1);
+  assert.equal(r.data.markEvents, 0);
   assert.deepEqual(readFileSync(f.output, "utf8").trim().split("\n").map(JSON.parse), [
     { event: "displaySpace", data: { hostUs: 123, zeroOriginHeight: 900 } },
   ]);

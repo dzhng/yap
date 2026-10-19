@@ -104,6 +104,11 @@ func runCapturePresentationTests() {
     var refused = ready()
     refused.failure = "PERMISSION_REQUIRED: Screen recording permission is not authorized."
     precondition(CapturePresentation.noticeLines(for: refused).contains(refused.failure!))
+    // Refusal is reported by action, since the physical key, not its label, is the identity.
+    refused.unavailableShortcuts = [ControlsAction.startOrStop.id, ControlsAction.undoMark.id]
+    precondition(CapturePresentation.noticeLines(for: refused).contains(
+        "The Start or Finish Recording and Undo Mark shortcuts were refused by macOS."),
+        "Refused shortcuts are named by action, got \(CapturePresentation.noticeLines(for: refused))")
     print("PASS shared capture lifecycle and transport applicability")
     runOverlayCameraTests()
 }
@@ -144,8 +149,6 @@ func mediaRows(_ takes: [ControlsState.RecentTake]) -> [LibraryState.Media] {
 }
 
 func runSavedRecordingTests() {
-    precondition(LibraryPresentation.agentPrompt(for: .recording("recording-1")) ==
-        "I want you to use this recording with this ID with the Yap CLI: recording-1")
     var state = ready()
     let first = ControlsState.RecentTake(id: "first", createdAt: "2026-09-15T18:04:05Z",
         state: "complete", sourceDurationUs: 65_000_000, interruptionReason: nil)
@@ -203,6 +206,10 @@ func runSavedRowOpenTests() {
     state.service = .unavailable("down")
     precondition(LibraryPresentation.projects(for: state, exports: .init()).items.first?.open == nil,
                  "A row whose open action is unavailable is not clickable")
+    let handoffs = (LibraryPresentation.recordings(for: state).items + LibraryPresentation.projects(for: state, exports: .init()).items)
+        .flatMap(\.actions).filter { [.copyRecordingPrompt("take"), .copyProjectPrompt("project")].contains($0.action) }
+    precondition(handoffs.count == 2 && handoffs.allSatisfy { !$0.enabled },
+                 "The agent prompt is read from the service, so copying waits for it")
     print("PASS clicking a saved row plays a recording or previews a project, only while that is enabled")
 }
 
@@ -214,12 +221,8 @@ func runSavedProjectRowTests() {
     precondition(row.status == nil, "A project row does not label itself a project")
     precondition(row.details == ["Created \(ElapsedTime.shortTime(of: "2026-10-13T22:12:00Z"))"],
                  "A project row describes when it was made, not its identifiers: \(row.details)")
-    precondition(row.actions.contains { $0.action == .copyProjectPrompt("p-1") && $0.title == "Copy agent prompt" && $0.enabled },
+    precondition(row.actions.contains { $0.action == .copyProjectPrompt("p-1") && $0.title == "Copy prompt" && $0.enabled },
                  "A project can still be handed to an agent")
-    precondition(LibraryPresentation.agentPrompt(for: .project("p-1")) ==
-        "I want you to use this project with this ID with the Yap CLI: p-1")
-    precondition(LibraryPresentation.agentPrompt(for: .recording("t-1")) ==
-        "I want you to use this recording with this ID with the Yap CLI: t-1")
     print("PASS a project row reads as a project and can still be handed to an agent")
 }
 
@@ -237,8 +240,6 @@ func runSavedMediaTests() {
     precondition((try? JSONDecoder().decode(LibraryState.Media.self, from: Data(wrongOwner.utf8))) == nil,
                  "A media row of any other kind is unreadable, not misfiled")
     precondition(MediaTarget.asset("a-1").parameters == ["assetId": "a-1"])
-    precondition(LibraryPresentation.agentPrompt(for: .asset("a-1")) ==
-        "I want you to use this imported video with this asset ID with the Yap CLI: a-1")
 
     var state = ready()
     state.library.media = media

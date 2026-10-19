@@ -47,6 +47,9 @@ import {
   modelStatusSchema,
   updatePreparationSchema,
 } from "@yap/protocol";
+import { controlledSpeech, modelMetadata } from "./transcript.fixture.js";
+import { sourceWorker } from "./project-capture.fixture.js";
+import type { MediaWorker } from "./worker.js";
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -66,6 +69,75 @@ test("recording.get without an id resolves the latest take and removed recording
     data: { id: latest.id },
   });
   expect(latest.id).not.toBe(older.id);
+});
+
+test("recording.prompt hands off projects and imports by their own ID", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const created = await f.call("project.create", {
+    requestId: "prompt-project",
+    title: "Prompt project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  expect(await f.call("recording.prompt", { projectId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this project with this ID with the Yap CLI: ${projectId}`,
+      facts: { projectId },
+    },
+  });
+  const imported = await f.call("asset.import", { requestId: "prompt-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  expect(await f.call("recording.prompt", { assetId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this imported video with this asset ID with the Yap CLI: ${assetId}`,
+      facts: { assetId },
+    },
+  });
+  expect(await f.call("recording.prompt", { projectId: assetId })).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+});
+
+test("recording.prompt refuses the latest take, retryably, until it has published", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(await f.call("recording.prompt", {})).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+  f.service.captures.allocate({ requestId: "prompt-older", arguments: "{}" });
+  const latest = f.service.captures.allocate({
+    requestId: "prompt-latest",
+    arguments: "{}",
+  }).recording;
+  // An unpublished take has nothing to describe, and an older take is not what was asked for.
+  for (const params of [{}, { recordingId: latest.id }])
+    expect(await f.call("recording.prompt", params)).toMatchObject({
+      ok: false,
+      error: { code: "NOT_READY", retryable: true },
+    });
 });
 
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
@@ -1763,6 +1835,329 @@ test("shutdown aborts an in-flight export destination admission before draining 
   } finally {
     catalog.close();
   }
+});
+
+test("audio imports persist one pending transcript per audio stream without a model", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), undefined, {
+    autoTranscribe: true,
+  });
+  const imported = await f.call("asset.import", { requestId: "backlog", path: f.path });
+  expect(imported).toMatchObject({ ok: true });
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const database = new Catalog(join(f.home, "library/catalog.sqlite"));
+  try {
+    expect(
+      database.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+    ).toEqual({ count: 2 });
+    expect(
+      database.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    ).toEqual({ count: 0 });
+  } finally {
+    database.close();
+  }
+  expect(requests).toHaveLength(0);
+});
+
+test("a ready model submits one background transcript per audio stream and clears backlog rows", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-ready-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await modelMetadata(await realpath(join(f.home, "library")));
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { state: "ready" },
+  });
+  const imported = await f.call("asset.import", { requestId: "ready", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  await expect
+    .poll(() =>
+      f.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT priority FROM jobs WHERE artifact='transcript' ORDER BY targetId")
+      .all(),
+  ).toEqual([{ priority: "background" }, { priority: "background" }]);
+  await expect
+    .poll(() =>
+      f.service.captures.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+    )
+    .toEqual({ count: 0 });
+});
+
+test("model.prepare drains pending transcript rows", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-prepare-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await modelMetadata(await realpath(join(home, "library")));
+  const imported = await f.call("asset.import", { requestId: "prepare-backlog", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  expect(await f.call("model.prepare", { modelId: "parakeet" })).toMatchObject({ ok: true });
+  await expect
+    .poll(() =>
+      f.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT DISTINCT priority FROM jobs WHERE artifact='transcript'")
+      .all(),
+  ).toEqual([{ priority: "background" }]);
+});
+
+test("service restart drains pending transcript rows when the model is already ready", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-restart-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const first = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  const imported = await first.call("asset.import", {
+    requestId: "restart-backlog",
+    path: first.path,
+  });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await first.job((imported.data as { jobId: string }).jobId, "ready");
+  expect(
+    first.service.captures.catalog
+      .prepare("SELECT COUNT(*) AS count FROM transcript_backlog")
+      .get(),
+  ).toEqual({ count: 2 });
+  await first.service.close();
+  await modelMetadata(await realpath(join(home, "library")));
+  const second = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await expect
+    .poll(() => second.call("model.status", { modelId: "parakeet" }))
+    .toMatchObject({ ok: true, data: { state: "ready" } });
+  await expect
+    .poll(() =>
+      second.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+});
+
+test("explicit transcript transcription joins the queued background job and promotes it", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const controlled = controlledSpeech(requests);
+  const worker = async (...args: Parameters<typeof controlled>) => {
+    const [operation] = args;
+    if (operation === "speech.transcribe") {
+      entered();
+      await gate;
+    }
+    return controlled(...args);
+  };
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-join-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
+  await modelMetadata(await realpath(join(home, "library")));
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { state: "ready" },
+  });
+  const imported = await f.call("asset.import", { requestId: "join-backlog", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const importedJob = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = importedJob.published!.output.assetId;
+  await f.call("model.prepare", { modelId: "parakeet" });
+  await started;
+  const explicit = await f.call("transcript.transcribe", { assetId, streamId: "track:1" });
+  expect(explicit).toMatchObject({ ok: true, data: { jobId: expect.any(String) } });
+  const jobId = (explicit as { data: { jobId: string } }).data.jobId;
+  release();
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+      .get(),
+  ).toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog.prepare("SELECT jobId,priority FROM jobs WHERE jobId=?").get(jobId),
+  ).toMatchObject({ jobId, priority: "interactive" });
+  await f.job(jobId, "ready");
+});
+
+test("asset conversion does not enqueue transcript work for a conversion output", async () => {
+  const worker: MediaWorker = async (operation, params, options) => {
+    if (operation === "media.probe")
+      return {
+        ok: true as const,
+        data: {
+          originUs: 0,
+          streams: [
+            {
+              id: "video",
+              kind: "video" as const,
+              codec: "fixture",
+              decodable: true,
+              width: 16,
+              height: 16,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+            {
+              id: "audio",
+              kind: "audio" as const,
+              codec: "fixture",
+              decodable: true,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+          ],
+        },
+      };
+    return { ok: true as const, data: {} };
+  };
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
+  const imported = await f.call("asset.import", { requestId: "convert-source", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  expect(
+    await f.call("asset.convert", {
+      assetId,
+      streamIds: ["video", "audio"],
+      recipe: "hdr-to-sdr-hable-1000nit-v1",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "PREREQUISITE_MISSING" } });
+  expect(
+    f.service.captures.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+  ).toEqual({ count: 1 });
+});
+
+test("acquisition publication enqueues audio streams with its acquisition selection", async () => {
+  const worker: MediaWorker = async (operation, params, options) => {
+    if (operation === "media.probe")
+      return {
+        ok: true as const,
+        data: {
+          originUs: 0,
+          streams: [
+            {
+              id: "video",
+              kind: "video" as const,
+              codec: "fixture",
+              decodable: true,
+              width: 16,
+              height: 16,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+            {
+              id: "audio",
+              kind: "audio" as const,
+              codec: "fixture",
+              decodable: true,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+          ],
+        },
+      };
+    return sourceWorker(operation, params, options);
+  };
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
+  const path = join(f.home, "acquisition-source");
+  await mkdir(path);
+  await writeFile(join(path, "capture.journal.jsonl"), JSON.stringify({ sessionID: "acquired" }));
+  await writeFile(join(path, "video.mov"), "video");
+  await writeFile(join(path, "narration.mov"), "audio");
+  const imported = await f.call("acquisition.import", { requestId: "acquisition-audio", path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const jobId = (imported.data as { jobId: string }).jobId;
+  const done = await f.job(jobId, "ready");
+  const acquisitionId = (done.published!.output as unknown as { acquisitionId: string })
+    .acquisitionId;
+  const row = f.service.captures.catalog
+    .prepare("SELECT metadata FROM acquisitions WHERE id=?")
+    .get(acquisitionId) as { metadata: string };
+  const acquisition = JSON.parse(row.metadata) as {
+    bindings: { assetId: string; streamId: string; sourceRoles: string[] }[];
+  };
+  const binding = acquisition.bindings.find((value) => value.sourceRoles.includes("narration"))!;
+  expect(binding).toMatchObject({ sourceRoles: ["narration"] });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT assetId,streamId,acquisitionId FROM transcript_backlog")
+      .all(),
+  ).toEqual([{ assetId: binding.assetId, streamId: binding.streamId, acquisitionId }]);
+});
+
+test("non-retryable transcript failure is not resubmitted by a second drain", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const base = controlledSpeech(requests);
+  const worker = async (...args: Parameters<typeof base>) => {
+    if (args[0] === "speech.transcribe")
+      return {
+        ok: false as const,
+        error: {
+          code: "INVALID_NATIVE_RESPONSE",
+          message: "fixture refusal",
+          retryable: false,
+          details: {},
+        },
+      };
+    return base(...args);
+  };
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-failure-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
+  await modelMetadata(await realpath(join(home, "library")));
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { state: "ready" },
+  });
+  const imported = await f.call("asset.import", { requestId: "nonretryable", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  await f.call("model.prepare", { modelId: "parakeet" });
+  await expect
+    .poll(() =>
+      f.service.captures.catalog
+        .prepare(
+          "SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript' AND state='failed'",
+        )
+        .get(),
+    )
+    .toEqual({ count: 2 });
+  const before = requests.length;
+  await f.call("model.prepare", { modelId: "parakeet" });
+  expect(requests).toHaveLength(before);
 });
 
 test("selected-source transcript reads report unprepared models without downloading or inventing a recording", async () => {

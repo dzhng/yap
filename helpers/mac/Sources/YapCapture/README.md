@@ -30,6 +30,13 @@ or make continuous input appear to overlap; actual gaps, backward overlaps and
 pause exclusions remain distinct. The journal retains the callback timestamps
 independently of their admitted placement.
 
+Marks a person makes during a screen take (strokes while ⇧ is held, ⇧-click pins, plain
+clicks) are capture evidence like the pointer, so they live in the same journal, schema 3,
+with the same clock and geometry epoch. The [recognizer](MarkRecognizer.swift) owns the gesture
+rules and stays free of AppKit; the writer feeds it modifier state and pointer readings, never
+keys, and projects each point through the same placement cursor samples use. Undo appends a
+retraction instead of rewriting the journal, so a published take still proves its prefix.
+
 A healthy ending can hold proven last-picture support through stop. Interrupted
 capture stops at available support instead of fabricating a tail. Hidden windows
 may deliver blank frames; pixel color cannot distinguish that from source loss.

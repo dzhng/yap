@@ -64,8 +64,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let controller = CaptureController(fixtureWindow: fixture)
         self.controller = controller
+        controls?.attach(to: controller)
         controller.onCameraFrame = { [weak self] frame in
             Task { @MainActor [weak self] in self?.controls?.receiveCameraFrame(frame) }
+        }
+        // Marks arrive in the order they happened and must be drawn in it: a mark is undone only
+        // after it was recorded. The main queue keeps that order; separate tasks need not.
+        controller.onMarkUpdate = { [weak self] update in
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.controls?.receiveMarkUpdate(update) } }
         }
         let updates = UpdateCoordinator(blockers: { [weak self] in
             guard let self else { return ["native.startup"] }
@@ -246,6 +252,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleAppOperation(_ operation: String, _ params: Data) -> Result<Data, ServiceFailure> {
         if operation.hasPrefix("update.") { return handleUpdate(operation, params) }
         if operation.hasPrefix("login.") { return handleLogin(operation, params) }
+        if operation.hasPrefix("shortcuts.") {
+            guard let controls else {
+                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))
+            }
+            return controls.handleShortcuts(operation, params)
+        }
         if operation.hasPrefix("skill.") || operation.hasPrefix("cli.") {
             guard let controls else {
                 return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))

@@ -16,6 +16,8 @@ public enum ControlsAction: Hashable, Sendable {
     /// during one. The menu's switch and the floating controls send this same action.
     case setCamera(Bool)
     case startOrStop
+    case pastePrompt
+    case undoMark
     case pauseOrResume
     case cancel
     case restart
@@ -46,6 +48,8 @@ public enum ControlsAction: Hashable, Sendable {
     case requestScreenPermission
     case requestMicrophonePermission
     case requestCameraPermission
+    /// Opens the Accessibility privacy pane; there is no prompt to show.
+    case requestAccessibilityPermission
     case openSettings
     case quit
 
@@ -61,6 +65,8 @@ public enum ControlsAction: Hashable, Sendable {
         case .showCameraPreview(let shown): shown ? "camera.preview.show" : "camera.preview.hide"
         case .setCamera(let on): on ? "capture.camera.on" : "capture.camera.off"
         case .startOrStop: "capture.startOrStop"
+        case .pastePrompt: "capture.pastePrompt"
+        case .undoMark: "capture.undoMark"
         case .pauseOrResume: "capture.pauseOrResume"
         case .cancel: "capture.cancel"
         case .restart: "capture.restart"
@@ -89,6 +95,7 @@ public enum ControlsAction: Hashable, Sendable {
         case .requestScreenPermission: "permission.screen"
         case .requestMicrophonePermission: "permission.microphone"
         case .requestCameraPermission: "permission.camera"
+        case .requestAccessibilityPermission: "permission.accessibility"
         case .openSettings: "app.settings"
         case .quit: "app.quit"
         }

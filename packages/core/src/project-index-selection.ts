@@ -1,4 +1,4 @@
-import { type SignedTimeValue } from "@yap/composition";
+import { timeUs, type SignedTimeValue } from "@yap/composition";
 import { setImmediate } from "node:timers/promises";
 import {
   createCompiler,
@@ -17,14 +17,14 @@ import {
   type ValidatedComposition,
 } from "@yap/composition";
 import { CatalogError } from "./catalog.js";
-import { selectionPolicy } from "./screenshot-index.js";
+import { CoverageTracker } from "./index-coverage.js";
+import type { IndexMoment, IndexPointerSample } from "./source-index-selection.js";
 import { observedSceneBoundary, type SourceSceneChunk } from "./source-scene-chunks.js";
 import type { SceneSampleClock } from "./source-scenes.js";
 import type { TimeRange } from "./presentation-time.js";
 
 export const projectIndexPolicy = Object.freeze({
-  id: "project-picture-selection-v2",
-  coverageUs: selectionPolicy.coverageUs,
+  id: "project-picture-selection-v4",
   maximumCandidates: 20000,
   maximumReasons: 100000,
   maximumOccurrences: 10000,
@@ -43,6 +43,7 @@ export type ProjectIndexReason =
       originUs: SignedTimeValue;
     }
   | { kind: "first" | "last" | "coverage"; projectAtUs: TimeValue }
+  | { kind: "mark" | "pin" | "click"; markId: string; projectAtUs: TimeValue }
   | { kind: "processing"; projectAtUs: TimeValue; side: "before" | "after" }
   | {
       kind: "clip" | "availability";
@@ -66,6 +67,8 @@ export async function selectProjectIndex(input: {
   ) => {
     generation: string;
     chunks: AsyncIterable<SourceSceneChunk> | Iterable<SourceSceneChunk>;
+    moments?: readonly IndexMoment[];
+    pointerSamples?: readonly IndexPointerSample[];
   } | null;
   signal?: AbortSignal | undefined;
 }): Promise<ProjectIndexCandidate[]> {
@@ -98,6 +101,8 @@ export async function selectProjectIndex(input: {
   bound("maximumOccurrences", clips.length);
   const compiler = createCompiler(model, input.revisionId);
   const candidates = new Map<number, Omit<ProjectIndexCandidate, "ordinal">>();
+  // Every chosen frame counts toward coverage, at the project time its reason names.
+  const coverage = new CoverageTracker();
   let reasonCount = 0,
     work = 0;
   async function checkpoint() {
@@ -115,6 +120,7 @@ export async function selectProjectIndex(input: {
     }
     bound("maximumReasons", ++reasonCount);
     candidate.reasons.push(reason);
+    coverage.chosen(timeUs(reason.projectAtUs));
   }
   async function boundary(
     projectAtUs: TimeValue,
@@ -133,14 +139,6 @@ export async function selectProjectIndex(input: {
     kind: "last",
     projectAtUs: model.durationUs,
   });
-  for (
-    let at = projectIndexPolicy.coverageUs;
-    at < model.durationUs;
-    at += projectIndexPolicy.coverageUs
-  ) {
-    await checkpoint();
-    add(compiler.frameBoundary(at).after, { kind: "coverage", projectAtUs: at });
-  }
   for (const value of clips) {
     signal?.throwIfAborted();
     for (const edge of ["start", "end"] as const) {
@@ -168,6 +166,27 @@ export async function selectProjectIndex(input: {
         endUs: ceil(fragment.source.end),
       });
       if (!source) continue;
+      const moments = source.moments ?? [];
+      if (clip.acquisitionId) {
+        for (const moment of moments) {
+          const mapped = projection.point(clip.id, moment.sourceUs);
+          if (
+            !mapped ||
+            compare(mapped.project, fragment.project.start) < 0 ||
+            compare(mapped.project, fragment.project.end) >= 0
+          )
+            continue;
+          const projectAtUs = toTime(mapped.project),
+            neighbors = compiler.frameBoundary(projectAtUs);
+          const frame =
+            neighbors.after &&
+            compare(fromTime(compiler.frameTime(neighbors.after.index)), fragment.project.end) < 0
+              ? neighbors.after
+              : neighbors.before;
+          add(frame, { kind: moment.kind, markId: moment.markId, projectAtUs });
+        }
+      }
+      coverage.scan(source.pointerSamples ?? []);
       let previous: SourceSceneChunk["coverage"][number] | undefined;
       for await (const chunk of source.chunks) {
         await checkpoint();
@@ -214,6 +233,22 @@ export async function selectProjectIndex(input: {
                 originUs: chunk.originUs,
               });
             }
+          }
+          const mapped = projection.point(clip.id, point.requestedSourceUs);
+          if (
+            mapped &&
+            compare(mapped.project, fragment.project.start) >= 0 &&
+            compare(mapped.project, fragment.project.end) < 0
+          ) {
+            const projectAtUs = toTime(mapped.project);
+            coverage.advance(timeUs(projectAtUs), point.requestedSourceUs);
+            const run = point.status === "available" ? point.stillnessRunStartUs : undefined;
+            if (
+              run !== undefined &&
+              coverage.due(run, Math.max(chunk.sourceWidth, chunk.sourceHeight))
+            )
+              add(compiler.frameBoundary(projectAtUs).after, { kind: "coverage", projectAtUs });
+            coverage.shown(run);
           }
           previous = point;
         }

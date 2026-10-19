@@ -19,7 +19,7 @@ import YapControls
         func choose(_ item: NSMenuItem) { NSApplication.shared.sendAction(item.action!, to: item.target, from: item) }
         guard let play = view.actionItem(identifier: ControlsAction.playRecording("fixture-recording").id),
               let copy = view.actionItem(identifier: ControlsAction.copyRecordingPrompt("fixture-recording").id) else {
-            preconditionFailure("The recording offers play and copy-agent-prompt actions")
+            preconditionFailure("The recording offers play and copy-prompt actions")
         }
         choose(play)
         choose(copy)
@@ -27,7 +27,7 @@ import YapControls
         guard let playImport = view.actionItem(identifier: ControlsAction.playAsset("fixture-import").id),
               let copyImport = view.actionItem(identifier: ControlsAction.copyAssetPrompt("fixture-import").id),
               let deleteImport = view.actionItem(identifier: ControlsAction.deleteAsset("fixture-import").id) else {
-            preconditionFailure("An imported video offers play, copy-agent-prompt and delete actions")
+            preconditionFailure("An imported video offers play, copy-prompt and delete actions")
         }
         choose(playImport)
         choose(copyImport)
@@ -39,10 +39,10 @@ import YapControls
         denied.update(state: { var locked = state; locked.service = .unavailable("fixture service failure"); return locked }(), exports: ExportsState())
         let deniedPlay = denied.actionItem(identifier: ControlsAction.playRecording("fixture-recording").id)!
         let deniedCopy = denied.actionItem(identifier: ControlsAction.copyRecordingPrompt("fixture-recording").id)!
-        precondition(!deniedPlay.isEnabled && deniedCopy.isEnabled, "Playback needs media service while prompt copying remains local")
+        precondition(!deniedPlay.isEnabled && !deniedCopy.isEnabled, "Playback and the agent prompt both need the service")
         choose(deniedPlay)
         choose(deniedCopy)
-        precondition(actions == [.playRecording("fixture-recording"), .copyRecordingPrompt("fixture-recording"), .copyRecordingPrompt("fixture-recording")], "Inapplicable playback cannot escape while local copying remains available")
+        precondition(actions == [.playRecording("fixture-recording"), .copyRecordingPrompt("fixture-recording")], "Inapplicable actions cannot escape")
         let menu = view.control(identifier: "actions.fixture-recording")!
         guard let row = view.control(identifier: "open.fixture-recording") as? NSButton else {
             preconditionFailure("A ready recording's whole row opens it")

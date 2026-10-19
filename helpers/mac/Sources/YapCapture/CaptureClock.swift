@@ -79,6 +79,11 @@ public struct CaptureClock: Sendable {
         }
         intervals.append((start, hostUs))
     }
+    /// Where the open pause began in source time: the last moment a paused take holds.
+    package var openPauseSourceUs: Int64? {
+        guard let pausedAt, let originUs, pausedAt >= originUs else { return nil }
+        return pausedAt - originUs - removedBefore(pausedAt, originUs: originUs)
+    }
     public func sourceTime(for hostUs: Int64, durationUs: Int64 = 0) -> Int64? {
         guard let originUs, hostUs >= originUs, accepts(hostUs: hostUs, durationUs: durationUs)
         else { return nil }

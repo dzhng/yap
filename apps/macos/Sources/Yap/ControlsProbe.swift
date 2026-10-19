@@ -97,6 +97,15 @@ final class ControlsProbe {
             }
             controls.showOverlay(elapsed: elapsed)
             return ["ok": true]
+        case "ink":
+            // Nobody draws for a check, so the ink shows a scene the same stream would have sent.
+            guard let scene = command["scene"] as? String,
+                let shown = controls.showInk(scene: scene, front: command["front"] as? Bool ?? false)
+            else { return ["ok": false, "error": "An ink command names a known scene."] }
+            return [
+                "ok": true, "display": shown.display,
+                "marks": shown.marks.map { [$0.minX, $0.minY, $0.width, $0.height] },
+            ]
         case "appearance":
             // Looking at this app the way a person with the other system appearance would.
             switch command["value"] as? String {
@@ -107,12 +116,20 @@ final class ControlsProbe {
             return ["ok": true]
         case "shot":
             // The window draws its own picture, so a review copy needs no screen capture, no
-            // pointer and nothing brought to the front of somebody's work.
+            // pointer and nothing brought to the front of somebody's work. A see-through window
+            // can be cut to a top-left rectangle of its points and laid over a plain backdrop.
             guard let title = command["window"] as? String, let path = command["path"] as? String,
-                let view = NSApplication.shared.windows.first(where: { $0.title == title })?.contentView,
-                let image = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+                let view = NSApplication.shared.windows.first(where: { $0.title == title })?.contentView
             else { return ["ok": false, "error": "No window named that has a picture to write."] }
-            view.cacheDisplay(in: view.bounds, to: image)
+            let crop = (command["crop"] as? [Double]).map {
+                NSRect(x: $0[0], y: view.bounds.height - $0[1] - $0[3], width: $0[2], height: $0[3])
+            }
+            let rect = crop?.intersection(view.bounds) ?? view.bounds
+            guard let drawn = view.bitmapImageRepForCachingDisplay(in: rect)
+            else { return ["ok": false, "error": "No window named that has a picture to write."] }
+            view.cacheDisplay(in: rect, to: drawn)
+            let image = (command["backdrop"] as? String).flatMap { Self.backdrops[$0] }
+                .flatMap { Self.flatten(drawn, over: $0) } ?? drawn
             guard let png = image.representation(using: .png, properties: [:]),
                 (try? png.write(to: URL(fileURLWithPath: path))) != nil
             else { return ["ok": false, "error": "The window's picture could not be written."] }
@@ -141,6 +158,27 @@ final class ControlsProbe {
                 "height": window.frame.height,
             ]
         }
+    }
+
+    /// Plain stand-ins for a light and a dark window behind something see-through.
+    private static let backdrops = ["light": NSColor(white: 0.96, alpha: 1), "dark": NSColor(white: 0.12, alpha: 1)]
+
+    private static func flatten(_ image: NSBitmapImageRep, over color: NSColor) -> NSBitmapImageRep? {
+        guard let flat = NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: image.pixelsWide, pixelsHigh: image.pixelsHigh,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+            let context = NSGraphicsContext(bitmapImageRep: flat)
+        else { return nil }
+        let bounds = NSRect(x: 0, y: 0, width: image.pixelsWide, height: image.pixelsHigh)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        color.setFill()
+        bounds.fill()
+        image.draw(in: bounds, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: false, hints: nil)
+        NSGraphicsContext.restoreGraphicsState()
+        flat.size = image.size
+        return flat
     }
 
     /// Answers into a file only once it is whole, so a reader never sees half of one.

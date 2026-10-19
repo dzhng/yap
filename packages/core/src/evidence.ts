@@ -77,6 +77,7 @@ export type SourceEvidenceReceipt = Readonly<{
   displaySpaces: number;
   pauseEvents: number;
   audioIntervals: number;
+  markEvents?: number;
   openPauseHostUs?: number | null;
   firstCursorSourceUs?: number | null;
   lastCursorSourceUs?: number | null;
@@ -186,7 +187,55 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
       data.endUs <= data.startUs
     )
       invalid("Invalid audio acquisition timing");
+  } else if (event === "mark") {
+    if (
+      !integer(data.hostUs) ||
+      !integer(data.sourceUs) ||
+      !integer(data.epoch) ||
+      typeof data.id !== "string" ||
+      !data.id ||
+      !["stroke", "pin", "click"].includes(data.kind as string) ||
+      !Array.isArray(data.points) ||
+      (data.retracts == null && data.points.length === 0) ||
+      (data.retracts != null &&
+        (typeof data.retracts !== "string" || !data.retracts || data.points.length !== 0)) ||
+      (data.kind === "pin"
+        ? !integer(data.pin) || (data.pin as number) < 1
+        : data.pin !== undefined)
+    )
+      invalid("Invalid normalized mark");
+    for (const point of data.points) {
+      const value = object(point);
+      if (
+        !integer(value.hostUs) ||
+        !finite(value.globalX) ||
+        !finite(value.globalY) ||
+        (value.x != null && !finite(value.x)) ||
+        (value.y != null && !finite(value.y)) ||
+        (value.x == null) !== (value.y == null)
+      )
+        invalid("Invalid normalized mark point");
+    }
+    if (data.window != null) {
+      const window = object(data.window);
+      const bounds = object(window.bounds);
+      if (
+        typeof window.app !== "string" ||
+        !window.app ||
+        typeof window.title !== "string" ||
+        ![bounds.x, bounds.y, bounds.width, bounds.height].every(finite)
+      )
+        invalid("Invalid normalized mark window");
+    }
   } else invalid("Unknown normalized evidence event");
+}
+
+/**
+ * Whether a journal uses the packed layout (separate published media, verified proofs): schema 2,
+ * or 3 once it can carry marks. Schema 1 is the camera companion's own journal.
+ */
+export function packedSchema(version: unknown): boolean {
+  return version === 2 || version === 3;
 }
 
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
@@ -194,6 +243,8 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   const receipt = object(value);
   const header = object(receipt.header);
   if (header.sessionID !== sourceId) invalid("Evidence identity does not match its recording");
+  if (header.schemaVersion !== undefined && ![1, 2, 3].includes(header.schemaVersion as number))
+    invalid("Unsupported evidence journal schema");
   if (
     typeof receipt.file !== "string" ||
     !receipt.file ||
@@ -204,6 +255,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       receipt.displaySpaces,
       receipt.pauseEvents,
       receipt.audioIntervals,
+      receipt.markEvents ?? 0,
       receipt.lastSequence,
     ].every(integer) ||
     !integer(receipt.bytes) ||
@@ -252,7 +304,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   if (receipt.publications !== undefined) {
     for (const [role, proof] of Object.entries(object(receipt.publications))) {
       if (!["video", "narration", "system"].includes(role)) invalid("Invalid publication role");
-      if (role !== "video" && header.schemaVersion !== 2)
+      if (role !== "video" && !packedSchema(header.schemaVersion))
         invalid("Audio publication proof requires the packed journal layout");
       const identity = object(proof);
       for (const kind of role === "video"
@@ -281,9 +333,10 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       if (role === "video" && !validCameraGaps(identity.support as SelectionRange, identity.gaps))
         invalid("Invalid verified camera gaps");
     }
-  } else if (header.schemaVersion === 2) invalid("Packed evidence requires verified publications");
+  } else if (packedSchema(header.schemaVersion))
+    invalid("Packed evidence requires verified publications");
   const camera = header.source != null && object(header.source).kind === "camera";
-  if ((camera && header.schemaVersion !== 2) || header.cameraBinding !== undefined) {
+  if ((camera && !packedSchema(header.schemaVersion)) || header.cameraBinding !== undefined) {
     const binding = object(header.cameraBinding);
     if (
       !camera ||
@@ -312,7 +365,8 @@ export async function* sourceEvidenceRecords(
     geometries = 0,
     displays = 0,
     pauses = 0,
-    audio = 0;
+    audio = 0,
+    marks = 0;
   const audioEnds = new Map<string, number>();
   let first: number | null = null,
     last: number | null = null;
@@ -335,6 +389,8 @@ export async function* sourceEvidenceRecords(
       const event = record.event as string,
         data = object(record.data);
       validateRecord(event, data);
+      if (event === "mark" && receipt.header?.schemaVersion !== 3)
+        invalid("Marks require schema 3 evidence");
       if (event === "cursorSample") {
         cursors++;
         first ??= data.sourceUs as number;
@@ -342,6 +398,7 @@ export async function* sourceEvidenceRecords(
       } else if (event === "geometry") geometries++;
       else if (event === "displaySpace") displays++;
       else if (event === "pause") pauses++;
+      else if (event === "mark") marks++;
       else {
         audio++;
         const role = data.role as string;
@@ -371,6 +428,7 @@ export async function* sourceEvidenceRecords(
     displays !== receipt.displaySpaces ||
     pauses !== receipt.pauseEvents ||
     audio !== receipt.audioIntervals ||
+    marks !== (receipt.markEvents ?? 0) ||
     first !== (receipt.firstCursorSourceUs ?? null) ||
     last !== (receipt.lastCursorSourceUs ?? null)
   )
@@ -398,6 +456,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='cursorSample';
       CREATE INDEX IF NOT EXISTS source_evidence_pauses ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='pause';
+      CREATE INDEX IF NOT EXISTS source_evidence_marks ON source_evidence_records
+        (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='mark';
       CREATE INDEX IF NOT EXISTS source_evidence_geometry ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='geometry';
       CREATE INDEX IF NOT EXISTS source_evidence_audio ON source_evidence_records
@@ -532,6 +592,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       },
       unplaced: { condition: "event='geometry' AND sourceUs IS NULL", keys: ["sequence"] },
       pauses: { condition: "event='pause'", keys: ["sourceUs", "sequence"] },
+      marks: { condition: "event='mark'", keys: ["sourceUs", "sequence"] },
       narration: {
         condition: "event='audioAcquired' AND json_extract(content,'$.role')='narration'",
         keys: ["sourceUs", "sequence"],

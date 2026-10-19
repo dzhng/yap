@@ -15,6 +15,7 @@ import {
   appOperations,
   parseRequest,
   responseSchema,
+  operationWaitMs,
 } from "./index.js";
 import { workStateSchema } from "./work.js";
 import {
@@ -115,6 +116,46 @@ it("scans operation and status schemas for a second async state vocabulary", () 
   expect(
     scanProtocolStateEnums([z.object({ state: z.enum(["processing", "ready"]) })]),
   ).toHaveLength(1);
+});
+
+it("advertises shortcut bindings as synchronous app operations", () => {
+  expect(appOperations.has("shortcuts.get")).toBe(true);
+  expect(appOperations.has("shortcuts.set")).toBe(true);
+  expect(readOnlyOperations.has("shortcuts.get")).toBe(true);
+  expect(idempotentOperations.has("shortcuts.set")).toBe(true);
+  expect(operationSchema.parse({ operation: "shortcuts.get", params: {} })).toMatchObject({
+    operation: "shortcuts.get",
+    params: {},
+  });
+  expect(
+    operationSchema.parse({
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    }).operation,
+  ).toBe("shortcuts.set");
+  expect(operationWaitMs("shortcuts.set")).toBe(operationWaitMs("update.setEnabled"));
+});
+
+it("advertises recording.prompt as a read-only operation naming at most one media owner", () => {
+  expect(operationNames.has("recording.prompt")).toBe(true);
+  expect(readOnlyOperations.has("recording.prompt")).toBe(true);
+  expect(operationSchema.parse({ operation: "recording.prompt", params: {} })).toEqual({
+    operation: "recording.prompt",
+    params: {},
+  });
+  for (const params of [{ recordingId: "rec-1" }, { projectId: "p-1" }, { assetId: "a-1" }])
+    expect(operationSchema.parse({ operation: "recording.prompt", params })).toEqual({
+      operation: "recording.prompt",
+      params,
+    });
+  expect(
+    operationSchema.safeParse({
+      operation: "recording.prompt",
+      params: { recordingId: "rec-1", projectId: "p-1" },
+    }).success,
+  ).toBe(false);
 });
 
 it("has no per-item retry operations", () => {
@@ -678,6 +719,7 @@ it("source capture continuations retain every reader head through both public op
     cursor: { after: null, done: true },
     pause: { after: [999, 1], done: false },
     geometry: { after: null, done: true },
+    mark: { after: [700, 4], done: false },
     interruption: { after: null, done: false },
   };
   for (const operation of ["cursor.raw", "timeline.events"]) {

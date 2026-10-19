@@ -4,7 +4,7 @@
 
 **Seam:** a core `TranscriptBacklog` owner in an additive catalog table (the catalog creates
 additive tables idempotently, `packages/core/src/catalog.ts:2-8`; format stays 29):
-`enqueue(selection)`, `drain()`, `state(selection) → none | pending | submitted`.
+`enqueue(selection)`, `wake()`, `drain()`, `pending(selection)`.
 - Enqueued from recording publication inside `acquisition.import` (recordings bypass
   `asset.import`, `acquisitions.ts:1101-1145`) and from real `asset.import`, not conversions
   (`asset-conversion.ts`). One row per **audio** stream (other kinds throw
@@ -22,6 +22,9 @@ job per audio stream after the model is ready); no model → row persists, no jo
 restart drains; an empty transcript completes cleanly; an explicit `transcript.transcribe`
 joins; non-audio and conversion outputs are never enqueued. Use the fixture model
 (`project-service.fixture.ts:94`), no real transcription.
+
+- A background job an app update interrupted (slice 09 lets updates proceed past background
+  work) ends failed and retryable; the backlog resubmits it on the next drain.
 
 **Delegated:** table shape.
 **Firewall:** no new job queue; the backlog only decides when to submit.

@@ -10,6 +10,11 @@ import type { DatabaseSync } from "node:sqlite";
 
 /** Catalog format 29 → 30, inside the caller's transaction. */
 export function migrateToFormat30(catalog: DatabaseSync): void {
+  // Format 30 also gives every job a priority, so background work can queue behind interactive.
+  if (catalog.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='jobs'").get())
+    catalog.exec(
+      "ALTER TABLE jobs ADD COLUMN priority TEXT NOT NULL DEFAULT 'interactive' CHECK(priority IN ('interactive','background'))",
+    );
   const tables = catalog
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
     .all() as { name: string }[];

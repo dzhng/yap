@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, readdir, writeFile, mkdir, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import type { PresetIndex, PresetManifest } from "./preset-format.js";
@@ -211,7 +212,7 @@ describe("preset installer", () => {
 
   test("directorySource round-trips the repository presets", async () => {
     const target = await mkdtemp(join(tmpdir(), "preset-install-"));
-    const source = directorySource(join(process.cwd(), "../../presets"));
+    const source = directorySource(fileURLToPath(new URL("../../../presets", import.meta.url)));
     const index = await source.index();
     const report = await installPackages(source, target, undefined, {
       removeMissingDownloaded: false,

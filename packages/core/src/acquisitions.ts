@@ -49,6 +49,7 @@ import {
 } from "./files.js";
 import {
   cameraProofIntervals,
+  packedSchema,
   validateSourceReceipt,
   type CameraPublicationProof,
   type SourceEvidenceMetadata,
@@ -562,6 +563,7 @@ export class AcquisitionImporter {
     private readonly assets: AssetStore,
     private readonly evidence: SourceEvidenceStore,
     library: string,
+    private readonly published?: (acquisition: Acquisition) => void,
   ) {
     this.directory = join(library, "acquisitions");
     this.recordings = join(realpathSync(library), "recordings");
@@ -1108,7 +1110,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            receipt.header?.schemaVersion === 2 &&
+            packedSchema(receipt.header?.schemaVersion) &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )
@@ -1176,6 +1178,7 @@ export class AcquisitionImporter {
         signal.throwIfAborted();
         this.catalog.transaction(() => {
           this.store.publish(value);
+          this.published?.(value);
         });
         published = true;
         return value;

@@ -73,7 +73,7 @@ test(
   "Escape during the countdown abandons the start and allocates no recording",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     // A display is selected but never recorded: the count is abandoned before capture is asked for.
     await app.ready();
     await app.choose("capture.startOrStop");
@@ -112,7 +112,7 @@ test(
   "the menu offers to cancel the count it is running, and does",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     await app.ready();
     assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
@@ -159,7 +159,9 @@ test(
       return Boolean(find(await app.rows(), `source.window.${windowId}`));
     }, 20_000);
     await app.choose(`source.window.${windowId}`);
-    // The fixture lists no microphone, so its switch is off and the take records no audio device.
+    // A Mac with a microphone starts with its switch on, and turning it off records no audio
+    // device of any kind; on a Mac without one the switch is already off.
+    if (find(await app.rows(), "microphone.toggle").checked) await app.choose("microphone.toggle");
     assert.equal(find(await app.rows(), "microphone.toggle").checked, false);
     assert.notEqual(
       (await app.window(controlsWindow))?.visible,

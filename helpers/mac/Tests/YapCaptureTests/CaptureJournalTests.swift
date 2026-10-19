@@ -174,4 +174,55 @@ func runCaptureJournalTests() async throws {
         "A refused record must leave the sequence the next record reports readable, reported \(reported) read \(afterRefusal.lastSequence) invalid \(afterRefusal.invalidAtSequence as Int?)"
     )
     print("PASS a record the journal could not write leaves the sequence unbroken")
+
+    let schema2 = RecoveryFixture.directory("schema2-mark-refused")
+    defer { try? FileManager.default.removeItem(at: schema2) }
+    let oldJournal = try CaptureJournal(directory: schema2.path, header: CaptureJournalHeader(
+        schemaVersion: 2, sessionID: "schema2", source: CaptureSource(kind: "display"),
+        width: 120, height: 80, microphone: false, systemAudio: false))
+    do {
+        try oldJournal.recordMark(JournalMark(
+            hostUs: 1, sourceUs: 0, epoch: 1, id: "old", kind: "click",
+            points: [JournalMarkPoint(globalX: 1, globalY: 2, x: 1, y: 2, hostUs: 1)]))
+        preconditionFailure("Schema2 journals must refuse marks")
+    } catch let failure as CaptureFailure {
+        precondition(failure.code == "INVALID_JOURNAL")
+    }
+    let schema3 = RecoveryFixture.directory("schema3-mark-writer")
+    defer { try? FileManager.default.removeItem(at: schema3) }
+    let newJournal = try CaptureJournal(directory: schema3.path, header: CaptureJournalHeader(
+        schemaVersion: 3, sessionID: "schema3", source: CaptureSource(kind: "display"),
+        width: 120, height: 80, microphone: false, systemAudio: false))
+    let points = (0..<50_000).map {
+        JournalMarkPoint(globalX: Double($0), globalY: 2, x: Double($0), y: 2, hostUs: Int64($0))
+    }
+    try newJournal.recordMark(JournalMark(
+        hostUs: 1, sourceUs: 0, epoch: 1, id: "long", kind: "stroke", points: points))
+    var written: [JournalMark] = []
+    let bounded = try CaptureJournal.streamEvidence(
+        directory: schema3.path, geometry: { _ in }, samples: { _ in },
+        displaySpace: { _ in }, mark: { written.append($0) })
+    precondition(bounded.invalidAtSequence == nil && written.count == 1 && written[0].points.count < points.count,
+        "Long strokes must stay under the one-megabyte record cap")
+    print("PASS schema3 writer round trip, schema2 refusal and bounded marks")
+
+    let fixtureRoot = RecoveryFixture.directory("schema3-marks-fixture")
+    defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("fixtures/journal/schema3-marks.jsonl")
+    try FileManager.default.copyItem(
+        at: fixtureURL, to: fixtureRoot.appendingPathComponent("capture.journal.jsonl"))
+    var fixtureMarks: [JournalMark] = []
+    let fixtureSummary = try CaptureJournal.streamEvidence(
+        directory: fixtureRoot.path, geometry: { _ in }, samples: { _ in },
+        displaySpace: { _ in }, mark: { fixtureMarks.append($0) })
+    precondition(
+        fixtureSummary.invalidAtSequence == nil && fixtureMarks.count == 4
+            && fixtureMarks[0].points[0] == JournalMarkPoint(
+                globalX: 10, globalY: 20, x: 10, y: 20, hostUs: 1100),
+        "Schema3 fixture mark points must retain global and output coordinates")
+    print("PASS schema3 fixture mark points read with cursor-compatible coordinates")
 }

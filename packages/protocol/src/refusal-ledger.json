@@ -29,7 +29,8 @@
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
-        "packages/core/src/acquisitions.ts": 1
+        "packages/core/src/acquisitions.ts": 1,
+        "packages/core/src/transcript-backlog.ts": 1
       }
     },
     "ACQUISITION_PATH_UNAVAILABLE": {
@@ -146,7 +147,8 @@
       "category": "conflict",
       "retryable": false,
       "files": {
-        "packages/core/src/assets.ts": 2
+        "packages/core/src/assets.ts": 2,
+        "packages/core/src/transcript-backlog.ts": 1
       }
     },
     "AUDIO_FORMAT_CHANGED": {
@@ -249,7 +251,8 @@
         "apps/service/src/package-registry.ts": 2,
         "helpers/mac/Sources/YapAudio/AudioWave.swift": 1,
         "packages/core/src/files.ts": 1,
-        "packages/core/src/jobs.ts": 4
+        "packages/core/src/jobs.ts": 5,
+        "packages/core/src/transcript-backlog.ts": 1
       }
     },
     "CAPTURE_BUSY": {
@@ -803,7 +806,7 @@
       "category": "malformed",
       "retryable": false,
       "files": {
-        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 16,
+        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 18,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/JournalPCM.swift": 2,
@@ -1083,7 +1086,7 @@
         "helpers/mac/Sources/YapWire/WireRequest.swift": 1,
         "packages/core/src/acquisitions.ts": 1,
         "packages/core/src/cache.ts": 1,
-        "packages/core/src/jobs.ts": 2,
+        "packages/core/src/jobs.ts": 4,
         "packages/core/src/models.ts": 6,
         "packages/core/src/project-evidence.ts": 2,
         "packages/core/src/transcript.ts": 1,
@@ -1169,7 +1172,8 @@
         "apps/service/src/project-service.ts": 1,
         "apps/service/src/publication.ts": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 3,
-        "helpers/mac/Sources/YapCapture/NativeCapture.swift": 8,
+        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
+        "helpers/mac/Sources/YapCapture/NativeCapture.swift": 9,
         "packages/core/src/acquisitions.ts": 3,
         "packages/core/src/capture-publication.ts": 7,
         "packages/core/src/capture-store.ts": 7,
@@ -1290,7 +1294,7 @@
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 1,
+        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
         "helpers/mac/Sources/YapCapture/ClosedCameraSource.swift": 1
       }
@@ -1622,11 +1626,13 @@
         "packages/core/src/models.ts": 1,
         "packages/core/src/prepared-audio.ts": 1,
         "packages/core/src/projects.ts": 3,
+        "packages/core/src/recording-prompt.ts": 1,
         "packages/core/src/rendered-speech.ts": 1,
         "packages/core/src/screenshot-index-read.ts": 1,
         "packages/core/src/screenshot-index.ts": 1,
         "packages/core/src/speaker-evidence.ts": 1,
         "packages/core/src/storage.ts": 3,
+        "packages/core/src/transcript-backlog.ts": 1,
         "packages/core/src/transcript-processing.ts": 1,
         "packages/core/src/transcript.ts": 1,
         "packages/core/src/voice-generation.ts": 1
@@ -1673,6 +1679,7 @@
         "packages/core/src/project-index.ts": 1,
         "packages/core/src/project-preview.ts": 3,
         "packages/core/src/project-window.ts": 1,
+        "packages/core/src/recording-prompt.ts": 1,
         "packages/core/src/speaker-evidence.ts": 1,
         "packages/core/src/speaker-processing.ts": 1,
         "skills/yap/scripts/caption-proposals.mjs": 1,

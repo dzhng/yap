@@ -91,7 +91,7 @@ export async function projectServiceFixture(
   existingHome?: string,
   serviceOptions: Pick<
     Parameters<typeof startProjectService>[0],
-    "control" | "version" | "autoPrepareModels" | "presets" | "deletionPlans"
+    "control" | "version" | "autoPrepareModels" | "autoTranscribe" | "presets" | "deletionPlans"
   > = {},
 ) {
   const home = existingHome ?? (await mkdtemp(join(tmpdir(), "asset-service-")));

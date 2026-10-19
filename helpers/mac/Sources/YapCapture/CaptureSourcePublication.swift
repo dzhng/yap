@@ -140,7 +140,7 @@ package enum CaptureSourcePublication {
             facts.header?.sessionID == authority.sourceId,
             facts.header?.cameraBinding == authority.binding,
             authority.kind != .camera || facts.header?.source.kind == "camera",
-            layout == (authority.kind == .camera ? 1 : 2) else {
+            authority.kind == .camera ? layout == 1 : CaptureJournal.isPacked(layout) else {
             throw invalid("Recovery differs from allocated source/device authority.")
         }
     }
@@ -249,7 +249,7 @@ package enum CaptureSourcePublication {
             : ["video.mov", "narration.mov", "system.mov", "narration.publication.json", "system.publication.json"]
         guard whole == basis.original, whole.bytes == source.journal.bytes, whole.sha256 == source.journal.sha256,
             source.journal.file == (source.kind == .primary ? "source.journal.jsonl" : "capture.journal.jsonl"),
-            source.journal.layout == (source.kind == .primary ? 2 : 1),
+            source.kind == .primary ? CaptureJournal.isPacked(source.journal.layout) : source.journal.layout == 1,
             facts.validatedPrefix == basis.prefix, facts.lastSequence == basis.lastSequence,
             facts.lastSequence == source.journal.lastSequence, facts.finished == basis.finished,
             facts.incompleteTail == basis.incompleteTail, facts.invalidAtSequence == basis.invalidAtSequence,
@@ -399,7 +399,7 @@ package enum CaptureSourcePublication {
         let allowedMembers: Set<String> = receipt.kind == .primary
             ? ["video.mov", "narration.mov", "system.mov", "narration.publication.json", "system.publication.json"]
             : ["video.mov", "camera.publication.json", CameraMedia.mappingFile]
-        guard receipt.journal.file == expectedJournal, [1, 2].contains(receipt.journal.layout),
+        guard receipt.journal.file == expectedJournal, [1, 2, 3].contains(receipt.journal.layout),
             Set(receipt.members.keys).isSubset(of: allowedMembers), receipt.members["video.mov"] != nil,
             receipt.kind != .camera || Set(receipt.members.keys) == allowedMembers else {
             throw invalid("Source receipt names invalid authority members.")

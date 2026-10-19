@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CatalogError } from "./catalog.js";
+import { packedSchema } from "./evidence.js";
 
 const identity = z.string().min(1).max(256);
 const diagnostic = z.strictObject({
@@ -29,7 +30,7 @@ const published = z.strictObject({
     bytes: z.int().positive().max(268_435_456),
     sha256: hash,
     lastSequence: z.int().positive(),
-    layout: z.union([z.literal(1), z.literal(2)]),
+    layout: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   }),
   members: z.strictObject({
     "video.mov": media,
@@ -189,7 +190,8 @@ export function readCapturePublication(
     const camera = kind === "camera";
     if (
       receipt.journal.file !== (camera ? "capture.journal.jsonl" : "source.journal.jsonl") ||
-      receipt.journal.layout !== (camera ? 1 : 2) ||
+      // A companion camera keeps its own schema-1 journal; a primary source's is packed.
+      (camera ? receipt.journal.layout !== 1 : !packedSchema(receipt.journal.layout)) ||
       Boolean(receipt.members["camera.publication.json"]) !== camera ||
       Boolean(receipt.members["camera.mapping.jsonl"]) !== camera
     )

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   intervalIndex,
   fromTime,
+  timeUs,
   toTime,
   toSignedTime,
   subtract,
@@ -35,7 +36,7 @@ export type CaptureSourceInput = SourceSelection & {
   cursor?: unknown;
 };
 export type CaptureDomain = "events" | "cursor";
-type PointKind = "pause" | "geometry" | "cursor" | "interruption";
+type PointKind = "pause" | "geometry" | "cursor" | "mark" | "interruption";
 export type CaptureCoverage = {
   kind: string;
   state: "ready" | "unavailable";
@@ -49,7 +50,28 @@ export type CaptureContext = {
   supportDigest: string;
   evidence: SourceEvidenceMetadata | null;
   coverage: CaptureCoverage[];
+  marks: JournalMark[];
 };
+export type CaptureMarkPoint = {
+  hostUs: number;
+  globalX: number;
+  globalY: number;
+  x: number | null;
+  y: number | null;
+};
+/** A live mark as callers read it: `assetUs` is asset microseconds, the clock every reader uses. */
+export type CaptureMark = {
+  assetUs: number;
+  hostUs: number;
+  epoch: number;
+  id: string;
+  kind: "stroke" | "pin" | "click";
+  points: CaptureMarkPoint[];
+  pin?: number;
+  window?: Record<string, unknown>;
+};
+// The journal's own form: capture-clock `sourceUs` and the order it was written in.
+type JournalMark = Omit<CaptureMark, "assetUs"> & { sourceUs: number; sequence: number };
 export type CaptureRow = {
   kind: PointKind;
   sourceAtUs: TimeValue;
@@ -63,9 +85,10 @@ export const initialCapture = (): CapturePosition => ({
   cursor: { after: null, done: false, row: null },
   pause: { after: null, done: false, row: null },
   geometry: { after: null, done: false, row: null },
+  mark: { after: null, done: false, row: null },
   interruption: { after: null, done: false, row: null },
 });
-const index = { cursor: "cursor", pause: "pauses", geometry: "geometry" } as const;
+const index = { cursor: "cursor", pause: "pauses", geometry: "geometry", mark: "marks" } as const;
 const sourcePositionSchema = z.strictObject({
   after: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]).nullable(),
   done: z.boolean(),
@@ -74,9 +97,22 @@ export const capturePositionSchema = z.strictObject({
   cursor: sourcePositionSchema,
   pause: sourcePositionSchema,
   geometry: sourcePositionSchema,
+  mark: sourcePositionSchema,
   interruption: sourcePositionSchema,
 });
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+/** The one capture-to-asset clock conversion: assetUs = captureUs + sourceToAssetOffsetUs. */
+function captureToAsset(captureUs: number, sourceToAssetOffsetUs: SignedTimeValue): TimeValue {
+  return toTime(add(fromTime(captureUs), fromTime(sourceToAssetOffsetUs)));
+}
+/** The same conversion as a plain number, for readers that compare and sort times. */
+export function captureToAssetUs(
+  captureUs: number,
+  sourceToAssetOffsetUs: SignedTimeValue,
+): number {
+  return timeUs(captureToAsset(captureUs, sourceToAssetOffsetUs));
+}
 
 /** Explicit capture authority and clock conversion, shared by source and project inspection. */
 export class CaptureSourceRead {
@@ -95,6 +131,19 @@ export class CaptureSourceRead {
   resolveMany(selections: readonly SourceSelection[], domain: CaptureDomain): CaptureContext[] {
     const sources = new SourceSelectionRead(this.assets, this.acquisitions, selections);
     return selections.map((selection) => this.resolve(selection, domain, sources));
+  }
+  /** A take's live marks in capture order, retractions applied, in asset time: the one reader of marks. */
+  marks(selection: SourceSelection): CaptureMark[] {
+    const context = this.resolve(selection, "events");
+    if (
+      !context.evidence ||
+      !context.coverage.some((item) => item.kind === "mark" && item.state === "ready")
+    )
+      return [];
+    return this.readMarks(context.evidence).map(({ sequence: _sequence, sourceUs, ...mark }) => ({
+      assetUs: captureToAssetUs(sourceUs, context.sourceToAssetOffsetUs),
+      ...mark,
+    }));
   }
   private context(
     selected: ReturnType<SourceSelectionRead["get"]>,
@@ -132,6 +181,7 @@ export class CaptureSourceRead {
         : [
             capability("pause"),
             capability("geometry", !!visual),
+            capability("mark", !!visual),
             { kind: "unplaced_geometry", state: "unavailable" as const, reason: "no_source_time" },
             {
               kind: "interruption",
@@ -144,6 +194,7 @@ export class CaptureSourceRead {
               reason: "unsupported",
             })),
           ];
+    const marks: JournalMark[] = [];
     return {
       selection: selected.selection,
       domain,
@@ -152,7 +203,42 @@ export class CaptureSourceRead {
       supportDigest: selected.supportDigest,
       evidence: acquisition?.evidence ?? null,
       coverage,
+      marks,
     };
+  }
+  private readMarks(identity: SourceEvidenceMetadata): JournalMark[] {
+    const rows = [] as { sequence: number; sourceUs: number; data: Record<string, unknown> }[];
+    let after: [number, number] | null = null;
+    for (;;) {
+      const page = this.records.eventRecords(identity, "marks", after, 256);
+      if (!page.length) break;
+      for (const row of page)
+        rows.push({
+          sequence: row.sequence,
+          sourceUs: row.sourceUs!,
+          data: JSON.parse(row.content),
+        });
+      after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
+    }
+    const retracted = new Set(
+      rows.map((row) => row.data.retracts).filter((id): id is string => typeof id === "string"),
+    );
+    return rows
+      .filter((row) => row.data.retracts == null && !retracted.has(row.data.id as string))
+      .map((row) => {
+        const data = row.data;
+        return {
+          sourceUs: row.sourceUs,
+          sequence: row.sequence,
+          hostUs: data.hostUs as number,
+          epoch: data.epoch as number,
+          id: data.id as string,
+          kind: data.kind as CaptureMark["kind"],
+          points: data.points as CaptureMarkPoint[],
+          ...(data.pin === undefined ? {} : { pin: data.pin as number }),
+          ...(data.window === undefined ? {} : { window: data.window as Record<string, unknown> }),
+        };
+      });
   }
   /** Pointer history keeps the acquisition clock, independently of an edited clip range.
    * assetUs = captureUs + sourceToAssetOffsetUs; containerUs = assetUs + originUs. */
@@ -219,13 +305,39 @@ export class CaptureSourceRead {
       const position = state[kind];
       if (position.row || position.done) continue;
       if (budget.remaining-- <= 0) return undefined;
+      if (kind === "mark") {
+        if (!context.marks.length && context.evidence)
+          context.marks = this.readMarks(context.evidence);
+        const next = context.marks.find(
+          (mark) =>
+            mark.sourceUs >= captureRange.startUs &&
+            mark.sourceUs < captureRange.endUs &&
+            (position.after === null ||
+              mark.sourceUs > position.after[0] ||
+              (mark.sourceUs === position.after[0] && mark.sequence > position.after[1])),
+        );
+        if (!next) {
+          position.done = true;
+          continue;
+        }
+        position.row = {
+          kind,
+          sourceAtUs: captureToAsset(next.sourceUs, context.sourceToAssetOffsetUs),
+          captureAtUs: next.sourceUs,
+          sourceSequence: next.sequence,
+          observation: (() => {
+            const { sequence: _sequence, ...mark } = next;
+            return mark as Record<string, unknown>;
+          })(),
+        };
+        continue;
+      }
       if (kind === "interruption") {
         position.done = true;
         const completion = context.evidence.receipt.completion;
         if (completion?.state === "interrupted") {
-          const source = add(
-            fromTime(completion.durationUs),
-            fromTime(context.sourceToAssetOffsetUs),
+          const source = fromTime(
+            captureToAsset(completion.durationUs, context.sourceToAssetOffsetUs),
           );
           if (
             compare(source, fromTime(range.startUs)) > 0 &&
@@ -268,7 +380,7 @@ export class CaptureSourceRead {
       const captureAtUs = row.sourceUs!;
       position.row = {
         kind,
-        sourceAtUs: toTime(add(fromTime(captureAtUs), fromTime(context.sourceToAssetOffsetUs))),
+        sourceAtUs: captureToAsset(captureAtUs, context.sourceToAssetOffsetUs),
         captureAtUs,
         sourceSequence: row.sequence,
         observation: JSON.parse(row.content),

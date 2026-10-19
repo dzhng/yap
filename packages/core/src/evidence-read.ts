@@ -9,6 +9,7 @@ export const evidenceIndexes = [
   "geometry",
   "unplaced",
   "pauses",
+  "marks",
   "narration",
   "system",
 ] as const;
@@ -40,8 +41,8 @@ export abstract class SourceEvidenceReader {
     this.requireComplete(identity);
     if (range) {
       this.timingRange(range);
-      if (!["cursor", "geometry", "pauses"].includes(index))
-        invalid("Source ranges require cursor, geometry or pause records");
+      if (!["cursor", "geometry", "pauses", "marks"].includes(index))
+        invalid("Source ranges require cursor, geometry, pause or mark records");
     }
     let lower: PageBound | undefined = range
       ? { key: [range.startUs, 0], inclusive: true }
@@ -64,7 +65,7 @@ export abstract class SourceEvidenceReader {
   /** Ordered point markers for bounded timeline projection; null-time geometry stays separate. */
   eventRecords(
     identity: EvidenceIdentity,
-    index: "pauses" | "geometry",
+    index: "pauses" | "geometry" | "marks",
     after: readonly [number, number] | null,
     limit: number,
   ): RecordRow[] {
