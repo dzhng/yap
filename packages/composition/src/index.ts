@@ -58,6 +58,7 @@ export {
   rational,
   compare,
   fromTime,
+  timeUs,
   toTime,
   toSignedTime,
   floor,

@@ -136,11 +136,15 @@ final class RecordingControls: NSObject {
         self.homeLifecycle = HomeLifecycle(inApplications: inApplications)
         state = ControlsState(recording: preferences.recording)
         super.init()
+        var bindings = ShortcutBindings.defaults
         do {
-            try applyShortcuts(
-                ShortcutBindings.decode(
-                    FileManager.default.contents(atPath: GlobalShortcuts.overridePath(home: home))),
-                recording: false)
+            bindings = try ShortcutBindings.decode(
+                FileManager.default.contents(atPath: GlobalShortcuts.overridePath(home: home)))
+        } catch {
+            state.failure = "Shortcuts file refused, using the defaults: \(error.message)"
+        }
+        do {
+            try applyShortcuts(bindings, recording: false)
         } catch {
             // A hand-edited file can bind one key twice; the defaults never do, so they hold
             // instead and Settings shows what is actually registered.
@@ -633,7 +637,12 @@ final class RecordingControls: NSObject {
         }
         var params = parameters(of: start, requestId: UUID().uuidString)
         params["recordingId"] = recordingId
-        send("capture.restart", params)
+        send("capture.restart", params) { [weak self] result in
+            guard let self, case .success(let data) = result,
+                let take = try? JSONDecoder().decode(ControlsState.TakeStatus.self, from: data)
+            else { return }
+            state.restarted(recordingId: take.recordingId, start: start)
+        }
     }
 
     /// A live toggle. A refusal (the camera is gone, the turn-on limit, a changed format, missing

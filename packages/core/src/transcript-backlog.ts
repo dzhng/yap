@@ -45,8 +45,6 @@ function key(selection: TranscriptBacklogSelection): [string, string, string] {
  * is ready or can no longer be delivered automatically.
  */
 export class TranscriptBacklog {
-  private draining: Promise<void> | undefined;
-
   constructor(
     private readonly catalog: Catalog,
     private readonly driver: TranscriptBacklogDriver,
@@ -84,19 +82,19 @@ export class TranscriptBacklog {
   /** Drain soon, from any event that may have made progress possible; never rejects. */
   wake(): void {
     queueMicrotask(() => {
-      this.drain().catch((error) => this.driver.report(error));
+      try {
+        this.drain();
+      } catch (error) {
+        this.driver.report(error);
+      }
     });
   }
 
-  async drain(): Promise<void> {
-    if (this.draining) return this.draining;
-    this.draining = this.drainRows().finally(() => {
-      this.draining = undefined;
-    });
-    return this.draining;
-  }
-
-  private async drainRows(): Promise<void> {
+  /**
+   * One synchronous pass over the rows. Submitting only queues a job, so a pass never waits and
+   * a wake raised during it runs its own pass afterwards.
+   */
+  drain(): void {
     if (!this.driver.readiness()) return;
     const rows = this.catalog.catalog
       .prepare(

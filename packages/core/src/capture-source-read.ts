@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   intervalIndex,
   fromTime,
+  timeUs,
   toTime,
   toSignedTime,
   subtract,
@@ -110,8 +111,7 @@ export function captureToAssetUs(
   captureUs: number,
   sourceToAssetOffsetUs: SignedTimeValue,
 ): number {
-  const value = captureToAsset(captureUs, sourceToAssetOffsetUs);
-  return typeof value === "number" ? value : value.numerator / value.denominator;
+  return timeUs(captureToAsset(captureUs, sourceToAssetOffsetUs));
 }
 
 /** Explicit capture authority and clock conversion, shared by source and project inspection. */

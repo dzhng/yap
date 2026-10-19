@@ -1,4 +1,4 @@
-import { type SignedTimeValue } from "@yap/composition";
+import { timeUs, type SignedTimeValue } from "@yap/composition";
 import { setImmediate } from "node:timers/promises";
 import {
   createCompiler,
@@ -103,10 +103,6 @@ export async function selectProjectIndex(input: {
   const candidates = new Map<number, Omit<ProjectIndexCandidate, "ordinal">>();
   // Every chosen frame counts toward coverage, at the project time its reason names.
   const coverage = new CoverageTracker();
-  const microseconds = (value: TimeValue) => {
-    const exact = fromTime(value);
-    return Number(exact.numerator) / Number(exact.denominator);
-  };
   let reasonCount = 0,
     work = 0;
   async function checkpoint() {
@@ -124,7 +120,7 @@ export async function selectProjectIndex(input: {
     }
     bound("maximumReasons", ++reasonCount);
     candidate.reasons.push(reason);
-    coverage.chosen(microseconds(reason.projectAtUs));
+    coverage.chosen(timeUs(reason.projectAtUs));
   }
   async function boundary(
     projectAtUs: TimeValue,
@@ -245,7 +241,7 @@ export async function selectProjectIndex(input: {
             compare(mapped.project, fragment.project.end) < 0
           ) {
             const projectAtUs = toTime(mapped.project);
-            coverage.advance(microseconds(projectAtUs), point.requestedSourceUs);
+            coverage.advance(timeUs(projectAtUs), point.requestedSourceUs);
             const run = point.status === "available" ? point.stillnessRunStartUs : undefined;
             if (
               run !== undefined &&

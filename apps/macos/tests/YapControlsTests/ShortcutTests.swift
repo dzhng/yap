@@ -13,9 +13,17 @@ func runShortcutTests() {
     precondition(defaults[.undoMark]?.lifetime == .recording && defaults[.restart]?.lifetime == .recording, "In-take actions live for the recording")
 
     let encoded = Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"}}}"#.utf8)
-    let decoded = ShortcutBindings.decode(encoded)
-    precondition(decoded[.startOrStop]?.shortcut.keyCode == 1, "Version 2 stores a physical key code")
-    precondition(ShortcutBindings.decode(Data(#"{"version":1,"bindings":{"capture.startOrStop":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8)) == defaults, "Version 1 overrides are ignored")
+    let decoded = try? ShortcutBindings.decode(encoded)
+    precondition(decoded?[.startOrStop]?.shortcut.keyCode == 1, "Version 2 stores a physical key code")
+    precondition((try? ShortcutBindings.decode(Data(#"{"version":1,"bindings":{"capture.startOrStop":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))) == defaults, "Version 1 overrides are ignored")
+    // A version 2 file with a bad entry is refused out loud, so the person learns why their
+    // bindings are not in effect before a later change overwrites the file.
+    do {
+        let accepted = try ShortcutBindings.decode(Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"},"capture.unknown":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))
+        preconditionFailure("A version 2 file with an invalid entry is adopted silently, got \(accepted)")
+    } catch {
+        precondition(!error.message.isEmpty, "The refused file says why")
+    }
     print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
 }
 
@@ -38,6 +46,14 @@ func runShortcutSetTests() {
             "an entry with no label"),
         ([ControlsAction.pastePrompt.id: paste, ControlsAction.restart.id: "⌥⇧R"], "an entry that is not an object"),
         (["capture.unknown": paste], "an unknown action"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": true, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a boolean key code"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 11.5, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a fractional key code"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 11, "modifiers": -1, "label": "⌥⇧B"]],
+            "negative modifiers"),
+        ([ControlsAction.pastePrompt.id: ["keyCode": 4_294_967_296, "modifiers": 2_560, "label": "⌥⇧B"]],
+            "a key code past 32 bits"),
     ] as [([String: Any], String)] {
         do {
             let accepted = try ShortcutBindings.merging(stated, into: current)

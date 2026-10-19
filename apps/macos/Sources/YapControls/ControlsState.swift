@@ -676,6 +676,11 @@ extension ControlsState {
         else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }
         return answer == .ended && request.repeatsUnanswered
     }
+
+    /// A restart replaces the take under a new ID; the start it was made from moves to that take.
+    public mutating func restarted(recordingId: String, start: CaptureSelection.Start) {
+        activeStart = ActiveStart(recordingId: recordingId, start: start)
+    }
 }
 
 /// Effective updater facts observed by the controls; Sparkle owns their persistence.

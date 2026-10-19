@@ -227,6 +227,13 @@ func runStartRoutingTests() {
     state.selection.source = .display(menuDisplay)
     precondition(state.restartStart?.source == request.start.source,
         "Restart reuses the live take's resolved source after a hotkey start")
+    // A restart gives the take a new identity; the start moves with it, so restarting again
+    // still records the hotkey's display, not the menu's.
+    guard let restarted = state.restartStart else { preconditionFailure("A live take restarts") }
+    state.restarted(recordingId: "rec-hotkey-2", start: restarted)
+    state.device = .init(state: .recording, recordingId: "rec-hotkey-2", elapsedUs: 0)
+    precondition(state.restartStart?.source == request.start.source,
+        "A second restart reuses the hotkey's source, got \(String(describing: state.restartStart?.source))")
 
     // That take ends normally; another client (the CLI's capture.start) starts the next one, and
     // status reports its source as the selection.

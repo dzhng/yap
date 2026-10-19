@@ -50,25 +50,25 @@ test("transcript backlog waits for readiness and resubmits retryable failures", 
 
   backlog.enqueue(selection);
   expect(backlog.pending(selection)).toBe(true);
-  await backlog.drain();
+  backlog.drain();
   expect(submissions).toBe(0);
   expect(backlog.pending(selection)).toBe(true);
 
   ready = true;
-  await backlog.drain();
+  backlog.drain();
   expect(submissions).toBe(1);
   expect(priority).toBe("background");
   expect(backlog.pending(selection)).toBe(true);
 
   status = "failed";
-  await backlog.drain();
+  backlog.drain();
   expect(retries).toBe(1);
 
   status = "queued";
-  await backlog.drain();
+  backlog.drain();
   expect(backlog.pending(selection)).toBe(true);
   status = "ready";
-  await backlog.drain();
+  backlog.drain();
   expect(backlog.pending(selection)).toBe(false);
 });
 
@@ -82,7 +82,7 @@ test("one row's failure is reported and never stops the others or rejects the dr
   });
   backlog.enqueue({ assetId: "broken", streamId: "audio" });
   backlog.enqueue({ assetId: "fine", streamId: "audio" });
-  await expect(backlog.drain()).resolves.toBeUndefined();
+  expect(() => backlog.drain()).not.toThrow();
   expect(submitted).toEqual(["fine"]);
   expect(reported).toEqual([expect.objectContaining({ code: "UNAVAILABLE" })]);
   expect(backlog.pending({ assetId: "broken", streamId: "audio" })).toBe(true);
@@ -99,10 +99,10 @@ test("a full job queue ends the pass quietly and the next drain carries on", asy
   });
   backlog.enqueue({ assetId: "first", streamId: "audio" });
   backlog.enqueue({ assetId: "second", streamId: "audio" });
-  await expect(backlog.drain()).resolves.toBeUndefined();
+  expect(() => backlog.drain()).not.toThrow();
   expect(reported).toEqual([]);
   full = false;
-  await backlog.drain();
+  backlog.drain();
   expect(submitted).toEqual(["first", "second"]);
 });
 
@@ -127,9 +127,9 @@ test("a terminal failure leaves the backlog and is not read again", async () => 
     },
   });
   backlog.enqueue(selection);
-  await backlog.drain();
+  backlog.drain();
   expect(backlog.pending(selection)).toBe(false);
-  await backlog.drain();
+  backlog.drain();
   expect(reads).toBe(1);
 });
 
@@ -143,7 +143,7 @@ test("a failure that keeps coming back retryable is retried a bounded number of 
     },
   });
   backlog.enqueue(selection);
-  for (let drain = 0; drain < 10; drain++) await backlog.drain();
+  for (let drain = 0; drain < 10; drain++) backlog.drain();
   expect(retries).toBeGreaterThan(0);
   expect(retries).toBeLessThan(10);
   expect(backlog.pending(selection)).toBe(false);

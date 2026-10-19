@@ -51,6 +51,11 @@ export function fromTime(value: SignedTimeValue): Rational {
     : rational(BigInt(value.numerator), BigInt(value.denominator));
 }
 
+/** A time as plain microseconds, for readers that compare, sort and add rather than keep it exact. */
+export function timeUs(value: SignedTimeValue): number {
+  return typeof value === "number" ? value : value.numerator / value.denominator;
+}
+
 function serializedFraction(value: Rational, signed: boolean): Fraction {
   if (
     value.numerator < (signed ? BigInt(Number.MIN_SAFE_INTEGER) : 0n) ||

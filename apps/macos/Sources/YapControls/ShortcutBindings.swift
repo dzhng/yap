@@ -74,8 +74,8 @@ public enum ShortcutBindings {
                 throw InvalidBinding(message: "Unknown shortcut action \(id).")
             }
             guard let fields = value as? [String: Any],
-                let keyCode = (fields["keyCode"] as? NSNumber)?.uint32Value,
-                let modifiers = (fields["modifiers"] as? NSNumber)?.uint32Value,
+                let keyCode = whole32(fields["keyCode"]),
+                let modifiers = whole32(fields["modifiers"]),
                 let label = fields["label"] as? String, !label.isEmpty
             else {
                 throw InvalidBinding(message: "Shortcut \(id) needs a keyCode, modifiers and a label.")
@@ -87,15 +87,27 @@ public enum ShortcutBindings {
         return result
     }
 
-    /// Reads only version 2 over the defaults. An invalid or legacy file states nothing.
-    public static func decode(_ data: Data?) -> [ControlsAction: Binding] {
+    /// A JSON whole number that fits 32 bits. Booleans, fractions and negatives are refused rather
+    /// than coerced into some other key.
+    private static func whole32(_ value: Any?) -> UInt32? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+            let whole = UInt32(exactly: number.doubleValue)
+        else { return nil }
+        return whole
+    }
+
+    /// Reads only version 2 over the defaults; a missing, unreadable or legacy file states nothing.
+    /// A version 2 file with an invalid entry is refused, so the caller can say why it holds the
+    /// defaults instead.
+    public static func decode(_ data: Data?) throws(InvalidBinding) -> [ControlsAction: Binding] {
         guard let data,
             let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            object["version"] as? Int == 2,
-            let stated = object["bindings"] as? [String: Any],
-            let bindings = try? merging(stated, into: defaults)
+            object["version"] as? Int == 2
         else { return defaults }
-        return bindings
+        guard let stated = object["bindings"] as? [String: Any] else {
+            throw InvalidBinding(message: "The shortcuts file has no bindings.")
+        }
+        return try merging(stated, into: defaults)
     }
 
     public static func encode(_ bindings: [ControlsAction: Binding]) -> Data? {

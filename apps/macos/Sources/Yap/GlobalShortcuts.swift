@@ -35,8 +35,8 @@ final class GlobalShortcuts {
         _ bindings: [ControlsAction: ShortcutBindings.Binding], recording: Bool = false,
         perform: @escaping (ControlsAction) -> Void
     ) throws(ApplyError) -> (held: Set<String>, unavailable: [String]) {
-        // Both answers are action ids: the physical key is the identity, a label only shows it.
-        // The physical key and modifiers are the identity; a label is only how it is shown.
+        // Both answers are action ids. The physical key and modifiers are the identity; a label
+        // is only how it is shown.
         let grouped = Dictionary(grouping: bindings) {
             [$0.value.shortcut.keyCode, $0.value.shortcut.modifiers]
         }

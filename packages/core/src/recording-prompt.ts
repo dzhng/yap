@@ -1,3 +1,4 @@
+import { timeUs } from "@yap/composition";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { AssetStore } from "./assets.js";
 import type { CaptureMark, CaptureSourceRead } from "./capture-source-read.js";
@@ -170,7 +171,9 @@ export async function recordingPromptFacts(
   const primary = acquisitionOf(recording.sourceId);
   if (!primary) {
     // A take still recording or importing has nothing to describe yet, and an older take is not
-    // what was asked for. The capture store refuses a source that will never publish as final.
+    // what was asked for. The capture store owns why: it refuses a take still capturing (NOT_READY)
+    // or one that settled without a source (UNAVAILABLE). A source it has published is still being
+    // imported here, which is NOT_READY too.
     sources.recordings.publishedSource(recording.recordingId, recording.sourceId);
     throw new CatalogError("NOT_READY", "Recording has not finished importing", {
       recordingId: recording.recordingId,
@@ -226,7 +229,7 @@ export async function recordingPromptFacts(
   const end = (video ?? narration)?.stream?.endUs ?? 0;
   return {
     recordingId: recording.recordingId,
-    durationUs: typeof end === "number" ? end : end.numerator / end.denominator,
+    durationUs: timeUs(end),
     ...(display
       ? {
           display: {

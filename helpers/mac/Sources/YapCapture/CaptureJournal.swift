@@ -96,9 +96,9 @@ public final class CaptureJournal {
     private var sequence = 0
     private let header: CaptureJournalHeader
     package var schemaVersion: Int { header.schemaVersion }
-    /// Schema 1 is the legacy layout. Every later schema is packed: the journal maps accepted PCM
-    /// and the video track, and media is written per role. This is the one place that says which
-    /// schemas those are.
+    /// Schema 1 is the camera companion's own journal. Every later schema is packed: the journal
+    /// maps accepted PCM and the video track, and media is written per role. This is the one place
+    /// that says which schemas those are.
     package static func isPacked(_ schema: Int?) -> Bool {
         switch schema {
         case 2, 3: true

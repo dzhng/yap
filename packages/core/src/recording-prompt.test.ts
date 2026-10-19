@@ -302,3 +302,16 @@ test("a take whose source has not been imported is refused, not described as emp
     code: "NOT_READY",
   });
 });
+
+test("a take still recording or never published carries the capture store's own refusal", async () => {
+  for (const refusal of [
+    new CatalogError("NOT_READY", "Capture source has not published"),
+    new CatalogError("UNAVAILABLE", "Capture has no published source"),
+  ]) {
+    const unpublished = sources({ published: false });
+    unpublished.recordings.publishedSource = () => {
+      throw refusal;
+    };
+    await expect(recordingPromptFacts(unpublished)).rejects.toBe(refusal);
+  }
+});

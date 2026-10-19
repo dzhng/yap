@@ -753,7 +753,7 @@ export async function startProjectService(options: {
       retry: (selection) => transcripts.retrySource(selection),
       report: (error) => console.error(error),
     });
-    await transcriptBacklog.drain();
+    transcriptBacklog.drain();
     const ensureReviewModel = () => {
       const modelId = "parakeet";
       const current = transcripts.recognitionReadiness();
