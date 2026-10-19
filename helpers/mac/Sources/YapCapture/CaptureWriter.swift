@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AppKit
 import Foundation
 import Synchronization
 @preconcurrency import ScreenCaptureKit
@@ -101,6 +102,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var cursor = CursorTrack()
     private var sampler: CursorSampler?
     private var zeroOriginHeight: Double?
+    private var markRecognizer: MarkRecognizer?
+    private var markMonitorTokens: [Any] = []
+    private var recordedMarks: [(id: String, kind: String, pin: Int?)] = []
+    private var retractedMarkIDs = Set<String>()
 
     package init(
         request: CaptureRequest, width: Int, height: Int, sessionID: String,
@@ -111,6 +116,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         self.width = width
         self.height = height
         self.requestedSourceRect = requestedSourceRect
+        self.markRecognizer = request.source.kind == "camera"
+            ? nil : MarkRecognizer(windowUnderPoint: LiveWindowSource())
         try FileManager.default.createDirectory(
             atPath: request.outputDirectory, withIntermediateDirectories: true)
         journal = try CaptureJournal(
@@ -141,6 +148,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             self.sampler = sampler
             sampler.start()
         }
+        guard request.source.kind != "camera" else { return }
+        installMarkMonitors()
     }
 
     package func pause() {
@@ -149,6 +158,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             let hostUs = CaptureHostTime.nowUs()
             clock.pause(at: hostUs)
             publishClock()
+            markRecognizer?.updateCaptureState(
+                paused: true, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
             _ = record { try self.journal.recordPauseBegan(hostUs: hostUs) }
         }
     }
@@ -163,6 +174,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         let count = clock.pauses.count
         clock.resume(at: hostUs)
         publishClock()
+        markRecognizer?.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
         if paused {
             let pause = clock.pauses.count > count ? clock.pauses.last : nil
             _ = record { try self.journal.recordPauseEnded(hostUs: hostUs, pause: pause) }
@@ -204,6 +217,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     }
 
     package func seal() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
             idleRepeat?.cancel()
@@ -218,6 +232,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         }
     }
     package func cancel() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
             idleRepeat?.cancel()
@@ -241,10 +256,107 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     hostUs: reading.hostUs, zeroOriginHeight: reading.zeroOriginHeight)
             }
         }
-        guard failure == nil,
-            let batch = cursor.accept(reading, sourceUs: clock.sourceTime(for: reading.hostUs))
-        else { return }
-        _ = record { try self.journal.recordCursorSamples(batch) }
+        let sourceUs = clock.sourceTime(for: reading.hostUs)
+        guard failure == nil else { return }
+        if let batch = cursor.accept(reading, sourceUs: sourceUs) {
+            _ = record { try self.journal.recordCursorSamples(batch) }
+        }
+        guard let markRecognizer, let sourceUs else { return }
+        var recognizer = markRecognizer
+        recognizer.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil, cameraOnly: false)
+        let events = recognizer.feed(
+            sample: MarkSample(
+                hostUs: reading.hostUs, shift: reading.shift, otherModifiers: reading.otherModifiers,
+                point: reading.global, buttonDown: reading.buttons != 0))
+        self.markRecognizer = recognizer
+        append(events, fallbackSourceUs: sourceUs)
+    }
+
+    /// Appends a retracting mark for the most recent mark that has not already been undone.
+    package func undoMark() throws {
+        try queue.sync {
+            guard !finishing, failure == nil, request.source.kind != "camera" else {
+                throw CaptureFailure("INVALID_STATE", "No screen capture is recording marks.")
+            }
+            guard let target = recordedMarks.last(where: { !retractedMarkIDs.contains($0.id) })
+            else { return }
+            let hostUs = CaptureHostTime.nowUs()
+            guard let sourceUs = clock.sourceTime(for: hostUs) else { return }
+            let mark = JournalMark(
+                hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
+                id: UUID().uuidString, kind: target.kind, pin: target.pin, points: [], retracts: target.id)
+            let written = record { try journal.recordMark(mark) }
+            guard written else { return }
+            retractedMarkIDs.insert(target.id)
+        }
+    }
+
+    private func installMarkMonitors() {
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp]
+        let register = { [weak self] in
+            NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
+                guard let self else { return }
+                let isDown = event.type == .leftMouseDown
+                let shift = event.modifierFlags.contains(.shift)
+                let point = GlobalPointSpace.flip(
+                    appKit: NSEvent.mouseLocation, zeroOriginHeight: GlobalPointSpace.zeroOriginHeight())
+                let hostUs = CaptureHostTime.nowUs()
+                self.queue.async {
+                    guard !self.finishing, self.failure == nil, var recognizer = self.markRecognizer else { return }
+                    let sourceUs = self.clock.sourceTime(for: hostUs)
+                    guard let sourceUs else { return }
+                    recognizer.updateCaptureState(
+                        paused: self.clock.isPaused, hasFirstFrame: self.clock.originUs != nil,
+                        cameraOnly: false)
+                    let events: [MarkEvent]
+                    if isDown {
+                        events = recognizer.feed(
+                            press: MarkPress(
+                                hostUs: hostUs, point: point, shift: shift))
+                    } else {
+                        events = recognizer.feed(release: MarkRelease(hostUs: hostUs, point: point))
+                    }
+                    self.markRecognizer = recognizer
+                    self.append(events, fallbackSourceUs: sourceUs)
+                }
+            }
+        }
+        let token: Any? = Thread.isMainThread ? register() : DispatchQueue.main.sync(execute: register)
+        if let token { markMonitorTokens = [token] }
+    }
+
+    private func removeMarkMonitors() {
+        let tokens = markMonitorTokens
+        let remove = { for token in tokens { NSEvent.removeMonitor(token) } }
+        if Thread.isMainThread { remove() } else { DispatchQueue.main.sync(execute: remove) }
+        markMonitorTokens.removeAll()
+    }
+
+    private func append(_ events: [MarkEvent], fallbackSourceUs: Int64) {
+        for event in events {
+            guard let first = event.points.first else { continue }
+            guard let sourceUs = clock.sourceTime(for: first.hostUs) ?? (event.points.isEmpty ? fallbackSourceUs : nil)
+            else { continue }
+            let mark = JournalMark(
+                hostUs: first.hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
+                id: UUID().uuidString, kind: event.kind.rawValue, pin: event.pin,
+                points: event.points.map { point in
+                    let projection = cursor.projection(
+                        forGlobalPoint: CGPoint(x: point.x, y: point.y), hostUs: point.hostUs)
+                    let pixel = projection.inside ? projection.pixel : nil
+                    return JournalMarkPoint(
+                        globalX: point.x, globalY: point.y,
+                        x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
+                        hostUs: point.hostUs)
+                },
+                window: event.window.map {
+                    JournalMarkWindow(app: $0.app, title: $0.title, bounds: $0.bounds)
+                })
+            let written = record { try journal.recordMark(mark) }
+            guard written else { return }
+            recordedMarks.append((mark.id, mark.kind, mark.pin))
+        }
     }
 
     private func flushCursorSamples() {

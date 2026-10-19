@@ -122,22 +122,28 @@ public struct CaptureGeometry: Codable, Sendable, Equatable {
 }
 
 /// One pointer reading, before it is placed in a take's source time.
+/// Modifier state and clicks only, never keys.
 public struct CursorReading: Sendable, Equatable {
     public init(
-        hostUs: Int64, global: CGPoint, buttons: Int, zeroOriginHeight: Double, skippedTicks: Int = 0
+        hostUs: Int64, global: CGPoint, buttons: Int, zeroOriginHeight: Double,
+        skippedTicks: Int = 0, shift: Bool = false, otherModifiers: Bool = false
     ) {
         self.hostUs = hostUs
         self.global = global
         self.buttons = buttons
         self.zeroOriginHeight = zeroOriginHeight
         self.skippedTicks = skippedTicks
+        self.shift = shift
+        self.otherModifiers = otherModifiers
     }
 
     public let hostUs: Int64
     /// Global display points with a top-left origin, converted from AppKit's bottom-left space.
     public let global: CGPoint
-    /// `NSEvent.pressedMouseButtons` bitmask. Button state only; no key or event-tap observation.
+    /// `NSEvent.pressedMouseButtons` bitmask.
     public let buttons: Int
+    public let shift: Bool
+    public let otherModifiers: Bool
     /// Height of the zero-origin display used for that conversion, retained as raw evidence.
     public let zeroOriginHeight: Double
     /// Cadence ticks missed before this reading. Missed ticks stay missing, never interpolated.
@@ -231,6 +237,23 @@ public struct CursorTrack: Sendable {
 
     private var geometryHasSourcePlacement = false
 
+    package struct Projection: Sendable {
+        package let pixel: CGPoint?
+        package let inside: Bool
+        package let epoch: Int
+    }
+
+    /// Projects a global point through the same geometry placement used for cursor samples.
+    package func projection(forGlobalPoint point: CGPoint, hostUs: Int64) -> Projection {
+        let placed = placements.last { $0.hostUs <= hostUs }
+        let pixel = placed?.geometry.outputPixel(forGlobalPoint: point)
+        guard let pixel, let placed else {
+            return Projection(pixel: nil, inside: false, epoch: 0)
+        }
+        return Projection(
+            pixel: pixel, inside: placed.geometry.contains(outputPixel: pixel), epoch: placed.epoch)
+    }
+
     /// Records geometry changes even before source zero or during a pause. An epoch first seen
     /// without source time gains one additional observation on a usable, clock-accepted frame.
     /// That placement confirms the same epoch; it does not rewrite its raw host-time observation.
@@ -283,22 +306,16 @@ public struct CursorTrack: Sendable {
     }
 
     private func project(_ item: Pending) -> CursorSample {
-        let placed = placements.last { $0.hostUs <= item.reading.hostUs }
-        let pixel = placed?.geometry.outputPixel(forGlobalPoint: item.reading.global)
-        let eligibility: String
-        let geometryEpoch: Int
-        if let pixel, let placed {
-            eligibility = placed.geometry.contains(outputPixel: pixel) ? "inside" : "outside"
-            geometryEpoch = placed.epoch
-        } else {
-            eligibility = "unknownGeometry"
-            geometryEpoch = 0
-        }
+        let projection = projection(
+            forGlobalPoint: item.reading.global, hostUs: item.reading.hostUs)
+        let eligibility = projection.pixel == nil
+            ? "unknownGeometry" : (projection.inside ? "inside" : "outside")
         return CursorSample(
-            sourceUs: item.sourceUs, x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
+            sourceUs: item.sourceUs, x: projection.pixel.map { Double($0.x) },
+            y: projection.pixel.map { Double($0.y) },
             globalX: item.reading.global.x, globalY: item.reading.global.y,
             buttons: item.reading.buttons, eligibility: eligibility,
-            geometryEpoch: geometryEpoch)
+            geometryEpoch: projection.epoch)
     }
 
     /// Sampler readings arrive in their own timestamp order, independently of frames. An empty
@@ -349,13 +366,13 @@ public enum GlobalPointSpace {
 
 /// Reads the pointer at a fixed cadence while a take is recording.
 ///
-/// Readings come from `NSEvent`'s current pointer state: no event tap, no keyboard observation and
+/// Readings come from `NSEvent`'s current pointer state: modifier state and clicks only, never keys;
 /// no Accessibility authorization. Sampling runs on its own queue so a busy capture queue delays
 /// the write, not the reading, and the handoff is bounded: once the capture queue is that far
 /// behind, further readings are refused and counted instead of queueing without limit.
 ///
-/// `NSEvent.mouseLocation` and `NSEvent.pressedMouseButtons` are read off the main thread. Both are
-/// current-state class reads rather than main-actor UI state, and AppKit does not document them as
+/// `NSEvent.mouseLocation`, `NSEvent.pressedMouseButtons` and modifier state are read off the main
+/// thread. All are current-state class reads rather than main-actor UI state, and AppKit does not document them as
 /// main-thread-only; the lab measured the cadence working from this queue, which is evidence that
 /// it works on this host rather than a guarantee from the platform.
 public final class CursorSampler: Sendable {
@@ -432,7 +449,9 @@ public final class CursorSampler: Sendable {
         let reading = CursorReading(
             hostUs: hostUs,
             global: GlobalPointSpace.flip(appKit: NSEvent.mouseLocation, zeroOriginHeight: height),
-            buttons: NSEvent.pressedMouseButtons, zeroOriginHeight: height, skippedTicks: skipped)
+            buttons: NSEvent.pressedMouseButtons, zeroOriginHeight: height, skippedTicks: skipped,
+            shift: NSEvent.modifierFlags.contains(.shift),
+            otherModifiers: !NSEvent.modifierFlags.subtracting(.shift).isEmpty)
         target.async { [self] in
             deliver(reading)
             pending.wrappingSubtract(1, ordering: .sequentiallyConsistent)
