@@ -2,7 +2,7 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
-## Unreleased
+## 0.1.65
 
 Your agent can now change Yap's shortcuts by naming the keys: `yap shortcuts.set
 --params '{"bindings":{"capture.startOrStop":"ctrl+cmd+r"}}'`. A key means the one your
