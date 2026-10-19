@@ -86,6 +86,11 @@ command, the skill and the PATH line. It is built and awaiting its release-day c
 [Library permissions](library-permissions.md) makes library permissions only as strict
 as they need to be: a small, independent companion to closed library deletion.
 
+[Show your agent](show-your-agent/README.md) brings back Yap's original use case: `⌥⇧S`
+to record, ⇧ to draw and pin, `⌥⇧V` to paste a prompt that hands the recording to your
+agent. It holds the settled decisions, single owners and a sixteen-slice ladder that starts
+with two permission and capture probes.
+
 ## Future proposals
 
 These directories hold planning questions, not unfinished implementation slices.
