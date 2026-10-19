@@ -1045,7 +1045,7 @@ test("asset.delete resumes a cascaded plan after every coordinator boundary", as
         assetId,
         cascade: true,
       });
-      expect(resumed).toMatchObject({
+      expect(resumed, `${boundary}/${timing}: ${JSON.stringify(resumed)}`).toMatchObject({
         ok: true,
         data: { assetId, deleted: true, freedBytes: expectedFreedBytes },
       });

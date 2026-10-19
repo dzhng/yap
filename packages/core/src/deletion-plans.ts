@@ -194,15 +194,22 @@ export class DeletionPlans {
       .all(subjectKind, subjectId) as DeletionPlanMember[];
   }
 
-  /** Insert a plan and its exact members atomically. Existing plans are immutable. */
+  /**
+   * Insert a plan, its exact members and the request that asked for it atomically, so a crash
+   * cannot leave a plan whose request would run again instead of replaying. Existing plans are
+   * immutable.
+   */
   create(
     subjectKind: string,
     subjectId: string,
     cascade: boolean,
     members: readonly Omit<DeletionPlanMember, "subjectKind" | "subjectId">[] = [],
+    request?: { requestId: string; freedBytes: number },
     createdAt = new Date().toISOString(),
   ): DeletionPlan {
     return this.store.transaction(() => {
+      if (request)
+        this.recordRequest(request.requestId, subjectKind, subjectId, cascade, request.freedBytes);
       const existing = this.get(subjectKind, subjectId);
       if (existing) return existing;
       this.store.catalog

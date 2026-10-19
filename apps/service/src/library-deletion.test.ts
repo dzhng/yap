@@ -226,3 +226,52 @@ test("a finished delete's requestId keeps returning its first result after the s
   expect(runs).toBe(1);
   await f.close();
 });
+
+test("a crash right after planning still lets the same requestId replay the finished delete", async () => {
+  const home = await mkdtemp("/tmp/yap-library-deletion-");
+  const path = join(home, "catalog.sqlite");
+  let catalog = new Catalog(path);
+  let runs = 0;
+  const registration: DeletionRegistration = {
+    kind: "fixture",
+    checkUsers: () => [],
+    tombstone: () => {
+      runs += 1;
+      return true;
+    },
+    drain: () => {},
+    files: async () => {},
+    rows: () => true,
+    result: (subject: { id: string }) => ({ fixtureId: subject.id, deleted: true }),
+    freedBytes: () => 7,
+  };
+  let armed = true;
+  let deletion = new LibraryDeletion(
+    new FaultingDeletionPlans(catalog, (boundary, _subject, timing) => {
+      if (armed && boundary === "plan" && timing === "after") {
+        armed = false;
+        throw new Error("crash after planning");
+      }
+    }),
+  );
+  deletion.register(registration);
+  await expect(
+    deletion.delete({ kind: "fixture", id: "one" }, { requestId: "retry-me" }),
+  ).rejects.toMatchObject({ code: "DELETE_FAILED" });
+  await deletion.close();
+  catalog.close();
+
+  catalog = new Catalog(path);
+  deletion = new LibraryDeletion(new DeletionPlans(catalog));
+  deletion.register(registration);
+  await deletion.resume((error) => {
+    throw error;
+  });
+  await expect(
+    deletion.delete({ kind: "fixture", id: "one" }, { requestId: "retry-me" }),
+  ).resolves.toEqual({ fixtureId: "one", deleted: true, freedBytes: 7 });
+  expect(runs).toBe(1);
+  await deletion.close();
+  catalog.close();
+  await rm(home, { recursive: true, force: true });
+});

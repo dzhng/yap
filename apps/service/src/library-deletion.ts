@@ -199,9 +199,13 @@ export class LibraryDeletion {
         const checked = registration.checkUsers?.(subject, cascade);
         const members =
           checked === undefined ? [] : checked instanceof Promise ? await checked : checked;
-        plan = this.plans.create(subject.kind, subject.id, cascade, members);
-        if (requestId && !storedRequest)
-          this.plans.recordRequest(requestId, subject.kind, subject.id, cascade, freedBytes);
+        plan = this.plans.create(
+          subject.kind,
+          subject.id,
+          cascade,
+          members,
+          requestId && !storedRequest ? { requestId, freedBytes } : undefined,
+        );
         const marked = registration.tombstone(subject);
         if (!(marked instanceof Promise ? await marked : marked)) {
           this.plans.clear(subject.kind, subject.id);
