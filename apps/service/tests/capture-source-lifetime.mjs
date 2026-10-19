@@ -190,7 +190,7 @@ test(
     const admitted = await f.call("recording.cleanup", { recordingId: f.recording.recordingId });
     assert.deepEqual(admitted.target, {
       kind: "recording",
-      recordingId: f.recording.recordingId,
+      id: f.recording.recordingId,
       revisionId: null,
     });
     const failed = await f.terminal(admitted.jobId);

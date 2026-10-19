@@ -133,7 +133,7 @@ test(
           library,
           (owner) => {
             assert.equal(owner.kind, "asset");
-            assets.get(owner.assetId);
+            assets.get(owner.id);
           },
           1,
         );

@@ -22,9 +22,9 @@ test("deletion intent fences derivative access before selective cleanup", async 
   };
   const target = store.allocate().recording.recordingId;
   const sibling = store.allocate().recording.recordingId;
-  const ready = cache.reserve({ kind: "recording", recordingId: target });
-  const pending = cache.reserve({ kind: "recording", recordingId: target });
-  const other = cache.reserve({ kind: "recording", recordingId: sibling });
+  const ready = cache.reserve({ kind: "recording", id: target });
+  const pending = cache.reserve({ kind: "recording", id: target });
+  const other = cache.reserve({ kind: "recording", id: sibling });
   writeFileSync(ready.path, "target");
   writeFileSync(pending.path, "unfinished");
   writeFileSync(other.path, "sibling");
@@ -33,20 +33,20 @@ test("deletion intent fences derivative access before selective cleanup", async 
   const held = cache.acquire(ready.id)!;
   try {
     store.markDeleting(target);
-    expect(() => cache.reserve({ kind: "recording", recordingId: target })).toThrow(
+    expect(() => cache.reserve({ kind: "recording", id: target })).toThrow(
       expect.objectContaining({ code: "NOT_FOUND" }),
     );
     expect(() => cache.acquire(ready.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
     await expect(cache.publish(pending.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(existsSync(pending.path)).toBe(false);
     await expect(
-      cache.purgeOwner({ kind: "recording", recordingId: target }, removeFiles),
+      cache.purgeOwner({ kind: "recording", id: target }, removeFiles),
     ).rejects.toMatchObject({
       code: "CACHE_BUSY",
     });
     expect(existsSync(ready.path)).toBe(true);
     held.release();
-    await cache.purgeOwner({ kind: "recording", recordingId: target }, removeFiles);
+    await cache.purgeOwner({ kind: "recording", id: target }, removeFiles);
     expect(existsSync(ready.path)).toBe(false);
     expect(store.deleting(target)?.recordingId).toBe(target);
     const read = cache.acquire(other.id)!;

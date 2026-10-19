@@ -254,7 +254,7 @@ export class ManagedStorage {
         }
         for (const path of this.cache.usageFiles({
           kind: "recording",
-          recordingId: recording.recordingId,
+          id: recording.recordingId,
         }))
           await count(path, "cacheBytes", [this.homeIdentity]);
       } else {

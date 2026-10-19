@@ -313,7 +313,7 @@ export class MediaAudioInspection {
       options,
       selection: { ...options.selection, range: options.range },
       identity: {
-        target: { kind: "asset" as const, assetId: options.selection.assetId },
+        target: { kind: "asset" as const, id: options.selection.assetId },
         artifact,
         input: JSON.stringify(options),
       },
@@ -496,7 +496,7 @@ export class MediaAudioInspection {
         preparedResourceId: options.preparedResourceId,
       },
       identity: {
-        target: { kind: "project" as const, projectId: input.projectId, revisionId },
+        target: { kind: "project" as const, id: input.projectId, revisionId },
         artifact,
         input: JSON.stringify(options),
       },
@@ -608,7 +608,7 @@ export class MediaAudioInspection {
   private exportIdentity(pinned: PinnedProjectAudioExport) {
     const { projectId, revisionId, settings, encodingImplementationId, ...pcm } = pinned;
     return {
-      target: { kind: "project" as const, projectId, revisionId },
+      target: { kind: "project" as const, id: projectId, revisionId },
       artifact: "audio-file",
       input: JSON.stringify({ pcm, settings, encodingImplementationId }),
     };
@@ -693,7 +693,7 @@ export class MediaAudioInspection {
       ...options.pcm,
       encodingImplementationId: options.encodingImplementationId,
       settings: options.settings,
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
     };
   }
@@ -796,7 +796,7 @@ export class MediaAudioInspection {
     if (!owner || owner.renderer.implementationId !== parsed.data.implementationId)
       throw new CatalogError("NOT_READY", "Pinned project audio renderer is unavailable", {});
     const plan = this.projectPlan({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...parsed.data,
       preparedResourceId: parsed.data.preparedResourceId ?? null,
@@ -824,7 +824,7 @@ export class MediaAudioInspection {
         value: {
           ...value,
           ...parsed.data,
-          projectId: job.target.projectId,
+          projectId: job.target.id,
           revisionId: job.target.revisionId,
           mediaType: "audio/wav",
           layout: "stereo",
@@ -854,7 +854,7 @@ export class MediaAudioInspection {
       job.target.kind !== "asset" ||
       job.artifact !== artifact ||
       !parsed.success ||
-      parsed.data.selection.assetId !== job.target.assetId
+      parsed.data.selection.assetId !== job.target.id
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Audio job does not name a selected asset stream");
     const options = parsed.data;

@@ -42,7 +42,7 @@ function fixture(count = 2) {
   return { directory, catalog, file, receipt };
 }
 const identity: EvidenceIdentity = {
-  owner: { kind: "acquisition", acquisitionId: "same-id" },
+  owner: { kind: "acquisition", id: "same-id" },
   sourceId: "session",
   generation: "same-attempt",
 };
@@ -51,11 +51,11 @@ test("one catalog isolates acquisition ownership, retains raw clocks in portable
   const f = fixture();
   const sibling: EvidenceIdentity = {
     ...identity,
-    owner: { kind: "recording", recordingId: "same-id" },
+    owner: { kind: "recording", id: "same-id" },
   };
   const other: EvidenceIdentity = {
     ...identity,
-    owner: { kind: "acquisition", acquisitionId: "other-id" },
+    owner: { kind: "acquisition", id: "other-id" },
   };
   const store = new SourceEvidenceStore(f.catalog, ({ sourceId }) => {
     if (sourceId !== "session") throw new CatalogError("INVALID_EVIDENCE", "Unknown source");

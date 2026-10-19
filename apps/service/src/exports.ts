@@ -22,6 +22,7 @@ import {
   JobDependencyLost,
   ownerIdentity,
   type JobOwner,
+  type Owner,
   type Job,
   type JobAdmission,
   type JobExecution,
@@ -52,7 +53,7 @@ type Request = Extract<
   ReturnType<typeof operationSchema.parse>,
   { operation: "export.create" }
 >["params"] & { exportId: string };
-type ExportOwner = Extract<JobOwner, { kind: "project" }>;
+type ExportOwner = Owner<"project">;
 type ReadyRendition = {
   cacheId: string;
   bytes: number;
@@ -285,13 +286,13 @@ export class MediaExports {
     return packages;
   }
   private owner(intent: Pick<Intent, "targetId">): ExportOwner {
-    return { kind: "project", projectId: intent.targetId };
+    return { kind: "project", id: intent.targetId };
   }
   private assertOwner(intent: Pick<Intent, "targetId">) {
     this.owners.project.store.get(intent.targetId);
   }
   private deleting(owner: ExportOwner) {
-    return this.owners.project.store.isDeleting(owner.projectId);
+    return this.owners.project.store.isDeleting(owner.id);
   }
   private matches(job: Job, intent: Intent) {
     return (
@@ -795,7 +796,7 @@ export class MediaExports {
         : pageCursor.decode("export.list", input.cursor, filters)
     ) as { rowid?: unknown } | undefined;
     const owner: ExportOwner | undefined =
-      projectId !== null ? { kind: "project", projectId } : undefined;
+      projectId !== null ? { kind: "project", id: projectId } : undefined;
     // Keep the bounded ID page outside the lookup; SQLite may otherwise scan every summary.
     const rows = this.owners.catalog.catalog
       .prepare(

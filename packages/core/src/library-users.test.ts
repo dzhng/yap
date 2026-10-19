@@ -109,7 +109,7 @@ test("reports a clip retained only by a project's undo history and its actual by
     id: assetId,
   });
   expect(result).toMatchObject({
-    usedBy: [{ kind: "project", projectId: "project-1", title: "Undo holder", revisions: 2 }],
+    usedBy: [{ kind: "project", id: "project-1", title: "Undo holder", revisions: 2 }],
     acquisitions: [],
     derivedAssets: [],
     freesBytes: bytes,
@@ -128,8 +128,8 @@ test("collapses two projects and all of their revisions into project users", asy
     new LibraryUsers(f.catalog, f.files).usersOf({ kind: "asset", id: asset.id }),
   ).toMatchObject({
     usedBy: [
-      { kind: "project", projectId: "project-a", title: "A", revisions: 2 },
-      { kind: "project", projectId: "project-b", title: "B", revisions: 1 },
+      { kind: "project", id: "project-a", title: "A", revisions: 2 },
+      { kind: "project", id: "project-b", title: "B", revisions: 1 },
     ],
     freesBytes: asset.bytes,
     cascadeFreesBytes: asset.bytes,
@@ -148,8 +148,8 @@ test("follows a derived asset chain and reports only the live using project", as
     id: source.id,
   });
   expect(result).toMatchObject({
-    usedBy: [{ projectId: "project-derived", revisions: 1 }],
-    derivedAssets: [{ kind: "asset", assetId: hdr.id }],
+    usedBy: [{ id: "project-derived", revisions: 1 }],
+    derivedAssets: [{ kind: "asset", id: hdr.id }],
     freesBytes: source.bytes,
     cascadeFreesBytes: source.bytes + hdr.bytes,
   });
@@ -188,14 +188,14 @@ test("reports a capture acquisition used by a project and counts its managed fil
     id: acquisitionId,
   });
   expect(result).toMatchObject({
-    usedBy: [{ projectId: "project-capture", title: "Capture", revisions: 1 }],
+    usedBy: [{ id: "project-capture", title: "Capture", revisions: 1 }],
     freesBytes: acquisitionBytes,
     cascadeFreesBytes: acquisitionBytes,
   });
   expect(
     new LibraryUsers(f.catalog, f.files).usersOf({ kind: "recording", id: "recording-1" }),
   ).toMatchObject({
-    usedBy: [{ projectId: "project-capture" }],
+    usedBy: [{ id: "project-capture" }],
     freesBytes: recordingBytes,
     cascadeFreesBytes: acquisitionBytes + recordingBytes,
   });

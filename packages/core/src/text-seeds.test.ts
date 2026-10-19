@@ -59,7 +59,7 @@ async function fixture(
   const selection = { assetId: media.id, streamId: "a" };
   const selected = selectSource(assets, acquisitions, selection);
   const identity = {
-    owner: { kind: "asset" as const, assetId: media.id },
+    owner: { kind: "asset" as const, id: media.id },
     sourceId: media.id,
     generation: "words",
   };

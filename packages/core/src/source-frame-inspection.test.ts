@@ -100,7 +100,7 @@ async function fixture(
   );
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "asset") throw new Error("Expected source owner");
-    assets.get(owner.assetId);
+    assets.get(owner.id);
   });
   await cache.reconcile();
   let frames!: MediaFrameInspection;
@@ -111,7 +111,7 @@ async function fixture(
     targets: {
       pin(target) {
         if (target.kind !== "asset") throw new Error("Expected asset");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
       isAvailable: () => true,

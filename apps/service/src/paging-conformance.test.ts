@@ -263,8 +263,8 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       params: {},
       plural: "media",
       ids: (value) => {
-        const row = value as { kind: string; recordingId?: string; assetId?: string };
-        return `${row.kind}:${row.recordingId ?? row.assetId}`;
+        const row = value as { kind: string; id: string };
+        return `${row.kind}:${row.id}`;
       },
     };
   },

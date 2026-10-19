@@ -275,9 +275,9 @@ test("public project audio preserves explicit cuts, captured support, pinned rev
         catalog,
         library,
         (owner) => {
-          if (owner.kind === "project") projects.get(owner.projectId);
-          else if (owner.kind === "asset") assert.ok(assets.has(owner.assetId));
-          else acquisitions.get(owner.acquisitionId);
+          if (owner.kind === "project") projects.get(owner.id);
+          else if (owner.kind === "asset") assert.ok(assets.has(owner.id));
+          else acquisitions.get(owner.id);
         },
         1,
       );

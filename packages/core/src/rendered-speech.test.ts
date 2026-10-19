@@ -53,8 +53,8 @@ async function fixture() {
     providers: { newId: randomUUID },
     targets: {
       pin(target) {
-        if (target.kind === "asset") assets.get(target.assetId);
-        else if (target.kind === "project") projects.revision(target.projectId, target.revisionId);
+        if (target.kind === "asset") assets.get(target.id);
+        else if (target.kind === "project") projects.revision(target.id, target.revisionId);
         else throw Error("Wrong owner");
         return target;
       },
@@ -327,7 +327,7 @@ test("rendered recognition survives failed original transcription and maps actua
   expect(ready.state, JSON.stringify(f.jobs.inspect(ready.jobId!))).toBe("ready");
   expect(ready.published!.speech.pcm.origin.selection).toMatchObject({
     kind: "project",
-    projectId: f.selection.projectId,
+    id: f.selection.projectId,
     revisionId: f.selection.revisionId,
     tap: f.selection.tap,
     range: f.selection.range,
@@ -550,7 +550,7 @@ test("a retained rendered publication without the current transcript policy cann
   await f.jobs.idle();
   const original = f.rendered.prepare(f.selection);
   const retained = f.jobs.retainedArtifact(
-    { kind: "project", projectId: f.selection.projectId },
+    { kind: "project", id: f.selection.projectId },
     "rendered-speech",
     original.published!.speech.generation,
   )!;
@@ -570,7 +570,7 @@ test("a retained rendered publication without the current transcript policy cann
   f.jobs.adoptArtifact(
     {
       ...retained,
-      target: { kind: "project", projectId: selection.projectId, revisionId: restored.revisionId },
+      target: { kind: "project", id: selection.projectId, revisionId: restored.revisionId },
       attemptId: randomUUID(),
       input: JSON.stringify(historicalInput),
       result: JSON.stringify(historical),

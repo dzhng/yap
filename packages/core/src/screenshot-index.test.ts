@@ -160,7 +160,7 @@ test("canceling final validation hides partial evidence and prevents late append
   controller.abort();
   await expect(finishing).rejects.toThrow();
   expect(() => f.index.page({ identity: f.identity })).toThrow("complete");
-  await f.index.reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false);
+  await f.index.reclaim({ kind: "asset", id: f.identity.assetId }, () => false);
   expect(() => f.index.outputPath(f.identity, 0)).toThrow("identity");
 });
 test("an acquired read survives deletion while new reads fail", async () => {
@@ -193,15 +193,15 @@ test("retained evidence survives derived cache eviction and owner-directed recla
     f.home,
     (owner) => {
       if (owner.kind !== "asset") throw new Error("asset only");
-      f.assets.get(owner.assetId);
+      f.assets.get(owner.id);
     },
     png.length,
   );
   await cache.reconcile();
-  const reserved = cache.reserve({ kind: "asset", assetId: f.identity.assetId });
+  const reserved = cache.reserve({ kind: "asset", id: f.identity.assetId });
   writeFileSync(reserved.path, png);
   await cache.publish(reserved.id);
-  const later = cache.reserve({ kind: "asset", assetId: f.identity.assetId });
+  const later = cache.reserve({ kind: "asset", id: f.identity.assetId });
   writeFileSync(later.path, png);
   await cache.publish(later.id);
   expect(cache.acquire(reserved.id)).toBeNull();
@@ -213,7 +213,7 @@ test("retained evidence survives derived cache eviction and owner-directed recla
   const stray = f.index.outputPath(partial, 0);
   writeFileSync(stray, png);
   await f.index.reclaim(
-    { kind: "asset", assetId: f.identity.assetId },
+    { kind: "asset", id: f.identity.assetId },
     (id) => id.generation === f.identity.generation,
   );
   expect(existsSync(stray)).toBe(false);
@@ -334,7 +334,7 @@ test("one damaged generation does not starve unrelated reclamation", async () =>
   writeFileSync(nextPath, png);
   writeFileSync(join(image.frame.file, "..", "unexpected.txt"), "foreign file");
   const error = await f.index
-    .reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false)
+    .reclaim({ kind: "asset", id: f.identity.assetId }, () => false)
     .catch((error) => error);
   expect(error).toBeInstanceOf(Error);
   expect(existsSync(nextPath)).toBe(false);

@@ -215,7 +215,7 @@ export function resourceIdentity(resource: PortableDependency): ResourceReferenc
       return {
         kind: "index-generation",
         id: indexGenerationResource(
-          { kind: "project", projectId: resource.metadata.projectId },
+          { kind: "project", id: resource.metadata.projectId },
           resource.metadata.generation,
         ),
       };
@@ -223,7 +223,7 @@ export function resourceIdentity(resource: PortableDependency): ResourceReferenc
       return {
         kind: "index-generation",
         id: indexGenerationResource(
-          { kind: "asset", assetId: resource.metadata.assetId },
+          { kind: "asset", id: resource.metadata.assetId },
           resource.metadata.generation,
         ),
       };
@@ -276,7 +276,7 @@ export function resourceDependencies(resource: PortableDependency): ResourceRefe
     case "scene-generation":
     case "transcript-generation":
       return [
-        { kind: "asset", id: resource.metadata.owner.assetId },
+        { kind: "asset", id: resource.metadata.owner.id },
         ...(resource.metadata.source.acquisitionId
           ? [{ kind: "acquisition" as const, id: resource.metadata.source.acquisitionId }]
           : []),

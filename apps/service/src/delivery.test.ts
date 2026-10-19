@@ -33,7 +33,7 @@ async function fixture(data = Buffer.from("screen evidence")) {
   await cache.reconcile();
   const recordingId = store.allocate().recording.recordingId;
   const otherRecordingId = store.allocate().recording.recordingId;
-  const reservation = cache.reserve({ kind: "recording", recordingId: recordingId });
+  const reservation = cache.reserve({ kind: "recording", id: recordingId });
   writeFileSync(reservation.path, data);
   const file = await cache.publish(reservation.id);
   const delivery = new DerivativeDelivery();
@@ -252,7 +252,7 @@ test("a read exception closes its lease and releases the real backing pin", asyn
 
 test("revoking one recording releases all its leases and preserves another recording", async () => {
   const f = await fixture();
-  const other = f.cache.reserve({ kind: "recording", recordingId: f.otherRecordingId });
+  const other = f.cache.reserve({ kind: "recording", id: f.otherRecordingId });
   writeFileSync(other.path, "other recording");
   await f.cache.publish(other.id);
   const a = f.delivery.open({ kind: "recording", id: f.recordingId }, () =>

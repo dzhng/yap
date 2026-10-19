@@ -261,7 +261,7 @@ test("project retirement drains a late publication, removes only private state a
   await f.exports.create(request);
   await started.promise;
   f.projects.markDeleting(f.projectId);
-  const owner = { kind: "project", projectId: f.projectId };
+  const owner = { kind: "project", id: f.projectId };
   const retiring = Promise.all([f.jobs.drainOwner(owner), f.exports.retireOwner(owner)]);
   assert.ok(f.assets.references(f.asset.id).length > 0);
   await assert.rejects(

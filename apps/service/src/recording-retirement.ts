@@ -43,10 +43,10 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
           ...result,
         });
       return [
-        ...result.usedBy.map((project) => ({ memberKind: "project", memberId: project.projectId })),
+        ...result.usedBy.map((project) => ({ memberKind: "project", memberId: project.id })),
         ...result.acquisitions.map((acquisition) => ({
           memberKind: "acquisition",
-          memberId: acquisition.acquisitionId,
+          memberId: acquisition.id,
         })),
       ];
     },
@@ -70,7 +70,7 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
     },
     scope: (subject, signal, run) => owners.sources.retire(subject.id, signal, run),
     beforeScope: async (subject, signal) => {
-      await owners.jobs.drainOwner({ kind: "recording", recordingId: subject.id });
+      await owners.jobs.drainOwner({ kind: "recording", id: subject.id });
       signal.throwIfAborted();
     },
     drain: async (subject) => {
@@ -85,7 +85,7 @@ export function recordingRetirement(owners: RecordingRetirementOwners): Deletion
         return true;
       }
       owners.sources.forget(subject.id);
-      await owners.jobs.forgetOwner({ kind: "recording", recordingId: subject.id });
+      await owners.jobs.forgetOwner({ kind: "recording", id: subject.id });
       signal.throwIfAborted();
       owners.store.finishDeletion(subject.id);
       return true;

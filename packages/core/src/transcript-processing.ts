@@ -86,13 +86,13 @@ export function assetTranscriptOwner(assets: AssetStore, acquisitions: Acquisiti
     if (
       identity.owner.kind !== "asset" ||
       source.kind !== "asset" ||
-      identity.sourceId !== identity.owner.assetId
+      identity.sourceId !== identity.owner.id
     )
       throw new CatalogError("INVALID_EVIDENCE", "Asset transcript requires an asset source");
     const selected = selectedAudio(
       { assets, acquisitions },
       {
-        assetId: identity.owner.assetId,
+        assetId: identity.owner.id,
         streamId: source.streamId,
         ...(source.acquisitionId === undefined ? {} : { acquisitionId: source.acquisitionId }),
       },
@@ -137,7 +137,7 @@ export class TranscriptProcessing {
     scope: SpeechExecution,
   ) {
     return {
-      target: { kind: "asset" as const, assetId: selected.selection.assetId },
+      target: { kind: "asset" as const, id: selected.selection.assetId },
       artifact,
       input: JSON.stringify({
         selection: selected.selection,
@@ -153,7 +153,7 @@ export class TranscriptProcessing {
 
   private portableSelection(value: PortableTranscript) {
     const selected = selectedAudio(this.asset, {
-      assetId: value.owner.assetId,
+      assetId: value.owner.id,
       streamId: value.source.streamId,
       ...(value.source.acquisitionId === undefined
         ? {}
@@ -278,7 +278,7 @@ export class TranscriptProcessing {
     const { selected, scope, issues } = this.admitSource(selection);
     let status = this.jobs.status(this.sourceIdentity(selected, this.execution(), scope));
     if (selection.generation !== undefined) {
-      const owner = { kind: "asset" as const, assetId: selection.assetId };
+      const owner = { kind: "asset" as const, id: selection.assetId };
       const retained = this.jobs.retainedArtifact(owner, artifact, selection.generation);
       const stale = this.transcripts.isStale({ owner, generation: selection.generation });
       if (!retained || stale)
@@ -367,7 +367,7 @@ export class TranscriptProcessing {
 
   /** A stale publication is forgotten with its job, so its generation is reclaimed unless a revision pins it. */
   private cleanupAsset(assetId: string, signal: AbortSignal) {
-    const owner = { kind: "asset" as const, assetId };
+    const owner = { kind: "asset" as const, id: assetId };
     return this.transcripts.reclaim(
       owner,
       (generation) =>
@@ -390,7 +390,7 @@ export class TranscriptProcessing {
     await this.cleanupAsset(selection.assetId, signal);
     return this.transcribeSource(
       {
-        owner: { kind: "asset", assetId: selection.assetId },
+        owner: { kind: "asset", id: selection.assetId },
         sourceId: selection.assetId,
         generation,
       },
@@ -409,7 +409,7 @@ export class TranscriptProcessing {
     const scope = historicalSpeechExecutionSchema.parse(JSON.parse(job.input).execution);
     const selected = selectedAudio(this.asset, selection);
     if (
-      job.target.assetId !== selection.assetId ||
+      job.target.id !== selection.assetId ||
       job.input !== this.sourceIdentity(selected, this.execution(), scope).input
     )
       throw new CatalogError("ARTIFACT_CHANGED", "Transcript source or model inputs changed");
@@ -419,7 +419,7 @@ export class TranscriptProcessing {
     await this.cleanupAsset(selection.assetId, signal);
     const { transcript, issues } = await this.transcribeSource(
       {
-        owner: { kind: "asset", assetId: selection.assetId },
+        owner: { kind: "asset", id: selection.assetId },
         sourceId: selection.assetId,
         generation: job.attemptId,
       },

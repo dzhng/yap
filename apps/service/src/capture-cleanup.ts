@@ -46,7 +46,7 @@ export class CaptureCleanup {
   request(recordingId: string) {
     const recording = this.store.get(recordingId);
     const job = this.jobs.submit({
-      target: { kind: "recording", recordingId, revisionId: null },
+      target: { kind: "recording", id: recordingId, revisionId: null },
       artifact,
       lane: "heavy",
       input: recording.sourceId,
@@ -61,7 +61,7 @@ export class CaptureCleanup {
       job.target.revisionId !== null
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Cleanup requires a recording-owned source job");
-    const recording = this.store.get(job.target.recordingId);
+    const recording = this.store.get(job.target.id);
     if (
       !isSettled(recording.state) ||
       recording.state === "canceled" ||

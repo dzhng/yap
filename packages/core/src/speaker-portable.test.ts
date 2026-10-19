@@ -12,7 +12,7 @@ test("portable speaker staging preserves native bytes, row ordinals, all score c
   try {
     const records = new SpeakerEvidenceStore(donor, () => {});
     const identity = {
-      owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+      owner: { kind: "asset" as const, id: "a".repeat(64) },
       sourceId: "a".repeat(64),
       generation: "g-z",
       policy: "speaker-v1" as const,
@@ -27,7 +27,7 @@ test("portable speaker staging preserves native bytes, row ordinals, all score c
       original,
     );
     donor.transaction(() => newer.publish());
-    const portable = records.portableGenerations(identity.owner.assetId);
+    const portable = records.portableGenerations(identity.owner.id);
     const imported = new SpeakerEvidenceStore(target, () => {});
     for (const item of portable) {
       const stage = imported.stagePortable(
@@ -52,9 +52,7 @@ test("portable speaker staging preserves native bytes, row ordinals, all score c
       }),
     ).toEqual(records.scorePage({ identity: stage.metadata, limit: 1000 }));
     expect(portable.map((item) => item.metadata.generation)).toEqual(["g-z", "g-a"]);
-    expect(imported.latestObservation(identity.owner.assetId, speakerSource)?.generation).toBe(
-      "g-a",
-    );
+    expect(imported.latestObservation(identity.owner.id, speakerSource)?.generation).toBe("g-a");
   } finally {
     donor.close();
     target.close();
@@ -69,7 +67,7 @@ test("portable speaker tampering and changed live owner refuse before ready publ
   try {
     const records = new SpeakerEvidenceStore(donor, () => {});
     const identity = {
-      owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+      owner: { kind: "asset" as const, id: "a".repeat(64) },
       sourceId: "a".repeat(64),
       generation: "g1",
       policy: "speaker-v1" as const,
@@ -92,7 +90,7 @@ test("portable speaker tampering and changed live owner refuse before ready publ
     expect(() => target.transaction(() => staged.publish())).toThrow("source owner changed");
     expect(() => imported.metadata(identity)).toThrow("not ready");
     await staged.close();
-    expect(imported.portableGenerations(identity.owner.assetId)).toEqual([]);
+    expect(imported.portableGenerations(identity.owner.id)).toEqual([]);
     expect(() => imported.capturedOperands(identity)).toThrow("not retained");
   } finally {
     donor.close();

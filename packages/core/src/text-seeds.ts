@@ -29,7 +29,7 @@ export function textSeedResources(document: Document): ResourceReference[] {
   const ids = new Set(
     textSeeds(document).map((seed) =>
       transcriptGenerationResource({
-        owner: { kind: "asset", assetId: seed.source.assetId },
+        owner: { kind: "asset", id: seed.source.assetId },
         generation: seed.generation,
       }),
     ),
@@ -40,7 +40,7 @@ export function textSeedResources(document: Document): ResourceReference[] {
 /** A pin an existing revision already holds is historical evidence; a new pin needs a current generation. */
 function words(seed: Seed, records: TranscriptStore, historical: boolean) {
   const identity = {
-    owner: { kind: "asset" as const, assetId: seed.source.assetId },
+    owner: { kind: "asset" as const, id: seed.source.assetId },
     generation: seed.generation,
   };
   const metadata = records.retainedGeneration(identity, { historical });

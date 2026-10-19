@@ -23,7 +23,7 @@ function fixture(durationUs = 20_000_000, sparse = false) {
   const recording = store.allocate().recording;
   store.registerSource(recording.recordingId, durationUs);
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.recordingId },
     sourceId: recording.sourceId,
     generation: "attempt-1",
     policy: scenePolicy.id,
@@ -211,7 +211,7 @@ test("restart leaves partial attempts unreadable and separates source generation
   reopened.registerSource(recording.recordingId, 10_000_000);
   const sourceIdentity = {
     ...f.identity,
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.recordingId },
     sourceId: recording.sourceId,
   };
   evidence.append(sourceIdentity, f.source, chunk);
@@ -222,7 +222,7 @@ test("restart leaves partial attempts unreadable and separates source generation
   controller.abort();
   await expect(
     evidence.reclaim(
-      { kind: "recording", recordingId: recording.recordingId },
+      { kind: "recording", id: recording.recordingId },
       () => false,
       controller.signal,
     ),

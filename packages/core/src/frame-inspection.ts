@@ -41,6 +41,7 @@ import type {
   JobQueue,
   JobExecution,
   JobOwner,
+  Owner,
   Job,
   JobAdmission,
   StagedJobResult,
@@ -520,7 +521,7 @@ export class MediaFrameInspection {
       jobs,
       cache,
       {
-        target: { kind: "asset", assetId: options.selection.assetId },
+        target: { kind: "asset", id: options.selection.assetId },
         artifact: "frame",
         input: JSON.stringify(options),
       },
@@ -643,7 +644,7 @@ export class MediaFrameInspection {
   sourceUnavailable(input: SourceFrameInput): SourceFrameUnavailable {
     const { options } = this.sourcePlan(input);
     const status = this.owners.jobs.status({
-      target: { kind: "asset", assetId: options.selection.assetId },
+      target: { kind: "asset", id: options.selection.assetId },
       artifact: "frame",
       input: JSON.stringify(options),
     });
@@ -669,7 +670,7 @@ export class MediaFrameInspection {
   }
 
   private async publish<T extends { file: string; bytes: number }>(
-    owner: Extract<JobOwner, { kind: "asset" | "project" }>,
+    owner: Owner<"asset" | "project">,
     signal: AbortSignal,
     render: (output: string) => Promise<T>,
   ) {
@@ -700,7 +701,7 @@ export class MediaFrameInspection {
       job.target.kind !== "asset" ||
       job.artifact !== "frame" ||
       !parsed.success ||
-      parsed.data.selection.assetId !== job.target.assetId
+      parsed.data.selection.assetId !== job.target.id
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a still image");
     const plan = this.imagePlan({
@@ -770,7 +771,7 @@ export class MediaFrameInspection {
       job.target.kind !== "asset" ||
       job.artifact !== "frame" ||
       !parsed.success ||
-      parsed.data.selection.assetId !== job.target.assetId
+      parsed.data.selection.assetId !== job.target.id
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a selected source");
     if (parsed.data.implementationId !== this.owners.sourceRenderer.implementationId)
@@ -784,7 +785,7 @@ export class MediaFrameInspection {
     if (plan.options.supportDigest !== parsed.data.supportDigest)
       throw new CatalogError("ARTIFACT_CHANGED", "Selected source support changed");
     if (plan.reason) throw new CatalogError("UNAVAILABLE", plan.reason);
-    return this.publish({ kind: "asset", assetId: job.target.assetId }, signal, async (output) => {
+    return this.publish({ kind: "asset", id: job.target.id }, signal, async (output) => {
       const parsedReceipt = sourceReceiptSchema.safeParse(
         await this.owners.sourceRenderer
           .render(
@@ -914,7 +915,7 @@ export class MediaFrameInspection {
       this.owners.jobs,
       this.owners.cache,
       {
-        target: { kind: "project", projectId: input.projectId, revisionId },
+        target: { kind: "project", id: input.projectId, revisionId },
         artifact: "frame",
         input: JSON.stringify({
           ...options,
@@ -991,7 +992,7 @@ export class MediaFrameInspection {
     if (job.target.kind !== "project" || job.artifact !== "frame")
       throw new CatalogError("UNSUPPORTED_JOB", "Picture admission requires a project job");
     const plan = this.planProject({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options,
       observations: options.observationRequest,
@@ -1013,44 +1014,53 @@ export class MediaFrameInspection {
     if (parsed.data.implementationId !== this.project.renderer.implementationId)
       throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {});
     const plan = this.planProject({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...parsed.data,
       observations: parsed.data.observationRequest,
       faceObservations: parsed.data.faceObservationRequest,
     });
-    const projectId = job.target.projectId;
+    const projectId = job.target.id;
     let issues: Issue[] = [];
-    const result = await this.publish({ kind: "project", projectId }, signal, async (output) => {
-      const render = () =>
-        this.project.renderer.render(
-          {
-            model: plan.model,
-            window: plan.window,
-            assets: plan.assets,
-            fonts: plan.fonts,
-            luts: plan.luts,
-            output,
-            maxLongEdge: plan.options.maxLongEdge,
-            ...(plan.options.observationRequest === undefined
-              ? {}
-              : { observations: plan.options.observationRequest }),
-            ...(plan.options.faceObservationRequest === undefined
-              ? {}
-              : { faceObservations: plan.options.faceObservationRequest }),
-          },
-          signal,
-        );
-      const receipt = this.project.renderer.pointers
-        ? await this.project.renderer.pointers.withReady(plan.pointerSources, render)
-        : await render();
-      signal.throwIfAborted();
-      const value = validateProjectFrameReceipt(receipt, plan, output, plan.options.maxLongEdge);
-      validatePictureObservations(value, plan.options.observationRequest);
-      validateFaceObservations(value, plan.options.faceObservationRequest);
-      issues = pictureTextIssues(value);
-      return { ...value, ...plan.options, projectId, revisionId: plan.window.manifest.revisionId };
-    });
+    const result = await this.publish(
+      { kind: "project", id: projectId },
+      signal,
+      async (output) => {
+        const render = () =>
+          this.project.renderer.render(
+            {
+              model: plan.model,
+              window: plan.window,
+              assets: plan.assets,
+              fonts: plan.fonts,
+              luts: plan.luts,
+              output,
+              maxLongEdge: plan.options.maxLongEdge,
+              ...(plan.options.observationRequest === undefined
+                ? {}
+                : { observations: plan.options.observationRequest }),
+              ...(plan.options.faceObservationRequest === undefined
+                ? {}
+                : { faceObservations: plan.options.faceObservationRequest }),
+            },
+            signal,
+          );
+        const receipt = this.project.renderer.pointers
+          ? await this.project.renderer.pointers.withReady(plan.pointerSources, render)
+          : await render();
+        signal.throwIfAborted();
+        const value = validateProjectFrameReceipt(receipt, plan, output, plan.options.maxLongEdge);
+        validatePictureObservations(value, plan.options.observationRequest);
+        validateFaceObservations(value, plan.options.faceObservationRequest);
+        issues = pictureTextIssues(value);
+        return {
+          ...value,
+          ...plan.options,
+          projectId,
+          revisionId: plan.window.manifest.revisionId,
+        };
+      },
+    );
     return { result, issues };
   }
 }

@@ -154,7 +154,7 @@ test("a committed export remains authoritative when cancellation discards its la
   assert.equal(f.jobs.job(status.jobId).state, "canceled");
   assert.equal(
     f.jobs.status({
-      target: { kind: "project", projectId: f.projectId, revisionId: f.placed.revision.revisionId },
+      target: { kind: "project", id: f.projectId, revisionId: f.placed.revision.revisionId },
       artifact: "export-media",
       input: exportId,
     }).published,

@@ -493,7 +493,7 @@ test("an imported package drops a stale transcript no revision pins and keeps on
   ): Extract<PortableResource, { kind: "transcript-generation" }> => ({
     kind: "transcript-generation",
     metadata: {
-      owner: { kind: "asset", assetId },
+      owner: { kind: "asset", id: assetId },
       sourceId: assetId,
       generation,
       source: { kind: "asset", streamId: "audio", supportDigest: "d".repeat(64), durationUs: 1000 },

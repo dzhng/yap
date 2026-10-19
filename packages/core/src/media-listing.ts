@@ -5,15 +5,15 @@ import { pageCursor } from "./page-cursor.js";
 
 type RecordingMedia = {
   kind: "recording";
-  recordingId: string;
+  id: string;
   title: string;
   durationUs: number;
   sizeBytes: number;
   createdAt: string;
 };
 type ImportedMedia = {
-  kind: "imported";
-  assetId: string;
+  kind: "asset";
+  id: string;
   title: string;
   durationUs: number;
   sizeBytes: number;
@@ -98,7 +98,7 @@ export class MediaListing {
         continue;
       rows.push({
         kind: "recording",
-        recordingId: recording.recordingId,
+        id: recording.recordingId,
         title: recording.createdAt,
         durationUs: recording.sourceDurationUs ?? 0,
         sizeBytes: 0,
@@ -130,8 +130,8 @@ export class MediaListing {
       const source =
         typeof provenance.source === "string" ? provenance.source : (metadata.fileName ?? row.id);
       rows.push({
-        kind: "imported",
-        assetId: row.id,
+        kind: "asset",
+        id: row.id,
         title: basename(source),
         durationUs: durationUs(metadata),
         sizeBytes: 0,
@@ -159,10 +159,7 @@ export class MediaListing {
     return {
       media: page.map((row) => ({
         ...row,
-        sizeBytes: this.sizeOf({
-          kind: row.kind === "recording" ? "recording" : "asset",
-          id: row.kind === "recording" ? row.recordingId : row.assetId,
-        }),
+        sizeBytes: this.sizeOf(row),
       })),
       nextCursor:
         offset + page.length < rows.length && last
@@ -176,6 +173,6 @@ export class MediaListing {
   }
 
   private tieBreak(row: MediaRow): string {
-    return `${row.kind}:${"recordingId" in row ? row.recordingId : row.assetId}`;
+    return `${row.kind}:${row.id}`;
   }
 }

@@ -53,7 +53,7 @@ test(
     }));
     const cache = new DerivedCache(store, library, (owner) => {
       assert.equal(owner.kind, "asset");
-      assets.get(owner.assetId);
+      assets.get(owner.id);
     });
     await cache.reconcile();
     async function seed(label) {
@@ -71,7 +71,7 @@ test(
         `${label}: generated source leftover`,
       );
       if (label !== "sibling") return { ...take, directory, source };
-      const cached = cache.reserve({ kind: "asset", assetId: asset.id });
+      const cached = cache.reserve({ kind: "asset", id: asset.id });
       writeFileSync(cached.path, `${label}: derivative`);
       await cache.publish(cached.id);
       return { ...take, directory, source, cached };

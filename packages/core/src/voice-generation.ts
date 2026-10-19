@@ -193,7 +193,7 @@ export class VoiceGenerationJobs {
       settings,
     };
     const identity = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "voice-generation",
       input: JSON.stringify(request),
     };
@@ -217,7 +217,7 @@ export class VoiceGenerationJobs {
     const request = JSON.parse(job.input) as FrozenVoiceRequest;
     if (
       job.target.kind !== "asset" ||
-      job.target.assetId !== request.reference.assetId ||
+      job.target.id !== request.reference.assetId ||
       !isDeepStrictEqual(this.model(request.model.modelId), request.model) ||
       request.profileSha256 !== voiceProfileSha256
     )

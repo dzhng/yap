@@ -153,7 +153,7 @@ export class IndexProcessing {
     const identity = {
       target: {
         kind: "project" as const,
-        projectId: recipe.projectId,
+        id: recipe.projectId,
         revisionId: recipe.revisionId,
       },
       artifact,
@@ -296,7 +296,7 @@ export class IndexProcessing {
   frameProject(input: ProjectIndexReference & { ordinal: number }) {
     return this.withIssues(this.projectRead(input).frame(input.ordinal), {
       kind: "project",
-      projectId: input.projectId,
+      id: input.projectId,
     });
   }
   /** A frame read from a retained index carries the issues reported with that index publication. */
@@ -314,7 +314,7 @@ export class IndexProcessing {
     return this.projectRead(input).openRead(input.ordinal);
   }
   private async cleanupProject(projectId: string, signal: AbortSignal) {
-    const owner = { kind: "project" as const, projectId };
+    const owner = { kind: "project" as const, id: projectId };
     await this.project.index.reclaim(
       owner,
       ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
@@ -349,7 +349,7 @@ export class IndexProcessing {
     });
     const { scenes, ...identity } = input;
     if (
-      job.target.projectId !== input.projectId ||
+      job.target.id !== input.projectId ||
       job.target.revisionId !== input.revisionId ||
       !isDeepStrictEqual(identity, plan.identity)
     )
@@ -371,7 +371,7 @@ export class IndexProcessing {
   }
   portableProject(metadata: ScreenshotIndexMetadata<ProjectIndexRecords>) {
     const publication = this.jobs.retainedArtifact(
-      { kind: "project", projectId: metadata.projectId },
+      { kind: "project", id: metadata.projectId },
       artifact,
       metadata.generation,
     );
@@ -423,7 +423,7 @@ export class IndexProcessing {
     this.jobs.adoptArtifact(
       {
         ...publication,
-        target: { kind: "project", projectId: adopted.projectId, revisionId: adopted.revisionId },
+        target: { kind: "project", id: adopted.projectId, revisionId: adopted.revisionId },
         input: encodeIndexRecord(projectRecipe({ ...adopted, scenes })),
         artifact,
         result: JSON.stringify(this.project.index.metadata(adopted)),
@@ -433,7 +433,7 @@ export class IndexProcessing {
   }
   portableSource(metadata: ScreenshotIndexMetadata<SourceIndexRecords>) {
     const publication = this.jobs.retainedArtifact(
-      { kind: "asset", assetId: metadata.assetId },
+      { kind: "asset", id: metadata.assetId },
       artifact,
       metadata.generation,
     );
@@ -497,7 +497,7 @@ export class IndexProcessing {
     this.jobs.adoptArtifact(
       {
         ...publication,
-        target: { kind: "asset", assetId: metadata.assetId },
+        target: { kind: "asset", id: metadata.assetId },
         artifact,
         result: JSON.stringify(this.asset.index.metadata(metadata)),
       },
@@ -543,7 +543,7 @@ export class IndexProcessing {
       };
     const input = this.sourceRecipe(plan.options, dependency.published.evidence);
     const identity = {
-      target: { kind: "asset" as const, assetId: input.assetId },
+      target: { kind: "asset" as const, id: input.assetId },
       artifact,
       input: encodeIndexRecord(input),
     };
@@ -688,7 +688,7 @@ export class IndexProcessing {
   frameSource(input: SourceIndexReference & { ordinal: number }) {
     return this.withIssues(this.sourceRead(input).frame(input.ordinal), {
       kind: "asset",
-      assetId: input.assetId,
+      id: input.assetId,
     });
   }
   openReadSource(input: SourceIndexReference & { ordinal: number }) {
@@ -698,11 +698,11 @@ export class IndexProcessing {
   retainsSourceScenes(assetId: string, generation: string) {
     return this.jobs.retainsInput(
       "scene-generation",
-      sceneGenerationResource({ owner: { kind: "asset", assetId }, generation }),
+      sceneGenerationResource({ owner: { kind: "asset", id: assetId }, generation }),
     );
   }
   private async cleanupAsset(assetId: string, signal: AbortSignal) {
-    const owner = { kind: "asset" as const, assetId };
+    const owner = { kind: "asset" as const, id: assetId };
     await this.asset.index.reclaim(
       owner,
       ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
@@ -713,7 +713,7 @@ export class IndexProcessing {
     if (job.target.kind !== "asset" || job.artifact !== artifact)
       throw new CatalogError("UNSUPPORTED_JOB", "Source index requires an asset job");
     const input = JSON.parse(job.input) as SourceIndexInput;
-    if (job.target.assetId !== input.assetId)
+    if (job.target.id !== input.assetId)
       throw new CatalogError("ARTIFACT_CHANGED", "Source index recipe changed");
     const { options, source } = this.asset.frames.sourcePlan({
       ...input,

@@ -95,7 +95,7 @@ export async function materializeProjectIndex(
         throw new CatalogError("INVALID_EVIDENCE", "Project scenes require a video source");
       return [
         sourceSelectionKey({
-          assetId: scene.owner.assetId,
+          assetId: scene.owner.id,
           streamId: scene.source.streamId,
           ...(scene.source.acquisitionId === undefined
             ? {}

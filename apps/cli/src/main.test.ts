@@ -343,7 +343,7 @@ it("CLI and MCP return the same media list", async () => {
   const listed = cli(socket, "media.list", { limit: 1 });
   expect(listed.exitCode).toBe(0);
   expect(listed.result.data).toMatchObject({
-    media: [{ kind: "recording", recordingId }],
+    media: [{ kind: "recording", id: recordingId }],
     nextCursor: null,
   });
   const mcpList = await client.callTool({ name: "media.list", arguments: { limit: 1 } });

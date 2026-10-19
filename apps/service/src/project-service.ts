@@ -379,7 +379,7 @@ export async function startProjectService(options: {
     const evidence = new SourceEvidenceStore(catalog, (identity) => {
       if (identity.owner.kind !== "acquisition")
         throw new CatalogError("NOT_FOUND", "Unsupported source evidence owner");
-      acquisitions.intent(identity.owner.acquisitionId);
+      acquisitions.intent(identity.owner.id);
     });
     const acquisitionImports = new AcquisitionImporter(
       catalog,
@@ -446,11 +446,11 @@ export async function startProjectService(options: {
     const projects = new ProjectStore(catalog, assets, transcriptStore, acquisitions);
     const files = new ManagedFiles(library, worker);
     const cache = new DerivedCache(catalog, library, (owner) => {
-      if (owner.kind === "project") projects.get(owner.projectId);
+      if (owner.kind === "project") projects.get(owner.id);
       else if (owner.kind === "asset") {
-        if (!assets.has(owner.assetId))
-          throw new CatalogError("NOT_FOUND", "Asset does not exist", { assetId: owner.assetId });
-      } else if (owner.kind === "acquisition") acquisitions.get(owner.acquisitionId);
+        if (!assets.has(owner.id))
+          throw new CatalogError("NOT_FOUND", "Asset does not exist", { assetId: owner.id });
+      } else if (owner.kind === "acquisition") acquisitions.get(owner.id);
       else throw new CatalogError("NOT_FOUND", "Unsupported derived-file owner");
     });
     await cache.reconcile();
@@ -459,27 +459,27 @@ export async function startProjectService(options: {
     const probe = assetProbe(worker, workspace);
     const targets: JobTargets = {
       pin(target) {
-        if (target.kind === "import") assets.intent(target.importId);
+        if (target.kind === "import") assets.intent(target.id);
         else if (target.kind === "acquisition") {
-          if (plans.isTombstoned("acquisition", target.acquisitionId))
+          if (plans.isTombstoned("acquisition", target.id))
             throw new CatalogError("DELETE_IN_PROGRESS", "acquisition deletion is in progress", {
-              acquisitionId: target.acquisitionId,
+              acquisitionId: target.id,
             });
-          if (!captureSources.available(target.acquisitionId))
+          if (!captureSources.available(target.id))
             throw new CatalogError("NOT_FOUND", "Capture source donor is unavailable");
         } else if (target.kind === "asset") {
-          if (plans.isTombstoned("asset", target.assetId))
+          if (plans.isTombstoned("asset", target.id))
             throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
-              assetId: target.assetId,
+              assetId: target.id,
             });
-          if (!assets.has(target.assetId))
+          if (!assets.has(target.id))
             throw new CatalogError("NOT_FOUND", "Asset does not exist", {
-              assetId: target.assetId,
+              assetId: target.id,
             });
         } else if (target.kind === "project")
-          projects.requireRevision(target.projectId, target.revisionId);
+          projects.requireRevision(target.id, target.revisionId);
         else if (target.kind === "recording" && target.revisionId === null) {
-          const recording = captures.get(target.recordingId);
+          const recording = captures.get(target.id);
           if (!isSettled(recording.state) || recording.state === "canceled")
             throw new CatalogError(
               "INVALID_STATE",
@@ -491,11 +491,10 @@ export async function startProjectService(options: {
         return target;
       },
       isAvailable(target) {
-        if (target.kind === "recording") return captures.isAvailable(target.recordingId);
+        if (target.kind === "recording") return captures.isAvailable(target.id);
         if (target.kind === "asset")
-          return !plans.isTombstoned("asset", target.assetId) && assets.has(target.assetId);
-        if (target.kind === "project")
-          return projects.hasRevision(target.projectId, target.revisionId);
+          return !plans.isTombstoned("asset", target.id) && assets.has(target.id);
+        if (target.kind === "project") return projects.hasRevision(target.id, target.revisionId);
         if (target.kind !== "import" && target.kind !== "acquisition") return false;
         try {
           targets.pin(target);
@@ -510,11 +509,10 @@ export async function startProjectService(options: {
         }
       },
       isDeleting: (owner) => {
-        if (owner.kind === "recording") return captures.isDeleting(owner.recordingId);
-        if (owner.kind === "project") return projects.isDeleting(owner.projectId);
-        if (owner.kind === "asset") return plans.isTombstoned("asset", owner.assetId);
-        if (owner.kind === "acquisition")
-          return plans.isTombstoned("acquisition", owner.acquisitionId);
+        if (owner.kind === "recording") return captures.isDeleting(owner.id);
+        if (owner.kind === "project") return projects.isDeleting(owner.id);
+        if (owner.kind === "asset") return plans.isTombstoned("asset", owner.id);
+        if (owner.kind === "acquisition") return plans.isTombstoned("acquisition", owner.id);
         return false;
       },
       isCapturing: () => captures.isCapturing(),
@@ -602,7 +600,7 @@ export async function startProjectService(options: {
         if (job.artifact === "capture-cleanup") return captureCleanup.execute({ job, signal });
         if (job.target.kind === "acquisition" && job.artifact === "acquisition.import") {
           const acquisition = await acquisitionImports.executeImport(
-            job.target.acquisitionId,
+            job.target.id,
             job.attemptId,
             {
               probe,
@@ -614,7 +612,7 @@ export async function startProjectService(options: {
         }
         if (job.target.kind !== "import" || job.artifact !== "asset.import")
           throw new CatalogError("PREREQUISITE_MISSING", "Unsupported preparation job");
-        const asset = await assets.executeImport(job.target.importId, probe, signal, {
+        const asset = await assets.executeImport(job.target.id, probe, signal, {
           kind: "job",
           id: job.jobId,
         });
@@ -1022,14 +1020,14 @@ export async function startProjectService(options: {
         assets.path(id),
         join(library, "transcripts", "assets", id),
         join(library, "transcripts", "imported", id),
-        ...sourceIndex.ownedPaths({ kind: "asset", assetId: id }),
-        ...cache.ownedPaths({ kind: "asset", assetId: id }),
+        ...sourceIndex.ownedPaths({ kind: "asset", id: id }),
+        ...cache.ownedPaths({ kind: "asset", id: id }),
       ],
       acquisition: (id) => acquisitionImports.managedPaths(id),
       recording: (id) => files.recordingPaths(id),
       project: (id) => [
-        ...projectIndex.ownedPaths({ kind: "project", projectId: id }),
-        ...cache.ownedPaths({ kind: "project", projectId: id }),
+        ...projectIndex.ownedPaths({ kind: "project", id: id }),
+        ...cache.ownedPaths({ kind: "project", id: id }),
       ],
     });
     const mediaListing = new MediaListing(
@@ -1845,7 +1843,7 @@ export async function startProjectService(options: {
               const admitted = admitProjectRange(composition.model.durationUs, params.range),
                 range = admitted.range;
               const identity = {
-                  owner: { kind: "asset" as const, assetId: params.assetId },
+                  owner: { kind: "asset" as const, id: params.assetId },
                   generation: params.generation,
                   policy: "alignment-v1" as const,
                 },
@@ -1882,13 +1880,13 @@ export async function startProjectService(options: {
                 }),
                 rows =
                   "rows" in sourcePage
-                    ? metadata.owner.assetId === prepared.audio.assetId
+                    ? metadata.owner.id === prepared.audio.assetId
                       ? projectTapAlignmentRows(sourcePage.rows, range)
                       : projectAlignmentRows(
                           sourcePage.rows,
                           occurrences.filter(
                             (occurrence) =>
-                              occurrence.assetId === metadata.owner.assetId &&
+                              occurrence.assetId === metadata.owner.id &&
                               occurrence.streamId === metadata.source.streamId &&
                               (occurrence.acquisitionId ?? null) === metadata.source.acquisitionId,
                           ),
@@ -1937,7 +1935,7 @@ export async function startProjectService(options: {
                 ),
               };
             const identity = {
-              owner: { kind: "asset" as const, assetId },
+              owner: { kind: "asset" as const, id: assetId },
               generation,
               policy: "alignment-v1" as const,
             };
@@ -2096,7 +2094,7 @@ export async function startProjectService(options: {
                   labels = new Map(
                     speakerLabels
                       .read({
-                        owner: { kind: "asset", assetId: row.assetId },
+                        owner: { kind: "asset", id: row.assetId },
                         sourceId: row.assetId,
                         generation: row.generation,
                         policy: "speaker-v1",
@@ -3405,7 +3403,7 @@ export async function startProjectService(options: {
             const job = queue.submit(() => {
               const intent = acquisitions.admitImport(prepared);
               return {
-                target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+                target: { kind: "acquisition", id: intent.acquisitionId },
                 artifact: "acquisition.import",
                 lane: "heavy",
                 input: JSON.stringify(intent.files),
@@ -3424,7 +3422,7 @@ export async function startProjectService(options: {
             const job = queue.submit(() => {
               const intent = assets.admitImport(prepared);
               return {
-                target: { kind: "import", importId: intent.importId },
+                target: { kind: "import", id: intent.importId },
                 artifact: "asset.import",
                 lane: "heavy",
                 input: JSON.stringify(intent.source),

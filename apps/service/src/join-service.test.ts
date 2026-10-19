@@ -201,7 +201,7 @@ test.runIf(process.platform === "darwin")(
     });
     const records = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
     const staged = records.stage(
-      { owner: { kind: "asset", assetId }, generation: "join-g1", policy: "alignment-v1" },
+      { owner: { kind: "asset", id: assetId }, generation: "join-g1", policy: "alignment-v1" },
       { ...alignmentSource, streamId, durationUs: 1000000, supportDigest: selected.supportDigest },
       alignmentOutput(),
     );

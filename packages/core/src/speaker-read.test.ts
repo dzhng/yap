@@ -19,7 +19,7 @@ async function fixture() {
   });
   const records = new SpeakerEvidenceStore(catalog, () => {});
   const identity = {
-    owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+    owner: { kind: "asset" as const, id: "a".repeat(64) },
     sourceId: "a".repeat(64),
     generation: "g1",
     policy: "speaker-v1" as const,

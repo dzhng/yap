@@ -36,12 +36,12 @@ type Member = { memberKind: string; memberId: string };
 
 function membersFor(result: LibraryUsersResult): Member[] {
   return [
-    ...result.usedBy.map((project) => ({ memberKind: "project", memberId: project.projectId })),
+    ...result.usedBy.map((project) => ({ memberKind: "project", memberId: project.id })),
     ...result.acquisitions.map((acquisition) => ({
       memberKind: "acquisition",
-      memberId: acquisition.acquisitionId,
+      memberId: acquisition.id,
     })),
-    ...result.derivedAssets.map((asset) => ({ memberKind: "asset", memberId: asset.assetId })),
+    ...result.derivedAssets.map((asset) => ({ memberKind: "asset", memberId: asset.id })),
   ];
 }
 
@@ -66,25 +66,25 @@ export function assetRetirement(owners: AssetRetirementOwners): DeletionRegistra
       return true;
     },
     drain: async (subject, signal) => {
-      await owners.jobs.drainOwner({ kind: "asset", assetId: subject.id });
+      await owners.jobs.drainOwner({ kind: "asset", id: subject.id });
       signal.throwIfAborted();
     },
     files: async (subject, signal) => {
       await owners.assets.unlinkFile(subject.id);
       signal.throwIfAborted();
-      await owners.transcripts.purge({ kind: "asset", assetId: subject.id }, signal);
+      await owners.transcripts.purge({ kind: "asset", id: subject.id }, signal);
       await owners.importedTranscripts.purge(subject.id, signal);
-      await owners.scenes.purge({ kind: "asset", assetId: subject.id }, signal);
-      await owners.indexes.purge({ kind: "asset", assetId: subject.id }, signal);
+      await owners.scenes.purge({ kind: "asset", id: subject.id }, signal);
+      await owners.indexes.purge({ kind: "asset", id: subject.id }, signal);
       await owners.alignments.purge(subject.id, signal);
       await owners.speakers.purge(subject.id, signal);
-      await owners.cache.purgeOwner({ kind: "asset", assetId: subject.id }, (batch) =>
+      await owners.cache.purgeOwner({ kind: "asset", id: subject.id }, (batch) =>
         owners.files.removeCacheFiles(batch.ids, batch.root, signal),
       );
     },
     rows: async (subject, signal) => {
       signal.throwIfAborted();
-      await owners.jobs.forgetOwner({ kind: "asset", assetId: subject.id });
+      await owners.jobs.forgetOwner({ kind: "asset", id: subject.id });
       if (references.releaseOwnerPage({ kind: "asset", id: subject.id }) === 256) return false;
       if (references.releaseResourcePage("asset", subject.id) === 256) return false;
       const origins = owners.catalog.catalog

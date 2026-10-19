@@ -1,5 +1,5 @@
 import { ResourceReferences } from "./references.js";
-import { ownerIdentity, type JobOwner } from "./jobs.js";
+import { ownerIdentity, type JobOwner, type Owner } from "./jobs.js";
 import {
   copyImportedFile,
   hashFile,
@@ -51,7 +51,7 @@ export type ScreenshotIndexEntry<D extends IndexRecords = IndexRecords> = {
   frame: D["frame"];
   coverageCount: number;
 };
-export type IndexOwner = Extract<JobOwner, { kind: "asset" | "project" }>;
+export type IndexOwner = Owner<"asset" | "project">;
 export type PortableIndexRecord<D extends IndexRecords> =
   | {
       kind: "entry";

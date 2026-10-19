@@ -294,7 +294,7 @@ export class PreparedAudioStore {
     const identity = {
       target: {
         kind: "project" as const,
-        projectId: input.projectId,
+        id: input.projectId,
         revisionId: plan.window.manifest.revisionId,
       },
       artifact: "prepared-audio",
@@ -318,7 +318,8 @@ export class PreparedAudioStore {
     if (job.target.kind !== "project" || job.artifact !== "prepared-audio")
       throw new CatalogError("UNSUPPORTED_JOB", "Prepared audio requires a project revision");
     const plan = this.plan({
-      ...job.target,
+      projectId: job.target.id,
+      revisionId: job.target.revisionId,
       tap: readRecipe(job.input, "INVALID_STORAGE").tap,
     });
     if (JSON.stringify(plan.window.manifest) !== job.input)
@@ -359,7 +360,7 @@ export class PreparedAudioStore {
       const value: PreparedAudio = {
         ...audio,
         dependencies,
-        resourceId: preparedAudioResource(job.target.projectId, job.attemptId),
+        resourceId: preparedAudioResource(job.target.id, job.attemptId),
         assetId,
         bytes: audio.bytes,
         identity,
@@ -416,7 +417,7 @@ export class PreparedAudioStore {
       throw new CatalogError("INVALID_PARAMS", "Invalid prepared audio identity");
     const [projectId, attemptId] = parsed.data;
     const publication = this.owners.jobs.retainedArtifact(
-      { kind: "project", projectId },
+      { kind: "project", id: projectId },
       "prepared-audio",
       attemptId,
     );
@@ -432,7 +433,7 @@ export class PreparedAudioStore {
     try {
       const audio = omit(read.value, "resourceId", "identity");
       return portablePreparedAudioSchema.parse({
-        projectId: publication.target.projectId,
+        projectId: publication.target.id,
         revisionId: publication.target.revisionId,
         publication: {
           generation: publication.generation,
@@ -514,7 +515,7 @@ export class PreparedAudioStore {
             ...portable.publication,
             target: {
               kind: "project",
-              projectId: composition.projectId,
+              id: composition.projectId,
               revisionId: composition.revisionId,
             },
             artifact: "prepared-audio",

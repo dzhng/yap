@@ -55,7 +55,7 @@ async function fixture(render = renderer) {
   const projects = projectStoreFixture(catalog, assets, home);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new CatalogError("INVALID_TARGET", "Expected project");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   let preview!: ProjectPreviewInspection;
@@ -67,11 +67,11 @@ async function fixture(render = renderer) {
         if (target.kind !== "project") throw new Error("Expected project");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).revisionId,
         };
       },
-      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.projectId),
-      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
+      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.id),
+      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.id),
       isCapturing: () => false,
     },
     execute: (execution) => preview.execute(execution),
@@ -362,7 +362,7 @@ test("deletion denies new previews while the existing queue drains before revisi
   cleanup.push(async () => release.resolve());
   const admitted = await f.preview.request({ projectId: f.projectId });
   await started.promise;
-  const owner = { kind: "project" as const, projectId: f.projectId };
+  const owner = { kind: "project" as const, id: f.projectId };
   f.projects.markDeleting(f.projectId);
   const draining = f.jobs.drainOwner(owner);
   await expect(

@@ -6,7 +6,7 @@ import { alignmentEvidenceSourceSchema } from "./alignment-operands.js";
 import { alignmentOutput, alignmentSource } from "./alignment-evidence.fixture.js";
 
 const identity = {
-  owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+  owner: { kind: "asset" as const, id: "a".repeat(64) },
   generation: "g-z",
   policy: "alignment-v1" as const,
 };
@@ -22,7 +22,7 @@ test("portable alignment preserves original operands, complete rows and original
     donor.transaction(() => first.publish());
     const newer = records.stage({ ...identity, generation: "g-a" }, alignmentSource, operands);
     donor.transaction(() => newer.publish());
-    const portable = [...records.portableGenerations(identity.owner.assetId)];
+    const portable = [...records.portableGenerations(identity.owner.id)];
     for (const item of portable) {
       const staged = imported.stagePortable(
         item.metadata,
@@ -36,7 +36,7 @@ test("portable alignment preserves original operands, complete rows and original
     expect(imported.operands(first.metadata)).toEqual(operands);
     expect(
       imported.latestObservation(
-        identity.owner.assetId,
+        identity.owner.id,
         alignmentEvidenceSourceSchema
           .omit({ pcm: true, decoder: true })
           .strip()
@@ -84,7 +84,7 @@ test("portable operand tampering and changed live ownership refuse before public
     expect(() => target.transaction(() => staged.publish())).toThrow("owner changed");
     expect(() => imported.metadata(identity)).toThrow("not ready");
     await staged.close();
-    expect([...imported.portableGenerations(identity.owner.assetId)]).toEqual([]);
+    expect([...imported.portableGenerations(identity.owner.id)]).toEqual([]);
     expect(() => imported.capturedOperands(identity)).toThrow("not retained");
   } finally {
     donor.close();

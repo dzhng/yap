@@ -69,7 +69,7 @@ async function fixture({
   const projects = projectStoreFixture(catalog, assets, home, acquisitions);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new Error("Wrong cache owner");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   const input = join(home, "media.mov");
@@ -90,7 +90,7 @@ async function fixture({
   }));
   const captureRecords = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw new Error("Wrong capture owner");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const captureReads: number[][] = [];
   const pointRecords = captureRecords.pointRecords.bind(captureRecords);
@@ -112,7 +112,7 @@ async function fixture({
       .run(id, id, JSON.stringify({ kind: "import", path: home, files: {} }));
     await writeFile(file, body);
     const evidence = await captureRecords.ingest({
-      owner: { kind: "acquisition", acquisitionId: id },
+      owner: { kind: "acquisition", id: id },
       sourceId: "capture",
       generation: "first",
       file,
@@ -205,18 +205,18 @@ async function fixture({
     targets: {
       pin: (target) => {
         if (target.kind === "asset") {
-          assets.get(target.assetId);
+          assets.get(target.id);
           return target;
         }
         if (target.kind === "project")
           return {
             ...target,
-            revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+            revisionId: projects.revision(target.id, target.revisionId).revisionId,
           };
         throw new Error("Wrong job owner");
       },
-      isAvailable: (target) => target.kind !== "project" || !projects.isDeleting(target.projectId),
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isAvailable: (target) => target.kind !== "project" || !projects.isDeleting(target.id),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: (execution) =>
@@ -407,7 +407,7 @@ async function fixture({
     };
     const staged = speakerRecords.stage(
       {
-        owner: { kind: "asset", assetId: asset.id },
+        owner: { kind: "asset", id: asset.id },
         sourceId: asset.id,
         generation,
         policy: "speaker-v1",
@@ -461,7 +461,7 @@ async function fixture({
             }) => {
               const found = speakerMetadata.find(
                 (value) =>
-                  value.owner.assetId === request.assetId &&
+                  value.owner.id === request.assetId &&
                   value.source.streamId === request.streamId &&
                   value.source.channel === request.channel &&
                   value.source.engine.modelId === request.modelId &&

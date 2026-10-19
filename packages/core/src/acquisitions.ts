@@ -153,7 +153,7 @@ export type PortableAcquisitionFiles = Record<
 function portableAcquisition(value: Acquisition): PortableAcquisition {
   if (
     value.evidence.owner.kind !== "acquisition" ||
-    value.evidence.owner.acquisitionId !== value.id ||
+    value.evidence.owner.id !== value.id ||
     value.evidence.sourceId !== value.sourceId
   )
     throw new CatalogError(
@@ -572,7 +572,7 @@ export class AcquisitionImporter {
   }
   /** Remove one admitted acquisition after its queue owner has drained. */
   async purge(acquisitionId: string, signal: AbortSignal): Promise<void> {
-    await this.evidence.purge({ kind: "acquisition", acquisitionId }, signal);
+    await this.evidence.purge({ kind: "acquisition", id: acquisitionId }, signal);
     await rm(join(this.directory, acquisitionId), { recursive: true, force: true });
   }
   async prepareImport(requestId: string, path: string): Promise<PreparedAcquisition> {
@@ -823,7 +823,7 @@ export class AcquisitionImporter {
     const reservation = this.catalog.transaction(() =>
       this.store.admitPortable(acquisition.id, packageIdentity),
     );
-    const owner = { kind: "acquisition" as const, acquisitionId: acquisition.id };
+    const owner = { kind: "acquisition" as const, id: acquisition.id };
     if (reservation.existing) {
       if (!isDeepStrictEqual(portableAcquisition(reservation.existing), acquisition))
         throw new CatalogError(
@@ -1096,7 +1096,7 @@ export class AcquisitionImporter {
         // Native verifies ordinary completion or the private recovered-support basis. The
         // normalized journal keeps its original disposition, including any untrusted completion.
         indexed = await this.evidence.ingest({
-          owner: { kind: "acquisition", acquisitionId },
+          owner: { kind: "acquisition", id: acquisitionId },
           sourceId,
           generation: attemptId,
           file: output,
@@ -1281,7 +1281,7 @@ export class AcquisitionImporter {
           .get(entry.name);
         const metadata = row?.metadata ? (JSON.parse(row.metadata as string) as Acquisition) : null;
         if (!metadata) {
-          await this.evidence.purge({ kind: "acquisition", acquisitionId: entry.name }, signal);
+          await this.evidence.purge({ kind: "acquisition", id: entry.name }, signal);
           this.assets.release({ kind: "acquisition", id: entry.name });
           await rm(join(this.directory, entry.name), { recursive: true, force: true });
           if (row) {
@@ -1308,7 +1308,7 @@ export class AcquisitionImporter {
         if (!pending.length) break;
         for (const intent of pending) {
           signal.throwIfAborted();
-          await this.evidence.purge({ kind: "acquisition", acquisitionId: intent.id }, signal);
+          await this.evidence.purge({ kind: "acquisition", id: intent.id }, signal);
           this.assets.release({ kind: "acquisition", id: intent.id });
           this.store.discardPortable(intent.id, intent.requestId);
         }

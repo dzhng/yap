@@ -375,6 +375,6 @@ export function recordingCacheOwnerCheck(store: CaptureStore): (owner: JobOwner)
   return (owner) => {
     if (owner.kind !== "recording")
       throw new CatalogError("INVALID_REQUEST", "Expected a recording cache owner");
-    store.get(owner.recordingId);
+    store.get(owner.id);
   };
 }

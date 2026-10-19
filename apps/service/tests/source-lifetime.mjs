@@ -92,7 +92,7 @@ if (process.argv[2] === "--child") {
           pid,
           generation,
           jobId: submitted.data.jobId,
-          acquisitionId: submitted.data.target.acquisitionId,
+          acquisitionId: submitted.data.target.id,
         });
         await new Promise(() => {});
       },
@@ -173,7 +173,7 @@ if (process.argv[2] === "--child") {
           const assets = new AssetStore(catalog, library),
             acquisitions = new AcquisitionStore(catalog);
           const evidence = new SourceEvidenceStore(catalog, (identity) =>
-            acquisitions.intent(identity.owner.acquisitionId),
+            acquisitions.intent(identity.owner.id),
           );
           const importer = new AcquisitionImporter(
             catalog,

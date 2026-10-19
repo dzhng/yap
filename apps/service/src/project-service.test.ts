@@ -190,14 +190,14 @@ test("media.list exposes imported titles and measured fields", async () => {
   expect(media).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        kind: "imported",
+        kind: "asset",
         title: "source.png",
         durationUs: 0,
         sizeBytes: 11,
       }),
     ]),
   );
-  expect(media.every((row) => !("id" in row) && !("bytes" in row))).toBe(true);
+  expect(media.every((row) => typeof row.id === "string" && !("bytes" in row))).toBe(true);
 });
 
 test("media.list sizeBytes uses the same measured bytes as deletion", async () => {
@@ -260,13 +260,11 @@ test("media.list sizeBytes uses the same measured bytes as deletion", async () =
   if (!listed.ok) throw new Error(JSON.stringify(listed));
   const media = (
     listed.data as {
-      media: { kind: string; assetId?: string; recordingId?: string; sizeBytes: number }[];
+      media: { kind: string; id: string; sizeBytes: number }[];
     }
   ).media;
-  expect(media.find((row) => row.assetId === assetId)?.sizeBytes).toBe(assetMeasured);
-  expect(media.find((row) => row.recordingId === recording.recordingId)?.sizeBytes).toBe(
-    recordingMeasured,
-  );
+  expect(media.find((row) => row.id === assetId)?.sizeBytes).toBe(assetMeasured);
+  expect(media.find((row) => row.id === recording.recordingId)?.sizeBytes).toBe(recordingMeasured);
 
   const assetDeleted = await f.call("asset.delete", {
     requestId: "media-size-delete-asset",
@@ -431,7 +429,7 @@ test("wired LibraryUsers reports the project bytes that real project deletion re
   const before = Number((await stat(cachePath)).size);
   const details = f.service.libraryUsers!.usersOf({ kind: "recording", id: "recording-1" });
   expect(details.usedBy).toEqual([
-    { kind: "project", projectId: project.projectId, title: "Untitled", revisions: 1 },
+    { kind: "project", id: project.projectId, title: "Untitled", revisions: 1 },
   ]);
   expect(details.cascadeFreesBytes).toBe(before);
   const totalBefore = Number((await stat(cachePath)).size);
@@ -2226,7 +2224,7 @@ test("asset job and cache presence checks preserve source validation without hyd
     jobId = (frame.data as { jobId: string }).jobId;
     expect(await f.job(jobId, "failed")).toMatchObject({
       jobId,
-      target: { kind: "asset", assetId },
+      target: { kind: "asset", id: assetId },
       reason: "offline",
       retryable: true,
       errorCode: "MEDIA_WORKER_UNAVAILABLE",
@@ -2274,7 +2272,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       });
       expect(await f.job(jobId!, "ready")).toMatchObject({
         jobId: jobId!,
-        target: { kind: "asset", assetId },
+        target: { kind: "asset", id: assetId },
         published: {
           output: {
             assetId,
@@ -2771,7 +2769,7 @@ test("a persisted queued voice request reaches its initialized owner after start
     targets: {
       pin: (target) => {
         if (target.kind !== "asset") throw Error("asset");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
       isAvailable: () => true,

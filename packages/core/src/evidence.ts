@@ -5,16 +5,14 @@ import { CatalogError, type Catalog } from "./catalog.js";
 import { SourceEvidenceReader, type RecordQuery, type EvidenceIndex } from "./evidence-read.js";
 import { compare, fromTime, selectionRangeSchema, type SelectionRange } from "@yap/composition";
 
-export type EvidenceOwner =
-  | Readonly<{ kind: "recording"; recordingId: string }>
-  | Readonly<{ kind: "acquisition"; acquisitionId: string }>;
+export type EvidenceOwner = Readonly<{ kind: "recording" | "acquisition"; id: string }>;
 export function evidenceOwnerKey(owner: EvidenceOwner): [EvidenceOwner["kind"], string] {
-  return [owner.kind, owner.kind === "recording" ? owner.recordingId : owner.acquisitionId];
+  return [owner.kind, owner.id];
 }
 export function recordingEvidenceOwner(store: CaptureStore): (identity: EvidenceIdentity) => void {
   return ({ owner, sourceId }) => {
     if (owner.kind !== "recording") invalid("Recording evidence requires a recording owner");
-    const recording = store.get(owner.recordingId);
+    const recording = store.get(owner.id);
     if (recording.state === "canceled" || recording.sourceId !== sourceId)
       invalid("Recording identity no longer accepts evidence");
   };
@@ -22,7 +20,7 @@ export function recordingEvidenceOwner(store: CaptureStore): (identity: Evidence
 /** Recording-domain readers must reject evidence owned by an acquisition. */
 export function evidenceRecordingId(identity: EvidenceIdentity): string {
   if (identity.owner.kind !== "recording") invalid("Evidence requires a recording owner");
-  return identity.owner.recordingId;
+  return identity.owner.id;
 }
 export type EvidenceIdentity = Readonly<{
   owner: EvidenceOwner;

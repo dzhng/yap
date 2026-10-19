@@ -96,10 +96,10 @@ export async function fixture(
   });
   const projects = new ProjectStore(catalog, assets, transcriptRecords, acquisitions),
     cache = new DerivedCache(catalog, home, (owner) => {
-      if (owner.kind === "asset") assets.get(owner.assetId);
+      if (owner.kind === "asset") assets.get(owner.id);
       else {
         assert.equal(owner.kind, "project");
-        projects.get(owner.projectId);
+        projects.get(owner.id);
       }
     });
   await cache.reconcile();
@@ -121,19 +121,19 @@ export async function fixture(
     targets: {
       pin(target) {
         if (target.kind === "asset") {
-          assets.get(target.assetId);
+          assets.get(target.id);
           return target;
         }
         assert.equal(target.kind, "project");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).revisionId,
         };
       },
       isAvailable: (target) =>
-        (target.kind === "asset" && assets.has(target.assetId)) ||
-        (target.kind === "project" && !projects.isDeleting(target.projectId)),
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+        (target.kind === "asset" && assets.has(target.id)) ||
+        (target.kind === "project" && !projects.isDeleting(target.id)),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: (execution) =>
@@ -229,7 +229,7 @@ export async function fixture(
   const delivery = new DerivativeDelivery();
   const evidence = new SourceEvidenceStore(catalog, (identity) => {
     assert.equal(identity.owner.kind, "acquisition");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const acquisitionImports = new AcquisitionImporter(catalog, acquisitions, assets, evidence, home);
   sceneProcessing = new SceneProcessing({

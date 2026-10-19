@@ -69,7 +69,7 @@ async function fixture(emptyAt?: number, allEmpty = false) {
   const selected = selectSource(assets, acquisitions, { assetId: asset.id, streamId: "v" });
   let scenes = new SceneEvidenceStore(catalog, assetSceneOwner(assets, acquisitions));
   const sceneId = {
-    owner: { kind: "asset" as const, assetId: asset.id },
+    owner: { kind: "asset" as const, id: asset.id },
     sourceId: asset.id,
     generation: "scene",
     policy: sourceScenePolicy,
@@ -285,7 +285,7 @@ test("source support cannot be mislabeled unavailable and incomplete generations
   ).toThrow("overlaps");
   await expect(f.index.finish(f.identity)).rejects.toThrow("incomplete");
   expect(() => f.index.page({ identity: f.identity })).toThrow("complete");
-  await f.index.reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false);
+  await f.index.reclaim({ kind: "asset", id: f.identity.assetId }, () => false);
   expect(f.catalog.catalog.prepare("SELECT * FROM screenshot_index_generations").all()).toEqual([]);
 });
 
@@ -332,7 +332,7 @@ test("asset and project indexes with equal fixture IDs and attempts reclaim inde
   retained.begin(identity);
   const path = retained.outputPath(identity, 0);
   await writeFile(path, png);
-  await f.index.reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false);
+  await f.index.reclaim({ kind: "asset", id: f.identity.assetId }, () => false);
   expect(await readFile(retained.outputPath(identity, 0))).toEqual(png);
   expect(
     f.catalog.catalog
@@ -428,7 +428,7 @@ test("demanded empty-picture coverage retains verified provenance after the job 
   const f = await fixture();
   const cache = new DerivedCache(f.catalog, f.home, (owner) => {
     if (owner.kind !== "asset") throw new Error("asset only");
-    f.assets.get(owner.assetId);
+    f.assets.get(owner.id);
   });
   await cache.reconcile();
   let frames!: MediaFrameInspection;
@@ -616,7 +616,7 @@ test("portable source index stages real PNGs, publishes atomically, replays, and
       validation(),
     ),
   ).rejects.toThrow();
-  expect(receiver.index.portableGenerations({ kind: "asset", assetId: metadata.assetId })).toEqual([
+  expect(receiver.index.portableGenerations({ kind: "asset", id: metadata.assetId })).toEqual([
     metadata,
   ]);
   async function* corruptRecords(): AsyncGenerator<PortableIndexRecord<SourceIndexRecords>> {
@@ -631,7 +631,7 @@ test("portable source index stages real PNGs, publishes atomically, replays, and
       validation(),
     ),
   ).rejects.toThrow("differs from inventory");
-  expect(receiver.index.portableGenerations({ kind: "asset", assetId: metadata.assetId })).toEqual([
+  expect(receiver.index.portableGenerations({ kind: "asset", id: metadata.assetId })).toEqual([
     metadata,
   ]);
   async function* wrongGeometry(): AsyncGenerator<PortableIndexRecord<SourceIndexRecords>> {
@@ -666,7 +666,7 @@ test("portable source index stages real PNGs, publishes atomically, replays, and
   await receiver.index.stagePortable(pendingIdentity, records(), signal, validation());
   receiver.reopen();
   await receiver.index.recoverPending("asset", signal);
-  expect(receiver.index.portableGenerations({ kind: "asset", assetId: metadata.assetId })).toEqual([
+  expect(receiver.index.portableGenerations({ kind: "asset", id: metadata.assetId })).toEqual([
     metadata,
   ]);
   expect(() => receiver.index.page({ identity: pendingIdentity })).toThrow("does not match");
@@ -710,7 +710,7 @@ test("retained index validation yields to a real cancellation timer before publi
     }),
   ).rejects.toThrow();
   expect(controller.signal.aborted).toBe(true);
-  expect(f.index.portableGenerations({ kind: "asset", assetId: f.identity.assetId })).toEqual([]);
+  expect(f.index.portableGenerations({ kind: "asset", id: f.identity.assetId })).toEqual([]);
 });
 
 test("an index cannot retain a plain frame when its recipe requested picture measurements", async () => {

@@ -55,9 +55,9 @@ test("actual usage includes partial, canceled and deleting bytes and separates s
   await file(join(root, "source", "unfinished.mov"), 17);
   await file(join(root, "evidence", "staging", "unpublished.jsonl"), 19);
   await file(join(root, "unclassified.bin"), 7);
-  const pending = cache.reserve({ kind: "recording", recordingId: take.recordingId });
+  const pending = cache.reserve({ kind: "recording", id: take.recordingId });
   await file(pending.path, 13);
-  const ready = cache.reserve({ kind: "recording", recordingId: take.recordingId });
+  const ready = cache.reserve({ kind: "recording", id: take.recordingId });
   await file(ready.path, 11);
   await cache.publish(ready.id);
   // Actual bytes can differ from metadata while a producer is still writing.
@@ -148,7 +148,7 @@ test("large file and reservation inventories yield while unrelated catalog reads
   const other = store.allocate().recording;
   for (let i = 0; i < 350; i++) {
     await file(join(home, "recordings", take.recordingId, "evidence", `${i}.json`), 2);
-    await file(cache.reserve({ kind: "recording", recordingId: take.recordingId }).path, 3);
+    await file(cache.reserve({ kind: "recording", id: take.recordingId }).path, 3);
   }
   let done = false,
     reads = 0;
@@ -418,7 +418,7 @@ test("completed deletion refuses a new per-record waiter even while an older obs
 
 test("live inspection tolerates actual LRU eviction while preserving another recording's new file", async () => {
   const { store, cache, storage, take, file } = await fixture(5);
-  const old = cache.reserve({ kind: "recording", recordingId: take.recordingId });
+  const old = cache.reserve({ kind: "recording", id: take.recordingId });
   await file(old.path, 3);
   await cache.publish(old.id);
   const sibling = store.allocate().recording;
@@ -441,7 +441,7 @@ test("live inspection tolerates actual LRU eviction while preserving another rec
   void inspection.catch(() => {});
   try {
     await opening;
-    const next = cache.reserve({ kind: "recording", recordingId: sibling.recordingId });
+    const next = cache.reserve({ kind: "recording", id: sibling.recordingId });
     await file(next.path, 4);
     // Publishing through the real owner exceeds its budget and evicts the oldest unpinned file.
     await cache.publish(next.id);
@@ -464,7 +464,7 @@ test("shared-library aggregation counts registered cache bytes and retains unown
   const first = await storage.usage();
   await file(join(home, "assets", "retained.bin"), 11);
   await file(join(home, "recordings", take.recordingId, "source", "residue.bin"), 13);
-  const cached = cache.reserve({ kind: "recording", recordingId: take.recordingId });
+  const cached = cache.reserve({ kind: "recording", id: take.recordingId });
   await file(cached.path, 17);
   await file(join(home, "cache", "derived", "unregistered.tmp"), 19);
   await file(join(home, "models", "weights.bin"), 1000);

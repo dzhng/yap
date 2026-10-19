@@ -41,7 +41,7 @@ function fixture(execute: JobExecutor) {
     rmSync(home, { recursive: true, force: true });
   });
   const request = {
-    target: { kind: "project" as const, projectId: "p", revisionId: "r" },
+    target: { kind: "project" as const, id: "p", revisionId: "r" },
     artifact: "prepared-audio",
     input: "recipe",
     lane: "heavy" as const,

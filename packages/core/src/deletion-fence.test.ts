@@ -113,7 +113,7 @@ test("jobs.retainInputs refuses a tombstoned asset and succeeds after clearing",
     expect(() =>
       queue.submit(
         {
-          target: { kind: "asset", assetId: f.asset.id },
+          target: { kind: "asset", id: f.asset.id },
           artifact: "test",
           lane: "frame",
           input: "x",
@@ -124,7 +124,7 @@ test("jobs.retainInputs refuses a tombstoned asset and succeeds after clearing",
     plans.clear("asset", f.asset.id);
     const retry = queue.submit(
       {
-        target: { kind: "asset", assetId: f.asset.id },
+        target: { kind: "asset", id: f.asset.id },
         artifact: "test-2",
         lane: "frame",
         input: "x",

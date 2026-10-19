@@ -38,20 +38,20 @@ export type JobAdmission = (
 ) => { state: "ready" } | { state: "waiting"; dependency: string };
 
 /** A preparation request exists before its result asset; revisions name immutable project/take inputs. */
-export type JobOwner =
-  | Readonly<{ kind: "import"; importId: string }>
-  | Readonly<{ kind: "asset"; assetId: string }>
-  | Readonly<{ kind: "acquisition"; acquisitionId: string }>
-  | Readonly<{ kind: "project"; projectId: string }>
-  | Readonly<{ kind: "recording"; recordingId: string }>;
+type OwnerKind = "import" | "asset" | "acquisition" | "project" | "recording";
+/** A reference to one owner of each named kind; checking `kind` narrows it. */
+export type Owner<Kind extends OwnerKind> = Kind extends OwnerKind
+  ? Readonly<{ kind: Kind; id: string }>
+  : never;
+export type JobOwner = Owner<OwnerKind>;
 /** Recording work selects settled source lifetime; only projects carry edit revisions. */
 export type JobTarget =
-  | Extract<JobOwner, { kind: "import" | "asset" | "acquisition" }>
-  | (Extract<JobOwner, { kind: "project" }> & Readonly<{ revisionId: string }>)
-  | (Extract<JobOwner, { kind: "recording" }> & Readonly<{ revisionId: null }>);
+  | Owner<"import" | "asset" | "acquisition">
+  | (Owner<"project"> & Readonly<{ revisionId: string }>)
+  | (Owner<"recording"> & Readonly<{ revisionId: null }>);
 export type JobRequestTarget =
   | Exclude<JobTarget, { kind: "recording" }>
-  | (Extract<JobOwner, { kind: "recording" }> & Readonly<{ revisionId?: string | null }>);
+  | (Owner<"recording"> & Readonly<{ revisionId?: string | null }>);
 
 /** Domain owners validate existence and deletion intent in the same catalog transaction as admission. */
 export type JobTargets = {
@@ -190,41 +190,20 @@ type TargetRow = { targetKind: JobOwner["kind"]; targetId: string; revisionId: s
 type JobRow = Omit<Job, "target" | "retryable" | "errorDetails"> &
   TargetRow & { retryable: number; errorDetails: string | null };
 type ArtifactRow = Omit<Artifact, "target"> & TargetRow;
+/** An owner's catalog key, as its `kind`/`id` column pair. */
 export function ownerIdentity(owner: JobOwner): [JobOwner["kind"], string] {
-  switch (owner.kind) {
-    case "import":
-      return [owner.kind, owner.importId];
-    case "asset":
-      return [owner.kind, owner.assetId];
-    case "acquisition":
-      return [owner.kind, owner.acquisitionId];
-    case "project":
-      return [owner.kind, owner.projectId];
-    case "recording":
-      return [owner.kind, owner.recordingId];
-  }
-}
-function targetValues(target: JobTarget): [JobOwner["kind"], string, string] {
-  return [...ownerIdentity(target), "revisionId" in target ? (target.revisionId ?? "") : ""];
+  return [owner.kind, owner.id];
 }
 export function ownerFromIdentity(kind: JobOwner["kind"], id: string): JobOwner {
-  switch (kind) {
-    case "import":
-      return { kind, importId: id };
-    case "asset":
-      return { kind, assetId: id };
-    case "acquisition":
-      return { kind, acquisitionId: id };
-    case "project":
-      return { kind, projectId: id };
-    case "recording":
-      return { kind, recordingId: id };
-  }
+  return { kind, id };
+}
+function targetValues(target: JobTarget): [JobOwner["kind"], string, string] {
+  return [target.kind, target.id, "revisionId" in target ? (target.revisionId ?? "") : ""];
 }
 function targetFrom({ targetKind, targetId, revisionId }: TargetRow): JobTarget {
-  const owner = ownerFromIdentity(targetKind, targetId);
-  if (owner.kind === "recording") return { ...owner, revisionId: null };
-  return owner.kind === "project" ? { ...owner, revisionId } : owner;
+  if (targetKind === "recording") return { kind: targetKind, id: targetId, revisionId: null };
+  if (targetKind === "project") return { kind: targetKind, id: targetId, revisionId };
+  return { kind: targetKind, id: targetId };
 }
 function toArtifact(stored: ArtifactRow & { attemptId?: string }): Artifact {
   const { targetKind, targetId, revisionId, ...row } = omit(stored, "attemptId");
@@ -239,10 +218,7 @@ function toJob({ targetKind, targetId, revisionId, ...row }: JobRow): Job {
   };
 }
 function sameOwner(first: JobOwner | undefined, second: JobOwner): boolean {
-  return (
-    first !== undefined &&
-    ownerIdentity(first).every((value, index) => value === ownerIdentity(second)[index])
-  );
+  return first !== undefined && first.kind === second.kind && first.id === second.id;
 }
 
 /** Copy only bounded JSON data; never execute diagnostic getters or toJSON hooks. */

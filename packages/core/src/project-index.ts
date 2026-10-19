@@ -247,7 +247,7 @@ export function projectIndexDomain(
     return active;
   }
   return {
-    owner: (identity) => ({ kind: "project", projectId: identity.projectId }),
+    owner: (identity) => ({ kind: "project", id: identity.projectId }),
     pin: (identity) => ({
       projectId: identity.projectId,
       revisionId: identity.revisionId,
@@ -278,7 +278,7 @@ export function projectIndexDomain(
         if (dependency.owner.kind !== "asset" || dependency.source.kind !== "asset")
           invalid("Project scenes require a selected video source");
         const selection = {
-          assetId: dependency.owner.assetId,
+          assetId: dependency.owner.id,
           streamId: dependency.source.streamId,
           ...(dependency.source.acquisitionId === undefined
             ? {}
@@ -367,7 +367,7 @@ export function projectIndexDomain(
         invalid("A nonempty project index requires a delivered picture");
       active = undefined;
     },
-    isDeleting: (owner) => owner.kind === "project" && read.isDeleting(owner.projectId),
+    isDeleting: (owner) => owner.kind === "project" && read.isDeleting(owner.id),
     retainedFrame: retainedProjectFrameSchema,
   };
 }

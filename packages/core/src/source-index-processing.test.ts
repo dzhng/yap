@@ -238,7 +238,7 @@ test("source index execution rechecks current authority before cancellation", as
   f.scenes.prepareSource(selection);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: selection.assetId },
+    target: { kind: "asset", id: selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",
@@ -278,7 +278,7 @@ test("source index target mismatch refuses before metadata lookup and cancellati
   f.scenes.prepareSource(selection);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: selection.assetId },
+    target: { kind: "asset", id: selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",
@@ -287,7 +287,7 @@ test("source index target mismatch refuses before metadata lookup and cancellati
   const original = f.jobs.job(queued.jobId!);
   const job = {
     ...original,
-    target: { kind: "asset" as const, assetId: "missing-target" },
+    target: { kind: "asset" as const, id: "missing-target" },
     input: encodeIndexRecord({ ...JSON.parse(original.input), assetId: "missing-input" }),
   };
   const { work, restore } = observeSourceMetadata(f);
@@ -438,7 +438,7 @@ test("queued index pins its exact old scene generation across regeneration then 
   await f.jobs.idle();
   const otherScene = f.scenes.sourceStatus(other).published!.evidence;
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     input: "barrier",
     lane: "heavy",
@@ -551,7 +551,7 @@ test("explicit index retry recovers a canceled scene prerequisite without read-t
     },
   });
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",

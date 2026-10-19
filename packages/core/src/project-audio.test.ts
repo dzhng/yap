@@ -85,7 +85,7 @@ async function fixture(
     home,
     (owner) => {
       if (owner.kind !== "project") throw new Error("project expected");
-      projects.get(owner.projectId);
+      projects.get(owner.id);
     },
     budget,
   );
@@ -100,11 +100,11 @@ async function fixture(
         if (target.kind !== "project") throw new Error("project expected");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).revisionId,
         };
       },
-      isAvailable: (owner) => owner.kind === "project" && !projects.isDeleting(owner.projectId),
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isAvailable: (owner) => owner.kind === "project" && !projects.isDeleting(owner.id),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: (execution) =>

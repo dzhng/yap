@@ -25,8 +25,8 @@ import {
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const evidenceIdentitySchema = z.strictObject({
   owner: z.discriminatedUnion("kind", [
-    z.strictObject({ kind: z.literal("recording"), recordingId: z.string().min(1).max(256) }),
-    z.strictObject({ kind: z.literal("acquisition"), acquisitionId: z.string().min(1).max(256) }),
+    z.strictObject({ kind: z.literal("recording"), id: z.string().min(1).max(256) }),
+    z.strictObject({ kind: z.literal("acquisition"), id: z.string().min(1).max(256) }),
   ]),
   sourceId: z.string().min(1).max(256),
   generation: z.string().min(1).max(256),

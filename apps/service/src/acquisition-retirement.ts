@@ -31,11 +31,11 @@ export function acquisitionRetirement(owners: AcquisitionRetirementOwners): Dele
         .dependencies({ kind: "acquisition", id: subject.id })
         .filter((resource) => resource.kind === "asset")
         .map((resource) => ({ memberKind: "asset", memberId: resource.id })),
-    drain: (subject) => owners.jobs.drainOwner({ kind: "acquisition", acquisitionId: subject.id }),
+    drain: (subject) => owners.jobs.drainOwner({ kind: "acquisition", id: subject.id }),
     files: (subject, signal) => owners.importer.purge(subject.id, signal),
     rows: async (subject, signal) => {
       signal.throwIfAborted();
-      await owners.jobs.forgetOwner({ kind: "acquisition", acquisitionId: subject.id });
+      await owners.jobs.forgetOwner({ kind: "acquisition", id: subject.id });
       if (references.releaseOwnerPage({ kind: "acquisition", id: subject.id }) === 256)
         return false;
       if (references.releaseResourcePage("acquisition", subject.id) === 256) return false;

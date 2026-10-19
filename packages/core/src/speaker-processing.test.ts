@@ -126,7 +126,7 @@ async function fixture() {
     targets: {
       pin: (v) => {
         if (v.kind !== "asset") throw new Error("expected asset");
-        assets.get(v.assetId);
+        assets.get(v.id);
         return v;
       },
       isAvailable: () => !control.deleting,
@@ -207,7 +207,7 @@ test("cancellation drains a held worker and explicit retry publishes a fresh gen
   expect(f.processing.sourceStatus(f.input).published).toBeNull();
   expect(() =>
     f.evidence.metadata({
-      owner: { kind: "asset", assetId: f.input.assetId },
+      owner: { kind: "asset", id: f.input.assetId },
       sourceId: f.input.assetId,
       generation: first,
       policy: "speaker-v1",
@@ -227,7 +227,7 @@ test("native refusals retain exact original operands but never expose ready inte
   const status = f.processing.sourceStatus(f.input),
     job = f.jobs.job(status.jobId!);
   const identity = {
-    owner: { kind: "asset" as const, assetId: f.input.assetId },
+    owner: { kind: "asset" as const, id: f.input.assetId },
     sourceId: f.input.assetId,
     generation: job.attemptId,
     policy: "speaker-v1" as const,

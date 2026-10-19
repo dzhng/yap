@@ -10,12 +10,12 @@ export type LibraryUserSubject = {
 };
 export type LibraryUserProject = {
   kind: "project";
-  projectId: string;
+  id: string;
   title: string;
   revisions: number;
 };
-export type LibraryUserAcquisition = { kind: "acquisition"; acquisitionId: string };
-export type LibraryUserDerivedAsset = { kind: "asset"; assetId: string };
+export type LibraryUserAcquisition = { kind: "acquisition"; id: string };
+export type LibraryUserDerivedAsset = { kind: "asset"; id: string };
 export type LibraryUsersResult = {
   usedBy: LibraryUserProject[];
   acquisitions: LibraryUserAcquisition[];
@@ -62,11 +62,11 @@ export class LibraryUsers {
     const usedBy = [...projectIds]
       .map((projectId) => this.projectUser(projectId))
       .filter((project): project is LibraryUserProject => project !== null)
-      .sort((a, b) => a.projectId.localeCompare(b.projectId));
+      .sort((a, b) => a.id.localeCompare(b.id));
     const acquisitions = [...acquisitionIds]
       .filter((id) => id !== subject.id || subject.kind !== "acquisition")
       .sort()
-      .map((acquisitionId) => ({ kind: "acquisition" as const, acquisitionId }));
+      .map((acquisitionId) => ({ kind: "acquisition" as const, id: acquisitionId }));
     const recordingAssetIds =
       subject.kind === "recording"
         ? new Set(
@@ -82,13 +82,13 @@ export class LibraryUsers {
       .filter((id) => id !== subject.id || subject.kind !== "asset")
       .filter((id) => !recordingAssetIds?.has(id))
       .sort()
-      .map((assetId) => ({ kind: "asset" as const, assetId }));
+      .map((assetId) => ({ kind: "asset" as const, id: assetId }));
     const ownPaths = this.subjectPaths(subject);
     const cascadePaths = new Set(ownPaths);
     for (const assetId of assetIds) this.addAssetPath(cascadePaths, assetId);
     for (const acquisitionId of acquisitionIds)
       this.addAcquisitionPath(cascadePaths, acquisitionId);
-    for (const project of usedBy) this.addProjectPath(cascadePaths, project.projectId);
+    for (const project of usedBy) this.addProjectPath(cascadePaths, project.id);
     const freePaths = new Set<string>();
     for (const path of ownPaths) freePaths.add(path);
     for (const assetId of assetIds) {
@@ -192,7 +192,7 @@ export class LibraryUsers {
       return null;
     return {
       kind: "project",
-      projectId: row.projectId,
+      id: row.projectId,
       title: row.title,
       revisions: row.revisions,
     };
@@ -230,7 +230,7 @@ export class LibraryUsers {
       .prepare("SELECT projectId FROM project_revisions WHERE id=?")
       .get(revisionId) as { projectId: string } | undefined;
     if (!row) return null;
-    return this.projectUser(row.projectId)?.projectId ?? null;
+    return this.projectUser(row.projectId)?.id ?? null;
   }
 
   private subjectPaths(subject: LibraryUserSubject) {

@@ -167,7 +167,7 @@ test("bundled source index retains selected images, pinned continuation and cach
     library,
     (owner) => {
       assert.equal(owner.kind, "asset");
-      assert.ok(reopenedAssets.has(owner.assetId));
+      assert.ok(reopenedAssets.has(owner.id));
     },
     1,
   ).reconcile();

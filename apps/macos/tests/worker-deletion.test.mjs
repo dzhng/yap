@@ -242,8 +242,7 @@ test(
           assert.ok(active.length > 0);
           assert.ok(
             active.every(
-              (job) =>
-                job.targetKind === "acquisition" && job.targetId === importJob.target.acquisitionId,
+              (job) => job.targetKind === "acquisition" && job.targetId === importJob.target.id,
             ),
             JSON.stringify(active),
           );

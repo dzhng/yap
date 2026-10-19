@@ -121,7 +121,7 @@ async function fixture() {
     providers: { newId: randomUUID },
     targets: {
       pin: (v) => {
-        if (v.kind === "asset") assets.get(v.assetId);
+        if (v.kind === "asset") assets.get(v.id);
         else if (v.kind !== "project") throw new Error("expected media owner");
         return v;
       },
@@ -211,7 +211,7 @@ test("cancellation drains a held worker and explicit retry publishes a fresh gen
   expect(f.processing.sourceStatus(f.input).published).toBeNull();
   expect(() =>
     f.evidence.metadata({
-      owner: { kind: "asset", assetId: f.input.assetId },
+      owner: { kind: "asset", id: f.input.assetId },
       generation: first,
       policy: "alignment-v1",
     }),
@@ -291,13 +291,13 @@ test("project alignment uses a project job while retaining the prepared tap sour
   expect(pending.state).toMatch(/pending|processing/);
   expect(f.jobs.job(pending.jobId!).target).toEqual({
     kind: "project",
-    projectId: "project",
+    id: "project",
     revisionId: "revision",
   });
   await expect.poll(() => f.processing.prepareProject(request).state).toBe("ready");
   expect(f.processing.prepareProject(request).published?.evidence.owner).toEqual({
     kind: "asset",
-    assetId: f.input.assetId,
+    id: f.input.assetId,
   });
   const beforeCleanup = f.processing.prepareProject(request);
   await f.processing.cleanup(new AbortController().signal);

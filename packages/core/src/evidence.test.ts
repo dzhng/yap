@@ -21,7 +21,7 @@ function fixture(times = [0, 10, 10, 20]) {
   stores.push(store);
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.recordingId },
     sourceId: recording.sourceId,
     generation: "attempt-1",
   };
@@ -116,7 +116,7 @@ test("declared camera evidence cannot be indexed without its verified publicatio
       schemaVersion: 1,
       source: { kind: "camera" },
       cameraBinding: {
-        recordingId: f.identity.owner.recordingId,
+        recordingId: f.identity.owner.id,
         sourceId: f.identity.sourceId,
         deviceId: "fixture-camera",
       },
@@ -421,7 +421,7 @@ test("large streamed evidence pages seek through SQLite without reading the file
       "EXPLAIN QUERY PLAN SELECT sequence,content FROM source_evidence_records WHERE ownerKind='recording' AND ownerId=? AND sourceId=? AND generation=? AND event='cursorSample' AND sourceUs>=? AND sourceUs<? AND (sourceUs,sequence)>(?,?) ORDER BY sourceUs,sequence LIMIT ?",
     )
     .all(
-      f.identity.owner.recordingId,
+      f.identity.owner.id,
       f.identity.sourceId,
       f.identity.generation,
       24900,
@@ -766,11 +766,11 @@ test("recording purge reclaims complete and unfinished generations across restar
   const sibling = f.store.allocate().recording;
   f.store.catalog
     .prepare("INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)")
-    .run(f.identity.owner.recordingId, f.identity.sourceId, "unfinished");
+    .run(f.identity.owner.id, f.identity.sourceId, "unfinished");
   f.store.catalog
     .prepare("INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)")
     .run(sibling.recordingId, sibling.sourceId, "sibling");
-  f.store.markDeleting(f.identity.owner.recordingId);
+  f.store.markDeleting(f.identity.owner.id);
   f.store.close();
   const reopened = new CaptureStore(join(dirname(f.file), "library.sqlite"), {
     now: () => "",
@@ -795,7 +795,7 @@ test("purge yields even for empty generations and aborted cleanup can resume", a
       "INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)",
     );
     for (let i = 0; i < 130; i++)
-      insert.run(f.identity.owner.recordingId, f.identity.sourceId, `unfinished-${i}`);
+      insert.run(f.identity.owner.id, f.identity.sourceId, `unfinished-${i}`);
   });
   const controller = new AbortController();
   setImmediate(() => controller.abort());
@@ -816,7 +816,7 @@ test("source purge retains unfinished generation identity across an interrupted 
     .prepare(
       "UPDATE source_evidence_generations SET receipt=NULL WHERE ownerKind='recording' AND ownerId=?",
     )
-    .run(f.identity.owner.recordingId);
+    .run(f.identity.owner.id);
   const original = readFileSync(f.file);
   const controller = new AbortController();
   setImmediate(() => controller.abort());
@@ -826,7 +826,7 @@ test("source purge retains unfinished generation identity across an interrupted 
       .prepare("SELECT ownerId AS recordingId,sourceId,generation FROM source_evidence_generations")
       .get(),
   ).toEqual({
-    recordingId: f.identity.owner.recordingId,
+    recordingId: f.identity.owner.id,
     sourceId: f.identity.sourceId,
     generation: f.identity.generation,
   });
@@ -835,7 +835,7 @@ test("source purge retains unfinished generation identity across an interrupted 
       "SELECT ownerId AS recordingId,sequence FROM source_evidence_records ORDER BY sequence LIMIT 1",
     )
     .get() as { recordingId: string; sequence: number };
-  expect(remaining.recordingId).toBe(f.identity.owner.recordingId);
+  expect(remaining.recordingId).toBe(f.identity.owner.id);
   expect(remaining.sequence).toBeGreaterThan(1);
   await f.evidence.purge(f.identity.owner, new AbortController().signal);
   expect(f.store.catalog.prepare("SELECT sequence FROM source_evidence_records").all()).toEqual([]);

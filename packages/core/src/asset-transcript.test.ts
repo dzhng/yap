@@ -93,7 +93,7 @@ async function fixture(
     targets: {
       pin: (target) => {
         if (target.kind !== "asset") throw new Error("Unexpected owner");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
       isAvailable: () => true,

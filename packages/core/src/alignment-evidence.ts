@@ -19,7 +19,7 @@ import {
 import { selectAlignmentSource } from "./source-alignment.js";
 
 export const alignmentIdentitySchema = z.strictObject({
-  owner: z.strictObject({ kind: z.literal("asset"), assetId: z.string().regex(/^[a-f0-9]{64}$/) }),
+  owner: z.strictObject({ kind: z.literal("asset"), id: z.string().regex(/^[a-f0-9]{64}$/) }),
   generation: z.string().min(1).max(256),
   policy: z.literal("alignment-v1"),
 });
@@ -48,8 +48,8 @@ export const alignmentEvidenceMetadataSchema = alignmentCapturedMetadataSchema
 export type AlignmentEvidenceMetadata = z.infer<typeof alignmentEvidenceMetadataSchema>;
 export const alignmentGenerationResource = (
   identity: Pick<AlignmentEvidenceIdentity, "owner" | "generation">,
-) => JSON.stringify([identity.owner.kind, identity.owner.assetId, identity.generation]);
-const key = (v: AlignmentEvidenceIdentity) => [v.owner.assetId, v.generation, v.policy];
+) => JSON.stringify([identity.owner.kind, identity.owner.id, identity.generation]);
+const key = (v: AlignmentEvidenceIdentity) => [v.owner.id, v.generation, v.policy];
 const where = "ownerId=? AND generation=? AND policy=?";
 type Generation = {
   metadata: string;
@@ -175,7 +175,7 @@ export function assetAlignmentOwner(
 ) {
   return (identity: AlignmentEvidenceIdentity, source: AlignmentEvidenceSource) => {
     const selected = selectAlignmentSource(assets, acquisitions, {
-      assetId: identity.owner.assetId,
+      assetId: identity.owner.id,
       streamId: source.streamId,
       ...(source.acquisitionId === null ? {} : { acquisitionId: source.acquisitionId }),
       channel: source.channel,
@@ -464,7 +464,7 @@ export class AlignmentEvidenceStore {
       for (const row of rows) {
         signal?.throwIfAborted();
         const identity = {
-          owner: { kind: "asset" as const, assetId },
+          owner: { kind: "asset" as const, id: assetId },
           generation: row.generation,
           policy: row.policy,
         };
@@ -489,7 +489,7 @@ export class AlignmentEvidenceStore {
         )
         .get(assetId) as { generation: string; policy: "alignment-v1" } | undefined;
       if (!row) return;
-      this.remove({ owner: { kind: "asset", assetId }, ...row });
+      this.remove({ owner: { kind: "asset", id: assetId }, ...row });
     }
   }
   private row(identity: AlignmentEvidenceIdentity) {

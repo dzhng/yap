@@ -190,8 +190,8 @@ test("duplicate retains only the assets in the copied document", async () => {
     kind: "asset",
     id: secondAsset.id,
   });
-  expect(firstUsers.usedBy.map(({ projectId }) => projectId)).toEqual([source.project.projectId]);
-  expect(secondUsers.usedBy.map(({ projectId }) => projectId).sort()).toEqual(
+  expect(firstUsers.usedBy.map(({ id }) => id)).toEqual([source.project.projectId]);
+  expect(secondUsers.usedBy.map(({ id }) => id).sort()).toEqual(
     [source.project.projectId, copy.project.projectId].sort(),
   );
 });

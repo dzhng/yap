@@ -384,7 +384,7 @@ export class ProjectPackages {
       .filter(
         (resource): resource is Extract<PortableResource, { kind: "speaker-generation" }> =>
           resource.kind === "speaker-generation" &&
-          resource.metadata.owner.assetId === input.assetId &&
+          resource.metadata.owner.id === input.assetId &&
           resource.metadata.source.streamId === input.streamId &&
           resource.metadata.source.acquisitionId === (input.acquisitionId ?? null) &&
           resource.metadata.source.channel === input.channel &&
@@ -436,7 +436,7 @@ export class ProjectPackages {
     const resource = manifest.resources.find(
       (value): value is Extract<PortableResource, { kind: "alignment-generation" }> =>
         value.kind === "alignment-generation" &&
-        value.metadata.owner.assetId === assetId &&
+        value.metadata.owner.id === assetId &&
         value.metadata.generation === generation,
     );
     if (!resource) throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {});
@@ -574,7 +574,10 @@ export class ProjectPackages {
     const transcriptsForAsset = (assetId: string) => {
       const { generations, stale } = this.owners.transcriptRecords.portableGenerations(assetId);
       for (const generation of stale) {
-        const id = transcriptGenerationResource({ owner: { kind: "asset", assetId }, generation });
+        const id = transcriptGenerationResource({
+          owner: { kind: "asset", id: assetId },
+          generation,
+        });
         staleTranscripts.set(id, { kind: "transcript-generation", id });
       }
       return generations.map(addTranscript);
@@ -631,27 +634,29 @@ export class ProjectPackages {
       return identities;
     };
     const indexesForAsset = (assetId: string) =>
-      this.owners.indexRecords.portableGenerations({ kind: "asset", assetId }).map((metadata) => {
-        const resource: Extract<PortableDependency, { kind: "index-generation" }> = {
-          kind: "index-generation",
-          metadata: portableSourceIndexMetadataSchema.parse(metadata),
-          publication: this.owners.indexes.portableSource(metadata),
-        };
-        const identity = resourceIdentity(resource);
-        if (!indexInventory.has(identity.id)) {
-          const entries = metadata.candidateCount * 2 + metadata.coverageCount;
-          members += entries;
-          if (members >= archiveLimits.entries)
-            throw new CatalogError(
-              "LIMIT_EXCEEDED",
-              "Screenshot index inventory exceeds archive budget",
-            );
-          indexInventory.set(identity.id, resource);
-        }
-        return identity;
-      });
+      this.owners.indexRecords
+        .portableGenerations({ kind: "asset", id: assetId })
+        .map((metadata) => {
+          const resource: Extract<PortableDependency, { kind: "index-generation" }> = {
+            kind: "index-generation",
+            metadata: portableSourceIndexMetadataSchema.parse(metadata),
+            publication: this.owners.indexes.portableSource(metadata),
+          };
+          const identity = resourceIdentity(resource);
+          if (!indexInventory.has(identity.id)) {
+            const entries = metadata.candidateCount * 2 + metadata.coverageCount;
+            members += entries;
+            if (members >= archiveLimits.entries)
+              throw new CatalogError(
+                "LIMIT_EXCEEDED",
+                "Screenshot index inventory exceeds archive budget",
+              );
+            indexInventory.set(identity.id, resource);
+          }
+          return identity;
+        });
     for (const metadata of this.owners.projectIndexRecords.portableGenerations(
-      { kind: "project", projectId },
+      { kind: "project", id: projectId },
       undefined,
       snapshot.project.currentRevisionId === this.owners.projects.get(projectId).currentRevisionId
         ? undefined
@@ -773,7 +778,7 @@ export class ProjectPackages {
                 addTranscript(
                   portableTranscript(
                     this.owners.transcriptRecords.retainedGeneration(
-                      { owner: { kind: "asset", assetId: retained[1] }, generation: retained[2] },
+                      { owner: { kind: "asset", id: retained[1] }, generation: retained[2] },
                       { historical: true },
                     ),
                   ),
@@ -863,7 +868,7 @@ export class ProjectPackages {
                 [
                   resourceIdentity(resource).id,
                   indexGenerationResource(
-                    { kind: "project", projectId: adoption.project.projectId },
+                    { kind: "project", id: adoption.project.projectId },
                     resource.metadata.generation,
                   ),
                 ] as const,
@@ -1034,7 +1039,7 @@ export class ProjectPackages {
                   },
                   {
                     ...resource.metadata.track,
-                    source: assetPaths.get(resource.metadata.owner.assetId)!,
+                    source: assetPaths.get(resource.metadata.owner.id)!,
                     available: resource.available,
                   },
                   signal,

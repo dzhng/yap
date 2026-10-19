@@ -67,19 +67,19 @@ test("deletion drains canceled executors before releasing shared media; interrup
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        projects.revision(target.projectId, target.revisionId);
+        projects.revision(target.id, target.revisionId);
         return target;
       },
       isAvailable(target) {
         if (target.kind !== "project") return false;
         try {
-          projects.revision(target.projectId, target.revisionId);
+          projects.revision(target.id, target.revisionId);
           return true;
         } catch {
           return false;
         }
       },
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: async ({ signal }) => {
@@ -91,7 +91,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
   });
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new Error("Expected project cache owner");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   // Native filesystem deletion is the external seam; catalog, leases and lifetime are real.
@@ -185,16 +185,16 @@ test("deletion drains canceled executors before releasing shared media; interrup
       second = place(two);
     const target = {
       kind: "project" as const,
-      projectId: one.project.projectId,
+      id: one.project.projectId,
       revisionId: first.revision.revisionId,
     };
     const cached = cache.reserve(target);
     await writeFile(cached.path, "cached first project");
     await cache.publish(cached.id);
-    const sibling = cache.reserve({ kind: "project", projectId: two.project.projectId });
+    const sibling = cache.reserve({ kind: "project", id: two.project.projectId });
     await writeFile(sibling.path, "cached second project");
     await cache.publish(sibling.id);
-    const delivered = delivery.open({ kind: "project", id: target.projectId }, () =>
+    const delivered = delivery.open({ kind: "project", id: target.id }, () =>
       cache.acquire(cached.id),
     );
     const siblingDelivery = delivery.open({ kind: "project", id: two.project.projectId }, () =>
@@ -204,8 +204,8 @@ test("deletion drains canceled executors before releasing shared media; interrup
     releaseRead = () => read.release();
     const job = queue.submit({ target, artifact: "fixture", lane: "heavy", input: "input" });
     await started.promise;
-    const removing = deletion.delete({ kind: "project", id: target.projectId });
-    expect(deletion.delete({ kind: "project", id: target.projectId })).toBe(removing);
+    const removing = deletion.delete({ kind: "project", id: target.id });
+    expect(deletion.delete({ kind: "project", id: target.id })).toBe(removing);
     await aborted.promise;
     expect(await readFile(unfinishedPicture, "utf8")).toBe("unpublished worker output");
     expect(() => delivery.read(delivered.token, 0, 32)).toThrow(
@@ -220,7 +220,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
         .map((r) => r.id)
         .sort(),
     ).toEqual([first.revision.revisionId, second.revision.revisionId].sort());
-    expect(() => projects.get(target.projectId)).toThrow(/does not exist/);
+    expect(() => projects.get(target.id)).toThrow(/does not exist/);
     expect(() => queue.retry(job.jobId)).toThrow();
     const failed = expect(removing).rejects.toMatchObject({
       code: "DELETE_FAILED",
@@ -230,7 +230,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
     exit.resolve();
     await failed;
     await closing;
-    expect(projects.deletionsPage().projectIds).toEqual([target.projectId]);
+    expect(projects.deletionsPage().projectIds).toEqual([target.id]);
     const resumed = new LibraryDeletion(new DeletionPlans(catalog));
     resumed.register(
       projectRetirement({
@@ -251,7 +251,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
       expect(failures).toEqual([
         expect.objectContaining({ code: "DELETE_FAILED", retryable: true }),
       ]);
-      expect(projects.deletionsPage().projectIds).toEqual([target.projectId]);
+      expect(projects.deletionsPage().projectIds).toEqual([target.id]);
       expect(
         assets
           .references(asset.id)
@@ -277,7 +277,7 @@ test("deletion drains canceled executors before releasing shared media; interrup
           .prepare(
             "SELECT generation FROM screenshot_index_generations WHERE ownerKind='project' AND ownerId=?",
           )
-          .all(target.projectId),
+          .all(target.id),
       ).toEqual([]);
       expect(assets.references(asset.id)).toEqual([
         { kind: "revision", id: second.revision.revisionId },
@@ -285,8 +285,8 @@ test("deletion drains canceled executors before releasing shared media; interrup
       expect(assets.get(asset.id)).toEqual(asset);
       expect(() => queue.job(job.jobId)).toThrow(/not found|does not exist/i);
       expect(projects.revision(two.project.projectId)).toEqual(second.revision);
-      expect(await resumed.delete({ kind: "project", id: target.projectId })).toEqual({
-        projectId: target.projectId,
+      expect(await resumed.delete({ kind: "project", id: target.id })).toEqual({
+        projectId: target.id,
         deleted: true,
         freedBytes: 0,
       });
@@ -383,26 +383,26 @@ async function projectPlanFixture(home: string, fault?: DeletionFault) {
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        projects.revision(target.projectId, target.revisionId);
+        projects.revision(target.id, target.revisionId);
         return target;
       },
       isAvailable(target) {
         if (target.kind !== "project") return false;
         try {
-          projects.revision(target.projectId, target.revisionId);
+          projects.revision(target.id, target.revisionId);
           return true;
         } catch {
           return false;
         }
       },
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: async () => "ready",
   });
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new Error("Expected project cache owner");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   const deletion = new LibraryDeletion(

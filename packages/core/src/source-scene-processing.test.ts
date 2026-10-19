@@ -110,7 +110,7 @@ async function fixture(durationUs: TimeValue = 1000000) {
       targets: {
         pin(target) {
           if (target.kind !== "asset") throw new Error("expected asset");
-          assets.get(target.assetId);
+          assets.get(target.id);
           return target;
         },
         isAvailable: () => !control.deleting,
@@ -279,7 +279,7 @@ test("deletion waits for retained worker lifetime and canceled late results cann
   const jobId = f.processing.sourceStatus(f.selection).jobId!;
   f.control.deleting = true;
   let settled = false;
-  const drain = f.jobs.drainOwner({ kind: "asset", assetId: f.asset.id }).then(() => {
+  const drain = f.jobs.drainOwner({ kind: "asset", id: f.asset.id }).then(() => {
     settled = true;
   });
   await new Promise((resolve) => setTimeout(resolve, 10));

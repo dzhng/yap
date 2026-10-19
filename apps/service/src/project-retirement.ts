@@ -31,14 +31,14 @@ export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegi
       return retained;
     },
     drain: async (subject, signal) => {
-      const owner = { kind: "project" as const, projectId: subject.id };
+      const owner = { kind: "project" as const, id: subject.id };
       await owners.jobs.drainOwner(owner);
       signal.throwIfAborted();
       await owners.exports.retireOwner(owner, signal);
       signal.throwIfAborted();
     },
     files: async (subject, signal) => {
-      const owner = { kind: "project" as const, projectId: subject.id };
+      const owner = { kind: "project" as const, id: subject.id };
       await owners.index.reclaim(owner, () => false, signal);
       signal.throwIfAborted();
       await owners.cache.purgeOwner(owner, ({ ids, root }) =>
@@ -48,7 +48,7 @@ export function projectRetirement(owners: ProjectRetirementOwners): DeletionRegi
     },
     rows: async (subject, signal) => {
       signal.throwIfAborted();
-      await owners.jobs.forgetOwner({ kind: "project", projectId: subject.id });
+      await owners.jobs.forgetOwner({ kind: "project", id: subject.id });
       return owners.store.finishDeletionPage(subject.id);
     },
     markersPage: (afterId = "") => {

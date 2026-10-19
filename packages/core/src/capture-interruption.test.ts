@@ -39,7 +39,7 @@ async function fixture({
   const acquisitions = new AcquisitionStore(catalog);
   const records = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw Error("Wrong owner");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const importer = new AcquisitionImporter(catalog, acquisitions, assets, records, home);
   await importer.recover(new AbortController().signal);
@@ -47,7 +47,7 @@ async function fixture({
   const projects = projectStoreFixture(catalog, assets, home, acquisitions);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw Error("Wrong owner");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   let inspection: ProjectEvidenceInspection;
@@ -59,7 +59,7 @@ async function fixture({
         if (target.kind !== "project") throw Error("No model work expected");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).revisionId,
+          revisionId: projects.revision(target.id, target.revisionId).revisionId,
         };
       },
       isAvailable: () => true,

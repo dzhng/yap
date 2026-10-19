@@ -53,11 +53,11 @@ async function fixture(
             "INVALID_REQUEST",
             "Source coordinator fixture requires a source job",
           );
-        store.get(target.recordingId);
+        store.get(target.id);
         return { ...target, revisionId: null };
       },
-      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.recordingId),
-      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.recordingId),
+      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.id),
+      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.id),
       isCapturing: () => store.isCapturing(),
     },
     providers: { newId: randomUUID },
@@ -184,7 +184,7 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     };
   });
   const request = {
-    target: { kind: "recording" as const, recordingId: target.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: target.recordingId, revisionId: null },
 
     lane: "frame" as const,
     artifact: "held",
@@ -215,7 +215,7 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
     const other = {
       ...request,
-      target: { ...request.target, recordingId: sibling.recordingId },
+      target: { ...request.target, id: sibling.recordingId },
       artifact: "other",
     };
     f.jobs.submit(other);
@@ -513,7 +513,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
     throw new CatalogError("INVALID_STATE", "Native closure not proven");
   };
   f.jobs.submit({
-    target: { kind: "recording" as const, recordingId: target.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: target.recordingId, revisionId: null },
 
     lane: "frame",
     artifact: "held",

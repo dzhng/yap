@@ -319,15 +319,12 @@ test("same-path visual requests retain independent recording ownership and purge
     expected,
   );
   expect(f.calls()).toBe(2);
-  await f.cache.purgeOwner(
-    { kind: "recording", recordingId: request.recordingId },
-    async ({ ids }) => {
-      for (const id of ids) {
-        if (basename(id) !== id) throw new Error("Fixture refuses a nonlocal cache name");
-        await rm(join(f.home, "cache", "derived", `${id}.cache`), { force: true });
-      }
-    },
-  );
+  await f.cache.purgeOwner({ kind: "recording", id: request.recordingId }, async ({ ids }) => {
+    for (const id of ids) {
+      if (basename(id) !== id) throw new Error("Fixture refuses a nonlocal cache name");
+      await rm(join(f.home, "cache", "derived", `${id}.cache`), { force: true });
+    }
+  });
   expect(await observations.sample({ ...request, recordingId: sibling }, signal())).toEqual(
     expected,
   );

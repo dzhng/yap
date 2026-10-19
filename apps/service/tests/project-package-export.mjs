@@ -701,8 +701,8 @@ for (const kind of ["source", "project"])
           "index-generation",
           indexGenerationResource(
             kind === "source"
-              ? { kind: "asset", assetId: f.asset.id }
-              : { kind: "project", projectId: f.projectId },
+              ? { kind: "asset", id: f.asset.id }
+              : { kind: "project", id: f.projectId },
             old.generation,
           ),
         ],
@@ -752,7 +752,7 @@ for (const kind of ["source", "project"])
       kind === "source"
         ? old
         : recipientRecords
-            .portableGenerations({ kind: "project", projectId: adopted.published.output.projectId })
+            .portableGenerations({ kind: "project", id: adopted.published.output.projectId })
             .find((value) => value.generation === old.generation);
     assert.ok(adoptedMetadata);
     assert.deepEqual(

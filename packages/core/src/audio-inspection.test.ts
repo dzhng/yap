@@ -118,7 +118,7 @@ async function fixture(
     home,
     (owner) => {
       if (owner.kind !== "asset") throw new Error("Expected asset");
-      assets.get(owner.assetId);
+      assets.get(owner.id);
     },
     budget,
   );
@@ -133,7 +133,7 @@ async function fixture(
       targets: {
         pin(target) {
           if (target.kind !== "asset") throw new Error("Expected asset");
-          assets.get(target.assetId);
+          assets.get(target.id);
           pinHook();
           return target;
         },

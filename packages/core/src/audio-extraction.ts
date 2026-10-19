@@ -331,7 +331,7 @@ export class AudioExtraction {
             "projectId" in selected
               ? {
                   kind: "project",
-                  projectId: selected.projectId,
+                  id: selected.projectId,
                   revisionId: selected.revisionId,
                   range: selected.range,
                   tap: selected.tap,

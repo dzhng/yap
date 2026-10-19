@@ -1192,11 +1192,11 @@ it("resumes persisted queued cleanup only after the recording service owners and
       pin(target) {
         if (target.kind !== "recording" || target.revisionId !== null)
           throw new CatalogError("INVALID_REQUEST", "Cleanup seed requires a source target");
-        store.get(target.recordingId);
+        store.get(target.id);
         return { ...target, revisionId: null };
       },
-      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.recordingId),
-      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.recordingId),
+      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.id),
+      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.id),
       isCapturing: () => store.isCapturing(),
     },
     providers: { newId: randomUUID },
@@ -1206,7 +1206,7 @@ it("resumes persisted queued cleanup only after the recording service owners and
     },
   });
   const job = queue.submit({
-    target: { kind: "recording", recordingId, revisionId: null },
+    target: { kind: "recording", id: recordingId, revisionId: null },
     artifact: "capture-cleanup",
     lane: "heavy",
     input: sourceId,

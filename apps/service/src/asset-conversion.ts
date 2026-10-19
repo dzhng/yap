@@ -148,7 +148,7 @@ export class AssetConversionJobs {
       );
     const base = { assetId: asset.id, streamIds, recipe: input.recipe };
     const replay = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "asset-conversion",
       replayKey: digest(base),
     };
@@ -161,7 +161,7 @@ export class AssetConversionJobs {
         "Bundled HDR conversion runtime is unavailable",
       );
     const identity = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "asset-conversion",
       input: JSON.stringify({
         ...base,
@@ -185,7 +185,7 @@ export class AssetConversionJobs {
     if (
       job.artifact !== "asset-conversion" ||
       job.target.kind !== "asset" ||
-      job.target.assetId !== request.assetId ||
+      job.target.id !== request.assetId ||
       request.recipe !== "hdr-to-sdr-hable-1000nit-v1" ||
       !runtime ||
       !isDeepStrictEqual(implementationIdentity(runtime), request.runtime)

@@ -115,7 +115,7 @@ export async function publishControlledObservation(
       engine: models.speaker(input.modelId).engine,
     };
     const identity = {
-      owner: { kind: "asset" as const, assetId: input.assetId },
+      owner: { kind: "asset" as const, id: input.assetId },
       sourceId: input.assetId,
       generation: "retained-control-g1",
       policy: "speaker-v1" as const,

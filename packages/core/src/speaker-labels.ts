@@ -111,6 +111,6 @@ export class SpeakerLabelStore {
   }
 
   private key(identity: SpeakerEvidenceIdentity): [string, string, string, string] {
-    return [identity.owner.assetId, identity.sourceId, identity.generation, identity.policy];
+    return [identity.owner.id, identity.sourceId, identity.generation, identity.policy];
   }
 }

@@ -48,7 +48,7 @@ export class CaptureSources {
             sourceId,
           );
           return {
-            target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+            target: { kind: "acquisition", id: intent.acquisitionId },
             artifact: "acquisition.import",
             lane: "heavy",
             input: "capture",
@@ -99,7 +99,7 @@ export class CaptureSources {
       if (!imports.length) return;
       yield imports.flatMap((intent) => {
         const { jobId } = this.jobs.status({
-          target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+          target: { kind: "acquisition", id: intent.acquisitionId },
           artifact: "acquisition.import",
           input: intent.kind === "capture" ? "capture" : JSON.stringify(intent.files),
         });
@@ -197,7 +197,7 @@ export class CaptureSources {
     }
     const status = intent
       ? this.jobs.status({
-          target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+          target: { kind: "acquisition", id: intent.acquisitionId },
           artifact: "acquisition.import",
           input: "capture",
         })

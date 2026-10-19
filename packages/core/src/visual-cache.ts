@@ -93,7 +93,7 @@ export class VisualObservationCache {
     const assembled = combine(times, [existing, observed]);
     analyzeVisualSamples(assembled.samples);
     signal.throwIfAborted();
-    const output = this.cache.reserve({ kind: "recording", recordingId: request.recordingId });
+    const output = this.cache.reserve({ kind: "recording", id: request.recordingId });
     try {
       await writeFile(output.path, JSON.stringify(observed), { flag: "wx" });
       signal.throwIfAborted();

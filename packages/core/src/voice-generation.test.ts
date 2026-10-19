@@ -96,10 +96,10 @@ async function fixture(outputFrames = 6000) {
       targets: {
         pin: (target) => {
           if (target.kind !== "asset") throw Error("asset target required");
-          assets.get(target.assetId);
+          assets.get(target.id);
           return target;
         },
-        isAvailable: (target) => target.kind === "asset" && assets.has(target.assetId),
+        isAvailable: (target) => target.kind === "asset" && assets.has(target.id),
         isDeleting: () => false,
         isCapturing: () => false,
       },

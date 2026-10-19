@@ -475,7 +475,7 @@ export class ProjectEvidenceInspection {
       this.options.jobs,
       this.options.cache,
       {
-        target: { kind: "project", projectId: input.projectId, revisionId: plan.query.revisionId },
+        target: { kind: "project", id: input.projectId, revisionId: plan.query.revisionId },
         artifact,
         input: JSON.stringify({ query: plan.query, pins: digest(this.pins(dependencies)) }),
       },
@@ -500,7 +500,7 @@ export class ProjectEvidenceInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Project evidence needs a project target");
     const input = JSON.parse(job.input) as { query: Query; pins: string };
     const plan = this.plan(
-      { ...input.query, projectId: job.target.projectId, revisionId: job.target.revisionId },
+      { ...input.query, projectId: job.target.id, revisionId: job.target.revisionId },
       true,
     );
     const dependencies = this.dependencies(plan.selections, false, plan.query);
@@ -595,7 +595,7 @@ export class ProjectEvidenceInspection {
     if (Buffer.byteLength(body) > maximumBytes)
       throw new CatalogError("LIMIT_EXCEEDED", "Evidence checkpoint exceeds 8MiB");
     signal?.throwIfAborted();
-    const reservation = this.options.cache.reserve({ kind: "project", projectId });
+    const reservation = this.options.cache.reserve({ kind: "project", id: projectId });
     try {
       await writeFile(reservation.path, body, { flag: "wx" });
       signal?.throwIfAborted();

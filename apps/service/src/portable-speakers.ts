@@ -166,7 +166,7 @@ export function portableProjectSpeakers(
       for (const resource of resources) {
         const source = resource.metadata.source;
         if (
-          resource.metadata.owner.assetId === selection.assetId &&
+          resource.metadata.owner.id === selection.assetId &&
           source.streamId === selection.streamId &&
           source.acquisitionId === (selection.acquisitionId ?? null) &&
           source.channel === input.channel &&

@@ -74,7 +74,7 @@ export class SceneProcessing {
     implementationId: string,
   ) {
     return {
-      target: { kind: "asset" as const, assetId: selected.selection.assetId },
+      target: { kind: "asset" as const, id: selected.selection.assetId },
       artifact,
       input: JSON.stringify({
         selection: selected.selection,
@@ -99,7 +99,7 @@ export class SceneProcessing {
     if (metadata.owner.kind !== "asset" || metadata.source.kind !== "asset")
       throw new CatalogError("INVALID_PACKAGE", "Portable scenes require an asset owner");
     const selection = {
-      assetId: metadata.owner.assetId,
+      assetId: metadata.owner.id,
       streamId: metadata.source.streamId,
       ...(metadata.source.acquisitionId === undefined
         ? {}
@@ -179,7 +179,7 @@ export class SceneProcessing {
     return this.sourceStatus(selection);
   }
   private cleanupAsset(assetId: string, signal: AbortSignal) {
-    const owner = { kind: "asset" as const, assetId };
+    const owner = { kind: "asset" as const, id: assetId };
     return this.evidence.reclaim(
       owner,
       (generation) =>
@@ -213,14 +213,14 @@ export class SceneProcessing {
     const selection = sourceSelectionSchema.parse(JSON.parse(job.input).selection);
     const selected = this.selected(selection);
     if (
-      job.target.assetId !== selection.assetId ||
+      job.target.id !== selection.assetId ||
       job.input !== this.sourceIdentity(selected, this.asset.implementationId).input
     )
       throw new CatalogError("ARTIFACT_CHANGED", "Scene source inputs changed");
     if (!selected.track.available.length) throw new CatalogError("UNAVAILABLE", "no_video");
     await this.cleanupAsset(selection.assetId, signal);
     const identity = {
-      owner: { kind: "asset" as const, assetId: selection.assetId },
+      owner: { kind: "asset" as const, id: selection.assetId },
       sourceId: selection.assetId,
       generation: job.attemptId,
       policy: sourceScenePolicy,

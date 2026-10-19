@@ -49,7 +49,7 @@ async function fixture(records: { event: string; data: Record<string, unknown> }
   });
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.recordingId },
     sourceId: recording.sourceId,
     generation: "fixture",
   };

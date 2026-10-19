@@ -50,7 +50,7 @@ export async function fixture(durationUs = 10_000_000) {
   const selected = selectSource(assets, acquisitions, selection);
   const scenes = new SceneEvidenceStore(catalog, assetSceneOwner(assets, acquisitions));
   const sceneIdentity = {
-    owner: { kind: "asset" as const, assetId: asset.id },
+    owner: { kind: "asset" as const, id: asset.id },
     sourceId: asset.id,
     generation: "scene-1",
     policy: sourceScenePolicy,

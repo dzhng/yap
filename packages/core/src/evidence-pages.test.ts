@@ -29,7 +29,7 @@ async function fixture() {
   stores.add(store);
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.recordingId },
     sourceId: recording.sourceId,
     generation: "source-1",
   };
@@ -382,14 +382,10 @@ test("raw cursor pages share source-time ordering and isolate package continuati
   ]);
   expect(second.nextCursor).toBeNull();
   expect(first.sourceRevisionId).toBe("r0");
-  const library = readRawCursor(
-    { recordingId: f.identity.owner.recordingId },
-    { sourceRange },
-    () => ({
-      metadata: f.metadata,
-      reader: f.evidence,
-    }),
-  );
+  const library = readRawCursor({ recordingId: f.identity.owner.id }, { sourceRange }, () => ({
+    metadata: f.metadata,
+    reader: f.evidence,
+  }));
   expect([...first.samples, ...second.samples]).toEqual(library.samples);
   expect(first.integrity).toEqual(library.integrity);
   // Another package or range is another filter set; other evidence is a stale pin.

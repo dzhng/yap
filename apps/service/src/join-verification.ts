@@ -101,7 +101,7 @@ export async function verifyJoin(
     throw new CatalogError("INVALID_PARAMS", "Join context does not overlap the project");
   const alignment = (assetId: string, generation: string, range: SelectionRange) => {
     const metadata = owners.alignments.metadata({
-      owner: { kind: "asset", assetId },
+      owner: { kind: "asset", id: assetId },
       generation,
       policy: "alignment-v1",
     });

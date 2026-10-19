@@ -430,19 +430,18 @@ test("proved native closure releases heavy work while deletion files and intent 
       pin(target) {
         if (target.kind !== "recording" || target.revisionId !== null)
           throw new Error("Expected source-owned capture work");
-        if (!store.isAvailable(target.recordingId))
-          throw new Error("Capture source is unavailable");
+        if (!store.isAvailable(target.id)) throw new Error("Capture source is unavailable");
         return { ...target, revisionId: null };
       },
-      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.recordingId),
-      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.recordingId),
+      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.id),
+      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.id),
       isCapturing: () => store.isCapturing(),
     },
     providers: { newId: randomUUID },
     execute: async () => "other recording processed",
   });
   const job = queue.submit({
-    target: { kind: "recording" as const, recordingId: other.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: other.recordingId, revisionId: null },
     artifact: "source",
     input: "other",
     lane: "heavy",

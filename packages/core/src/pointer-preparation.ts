@@ -86,7 +86,7 @@ export class PointerPreparation {
   }
   private identity(recipe: z.infer<typeof recipeSchema>) {
     return {
-      target: { kind: "acquisition" as const, acquisitionId: recipe.selection.acquisitionId },
+      target: { kind: "acquisition" as const, id: recipe.selection.acquisitionId },
       artifact: "pointer-presentation",
       input: JSON.stringify(recipe),
     };
@@ -179,7 +179,7 @@ export class PointerPreparation {
       job.artifact !== "pointer-presentation" ||
       job.target.kind !== "acquisition" ||
       !parsed.success ||
-      parsed.data.selection.acquisitionId !== job.target.acquisitionId
+      parsed.data.selection.acquisitionId !== job.target.id
     )
       throw new CatalogError(
         "UNSUPPORTED_JOB",

@@ -74,7 +74,11 @@ test.runIf(process.platform === "darwin")(
     operands.report += "\n";
     const records = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions)),
       staged = records.stage(
-        { owner: { kind: "asset", assetId }, generation: "portable-g1", policy: "alignment-v1" },
+        {
+          owner: { kind: "asset", id: assetId },
+          generation: "portable-g1",
+          policy: "alignment-v1",
+        },
         source,
         operands,
       );

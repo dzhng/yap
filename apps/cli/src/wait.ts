@@ -112,8 +112,14 @@ export async function waitForWork(options: {
     const result = await call("job.get", { jobId });
     if (result.ok) {
       const job = jobSummary.parse(result.data);
-      for (const key of ["assetId", "projectId", "revisionId"])
-        if (pins[key] !== undefined && job.target[key] !== pins[key])
+      // A job's target names what it works on; the waited response named the same thing.
+      const named = (kind: string) => (job.target.kind === kind ? job.target.id : undefined);
+      for (const [key, value] of [
+        ["assetId", named("asset")],
+        ["projectId", named("project")],
+        ["revisionId", job.target.revisionId],
+      ] as const)
+        if (pins[key] !== undefined && value !== pins[key])
           throw new ArtifactDeliveryError(
             "INVALID_RESPONSE",
             `Waiting job changed selected ${key}`,

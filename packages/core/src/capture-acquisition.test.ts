@@ -59,7 +59,7 @@ async function fixture() {
     await assets.recover();
     const evidence = new SourceEvidenceStore(captures, (identity) => {
       if (identity.owner.kind !== "acquisition") throw new Error("Wrong domain");
-      acquisitions.intent(identity.owner.acquisitionId);
+      acquisitions.intent(identity.owner.id);
     });
     const importer = new AcquisitionImporter(captures, acquisitions, assets, evidence, root);
     await importer.recover(signal());
@@ -119,22 +119,16 @@ async function fixture() {
       targets: {
         pin(target) {
           if (target.kind !== "acquisition") throw new Error("Wrong domain");
-          acquisitions.intent(target.acquisitionId);
+          acquisitions.intent(target.id);
           return target;
         },
-        isAvailable: (target) =>
-          target.kind === "acquisition" && !!acquisitions.intent(target.acquisitionId),
+        isAvailable: (target) => target.kind === "acquisition" && !!acquisitions.intent(target.id),
         isDeleting: () => false,
         isCapturing: () => captures.isCapturing(),
       },
       execute: async ({ job, signal }) => {
         if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-        const value = await importer.executeImport(
-          job.target.acquisitionId,
-          job.attemptId,
-          native,
-          signal,
-        );
+        const value = await importer.executeImport(job.target.id, job.attemptId, native, signal);
         return JSON.stringify({ acquisitionId: value.id });
       },
     });
@@ -153,7 +147,7 @@ async function fixture() {
         queue.submit(() => {
           const intent = acquisitions.admitCapture(captures, recordingId, donor);
           return {
-            target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+            target: { kind: "acquisition", id: intent.acquisitionId },
             artifact: "acquisition.import",
             lane: "heavy",
             input: "capture",
@@ -197,7 +191,7 @@ test("settled capture reserves one acquisition and job atomically before source 
   expect(f.admit(f.recording.recordingId)).toEqual(job);
   expect(job.state).toBe("queued");
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  expect(f.acquisitions.intent(job.target.acquisitionId)).toMatchObject({
+  expect(f.acquisitions.intent(job.target.id)).toMatchObject({
     kind: "capture",
     recordingId: f.recording.recordingId,
     sourceId: f.recording.sourceId,
@@ -244,7 +238,7 @@ test("capture admission stages its complete private authority and strips it befo
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "ready" });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  expect(f.acquisitions.get(job.target.acquisitionId).evidence.receipt).not.toHaveProperty(
+  expect(f.acquisitions.get(job.target.id).evidence.receipt).not.toHaveProperty(
     "verifiedSourceAuthority",
   );
   await expect(readFile(join(stage!, "source.publication.json"))).rejects.toMatchObject({
@@ -282,7 +276,7 @@ test.each(["missing", "different"])(
       errorCode: "SOURCE_CHANGED",
     });
     if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-    const acquisitionId = job.target.acquisitionId;
+    const acquisitionId = job.target.id;
     expect(() => f.acquisitions.get(acquisitionId)).toThrow();
   },
 );
@@ -302,14 +296,14 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
     retryable: true,
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  const frozen = f.acquisitions.intent(job.target.acquisitionId);
+  const frozen = f.acquisitions.intent(job.target.id);
   expect(frozen).toMatchObject({
     files: { "capture.journal.jsonl": { bytes: expect.any(Number) } },
   });
   await f.queue.close();
   f.captures.close();
   const reopened = await f.reopen();
-  expect(reopened.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
+  expect(reopened.acquisitions.intent(job.target.id)).toEqual(frozen);
   await writeFile(join(f.donor, "video.mov"), "video");
   expect(reopened.admit(f.recording.recordingId)).toMatchObject({
     jobId: job.jobId,
@@ -322,9 +316,9 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
   await reopened.queue.idle();
   expect(reopened.queue.inspect(job.jobId)).toMatchObject({
     state: "ready",
-    published: { output: { acquisitionId: job.target.acquisitionId } },
+    published: { output: { acquisitionId: job.target.id } },
   });
-  const value = reopened.acquisitions.get(job.target.acquisitionId);
+  const value = reopened.acquisitions.get(job.target.id);
   expect(value.sourceId).toBe(f.recording.sourceId);
   expect(value.bindings.map((binding) => binding.sourceRoles)).toEqual([["video"]]);
   await rm(f.donor, { recursive: true });
@@ -349,7 +343,7 @@ test("a changed frozen journal refuses before observing newly available video", 
     errorCode: "ACQUISITION_NOT_FOUND",
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  const frozen = f.acquisitions.intent(job.target.acquisitionId);
+  const frozen = f.acquisitions.intent(job.target.id);
   await writeFile(journal, JSON.stringify({ sessionID: "changed" }));
   await writeFile(join(f.donor, "video.mov"), "video");
   f.queue.retry(job.jobId);
@@ -359,8 +353,8 @@ test("a changed frozen journal refuses before observing newly available video", 
     errorCode: "SOURCE_CHANGED",
     retryable: false,
   });
-  expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
-  expect(f.acquisitions.ready(job.target.acquisitionId)).toBe(false);
+  expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
+  expect(f.acquisitions.ready(job.target.id)).toBe(false);
 });
 
 test("observed optional absence cannot be replaced after a failed native attempt", async () => {
@@ -379,7 +373,7 @@ test("observed optional absence cannot be replaced after a failed native attempt
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({ state: "failed", retryable: true });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  const frozen = f.acquisitions.intent(job.target.acquisitionId);
+  const frozen = f.acquisitions.intent(job.target.id);
   expect(frozen).toMatchObject({ files: { "narration.mov": null } });
   f.native.exportSource = exportSource;
   await writeFile(join(f.donor, "narration.mov"), "late audio");
@@ -390,7 +384,7 @@ test("observed optional absence cannot be replaced after a failed native attempt
     errorCode: "SOURCE_CHANGED",
     retryable: false,
   });
-  expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
+  expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
 });
 
 test("a foreign source journal fails before publishing evidence or assets", async () => {
@@ -410,7 +404,7 @@ test("a foreign source journal fails before publishing evidence or assets", asyn
     published: null,
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  expect(f.acquisitions.ready(job.target.acquisitionId)).toBe(false);
+  expect(f.acquisitions.ready(job.target.id)).toBe(false);
   expect(f.captures.catalog.prepare("SELECT id FROM assets").all()).toEqual([]);
   expect(f.captures.catalog.prepare("SELECT * FROM source_evidence_generations").all()).toEqual([]);
 });
@@ -469,13 +463,13 @@ test("an interrupted take with video retains canceled work and refuses a changed
     ),
   ).toThrow("already names another input");
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  expect(f.acquisitions.intent(job.target.acquisitionId)).toMatchObject({
+  expect(f.acquisitions.intent(job.target.id)).toMatchObject({
     sourceId: recording.sourceId,
     path: f.donor,
     files: {},
   });
   expect(f.captures.catalog.prepare("SELECT id FROM acquisitions").all()).toEqual([
-    { id: job.target.acquisitionId },
+    { id: job.target.id },
   ]);
 });
 
@@ -495,7 +489,7 @@ test.each(["source", "parent"])(
       errorCode: "ACQUISITION_NOT_FOUND",
     });
     if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-    const frozen = f.acquisitions.intent(job.target.acquisitionId);
+    const frozen = f.acquisitions.intent(job.target.id);
     await writeFile(join(f.donor, "video.mov"), "video");
     const refusedDirectory = directory === "source" ? f.donor : dirname(f.donor);
     await chmod(refusedDirectory, 0);
@@ -507,7 +501,7 @@ test.each(["source", "parent"])(
         errorCode: "ACQUISITION_PATH_UNAVAILABLE",
         retryable: true,
       });
-      expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
+      expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
     } finally {
       await chmod(refusedDirectory, 0o700);
     }
@@ -516,9 +510,9 @@ test.each(["source", "parent"])(
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
       state: "ready",
-      published: { output: { acquisitionId: job.target.acquisitionId } },
+      published: { output: { acquisitionId: job.target.id } },
     });
-    expect(f.acquisitions.intent(job.target.acquisitionId)).toMatchObject(frozen);
+    expect(f.acquisitions.intent(job.target.id)).toMatchObject(frozen);
   },
 );
 
@@ -547,7 +541,7 @@ test("post-freeze donor copy access failure preserves the acquisition for explic
       published: null,
     });
     if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-    frozen = f.acquisitions.intent(job.target.acquisitionId);
+    frozen = f.acquisitions.intent(job.target.id);
     expect(frozen).toMatchObject({ files: { "video.mov": { bytes: 5 }, "narration.mov": null } });
     expect(f.captures.catalog.prepare("SELECT id FROM assets").all()).toEqual([]);
     expect(f.captures.catalog.prepare("SELECT * FROM source_evidence_generations").all()).toEqual(
@@ -563,9 +557,9 @@ test("post-freeze donor copy access failure preserves the acquisition for explic
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "ready",
-    published: { output: { acquisitionId: job.target.acquisitionId } },
+    published: { output: { acquisitionId: job.target.id } },
   });
-  expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
+  expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
 });
 
 test("explicit imports keep their existing post-freeze donor access disposition", async () => {
@@ -603,7 +597,7 @@ test("a busy donor lease preserves frozen capture identity for explicit retry", 
   f.queue.start();
   await f.queue.idle();
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  const frozen = f.acquisitions.intent(job.target.acquisitionId);
+  const frozen = f.acquisitions.intent(job.target.id);
   await writeFile(join(f.donor, "video.mov"), "video");
   const lease = await openDirectoryLease(dirname(f.donor), "exclusive");
   try {
@@ -614,7 +608,7 @@ test("a busy donor lease preserves frozen capture identity for explicit retry", 
       errorCode: "RECORDING_BUSY",
       retryable: true,
     });
-    expect(f.acquisitions.intent(job.target.acquisitionId)).toEqual(frozen);
+    expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
   } finally {
     await lease.close();
   }
@@ -622,7 +616,7 @@ test("a busy donor lease preserves frozen capture identity for explicit retry", 
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "ready",
-    published: { output: { acquisitionId: job.target.acquisitionId } },
+    published: { output: { acquisitionId: job.target.id } },
   });
 });
 
@@ -709,14 +703,14 @@ async function cameraTake(f: Awaited<ReturnType<typeof fixture>>) {
       camera.sourceId,
     );
     return {
-      target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+      target: { kind: "acquisition", id: intent.acquisitionId },
       artifact: "acquisition.import",
       lane: "heavy",
       input: "capture",
     };
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
-  return { jobId: job.jobId, acquisitionId: job.target.acquisitionId };
+  return { jobId: job.jobId, acquisitionId: job.target.id };
 }
 const cameraProbe =
   (segments: { startUs: number; endUs: number; empty: boolean }[]) => async () => ({

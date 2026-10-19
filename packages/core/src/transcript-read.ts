@@ -220,7 +220,7 @@ export class SourceTranscriptRead {
     if (metadata.owner.kind !== "asset" || metadata.source.kind !== "asset")
       throw new CatalogError("INVALID_EVIDENCE", "Source transcript requires an asset source");
     this.reference = {
-      assetId: metadata.owner.assetId,
+      assetId: metadata.owner.id,
       streamId: metadata.source.streamId,
       acquisitionId: metadata.source.acquisitionId ?? null,
       generation: metadata.generation,

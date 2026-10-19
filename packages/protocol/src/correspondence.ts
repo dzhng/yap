@@ -13,7 +13,7 @@ const sourceEndpointSchema = z.strictObject({
 });
 const projectEndpointSchema = z.strictObject({
   kind: z.literal("project"),
-  projectId: id,
+  id: id,
   revisionId: id,
   preparedResourceId: id,
   tap: processingTapSchema,

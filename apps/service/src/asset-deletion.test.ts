@@ -463,7 +463,7 @@ test("asset.delete refuses a live project user with structured IN_USE details", 
         retryable: false,
         details: {
           assetId,
-          usedBy: [{ kind: "project", projectId, revisions: 1 }],
+          usedBy: [{ kind: "project", id: projectId, revisions: 1 }],
           acquisitions: [],
           derivedAssets: [],
           freesBytes: expect.any(Number),
@@ -649,8 +649,8 @@ test("asset.delete cascade follows a derived asset chain and removes its creatin
       error: {
         code: "IN_USE",
         details: {
-          derivedAssets: [{ kind: "asset", assetId: derivedId }],
-          usedBy: [{ kind: "project", projectId: project.projectId, revisions: 2 }],
+          derivedAssets: [{ kind: "asset", id: derivedId }],
+          usedBy: [{ kind: "project", id: project.projectId, revisions: 2 }],
         },
       },
     });
@@ -740,7 +740,7 @@ test("asset.delete cascade retires an acquisition and its managed evidence", asy
       ok: false,
       error: {
         code: "IN_USE",
-        details: { acquisitions: [{ kind: "acquisition", acquisitionId }] },
+        details: { acquisitions: [{ kind: "acquisition", id: acquisitionId }] },
       },
     });
     const deleted = await fixture.call("asset.delete", {

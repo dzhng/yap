@@ -302,7 +302,7 @@ test("retained entry reads reject another tap and deletion fences readers withou
   f.projects.markDeleting(f.projectId);
   expect(() => f.index.readEntry(identity, 0)).toThrow("delet");
   expect(() => f.index.openRead(identity, 0)).toThrow("delet");
-  await f.index.reclaim({ kind: "project", projectId: f.projectId }, () => false);
+  await f.index.reclaim({ kind: "project", id: f.projectId }, () => false);
   await expect(readFile(first.frame.file)).rejects.toMatchObject({ code: "ENOENT" });
 });
 test("candidate admission refuses duplicate frames, mismatched requests and incomplete sampled coverage", async () => {
@@ -391,7 +391,7 @@ test("retained images survive restart, head edits and renderer replacement; recl
   const lease = f.index.openRead(identity, 0),
     received = Buffer.alloc(png.length);
   try {
-    await f.index.reclaim({ kind: "project", projectId: f.projectId }, () => false);
+    await f.index.reclaim({ kind: "project", id: f.projectId }, () => false);
     await expect(readFile(first.frame.file)).rejects.toMatchObject({ code: "ENOENT" });
     expect(lease.read(received, 0)).toBe(png.length);
     expect(received).toEqual(png);
@@ -513,7 +513,7 @@ async function publishScenes(
     }),
   );
   const identity = {
-    owner: { kind: "asset" as const, assetId: video.asset.id },
+    owner: { kind: "asset" as const, id: video.asset.id },
     sourceId: video.asset.id,
     generation,
     policy: sourceScenePolicy,
@@ -777,7 +777,7 @@ test("portable revision selection ignores later incomplete indexes before invent
   });
   const later = f.identity("later");
   f.index.begin(later);
-  const owner = { kind: "project" as const, projectId: f.projectId };
+  const owner = { kind: "project" as const, id: f.projectId };
   expect(() => f.index.portableGenerations(owner)).toThrow(/incomplete/);
   expect(
     f.index.portableGenerations(owner, 1, [selected.revisionId]).map((value) => value.generation),

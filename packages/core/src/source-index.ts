@@ -173,7 +173,7 @@ export function sourceIndexDomain(
     });
   }
   return {
-    owner: (i) => ({ kind: "asset", assetId: i.assetId }),
+    owner: (i) => ({ kind: "asset", id: i.assetId }),
     pin: (i) => ({
       assetId: i.assetId,
       streamId: i.streamId,
@@ -194,7 +194,7 @@ export function sourceIndexDomain(
       if (
         source.stream.kind !== "video" ||
         metadata.owner.kind !== "asset" ||
-        metadata.owner.assetId !== identity.assetId ||
+        metadata.owner.id !== identity.assetId ||
         !isDeepStrictEqual(metadata, identity.scenes) ||
         !isDeepStrictEqual(metadata.source, sourceSceneDescriptor(source)) ||
         !identity.generation ||

@@ -102,13 +102,13 @@ export async function fixture(
       targets: {
         pin: (t) => {
           if (t.kind === "project")
-            return { ...t, revisionId: projects.revision(t.projectId, t.revisionId).revisionId };
+            return { ...t, revisionId: projects.revision(t.id, t.revisionId).revisionId };
           if (t.kind !== "asset") throw new Error("asset only");
-          assets.get(t.assetId);
+          assets.get(t.id);
           return t;
         },
-        isAvailable: (t) => t.kind !== "project" || !projects.isDeleting(t.projectId),
-        isDeleting: (t) => t.kind === "project" && projects.isDeleting(t.projectId),
+        isAvailable: (t) => t.kind !== "project" || !projects.isDeleting(t.id),
+        isDeleting: (t) => t.kind === "project" && projects.isDeleting(t.id),
         isCapturing: () => false,
       },
       execute: (e) =>
@@ -122,11 +122,11 @@ export async function fixture(
     });
     cache = new DerivedCache(catalog, home, (owner) => {
       if (owner.kind === "project") {
-        projects.get(owner.projectId);
+        projects.get(owner.id);
         return;
       }
       if (owner.kind !== "asset") throw new Error("asset only");
-      assets.get(owner.assetId);
+      assets.get(owner.id);
     });
     frames = new MediaFrameInspection({
       assets,

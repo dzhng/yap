@@ -11,7 +11,7 @@ import {
 } from "./alignment-evidence.fixture.js";
 const sha = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 const identity = {
-  owner: { kind: "asset" as const, assetId: sha("asset") },
+  owner: { kind: "asset" as const, id: sha("asset") },
   generation: "g1",
   policy: "alignment-v1" as const,
 };

@@ -141,7 +141,7 @@ export function publishRetainedAlignment(catalog: Catalog, library: string, asse
     values[field] = JSON.stringify(value);
   }
   const identity = {
-    owner: { kind: "asset" as const, assetId },
+    owner: { kind: "asset" as const, id: assetId },
     generation: "retained-alignment-g1",
     policy: "alignment-v1" as const,
   };

@@ -160,7 +160,7 @@ export class ProjectPreviewInspection {
   private identity(pinned: PinnedProjectPreview) {
     const { projectId, revisionId, ...options } = pinned;
     return {
-      target: { kind: "project" as const, projectId, revisionId },
+      target: { kind: "project" as const, id: projectId, revisionId },
       artifact: "preview",
       input: JSON.stringify(options),
     };
@@ -242,7 +242,7 @@ export class ProjectPreviewInspection {
     if (job.target.kind !== "project" || job.artifact !== "preview")
       throw new CatalogError("UNSUPPORTED_JOB", "Preview admission requires a project job");
     const pinned = this.pin({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options,
     });
@@ -275,7 +275,7 @@ export class ProjectPreviewInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Composition preview cannot execute this job");
     this.requireImplementation(options.data.implementationId);
     const pinned = this.pin({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options.data,
       preparedResourceId: options.data.preparedResourceId ?? null,
@@ -283,7 +283,7 @@ export class ProjectPreviewInspection {
     const plan = this.plan(pinned);
     signal.throwIfAborted();
     const range = plan.window.manifest.sampleRange;
-    const output = this.cache.reserve({ kind: "project", projectId: job.target.projectId });
+    const output = this.cache.reserve({ kind: "project", id: job.target.id });
     let prepared: PreparedAudioRead | undefined;
     try {
       prepared =
@@ -349,7 +349,7 @@ export class ProjectPreviewInspection {
       const result: ProjectPreviewArtifact = {
         ...movie,
         ...options.data,
-        projectId: job.target.projectId,
+        projectId: job.target.id,
         revisionId: job.target.revisionId,
         cacheId: output.id,
       };

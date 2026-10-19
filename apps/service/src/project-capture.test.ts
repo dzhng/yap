@@ -1002,7 +1002,7 @@ test("an explicit-import namespace collision refuses source admission without hi
   await writeFile(join(path, "video.mov"), "explicit source bytes");
   const imported = await f.call("acquisition.import", { requestId: `capture:${sourceId}`, path });
   if (!imported.ok) throw new Error(JSON.stringify(imported));
-  const explicit = imported.data as { jobId: string; target: { acquisitionId: string } };
+  const explicit = imported.data as { jobId: string; target: { id: string } };
   await f.call("capture.stop", { recordingId });
   const capture = {
     recordingId,
@@ -1040,12 +1040,13 @@ test("an explicit-import namespace collision refuses source admission without hi
       ok: true,
       data: {
         state: "ready",
-        published: { output: { acquisitionId: explicit.target.acquisitionId } },
+        published: { output: { acquisitionId: explicit.target.id } },
       },
     });
-  expect(
-    await f.call("acquisition.get", { acquisitionId: explicit.target.acquisitionId }),
-  ).toMatchObject({ ok: true, data: { sourceId: "explicit-source" } });
+  expect(await f.call("acquisition.get", { acquisitionId: explicit.target.id })).toMatchObject({
+    ok: true,
+    data: { sourceId: "explicit-source" },
+  });
   await f.service.close();
   const reopened = await fixture(f.home, sourceWorker);
   expect(await reopened.call("capture.start", params)).toMatchObject({ ok: true, data: capture });

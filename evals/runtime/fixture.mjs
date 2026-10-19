@@ -17,7 +17,7 @@ export async function failedJobFixture() {
               data: {
                 jobId: "audit-job",
                 attemptId: "audit-attempt",
-                target: { kind: "asset", assetId: "audit-asset" },
+                target: { kind: "asset", id: "audit-asset" },
                 artifact: "audio",
                 lane: "heavy",
                 state: "failed",
@@ -101,13 +101,13 @@ export async function deletionFixture(name) {
       usedBy: [
         {
           kind: "project",
-          projectId: "project-client-interview",
+          id: "project-client-interview",
           title: "Client interview",
           revisions: 2,
         },
         {
           kind: "project",
-          projectId: "project-social-cut",
+          id: "project-social-cut",
           title: "Social cut",
           revisions: 1,
         },
@@ -153,7 +153,7 @@ export async function deletionFixture(name) {
     let originalDeleted = false;
     let assetDeleted = false;
     const usedBy = [
-      { kind: "project", projectId: sourceProjectId, title: "History holder", revisions: 3 },
+      { kind: "project", id: sourceProjectId, title: "History holder", revisions: 3 },
     ];
     return serveDeletionFixture((request) => {
       if (request.operation === "asset.delete") {

@@ -99,7 +99,7 @@ export class RenderedSpeech {
     const result = {
       target: {
         kind: "project" as const,
-        projectId: request.projectId,
+        id: request.projectId,
         revisionId: request.revisionId,
       },
       artifact,
@@ -248,7 +248,7 @@ export class RenderedSpeech {
       throw new CatalogError("DEPENDENCY_LOST", "Rendered PCM dependency disappeared", {});
     const pcm = this.pcm(extracted);
     const resourceId = transcriptGenerationResource({
-      owner: { kind: "asset", assetId: pcm.assetId },
+      owner: { kind: "asset", id: pcm.assetId },
       generation: job.attemptId,
     });
     this.owners.jobs.retainInputs(job.jobId, "transcript-generation", [resourceId]);
@@ -283,7 +283,7 @@ export class RenderedSpeech {
   get(input: RenderedSpeechRead) {
     this.owners.projects.revision(input.projectId, input.revisionId);
     const retained = this.owners.jobs.retainedArtifact(
-      { kind: "project", projectId: input.projectId },
+      { kind: "project", id: input.projectId },
       artifact,
       input.generation,
     );

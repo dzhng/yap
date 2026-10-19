@@ -187,7 +187,7 @@ test.each([
       path: selectedPath,
     });
     if (!imported.ok) throw new Error(JSON.stringify(imported));
-    const importedJob = imported.data as { jobId: string; target: { acquisitionId: string } };
+    const importedJob = imported.data as { jobId: string; target: { id: string } };
     await entered.promise;
     release.resolve();
     await expect
@@ -205,11 +205,11 @@ test.each([
       ok: false,
       error: { code: "NOT_FOUND" },
     });
-    expect(
-      await f.call("acquisition.get", { acquisitionId: importedJob.target.acquisitionId }),
-    ).toMatchObject({
-      ok: true,
-    });
+    expect(await f.call("acquisition.get", { acquisitionId: importedJob.target.id })).toMatchObject(
+      {
+        ok: true,
+      },
+    );
   },
 );
 
@@ -459,8 +459,8 @@ test("a recording used by a project refuses until cascade retires its copies and
       retryable: false,
       details: {
         recordingId: take.recordingId,
-        usedBy: [{ kind: "project", projectId, revisions: 2 }],
-        acquisitions: [{ kind: "acquisition", acquisitionId: acquisition.id }],
+        usedBy: [{ kind: "project", id: projectId, revisions: 2 }],
+        acquisitions: [{ kind: "acquisition", id: acquisition.id }],
         derivedAssets: [],
         freesBytes: expect.any(Number),
         cascadeFreesBytes: expect.any(Number),
@@ -577,8 +577,8 @@ test("a recording refuses when a copy asset has a derived asset user", async () 
       details: {
         recordingId: take.recordingId,
         usedBy: [],
-        acquisitions: [{ kind: "acquisition", acquisitionId: take.acquisitionId }],
-        derivedAssets: expect.arrayContaining([{ kind: "asset", assetId: derivedAssetId }]),
+        acquisitions: [{ kind: "acquisition", id: take.acquisitionId }],
+        derivedAssets: expect.arrayContaining([{ kind: "asset", id: derivedAssetId }]),
         freesBytes: expect.any(Number),
         cascadeFreesBytes: expect.any(Number),
       },
@@ -633,7 +633,7 @@ test("public discard fences and drains queued managed imports before native canc
   );
   await writeFile(join(directory, "video.mov"), "not yet discarded");
   const request = { requestId: "queued-managed-import", path: directory };
-  const imported = data<{ jobId: string; target: { acquisitionId: string } }>(
+  const imported = data<{ jobId: string; target: { id: string } }>(
     await f.call("acquisition.import", request),
   );
   expect(await f.call("job.get", { jobId: imported.jobId })).toMatchObject({
@@ -666,9 +666,10 @@ test("public discard fences and drains queued managed imports before native canc
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(
-    await f.call("acquisition.get", { acquisitionId: imported.target.acquisitionId }),
-  ).toMatchObject({ ok: false, error: { code: "PREREQUISITE_MISSING" } });
+  expect(await f.call("acquisition.get", { acquisitionId: imported.target.id })).toMatchObject({
+    ok: false,
+    error: { code: "PREREQUISITE_MISSING" },
+  });
   expect(await f.call("capture.cancel", { recordingId })).toMatchObject({
     ok: true,
     data: { state: "canceled" },

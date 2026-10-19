@@ -42,12 +42,12 @@ const recordingSource: TranscriptSource = {
   durationUs: 1000,
 };
 const asset: TranscriptIdentity = {
-  owner: { kind: "asset", assetId: "same-owner" },
+  owner: { kind: "asset", id: "same-owner" },
   sourceId: "same-owner",
   generation: "same-attempt",
 };
 const recording: TranscriptIdentity = {
-  owner: { kind: "recording", recordingId: "same-owner" },
+  owner: { kind: "recording", id: "same-owner" },
   sourceId: "capture-source",
   generation: "same-attempt",
 };
@@ -282,7 +282,7 @@ test.each(Object.keys(staleRewrites) as (keyof typeof staleRewrites)[])(
   async (kind) => {
     const f = await fixture();
     const portable = {
-      owner: { kind: "asset" as const, assetId: "c".repeat(64) },
+      owner: { kind: "asset" as const, id: "c".repeat(64) },
       sourceId: "c".repeat(64),
     };
     const portableSource = { ...source, acquisitionId: randomUUID() };
@@ -306,7 +306,7 @@ test.each(Object.keys(staleRewrites) as (keyof typeof staleRewrites)[])(
     expect(f.store.isStale(old)).toBe(true);
     expect(f.store.isStale(current)).toBe(false);
     expect(f.store.retainedGeneration(current).generation).toBe(currentId);
-    const inventory = f.store.portableGenerations(portable.owner.assetId);
+    const inventory = f.store.portableGenerations(portable.owner.id);
     expect(inventory.generations.map((value) => value.generation)).toEqual([currentId]);
     expect(inventory.stale).toEqual([oldId]);
     if (kind !== "unreadable")
@@ -385,7 +385,7 @@ test("the retained native recording transcript preserves every inherited word an
   });
   const store = new TranscriptStore(library, home, recordingTranscriptOwner(library));
   const identity: TranscriptIdentity = {
-    owner: { kind: "recording", recordingId },
+    owner: { kind: "recording", id: recordingId },
     sourceId,
     generation: "native-fixture",
   };

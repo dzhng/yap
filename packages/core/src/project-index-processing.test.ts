@@ -222,7 +222,7 @@ test("project recipes pin both selected scene generations while queued and retai
   expect(pending.dependencies.map((d) => d.streamId)).toEqual(["v", "w"]);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     lane: "heavy",
     input: "hold",

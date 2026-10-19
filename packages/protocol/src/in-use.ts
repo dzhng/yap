@@ -4,19 +4,19 @@ const id = z.string().min(1);
 
 export const inUseProjectSchema = z.strictObject({
   kind: z.literal("project"),
-  projectId: id,
+  id: id,
   title: z.string(),
   revisions: z.int().nonnegative(),
 });
 
 export const inUseAcquisitionSchema = z.strictObject({
   kind: z.literal("acquisition"),
-  acquisitionId: id,
+  id: id,
 });
 
 export const inUseDerivedAssetSchema = z.strictObject({
   kind: z.literal("asset"),
-  assetId: id,
+  id: id,
 });
 
 /** The structured details shared by every IN_USE refusal. */

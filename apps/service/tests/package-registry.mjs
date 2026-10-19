@@ -51,14 +51,14 @@ async function fixture(t, options = {}, content = "generated source") {
       pin(target) {
         assert.equal(target.kind, "recording");
         assert.equal(target.revisionId, null);
-        assert.equal(store.isAvailable(target.recordingId), true);
+        assert.equal(store.isAvailable(target.id), true);
         return target;
       },
-      isAvailable: (target) => store.isAvailable(target.recordingId),
+      isAvailable: (target) => store.isAvailable(target.id),
       isDeleting: (owner) =>
         owner.kind === "recording"
-          ? store.isDeleting(owner.recordingId)
-          : owner.kind === "project" && projects.isDeleting(owner.projectId),
+          ? store.isDeleting(owner.id)
+          : owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => store.isCapturing(),
     },
     providers: { newId: randomUUID },
@@ -337,7 +337,7 @@ test("same-provenance project deletion and package close revoke only their own d
   );
   const cache = new DerivedCache(f.store, f.home, (owner) => {
     assert.equal(owner.kind, "project");
-    f.projects.get(owner.projectId);
+    f.projects.get(owner.id);
   });
   await cache.reconcile();
   // No exports exist; export retirement is the external edge, not a simulated project deletion.
@@ -414,7 +414,7 @@ test("startup remains blocked by a killed owner's actual native child while libr
         sourceDurationUs: 100,
       });
     const job = f.jobs.submit({
-      target: { kind: "recording", recordingId: recording.recordingId, revisionId: null },
+      target: { kind: "recording", id: recording.recordingId, revisionId: null },
       artifact: "library",
       lane: "heavy",
       input: "{}",

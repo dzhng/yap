@@ -38,10 +38,10 @@ test("asset-owned derivatives evict and reopen without modifying original media"
       },
     ],
   }));
-  const owner = { kind: "asset" as const, assetId: asset.id };
+  const owner = { kind: "asset" as const, id: asset.id };
   const check = (store: AssetStore) => (candidate: JobOwner) => {
     if (candidate.kind !== "asset") throw new CatalogError("NOT_FOUND", "Expected asset owner");
-    store.get(candidate.assetId);
+    store.get(candidate.id);
   };
   const cache = new DerivedCache(catalog, home, check(assets), 6);
   await cache.reconcile();
@@ -82,12 +82,12 @@ test("project retirement fences derived files and cannot purge another owner kin
       background: "#000000ff",
     },
   }).project;
-  const owner = { kind: "project" as const, projectId: project.projectId };
+  const owner = { kind: "project" as const, id: project.projectId };
   // Equal IDs must remain distinct even when today's generators use different shapes.
-  const other = { kind: "asset" as const, assetId: project.projectId };
+  const other = { kind: "asset" as const, id: project.projectId };
   const assertAvailable = (candidate: JobOwner) => {
-    if (candidate.kind === "project") projects.get(candidate.projectId);
-    else if (candidate.kind !== "asset" || candidate.assetId !== other.assetId)
+    if (candidate.kind === "project") projects.get(candidate.id);
+    else if (candidate.kind !== "asset" || candidate.id !== other.id)
       throw new CatalogError("NOT_FOUND", "Missing test owner");
   };
   const cache = new DerivedCache(catalog, home, assertAvailable);
@@ -104,7 +104,7 @@ test("project retirement fences derived files and cannot purge another owner kin
   expect(held).not.toBeNull();
   const pending = cache.reserve(owner);
   await writeFile(pending.path, "unpublished");
-  projects.markDeleting(owner.projectId);
+  projects.markDeleting(owner.id);
   expect(() => cache.reserve(owner)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
   expect(() => cache.acquire(first.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
   await expect(cache.publish(pending.id)).rejects.toMatchObject({ code: "NOT_FOUND" });

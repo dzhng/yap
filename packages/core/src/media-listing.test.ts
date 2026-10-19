@@ -91,17 +91,13 @@ test("media listing merges imports and recordings newest first and continues acr
   let cursor: string | undefined;
   for (;;) {
     const page = listing.list({ ...(cursor === undefined ? {} : { cursor }), limit: 1 });
-    all.push(
-      ...page.media.map(
-        (row) => `${row.kind}:${"recordingId" in row ? row.recordingId : row.assetId}`,
-      ),
-    );
+    all.push(...page.media.map((row) => `${row.kind}:${row.id}`));
     if (!page.nextCursor) break;
     cursor = page.nextCursor;
   }
   expect(all).toEqual([
     `recording:${first.recordingId}`,
-    `imported:asset-1`,
+    `asset:asset-1`,
     `recording:${second.recordingId}`,
   ]);
 
@@ -112,12 +108,8 @@ test("media listing merges imports and recordings newest first and continues acr
   expect(continued.media).toHaveLength(1);
   expect(continued.nextCursor).toBeNull();
   expect([
-    ...pair.media.map(
-      (row) => `${row.kind}:${"recordingId" in row ? row.recordingId : row.assetId}`,
-    ),
-    ...continued.media.map(
-      (row) => `${row.kind}:${"recordingId" in row ? row.recordingId : row.assetId}`,
-    ),
+    ...pair.media.map((row) => `${row.kind}:${row.id}`),
+    ...continued.media.map((row) => `${row.kind}:${row.id}`),
   ]).toEqual(all);
 });
 
@@ -167,12 +159,10 @@ test("media listing excludes copies, derivatives, canceled takes and tombstoned 
   plans.adopt("asset", "tombstoned-asset");
 
   const result = listing.list({ limit: 100 });
-  expect(result.media.map((row) => ("assetId" in row ? row.assetId : row.recordingId))).toEqual([
-    "both-origins",
-  ]);
+  expect(result.media.map((row) => row.id)).toEqual(["both-origins"]);
   expect(result.media[0]).toMatchObject({
-    kind: "imported",
-    assetId: "both-origins",
+    kind: "asset",
+    id: "both-origins",
     title: "clip.mov",
   });
 });

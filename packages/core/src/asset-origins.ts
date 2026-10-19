@@ -238,7 +238,7 @@ export const extractionOriginSchema = z.strictObject({
     }),
     z.strictObject({
       kind: z.literal("project"),
-      projectId: id,
+      id: id,
       revisionId: id,
       range: rangeSchema,
       sampleRange,

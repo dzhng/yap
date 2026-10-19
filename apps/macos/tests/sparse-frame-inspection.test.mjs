@@ -314,7 +314,7 @@ test("sparse source pictures preserve containing-sample timing, full resolution 
   const assets = new AssetStore(catalog, library);
   const ownerCheck = (owner) => {
     assert.equal(owner.kind, "asset");
-    assert.ok(assets.has(owner.assetId));
+    assert.ok(assets.has(owner.id));
   };
   try {
     const cache = new DerivedCache(catalog, library, ownerCheck);

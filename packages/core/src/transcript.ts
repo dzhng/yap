@@ -24,7 +24,7 @@ import { z } from "zod";
 import type { CaptureStore } from "./capture-store.js";
 import { CatalogError, type Catalog } from "./catalog.js";
 import { createOutputIssueTable, wordIssues } from "./issues.js";
-import { ownerIdentity, type JobOwner } from "./jobs.js";
+import { ownerIdentity, type JobOwner, type Owner } from "./jobs.js";
 import type { PageQuery } from "./ordered-pages.js";
 import type { SpeechEnginePins, SpeechModelRequest } from "./models.js";
 import type { TimeRange } from "./presentation-time.js";
@@ -142,7 +142,7 @@ export const portableTranscriptSchema = z
   .strictObject({
     owner: z.strictObject({
       kind: z.literal("asset"),
-      assetId: z.string().regex(/^[a-f0-9]{64}$/),
+      id: z.string().regex(/^[a-f0-9]{64}$/),
     }),
     sourceId: z.string().regex(/^[a-f0-9]{64}$/),
     generation: z
@@ -177,8 +177,7 @@ export const portableTranscriptSchema = z
     }),
   })
   .refine(
-    (value) =>
-      value.owner.assetId === value.sourceId && value.source.streamId === value.track.streamId,
+    (value) => value.owner.id === value.sourceId && value.source.streamId === value.track.streamId,
     "Transcript source differs from its owner and track",
   );
 export type PortableTranscript = z.infer<typeof portableTranscriptSchema>;
@@ -195,7 +194,7 @@ export function portableTranscript(metadata: TranscriptMetadata): PortableTransc
       : value.raw;
   return portableTranscriptSchema.parse({ ...value, raw, track: omit(value.track, "source") });
 }
-export type TranscriptOwner = Extract<JobOwner, { kind: "recording" | "asset" }>;
+export type TranscriptOwner = Owner<"recording" | "asset">;
 export type TranscriptIdentity = Readonly<{
   owner: TranscriptOwner;
   sourceId: string;
@@ -279,7 +278,7 @@ export function recordingTranscriptIdentity(
   value: RecordingTranscriptIdentity,
 ): TranscriptIdentity {
   return {
-    owner: { kind: "recording", recordingId: value.recordingId },
+    owner: { kind: "recording", id: value.recordingId },
     sourceId: value.sourceId,
     generation: value.generation,
   };
@@ -294,7 +293,7 @@ export function recordingTranscript(metadata: TranscriptMetadata): RecordingTran
     throw new CatalogError("INVALID_EVIDENCE", "Recording transcript requires a recording source");
   return {
     ...details,
-    recordingId: owner.recordingId,
+    recordingId: owner.id,
     sourceGeneration: source.sourceGeneration,
     narration: { source: track.source, sourceOffsetUs: track.sourceOffsetUs },
   };
@@ -303,7 +302,7 @@ export function recordingTranscriptOwner(store: CaptureStore) {
   return (identity: TranscriptIdentity, source: TranscriptSource): void => {
     if (identity.owner.kind !== "recording" || source.kind !== "recording")
       throw new CatalogError("INVALID_EVIDENCE", "Recording transcript requires a recording owner");
-    const recording = store.get(identity.owner.recordingId);
+    const recording = store.get(identity.owner.id);
     if (
       !store.isAvailable(recording.recordingId) ||
       recording.sourceId !== identity.sourceId ||
@@ -492,7 +491,7 @@ export class TranscriptStore implements TranscriptRecords {
     if (entries)
       for await (const entry of entries) {
         signal.throwIfAborted();
-        const owner = { kind: "asset" as const, assetId: entry.name };
+        const owner = { kind: "asset" as const, id: entry.name };
         try {
           await this.reclaim(
             owner,
@@ -519,7 +518,7 @@ export class TranscriptStore implements TranscriptRecords {
         if (row.state !== "complete")
           try {
             await this.remove(
-              { owner: { kind: "asset", assetId: row.ownerId }, generation: row.generation },
+              { owner: { kind: "asset", id: row.ownerId }, generation: row.generation },
               signal,
             );
           } catch (error) {
@@ -595,7 +594,7 @@ export class TranscriptStore implements TranscriptRecords {
       this.home,
       "transcripts",
       "assets",
-      value.owner.assetId,
+      value.owner.id,
       value.generation,
       "raw.jsonl",
     );
@@ -789,8 +788,8 @@ export class TranscriptStore implements TranscriptRecords {
     let path = this.home;
     const names =
       owner.kind === "recording"
-        ? ["recordings", component(owner.recordingId), "evidence", "transcript"]
-        : ["transcripts", "assets", component(owner.assetId)];
+        ? ["recordings", component(owner.id), "evidence", "transcript"]
+        : ["transcripts", "assets", component(owner.id)];
     for (const name of names) {
       path = join(path, name);
       if (create)
@@ -1374,8 +1373,8 @@ function metadata(row: GenerationRow): TranscriptMetadata {
   return {
     owner:
       row.ownerKind === "recording"
-        ? { kind: "recording", recordingId: row.ownerId }
-        : { kind: "asset", assetId: row.ownerId },
+        ? { kind: "recording", id: row.ownerId }
+        : { kind: "asset", id: row.ownerId },
     sourceId: row.sourceId,
     generation: row.generation,
     source: JSON.parse(row.source) as TranscriptSource,

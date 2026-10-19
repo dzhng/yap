@@ -59,7 +59,7 @@ async function fixture(durationUs = 1000000, originUs = 0) {
     supportDigest: selected.supportDigest,
   };
   const identity: SceneEvidenceIdentity = {
-    owner: { kind: "asset", assetId: asset.id },
+    owner: { kind: "asset", id: asset.id },
     sourceId: asset.id,
     generation: "attempt",
     policy: sourceScenePolicy,

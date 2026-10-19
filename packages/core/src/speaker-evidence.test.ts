@@ -22,7 +22,7 @@ async function fixture() {
   });
   const store = new SpeakerEvidenceStore(catalog, () => {});
   const identity = {
-    owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+    owner: { kind: "asset" as const, id: "a".repeat(64) },
     sourceId: "a".repeat(64),
     generation: "g1",
     policy: "speaker-v1" as const,
@@ -150,11 +150,11 @@ test("reclamation preserves typed retained generations and drops unretained obse
   });
   const abandonedIdentity = { ...f.identity, generation: "g2" };
   f.store.stage(abandonedIdentity, speakerSource, nativeOutput([]));
-  await f.store.reclaim(f.identity.owner.assetId, () => false);
+  await f.store.reclaim(f.identity.owner.id, () => false);
   expect(f.store.intervalPage({ identity: f.identity }).intervals[0]?.slot).toBe(0);
   expect(() => f.store.metadata(abandonedIdentity)).toThrow("not ready");
   references.release("speaker-generation", { kind: "revision", id: "r1" });
-  await f.store.reclaim(f.identity.owner.assetId, () => false);
+  await f.store.reclaim(f.identity.owner.id, () => false);
   expect(() => f.store.metadata(f.identity)).toThrow("not ready");
 });
 

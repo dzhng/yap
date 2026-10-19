@@ -53,7 +53,7 @@ async function fixture(
   });
   const store = new TranscriptStore(catalog, home, () => {});
   const identity = {
-    owner: { kind: "asset" as const, assetId: "asset-a" },
+    owner: { kind: "asset" as const, id: "asset-a" },
     sourceId: "asset-a",
     generation: "generation-a",
   };

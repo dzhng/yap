@@ -31,7 +31,7 @@ async function fixture() {
   const acquisitions = new AcquisitionStore(catalog);
   const evidence = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw new CatalogError("NOT_FOUND", "Wrong domain");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const importer = new AcquisitionImporter(catalog, acquisitions, assets, evidence, root);
   await importer.recover(signal());
@@ -299,7 +299,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
   expect(() =>
     f.evidence.audio(
       {
-        owner: { kind: "acquisition", acquisitionId: fresh.acquisitionId },
+        owner: { kind: "acquisition", id: fresh.acquisitionId },
         sourceId: "capture-session",
         generation: "canceled",
       },
