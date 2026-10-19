@@ -208,7 +208,14 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
       invalid("Invalid normalized mark");
     for (const point of data.points) {
       const value = object(point);
-      if (!integer(value.hostUs) || !finite(value.x) || !finite(value.y))
+      if (
+        !integer(value.hostUs) ||
+        !finite(value.globalX) ||
+        !finite(value.globalY) ||
+        (value.x != null && !finite(value.x)) ||
+        (value.y != null && !finite(value.y)) ||
+        (value.x == null) !== (value.y == null)
+      )
         invalid("Invalid normalized mark point");
     }
     if (data.window != null) {
@@ -443,6 +450,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='cursorSample';
       CREATE INDEX IF NOT EXISTS source_evidence_pauses ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='pause';
+      CREATE INDEX IF NOT EXISTS source_evidence_marks ON source_evidence_records
+        (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='mark';
       CREATE INDEX IF NOT EXISTS source_evidence_geometry ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='geometry';
       CREATE INDEX IF NOT EXISTS source_evidence_audio ON source_evidence_records
@@ -577,6 +586,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       },
       unplaced: { condition: "event='geometry' AND sourceUs IS NULL", keys: ["sequence"] },
       pauses: { condition: "event='pause'", keys: ["sourceUs", "sequence"] },
+      marks: { condition: "event='mark'", keys: ["sourceUs", "sequence"] },
       narration: {
         condition: "event='audioAcquired' AND json_extract(content,'$.role')='narration'",
         keys: ["sourceUs", "sequence"],

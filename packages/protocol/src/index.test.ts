@@ -699,6 +699,7 @@ it("source capture continuations retain every reader head through both public op
     cursor: { after: null, done: true },
     pause: { after: [999, 1], done: false },
     geometry: { after: null, done: true },
+    mark: { after: [700, 4], done: false },
     interruption: { after: null, done: false },
   };
   for (const operation of ["cursor.raw", "timeline.events"]) {

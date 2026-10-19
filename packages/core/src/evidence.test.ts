@@ -67,7 +67,7 @@ test("normalized mark evidence matches the markEvents receipt count", async () =
         epoch: 1,
         id: "m1",
         kind: "click",
-        points: [{ hostUs: 10, x: 1, y: 2 }],
+        points: [{ hostUs: 10, globalX: 1, globalY: 2, x: 1, y: 2 }],
       },
     },
     {
