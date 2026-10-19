@@ -21,7 +21,8 @@ are ready before the first content click.
 The global shortcuts are one catalog, [ShortcutBindings](Sources/YapControls/ShortcutBindings.swift),
 shared by Settings, registration and the `shortcuts.get`/`shortcuts.set` app operations, so a key
 means the same thing however it was set. Bindings are physical key codes, and they apply as soon as
-they change. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
+they change. A set names only the actions it changes and keeps every other binding; one invalid
+entry refuses the whole set. A key macOS refuses is reported by its action, never by its label. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
 pause, restart) only while a take or countdown is live, so they take no characters away otherwise.
 A hotkey start records the display under the pointer, whatever the menu has selected, and a
 restart reuses the running take's own source; the menu's Start keeps the menu's source. The
@@ -219,7 +220,7 @@ shows what would be recorded rather than Yap's own panel. The window list, in th
 [window rule](Sources/YapControls/WindowSource.swift) owns what that means, and takes Yap's own
 windows from the same exclusion.
 When a recording is available, the popover appends the latest library item below its transport
-actions and routes Play and Copy prompt through the same controls actions as Library.
+actions and routes Play and **Copy prompt** through the same controls actions, and the same label, as Library.
 
 Run `node apps/macos/tests/capture-view-shots.mjs` from the repository root for
 focused native interaction, applicability and scroll checks plus offscreen images.

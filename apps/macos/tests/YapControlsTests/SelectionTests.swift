@@ -221,10 +221,20 @@ func runStartRoutingTests() {
     precondition(replay.repeatsUnanswered && replay.origin == request.origin,
         "A replay keeps the original hotkey origin")
 
+    state.observeTake(.init(recordingId: "rec-hotkey", state: "recording", interruptionReason: nil, sourceDurationUs: nil))
     precondition(!state.finishStart(replay, .live), "A live replay settles the take")
+    state.device = .init(state: .recording, recordingId: "rec-hotkey", elapsedUs: 0)
     state.selection.source = .display(menuDisplay)
     precondition(state.restartStart?.source == request.start.source,
         "Restart reuses the live take's resolved source after a hotkey start")
+
+    // That take ends normally; another client (the CLI's capture.start) starts the next one, and
+    // status reports its source as the selection.
+    state.device = .init(state: .idle, recordingId: nil, elapsedUs: nil)
+    state.device = .init(state: .recording, recordingId: "rec-cli", elapsedUs: 0)
+    state.selection.source = .display(left)
+    precondition(state.restartStart?.source == .display(id: left.id),
+        "A take not started here restarts on its own source, not an earlier take's, got \(String(describing: state.restartStart?.source))")
     print("PASS hotkey starts route to the display under the pointer")
 }
 

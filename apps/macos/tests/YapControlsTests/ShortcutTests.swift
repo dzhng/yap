@@ -3,7 +3,7 @@ import YapControls
 
 func runShortcutTests() {
     let defaults = ShortcutBindings.defaults
-    precondition(defaults[.startOrStop]?.shortcut == ShortcutBindings.Shortcut(keyCode: 1, modifiers: 2560, label: "⌥⇧S"), "Start uses physical S")
+    precondition(defaults[.startOrStop]?.shortcut == Shortcut(keyCode: 1, modifiers: 2560, label: "⌥⇧S"), "Start uses physical S")
     precondition(defaults[.pastePrompt]?.shortcut.keyCode == 9, "Paste uses physical V")
     precondition(defaults[.undoMark]?.shortcut.keyCode == 6, "Undo uses physical Z")
     precondition(defaults[.cancel]?.shortcut.keyCode == 7, "Cancel uses physical X")
@@ -15,8 +15,38 @@ func runShortcutTests() {
     let encoded = Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"}}}"#.utf8)
     let decoded = ShortcutBindings.decode(encoded)
     precondition(decoded[.startOrStop]?.shortcut.keyCode == 1, "Version 2 stores a physical key code")
-    precondition(ShortcutBindings.decode(Data(#"{"version":1,"bindings":{}}"#.utf8)).isEmpty, "Version 1 overrides are ignored")
+    precondition(ShortcutBindings.decode(Data(#"{"version":1,"bindings":{"capture.startOrStop":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8)) == defaults, "Version 1 overrides are ignored")
     print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
+}
+
+/// `shortcuts.set` changes only the actions it names, and refuses the whole call for one bad entry.
+func runShortcutSetTests() {
+    var current = ShortcutBindings.defaults
+    current[.startOrStop] = .init(shortcut: .init(keyCode: 2, modifiers: 2_560, label: "⌥⇧D"), lifetime: .app)
+    let paste: [String: Any] = ["keyCode": 11, "modifiers": 2_560, "label": "⌥⇧B"]
+
+    let merged = try? ShortcutBindings.merging([ControlsAction.pastePrompt.id: paste], into: current)
+    precondition(merged?[.pastePrompt]?.shortcut.keyCode == 11, "The named action takes its new key")
+    precondition(merged?[.startOrStop] == current[.startOrStop],
+        "Setting one action keeps every other custom binding, got \(String(describing: merged?[.startOrStop]))")
+    precondition(merged?[.pastePrompt]?.lifetime == .app, "An action keeps its own lifetime")
+
+    for (stated, why) in [
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.undoMark.id: ["modifiers": 2_560, "label": "⌥⇧U"]],
+            "an entry with no key code"),
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.cancel.id: ["keyCode": 7, "modifiers": 2_560, "label": ""]],
+            "an entry with no label"),
+        ([ControlsAction.pastePrompt.id: paste, ControlsAction.restart.id: "⌥⇧R"], "an entry that is not an object"),
+        (["capture.unknown": paste], "an unknown action"),
+    ] as [([String: Any], String)] {
+        do {
+            let accepted = try ShortcutBindings.merging(stated, into: current)
+            preconditionFailure("shortcuts.set accepts \(why), got \(accepted)")
+        } catch {
+            precondition(!error.message.isEmpty, "The refusal of \(why) says why")
+        }
+    }
+    print("PASS shortcuts.set merges into the current bindings and refuses any invalid entry")
 }
 
 func runShortcutPresentationTests() {

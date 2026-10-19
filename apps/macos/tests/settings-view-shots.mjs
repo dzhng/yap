@@ -101,13 +101,13 @@ enum ControlsProbe { static let observed = true }
                 model.registered = [ControlsAction.startOrStop.id, ControlsAction.pastePrompt.id]
                 switch name {
                 case "refused-by-macos":
-                    model.state.unavailableShortcuts = [ShortcutBindings.defaults[.undoMark]!.shortcut.display]
+                    model.state.unavailableShortcuts = [ControlsAction.undoMark.id]
                 case "duplicate-in-yap":
                     model.shortcutErrorAction = .cancel
                 case "recording-in-progress":
                     model.state.service = .ready
                     model.state.device = .init(state: .recording, recordingId: "shot", elapsedUs: 1_000_000)
-                    model.registered = Set(ShortcutBindings.actions.map { $0.action.id })
+                    model.registered = Set(ShortcutBindings.catalog.map { $0.action.id })
                 case "field-recording":
                     model.recordingAction = .startOrStop
                 default: break

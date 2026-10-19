@@ -104,8 +104,11 @@ func runCapturePresentationTests() {
     var refused = ready()
     refused.failure = "PERMISSION_REQUIRED: Screen recording permission is not authorized."
     precondition(CapturePresentation.noticeLines(for: refused).contains(refused.failure!))
-    refused.unavailableShortcuts = ["⌥⇧S"]
-    precondition(CapturePresentation.noticeLines(for: refused).contains("⌥⇧S was refused by macOS."))
+    // Refusal is reported by action, since the physical key, not its label, is the identity.
+    refused.unavailableShortcuts = [ControlsAction.startOrStop.id, ControlsAction.undoMark.id]
+    precondition(CapturePresentation.noticeLines(for: refused).contains(
+        "The Start or Finish Recording and Undo Mark shortcuts were refused by macOS."),
+        "Refused shortcuts are named by action, got \(CapturePresentation.noticeLines(for: refused))")
     print("PASS shared capture lifecycle and transport applicability")
     runOverlayCameraTests()
 }
@@ -218,7 +221,7 @@ func runSavedProjectRowTests() {
     precondition(row.status == nil, "A project row does not label itself a project")
     precondition(row.details == ["Created \(ElapsedTime.shortTime(of: "2026-10-13T22:12:00Z"))"],
                  "A project row describes when it was made, not its identifiers: \(row.details)")
-    precondition(row.actions.contains { $0.action == .copyProjectPrompt("p-1") && $0.title == "Copy agent prompt" && $0.enabled },
+    precondition(row.actions.contains { $0.action == .copyProjectPrompt("p-1") && $0.title == "Copy prompt" && $0.enabled },
                  "A project can still be handed to an agent")
     print("PASS a project row reads as a project and can still be handed to an agent")
 }

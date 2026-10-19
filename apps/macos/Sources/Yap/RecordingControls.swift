@@ -135,18 +135,17 @@ final class RecordingControls: NSObject {
         self.preferences = preferences
         self.homeLifecycle = HomeLifecycle(inApplications: inApplications)
         state = ControlsState(recording: preferences.recording)
-        let overridePath = GlobalShortcuts.overridePath(home: home)
         super.init()
-        bindings.merge(
-            ShortcutBindings.decode(FileManager.default.contents(atPath: overridePath))) {
-                _, replacement in replacement
-            }
         do {
-            let outcome = try shortcuts.apply(bindings, perform: { [weak self] action in self?.performShortcut(action) })
-            held = outcome.held
-            state.unavailableShortcuts = outcome.unavailable
-        } catch let error {
+            try applyShortcuts(
+                ShortcutBindings.decode(
+                    FileManager.default.contents(atPath: GlobalShortcuts.overridePath(home: home))),
+                recording: false)
+        } catch {
+            // A hand-edited file can bind one key twice; the defaults never do, so they hold
+            // instead and Settings shows what is actually registered.
             state.failure = "Duplicate shortcuts: \(error)"
+            try? applyShortcuts(ShortcutBindings.defaults, recording: false)
         }
         statusItem.button?.target = self
         statusItem.button?.action = #selector(toggleCapture)
@@ -187,23 +186,14 @@ final class RecordingControls: NSObject {
         else {
             return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "shortcuts.set requires bindings."))
         }
-        let unknown = stated.keys.filter { id in !ShortcutBindings.actions.contains { item in item.action.id == id } }
-        guard unknown.isEmpty else {
-            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "Unknown shortcut action \(unknown[0])."))
-        }
-        let encoded = try? JSONSerialization.data(withJSONObject: ["version": 2, "bindings": stated])
-        let decoded = ShortcutBindings.decode(encoded)
-        guard !decoded.isEmpty else {
-            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: "shortcuts.set bindings are invalid."))
+        let next: [ControlsAction: ShortcutBindings.Binding]
+        do {
+            next = try ShortcutBindings.merging(stated, into: bindings)
+        } catch {
+            return .failure(ServiceFailure(code: "INVALID_PARAMS", message: error.message))
         }
         do {
-            let outcome = try shortcuts.apply(
-                decoded, recording: shortcutsRecording,
-                perform: { [weak self] action in self?.performShortcut(action) })
-            bindings = decoded
-            held = shortcutsSuspended ? [] : outcome.held
-            state.unavailableShortcuts = outcome.unavailable
-            if shortcutsSuspended { shortcuts.suspend() }
+            try applyShortcuts(next, recording: shortcutsRecording)
             let path = GlobalShortcuts.overridePath(home: home)
             try FileManager.default.createDirectory(
                 atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
@@ -223,19 +213,32 @@ final class RecordingControls: NSObject {
         }
     }
 
+    /// Registers `next` for the take's state and records what was held. A duplicate throws before
+    /// anything is released, so the current registrations and bindings stay as they were.
+    private func applyShortcuts(
+        _ next: [ControlsAction: ShortcutBindings.Binding], recording: Bool
+    ) throws(GlobalShortcuts.ApplyError) {
+        let outcome = try shortcuts.apply(
+            next, recording: recording, perform: { [weak self] action in self?.performShortcut(action) })
+        bindings = next
+        held = outcome.held
+        state.unavailableShortcuts = outcome.unavailable
+        shortcutsRecording = recording
+        // While Settings records a key, nothing is held, so the key reaches the field.
+        if shortcutsSuspended {
+            shortcuts.suspend()
+            held = []
+        }
+    }
+
     /// Settings submits through the same public handler as the CLI, so validation, registration,
-    /// persistence and the response shown in the window cannot drift apart.
+    /// persistence and the response shown in the window cannot drift apart. It states one action;
+    /// the handler keeps the rest.
     private func setShortcutFromSettings(
         _ action: ControlsAction, _ shortcut: Shortcut
     ) -> Result<Data, ServiceFailure> {
-        var next = bindings
-        let lifetime = next[action]?.lifetime ?? .app
-        next[action] = ShortcutBindings.Binding(shortcut: shortcut, lifetime: lifetime)
-        guard let encoded = ShortcutBindings.encode(next),
-            let object = try? JSONSerialization.jsonObject(with: encoded) as? [String: Any],
-            let stated = object["bindings"] as? [String: Any],
-            let params = try? JSONSerialization.data(withJSONObject: ["bindings": stated])
-        else {
+        let stated = [action.id: ["keyCode": shortcut.keyCode, "modifiers": shortcut.modifiers, "label": shortcut.label]]
+        guard let params = try? JSONSerialization.data(withJSONObject: ["bindings": stated]) else {
             return .failure(ServiceFailure(code: "INVALID_RESPONSE", message: "Could not encode shortcuts."))
         }
         return handleShortcuts("shortcuts.set", params)
@@ -249,14 +252,8 @@ final class RecordingControls: NSObject {
     private func resumeShortcutsForSettings() {
         shortcutsSuspended = false
         do {
-            let recording = state.isLive || state.counting
-            let outcome = try shortcuts.apply(
-                bindings, recording: recording,
-                perform: { [weak self] action in self?.performShortcut(action) })
-            held = outcome.held
-            state.unavailableShortcuts = outcome.unavailable
-            shortcutsRecording = recording
-        } catch let error {
+            try applyShortcuts(bindings, recording: state.isLive || state.counting)
+        } catch {
             state.failure = "Duplicate shortcuts: \(error)"
         }
         render()
@@ -917,13 +914,8 @@ final class RecordingControls: NSObject {
         let recording = state.isLive || state.counting
         guard recording != shortcutsRecording else { return }
         do {
-            let outcome = try shortcuts.apply(
-                bindings, recording: recording,
-                perform: { [weak self] action in self?.performShortcut(action) })
-            held = outcome.held
-            state.unavailableShortcuts = outcome.unavailable
-            shortcutsRecording = recording
-        } catch let error {
+            try applyShortcuts(bindings, recording: recording)
+        } catch {
             state.failure = "Duplicate shortcuts: \(error)"
         }
     }
@@ -1159,7 +1151,7 @@ final class RecordingControls: NSObject {
             status: CapturePresentation.statusTitle(for: state))
         input.startTitle = transport[0].title
         input.startShortcut = held.contains(ControlsAction.startOrStop.id)
-            ? bindings[.startOrStop]?.shortcut.display : nil
+            ? bindings[.startOrStop]?.shortcut.label : nil
         input.notices = CapturePresentation.noticeLines(for: state)
         input.adminMessage = state.adminMessage
         input.screenSourcesEnabled = state.screenSelectionAuthorized
