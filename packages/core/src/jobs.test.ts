@@ -355,6 +355,102 @@ test("one heavy and two frame attempts run at once", async () => {
   expect(queue.job(exported.jobId).state).toBe("queued");
 });
 
+test("interactive heavy work jumps queued background work without preempting a running background job", async () => {
+  const { store, queue, started } = fixture();
+  const recordingId = finished(store);
+  const background = queue.submit({
+    target: { kind: "recording", recordingId, revisionId: null },
+    artifact: "background-running",
+    lane: "heavy",
+    input: "background-running",
+    priority: "background",
+  });
+  const running = await started(background.attemptId);
+  const queuedBackground = queue.submit({
+    target: { kind: "recording", recordingId, revisionId: null },
+    artifact: "background-queued",
+    lane: "heavy",
+    input: "background-queued",
+    priority: "background",
+  });
+  const interactive = queue.submit({
+    target: { kind: "recording", recordingId, revisionId: null },
+    artifact: "interactive",
+    lane: "heavy",
+    input: "interactive",
+    priority: "interactive",
+  });
+  expect(queue.job(queuedBackground.jobId).state).toBe("queued");
+  expect(queue.job(interactive.jobId).state).toBe("queued");
+  running.finish("background-result");
+  expect((await started(interactive.attemptId)).job.jobId).toBe(interactive.jobId);
+  expect(queue.job(queuedBackground.jobId).state).toBe("queued");
+});
+
+test("an identical interactive request promotes a queued background job", async () => {
+  const { store, queue, started } = fixture();
+  const recordingId = finished(store);
+  const blocker = queue.submit({
+    target: { kind: "recording", recordingId, revisionId: null },
+    artifact: "blocker",
+    lane: "heavy",
+    input: "blocker",
+  });
+  const blockedAttempt = await started(blocker.attemptId);
+  const request = {
+    target: { kind: "recording" as const, recordingId, revisionId: null },
+    artifact: "transcript",
+    lane: "heavy" as const,
+    input: "narration",
+    priority: "background" as const,
+  };
+  const background = queue.submit(request);
+  const promoted = queue.submit({ ...request, priority: "interactive" });
+  expect(promoted.jobId).toBe(background.jobId);
+  expect(queue.job(background.jobId).priority).toBe("interactive");
+  blockedAttempt.finish("blocker-result");
+  expect((await started(promoted.attemptId)).job.jobId).toBe(promoted.jobId);
+});
+
+test("background work has its own queue bound and does not block updates", async () => {
+  const { store, queue, started } = fixture();
+  const recordingId = finished(store);
+  const running = queue.submit({
+    target: { kind: "recording", recordingId, revisionId: null },
+    artifact: "background-running",
+    lane: "heavy",
+    input: "background-running",
+    priority: "background",
+  });
+  await started(running.attemptId);
+  expect(queue.updateBlocked).toBe(false);
+  for (let index = 0; index < 33; index++) {
+    expect(() =>
+      queue.submit({
+        target: { kind: "recording", recordingId, revisionId: null },
+        artifact: `background-${index}`,
+        lane: "heavy",
+        input: `background-${index}`,
+        priority: "background",
+      }),
+    ).not.toThrow();
+  }
+});
+
+test("background jobs cannot enter dependency waiting", () => {
+  const { store, queue } = fixture();
+  const recordingId = finished(store);
+  expect(() =>
+    queue.submitDeferred({
+      target: { kind: "recording", recordingId, revisionId: null },
+      artifact: "transcript",
+      lane: "heavy",
+      input: "narration",
+      priority: "background",
+    }),
+  ).toThrow(/background.*waiting/i);
+});
+
 test("a new heavy job waits while a take is capturing; frame work does not", async () => {
   const { store, queue, attempts, started } = fixture();
   const recordingId = finished(store);
