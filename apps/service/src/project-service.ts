@@ -52,6 +52,7 @@ import {
   type SpeechTranscriptionReceipt,
 } from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
+import { TranscriptBacklog } from "@yap/core/transcript-backlog";
 import { SourceTranscriptRead } from "@yap/core/transcript-read";
 import { wordKind } from "@yap/core/word-kind";
 import {
@@ -388,6 +389,20 @@ export async function startProjectService(options: {
       assets,
       evidence,
       library,
+      (acquisition) => {
+        for (const binding of acquisition.bindings) {
+          const stream = assets
+            .get(binding.assetId)
+            .streams.find((candidate) => candidate.id === binding.streamId);
+          if (stream?.kind !== "audio") continue;
+          transcriptBacklog?.enqueue({
+            assetId: binding.assetId,
+            streamId: binding.streamId,
+            acquisitionId: acquisition.id,
+          });
+        }
+        queueMicrotask(() => void transcriptBacklog?.drain());
+      },
     );
     const capture = new CaptureSourceRead(assets, acquisitions, evidence);
     const sceneRecords = new SceneEvidenceStore(catalog, assetSceneOwner(assets, acquisitions));
@@ -424,6 +439,7 @@ export async function startProjectService(options: {
       modelPreparations.add(automaticModels);
       void automaticModels.finally(() => {
         modelPreparations.delete(automaticModels);
+        queueMicrotask(() => void transcriptBacklog?.drain());
         admission.progress();
       });
     }
@@ -533,6 +549,7 @@ export async function startProjectService(options: {
     let projectEvidence: ProjectEvidenceInspection;
     let mediaAudio: MediaAudioInspection;
     let preparedAudio: PreparedAudioStore;
+    let transcriptBacklog: TranscriptBacklog;
     let extractedAudio: AudioExtraction;
     let renderedSpeech: RenderedSpeech;
     let generatedVoice: VoiceGenerationJobs;
@@ -556,6 +573,7 @@ export async function startProjectService(options: {
       onCapacity: () => {
         resumeCaptureSources();
         for (const error of exports?.resumeRecovery() ?? []) console.error(error);
+        queueMicrotask(() => void transcriptBacklog?.drain());
       },
       execute: async ({ job, signal }) => {
         if (job.artifact === "asset-conversion") return convertedAssets.execute({ job, signal });
@@ -595,7 +613,11 @@ export async function startProjectService(options: {
           return alignments.execute({ job, signal });
         if (job.target.kind === "asset" && job.artifact === "source-speakers")
           return speakers.execute({ job, signal });
-        if (job.artifact === "transcript") return transcripts.execute({ job, signal });
+        if (job.artifact === "transcript") {
+          const result = await transcripts.execute({ job, signal });
+          queueMicrotask(() => void transcriptBacklog.drain());
+          return result;
+        }
         if (job.artifact === "export-media" || job.artifact === "export-recovery")
           return exports!.execute({ job, signal });
         if (job.target.kind === "project" && job.artifact === "preview")
@@ -615,10 +637,18 @@ export async function startProjectService(options: {
         }
         if (job.target.kind !== "import" || job.artifact !== "asset.import")
           throw new CatalogError("PREREQUISITE_MISSING", "Unsupported preparation job");
-        const asset = await assets.executeImport(job.target.importId, probe, signal, {
-          kind: "job",
-          id: job.jobId,
-        });
+        const asset = await assets.executeImport(
+          job.target.importId,
+          probe,
+          signal,
+          { kind: "job", id: job.jobId },
+          (published) => {
+            for (const stream of published.streams)
+              if (stream.kind === "audio")
+                transcriptBacklog.enqueue({ assetId: published.id, streamId: stream.id });
+            queueMicrotask(() => void transcriptBacklog.drain());
+          },
+        );
         return JSON.stringify({ assetId: asset.id });
       },
     });
@@ -708,6 +738,13 @@ export async function startProjectService(options: {
           }),
         ) as SpeechTranscriptionReceipt,
     });
+    transcriptBacklog = new TranscriptBacklog(catalog, {
+      readiness: () => transcripts.recognitionReadiness().state === "ready",
+      status: (selection) => transcripts.sourceStatus(selection),
+      submit: (selection) => transcripts.prepareSource(selection, "background"),
+      retry: (selection) => transcripts.retrySource(selection),
+    });
+    await transcriptBacklog.drain();
     const ensureReviewModel = () => {
       const modelId = "parakeet";
       const current = transcripts.recognitionReadiness();
@@ -725,6 +762,7 @@ export async function startProjectService(options: {
         modelPreparations.add(flight);
         void flight.finally(() => {
           modelPreparations.delete(flight!);
+          queueMicrotask(() => void transcriptBacklog.drain());
           admission.progress();
         });
       }
@@ -1844,10 +1882,12 @@ export async function startProjectService(options: {
               modelPreparations.add(preparing);
               void preparing.finally(() => {
                 modelPreparations.delete(preparing);
+                queueMicrotask(() => void transcriptBacklog.drain());
                 admission.progress();
               });
             }
             const model = await models.status(modelId);
+            queueMicrotask(() => void transcriptBacklog.drain());
             return {
               ok: true,
               data: { jobId: null, presence: modelPresence(modelId, model.state), ...model },

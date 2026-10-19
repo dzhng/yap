@@ -562,6 +562,7 @@ export class AcquisitionImporter {
     private readonly assets: AssetStore,
     private readonly evidence: SourceEvidenceStore,
     library: string,
+    private readonly published?: (acquisition: Acquisition) => void,
   ) {
     this.directory = join(library, "acquisitions");
     this.recordings = join(realpathSync(library), "recordings");
@@ -1176,6 +1177,7 @@ export class AcquisitionImporter {
         signal.throwIfAborted();
         this.catalog.transaction(() => {
           this.store.publish(value);
+          this.published?.(value);
         });
         published = true;
         return value;

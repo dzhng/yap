@@ -299,6 +299,7 @@ export class AssetStore {
     probe: AssetProbe,
     signal: AbortSignal,
     owner?: ResourceOwner,
+    published?: (asset: Asset) => void,
   ): Promise<Asset> {
     const intent = this.intent(importId);
     if (intent.assetId) {
@@ -320,6 +321,7 @@ export class AssetStore {
           .prepare("UPDATE asset_imports SET assetId=? WHERE importId=?")
           .run(asset.id, importId);
         if (owner) this.retain(owner, [asset.id]);
+        published?.(asset);
       },
       intent.source,
     );
