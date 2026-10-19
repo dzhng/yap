@@ -115,7 +115,7 @@ export async function resumeTaskNotes(request, invoke = createCli(request.cli)) 
   try {
     const current = await invoke("project.get", { projectId: notes.projectId });
     if (
-      (current.projectId && current.projectId !== notes.projectId) ||
+      current.id !== notes.projectId ||
       !text(current.currentRevisionId)
     )
       throw failure(

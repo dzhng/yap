@@ -106,6 +106,12 @@ are never pruned, including those of a deleted subject, so repeating a delete or
 model removal still returns its first result. Each record is one small row per
 request, so the tables need no retention rule.
 
+A record names its own identity `id`; a reference to another record is `<noun>Id`,
+and a reference that can point at several kinds is `{kind, id}`. Parameters name
+what they act on by reference, so `asset.get {assetId}` returns `{id, …}`. An
+operation that starts work reports that work's status with its `jobId`; `job.get`
+returns the job itself. Producers own these names; no edge renames them.
+
 [Framing](src/framing.ts) owns byte and time bounds. Measure encoded UTF-8, not
 character count, and keep diagnostics outside the response channel. Complete
 large results and media use owned leases; delivery metadata must retain the

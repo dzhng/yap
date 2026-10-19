@@ -37,15 +37,7 @@ import type { ProjectStore } from "./projects.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource, sourceSelectionSchema, type SourceSelection } from "./source-selection.js";
 import { compositionAsset, type AssetStore } from "./assets.js";
-import type {
-  JobQueue,
-  JobExecution,
-  JobOwner,
-  Owner,
-  Job,
-  JobAdmission,
-  StagedJobResult,
-} from "./jobs.js";
+import type { JobQueue, JobExecution, Owner, Job, JobAdmission, StagedJobResult } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import { CatalogError } from "./catalog.js";
 import { submitCachedDerivative } from "./cached-derivative.js";

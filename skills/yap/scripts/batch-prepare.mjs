@@ -20,6 +20,10 @@ const uncertainCodes = new Set([
   "INVALID_RESPONSE",
 ]);
 
+// Starting work reports a status naming its job `jobId`; job.get, job.retry and job.cancel
+// return the job record itself, which names itself `id`.
+const jobOf = (status) => status.jobId ?? status.id;
+
 export function createBatch(files) {
   if (!Array.isArray(files) || files.length < 1 || files.length > 1000)
     throw new Error("Supply one to 1000 explicit files");
@@ -124,7 +128,7 @@ export async function prepareBatch(
         !signal?.aborted
       ) {
         await delay(pollIntervalMs, undefined, { signal });
-        status = await invoke("job.get", { jobId: status.jobId }, { signal });
+        status = await invoke("job.get", { jobId: jobOf(status) }, { signal });
         polls++;
         update(status);
         await persist();
@@ -133,9 +137,9 @@ export async function prepareBatch(
     };
     item.error = null;
     if (retryFailed && failedStates.has(item.import.state)) {
-      if (item.import.jobId) {
+      if (jobOf(item.import)) {
         if (
-          !(await request("job.retry", { jobId: item.import.jobId }, (status) => {
+          !(await request("job.retry", { jobId: jobOf(item.import) }, (status) => {
             item.import = status;
           }))
         )
@@ -194,9 +198,9 @@ export async function prepareBatch(
         retryFailed &&
         (failedStates.has(entry.status.state) || entry.status.state === "uncertain")
       ) {
-        if (entry.status.jobId) {
+        if (jobOf(entry.status)) {
           if (
-            !(await request("job.retry", { jobId: entry.status.jobId }, (status) => {
+            !(await request("job.retry", { jobId: jobOf(entry.status) }, (status) => {
               entry.status = status;
             }))
           )

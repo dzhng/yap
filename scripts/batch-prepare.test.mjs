@@ -24,7 +24,7 @@ test("selected imports retain success when a sibling fails and resume without du
         : { jobId: "bad-job", state: "failed", errorCode: "DECODE_FAILED", retryable: true };
     }
     assert.equal(operation, "asset.get");
-    return { assetId: params.assetId, streams: [{ streamId: "video", mediaKind: "video" }] };
+    return { id: params.assetId, streams: [{ id: "video", mediaKind: "video" }] };
   };
   const result = await prepareBatch(manifest, {
     invoke,
@@ -32,7 +32,7 @@ test("selected imports retain success when a sibling fails and resume without du
     pollIntervalMs: 0,
   });
   assert.deepEqual(result.summary, { ready: 1, failed: 1, pending: 0, notRequested: 0 });
-  assert.equal(manifest.items[0].asset.assetId, "good-asset");
+  assert.equal(manifest.items[0].asset.id, "good-asset");
   assert.equal(manifest.items[1].import.errorCode, "DECODE_FAILED");
   const resumed = JSON.parse(JSON.stringify(manifest));
   await prepareBatch(resumed, { invoke, save: async (state) => saved.push(state) });
@@ -53,7 +53,7 @@ test("model absence is reported once; resume never prepares models or implicitly
         published: { generation: 1, output: { assetId: "interview" } },
       };
     if (operation === "asset.get")
-      return { assetId: "interview", streams: [{ streamId: "audio", mediaKind: "audio" }] };
+      return { id: "interview", streams: [{ id: "audio", mediaKind: "audio" }] };
     assert.equal(operation, "transcript.transcribe");
     preparationRequests++;
     throw Object.assign(new Error("Speech model is absent"), {
@@ -78,12 +78,12 @@ test("unfinished jobs hold concurrency slots across polling budgets and resume",
     }
     if (operation === "job.get")
       return {
-        jobId: params.jobId,
+        id: params.jobId,
         state: "ready",
         published: { generation: 1, output: { assetId: params.jobId } },
       };
     assert.equal(operation, "asset.get");
-    return { assetId: params.assetId, streams: [] };
+    return { id: params.assetId, streams: [] };
   };
   const paused = await prepareBatch(manifest, { invoke, concurrency: 2, maxPolls: 0 });
   assert.deepEqual(paused.summary, { ready: 0, failed: 0, pending: 2, notRequested: 1 });
@@ -123,7 +123,7 @@ for (const errorCode of ["CLI_TIMEOUT", "TIMEOUT", "CONNECTION_ERROR", "ABORTED"
         };
       }
       assert.equal(operation, "asset.get");
-      return { assetId: params.assetId, streams: [] };
+      return { id: params.assetId, streams: [] };
     };
     await prepareBatch(manifest, { invoke, concurrency: 1 });
     assert.equal(manifest.items[0].import.state, "uncertain");
@@ -158,7 +158,7 @@ test("the executable saves replay identities and preserves source bytes across r
         if(saved.items[0].requestId!==params.requestId)process.exit(2);
         fs.appendFileSync(${JSON.stringify(log)},JSON.stringify(params)+"\\n");
         data={jobId:"import-job",state:"ready",published:{generation:1,output:{assetId:"selected"}}};
-      } else if(process.argv[2]==="asset.get")data={assetId:"selected",streams:[]};
+      } else if(process.argv[2]==="asset.get")data={id:"selected",streams:[]};
       else process.exit(3);
       console.log(JSON.stringify({ok:true,data}));
     });`,
@@ -215,7 +215,7 @@ test("interrupted transcript admission recovers status without restarting a fail
         state: "ready",
         published: { generation: 1, output: { assetId: "interview" } },
       };
-    if (operation === "asset.get") return { assetId: "interview", streams: [] };
+    if (operation === "asset.get") return { id: "interview", streams: [] };
     if (operation === "transcript.transcribe") {
       assert.equal(checkpoint.items[0].transcripts[0].status.state, "uncertain");
       throw Object.assign(new Error("answer lost after admission"), { code: "CLI_TIMEOUT" });
@@ -255,7 +255,7 @@ test("an interrupted transcript admission that never reached the service is requ
         state: "ready",
         published: { generation: 1, output: { assetId: "interview" } },
       };
-    if (operation === "asset.get") return { assetId: "interview", streams: [] };
+    if (operation === "asset.get") return { id: "interview", streams: [] };
     if (operation === "transcript.transcribe") {
       if (++transcribes === 1)
         throw Object.assign(new Error("lost before admission"), { code: "CLI_TIMEOUT" });
@@ -287,11 +287,11 @@ test("lowering concurrency on resume drains earlier jobs before admitting a new 
       return { jobId: params.requestId, state: "running", published: null };
     if (operation === "job.get")
       return {
-        jobId: params.jobId,
+        id: params.jobId,
         state: "ready",
         published: { generation: 1, output: { assetId: params.jobId } },
       };
-    if (operation === "asset.get") return { assetId: params.assetId, streams: [] };
+    if (operation === "asset.get") return { id: params.assetId, streams: [] };
     assert.equal(operation, "transcript.transcribe");
     transcripts++;
     return { state: "ready", jobId: "transcript", published: { generation: 1 } };
@@ -322,7 +322,7 @@ test("resuming drains a pending stream before retrying a failed sibling", async 
         jobId: "import",
         published: { generation: 1, output: { assetId: "interview" } },
       };
-    if (operation === "asset.get") return { assetId: "interview", streams: [] };
+    if (operation === "asset.get") return { id: "interview", streams: [] };
     if (operation === "transcript.transcribe") {
       if (params.streamId === "first") return { state: "failed", jobId: "first", retryable: true };
       outstanding.add("second");
@@ -332,11 +332,11 @@ test("resuming drains a pending stream before retrying a failed sibling", async 
       retries++;
       outstanding.add(params.jobId);
       assert.deepEqual([...outstanding], ["first"]);
-      return { state: "queued", jobId: params.jobId };
+      return { id: params.jobId, state: "queued" };
     }
     assert.equal(operation, "job.get");
     outstanding.delete(params.jobId);
-    return { state: "ready", jobId: params.jobId };
+    return { id: params.jobId, state: "ready" };
   };
   await prepareBatch(manifest, { invoke, concurrency: 1, maxPolls: 0 });
   await prepareBatch(manifest, { invoke, concurrency: 1, maxPolls: 0, retryFailed: true });

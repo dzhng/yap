@@ -24,7 +24,7 @@ import { z } from "zod";
 import type { CaptureStore } from "./capture-store.js";
 import { CatalogError, type Catalog } from "./catalog.js";
 import { createOutputIssueTable, wordIssues } from "./issues.js";
-import { ownerIdentity, type JobOwner, type Owner } from "./jobs.js";
+import { ownerIdentity, type Owner } from "./jobs.js";
 import type { PageQuery } from "./ordered-pages.js";
 import type { SpeechEnginePins, SpeechModelRequest } from "./models.js";
 import type { TimeRange } from "./presentation-time.js";

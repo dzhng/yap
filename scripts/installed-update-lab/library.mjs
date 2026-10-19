@@ -48,11 +48,11 @@ export async function populateLibrary(home, source, call) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = await data("edit.apply", {
     projectId,
     requestId: randomUUID(),
-    expectedRevisionId: created.revision.revisionId,
+    expectedRevisionId: created.revision.id,
     operations: [
       { operation: "track.add", track: { kind: "video", order: 0 }, label: "video" },
       {
@@ -73,7 +73,7 @@ export async function populateLibrary(home, source, call) {
   const exportId = randomUUID();
   await data("export.create", {
     projectId,
-    revisionId: authored.revision.revisionId,
+    revisionId: authored.revision.id,
     requestId: exportId,
     kind: "processed-package",
     directory: destination,
@@ -92,8 +92,8 @@ export async function populateLibrary(home, source, call) {
     acquisitionId: acquisition.id,
     assetId: binding.assetId,
     projectId,
-    revisionId: authored.revision.revisionId,
-    jobId: job.jobId,
+    revisionId: authored.revision.id,
+    jobId: job.id,
     exportId,
     originalPath: join(source.donor, "video.mov"),
     exportPath: join(destination, "fixture.zip"),

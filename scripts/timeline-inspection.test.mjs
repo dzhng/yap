@@ -82,7 +82,7 @@ test("a pinned project sheet retains repeated occurrences, exact fragments, chan
   const invoke = async (operation, params) => {
     calls.push({ operation, params });
     if (operation === "revision.get")
-      return { projectId: "p", revision: { revisionId: "r", document: {} } };
+      return { projectId: "p", revision: { id: "r", document: {} } };
     assert.equal(params.revisionId, "r");
     if (operation === "frame.batch")
       return {
@@ -280,7 +280,7 @@ test("pending event evidence retains dependency failure identities for an explic
     jobId: "scene-job",
   };
   const invoke = async (operation) => {
-    if (operation === "revision.get") return { projectId: "p", revision: { revisionId: "r" } };
+    if (operation === "revision.get") return { projectId: "p", revision: { id: "r" } };
     if (operation === "waveform.get" || operation === "transcript.get")
       return { projectId: "p", revisionId: "r", state: "unavailable", reason: "no_audio" };
     assert.equal(operation, "timeline.events");
@@ -347,7 +347,7 @@ test("event labels fit beside their own markers while preserving kind/time and e
   }));
   const invoke = async (operation) =>
     operation === "revision.get"
-      ? { revision: { revisionId: "r" } }
+      ? { revision: { id: "r" } }
       : operation === "timeline.events"
         ? { revisionId: "r", state: "ready", rows, nextCursor: null }
         : { revisionId: "r", state: "unavailable", reason: "no_audio" };
@@ -382,7 +382,7 @@ test("event labels fit beside their own markers while preserving kind/time and e
 test("the picture panel distinguishes unselected evidence from actual pending and failed requests", async () => {
   const invoke = async (operation, params) =>
     operation === "revision.get"
-      ? { revision: { revisionId: "r" } }
+      ? { revision: { id: "r" } }
       : operation === "frame.batch"
         ? {
             items: params.atUs.map((atUs, index) => ({

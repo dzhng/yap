@@ -1,5 +1,5 @@
 import { ResourceReferences } from "./references.js";
-import { ownerIdentity, type JobOwner, type Owner } from "./jobs.js";
+import { ownerIdentity, type Owner } from "./jobs.js";
 import {
   copyImportedFile,
   hashFile,

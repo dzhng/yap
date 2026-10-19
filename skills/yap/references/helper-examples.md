@@ -45,7 +45,7 @@ const read = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const receipt = await read('revision.json');
 if (!receipt.ok) throw new Error('revision.get failed');
 console.log(JSON.stringify({
-  selections: [{projectId: receipt.data.projectId, revisionId: receipt.data.revision.revisionId,
+  selections: [{projectId: receipt.data.projectId, revisionId: receipt.data.revision.id,
     range: await read('range.json')}],
   maxPages: 1, cli: await read('cli.json')
 }));
@@ -78,7 +78,7 @@ const read = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const receipt = await read('revision.json');
 if (!receipt.ok) throw new Error('revision.get failed');
 console.log(JSON.stringify({
-  target: {projectId: receipt.data.projectId, revisionId: receipt.data.revision.revisionId},
+  target: {projectId: receipt.data.projectId, revisionId: receipt.data.revision.id},
   range: await read('range.json'), frames: 0, cli: await read('cli.json')
 }));
 ```
@@ -98,7 +98,7 @@ const receipt = await read('revision.json');
 if (!receipt.ok) throw new Error('revision.get failed');
 console.log(JSON.stringify({
   projectId: receipt.data.projectId,
-  revisions: [{revisionId: receipt.data.revision.revisionId, range: await read('range.json'),
+  revisions: [{revisionId: receipt.data.revision.id, range: await read('range.json'),
     extentProvenance: 'Explicit task selection saved in range.json'}],
   timeline: {frames: 0}, cli: await read('cli.json')
 }));

@@ -31,7 +31,6 @@ import {
   validateSourceFrameGeometry,
   validatePictureObservations,
   validateFaceObservations,
-  type SourceFrameArtifact,
   type SourceFrameUnavailable,
   type MediaFrameInspection,
 } from "./frame-inspection.js";

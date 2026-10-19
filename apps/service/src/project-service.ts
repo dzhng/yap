@@ -23,7 +23,6 @@ import {
   outputCapabilities,
   audioOutputCapabilities,
   createSourceRangeProjection,
-  omit,
 } from "@yap/composition";
 import { ProjectPackages } from "./project-packages.js";
 import { writeFile } from "node:fs/promises";

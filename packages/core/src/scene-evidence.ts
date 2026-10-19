@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { ResourceReferences } from "./references.js";
 import { isDeepStrictEqual } from "node:util";
-import { ownerIdentity, type JobOwner, type Owner } from "./jobs.js";
+import { ownerIdentity, type Owner } from "./jobs.js";
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource } from "./source-selection.js";

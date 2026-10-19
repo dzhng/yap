@@ -6,7 +6,7 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* slices 01–04 landed (04's app side is in 06); 07 is in progress; next is 05. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01–04 and 07 landed; 06 (app) is in progress; next is 05. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
@@ -22,7 +22,7 @@ section and the TODO list before you end a pass.
 - [x] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows (the app's side is in 06)
 - [ ] 05 Catalog format 30 and package version 7, each with a tested migration
 - [ ] 06 macOS app decoders
-- [ ] 07 CLI, skill, evals and docs
+- [x] 07 CLI, skill, evals and docs
 - [ ] 08 Quantity names without translation: the audio/acoustic receipt converters and `internalAudioSelection`
 - [ ] 09 Closeout: full run, close-spec, release
 

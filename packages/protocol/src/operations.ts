@@ -508,7 +508,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Adopt an explicitly named captured-source directory and its journal through a durable job. Own copied media and evidence independently of the donor; inspect job.get and use job.retry/job.cancel for preparation.",
+      "Adopt an explicitly named captured-source directory and its journal through a durable job. Own copied media and evidence independently of the donor. Returns the status of that work with its jobId; follow it with job.get and use job.retry/job.cancel for preparation.",
     ),
   z
     .object({
@@ -527,7 +527,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Admit local media, a font file or a bounded 3D .cube LUT as an immutable asset through a durable job. Fonts retain all explicitly named faces without installation or playable streams. LUTs retain byte identity and typed non-playable grid metadata; use processing.set with an explicit LUT asset, colorSpace and interpolation. Replay requestId to recover the same import; inspect job.get, retry failed work with job.retry and cancel with job.cancel.",
+      "Admit local media, a font file or a bounded 3D .cube LUT as an immutable asset through a durable job. Fonts retain all explicitly named faces without installation or playable streams. LUTs retain byte identity and typed non-playable grid metadata; use processing.set with an explicit LUT asset, colorSpace and interpolation. Replay requestId to recover the same import. Returns the status of that work with its jobId; follow it with job.get, retry failed work with job.retry and cancel with job.cancel.",
     ),
   z
     .object({
@@ -631,7 +631,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Export a pinned revision to an existing absolute directory. Replay is keyed by requestId; the returned exportId is used for status and recovery. A new intent atomically replaces an unchanged file matching a trusted Yap publication receipt; replacing another regular file requires overwrite:true.",
+      "Export a pinned revision to an existing absolute directory. Replay is keyed by requestId; pass the returned export id as exportId for status and recovery. A new intent atomically replaces an unchanged file matching a trusted Yap publication receipt; replacing another regular file requires overwrite:true.",
     ),
   z
     .object({
@@ -1561,7 +1561,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Page through recordings and imported originals newest first with one opaque cursor. Capture copies, generated or derived assets, tombstoned items and canceled takes are excluded.",
+      "Page through recordings and imported originals newest first with one opaque cursor. Each item names its kind (recording or asset) and id. Capture copies, generated or derived assets, tombstoned items and canceled takes are excluded.",
     ),
   z
     .object({
@@ -1576,7 +1576,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({ operation: z.literal("recording.cleanup"), params: recording })
     .strict()
     .describe(
-      "Explicitly reclaim verified publication working files from a settled recording. Returns a job; use job.get, job.retry and job.cancel. Unverified media remains retained; recording state and canonical media are unchanged.",
+      "Explicitly reclaim verified publication working files from a settled recording. Returns the status of that work with its jobId; follow it with job.get, job.retry and job.cancel. Unverified media remains retained; recording state and canonical media are unchanged.",
     ),
   z
     .object({

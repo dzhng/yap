@@ -21,7 +21,6 @@ import type { DerivedCache, DirectoryIdentity } from "@yap/core/cache";
 import {
   JobDependencyLost,
   ownerIdentity,
-  type JobOwner,
   type Owner,
   type Job,
   type JobAdmission,

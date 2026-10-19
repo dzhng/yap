@@ -51,7 +51,7 @@ export class CaptureCleanup {
       lane: "heavy",
       input: recording.sourceId,
     });
-    return this.jobs.inspect(job.jobId);
+    return this.jobs.work(job.jobId);
   }
 
   async execute({ job, signal }: JobExecution): Promise<string> {

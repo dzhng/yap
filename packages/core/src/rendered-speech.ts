@@ -1,4 +1,4 @@
-import { add, fromTime, rational, round, toTime } from "@yap/composition";
+import { add, fromTime, rational, round } from "@yap/composition";
 import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
 import type { Catalog } from "./catalog.js";

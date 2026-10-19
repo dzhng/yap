@@ -340,6 +340,10 @@ don't answer, drop it.
   attempts; do not overwrite them with a corrected request. Programmatically reuse
   their opaque IDs; do not retype them from memory. On `NOT_FOUND`, compare the
   submitted ID against the saved receipt before diagnosing lost service state.
+- A returned record names itself `id`; a reference to another record is
+  `<noun>Id`, so a project's `id` is the next call's `projectId`. A reference that
+  can point at several kinds is `{kind, id}`. Starting work reports its `jobId`;
+  `job.get` returns the job itself as `{id, state, …}`.
 - Parse the JSON envelope even on a nonzero exit. `--output` writes delivered
   media or JSON evidence to a file or directory according to the operation.
 - Read `issues` on every result and on its published output before trusting it.
@@ -357,5 +361,5 @@ don't answer, drop it.
 - For operations accepting `params.requestId`, reuse it with identical arguments
   when retrying an uncertain write. A new intended mutation or recomputed edit
   needs a new request ID. Export creation also keys replay on `requestId`; preserve
-  it and its arguments on retries, then use the returned `exportId` for status.
+  it and its arguments on retries, then use the returned export `id` for status.
   The CLI `--id` is a transport identifier, not the durable mutation identity.

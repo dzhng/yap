@@ -33,10 +33,7 @@ import { retainedPublicationSchema } from "./jobs.js";
 import { acquisitionContext, portableAcquisitionSchema } from "./acquisitions.js";
 import { resourceKinds, type ResourceReference } from "./references.js";
 import { checkProjectJsonBytes, type ArchiveLimits } from "./package-archive.js";
-import {
-  importedTranscriptGenerationResource,
-  type PortableImportedTranscript,
-} from "./imported-transcript.js";
+import { importedTranscriptGenerationResource } from "./imported-transcript.js";
 
 import {
   speakerEvidenceMetadataSchema,

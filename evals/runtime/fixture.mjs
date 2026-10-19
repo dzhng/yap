@@ -15,19 +15,19 @@ export async function failedJobFixture() {
               id: request.id,
               ok: true,
               data: {
-                jobId: "audit-job",
+                id: "audit-job",
+                state: "failed",
                 attemptId: "audit-attempt",
-                target: { kind: "asset", id: "audit-asset" },
                 artifact: "audio",
                 lane: "heavy",
-                state: "failed",
                 reason: "The scripted preparation attempt failed.",
                 errorCode: "AUDIT_FIXTURE_FAILURE",
-                errorDetails: null,
-                retryable: false,
-                generation: 1,
                 inputSha256: "0".repeat(64),
-                result: null,
+                attemptGeneration: 1,
+                target: { kind: "asset", id: "audit-asset" },
+                retryable: false,
+                errorDetails: null,
+                published: null,
               },
             }
           : {
@@ -132,9 +132,9 @@ export async function deletionFixture(name) {
         return deletionReply(request, {
           ok: true,
           data: {
-            assetId,
+            id: assetId,
             sizeBytes: details.freesBytes,
-            streams: [{ streamId: "video:0", mediaKind: "video" }],
+            streams: [{ id: "video:0", kind: "video" }],
           },
         });
       return unsupported(request, "This refusal fixture only answers asset.delete and asset.get.");
@@ -152,6 +152,14 @@ export async function deletionFixture(name) {
     let removed = false;
     let originalDeleted = false;
     let assetDeleted = false;
+    const revision = (id, projectId) => ({
+      id,
+      projectId,
+      ordinal: id === editedRevisionId ? 1 : 0,
+      createdAt: "2026-10-19T00:00:00.000Z",
+      operation: id === editedRevisionId ? "apply" : "create",
+      document: { tracks: [] },
+    });
     const usedBy = [
       { kind: "project", id: sourceProjectId, title: "History holder", revisions: 3 },
     ];
@@ -184,26 +192,32 @@ export async function deletionFixture(name) {
         return deletionReply(request, {
           ok: true,
           data: {
-            assetId,
+            id: assetId,
             sizeBytes: freedBytes,
-            streams: [{ streamId: "video:0", mediaKind: "video" }],
+            streams: [{ id: "video:0", kind: "video" }],
           },
         });
       if (request.operation === "project.get")
         return deletionReply(request, {
           ok: true,
           data: {
-            projectId: sourceProjectId,
+            id: sourceProjectId,
             title: "History holder",
-            revisionId: sourceRevisionId,
+            createdAt: "2026-10-01T00:00:00.000Z",
+            currentRevisionId: removed ? editedRevisionId : sourceRevisionId,
           },
         });
       if (request.operation === "revision.get") {
         const projectId = request.params.projectId;
-        const revisionId = projectId === copyProjectId ? copyRevisionId : sourceRevisionId;
+        const id =
+          projectId === copyProjectId
+            ? copyRevisionId
+            : removed
+              ? editedRevisionId
+              : sourceRevisionId;
         return deletionReply(request, {
           ok: true,
-          data: { projectId, revisionId, state: "ready", document: { tracks: [] } },
+          data: { projectId, revision: revision(id, projectId) },
         });
       }
       if (request.operation === "revision.history")
@@ -211,7 +225,7 @@ export async function deletionFixture(name) {
           ok: true,
           data: {
             projectId: request.params.projectId,
-            revisions: [{ revisionId: copyRevisionId, ordinal: 0 }],
+            revisions: [revision(copyRevisionId, copyProjectId)],
             nextCursor: null,
           },
         });
@@ -229,17 +243,20 @@ export async function deletionFixture(name) {
         removed = true;
         return deletionReply(request, {
           ok: true,
-          data: { projectId: sourceProjectId, revisionId: editedRevisionId, issues: [] },
+          data: { revision: revision(editedRevisionId, sourceProjectId), edit: { issues: [] } },
         });
       }
       if (request.operation === "project.duplicate")
         return deletionReply(request, {
           ok: true,
           data: {
-            projectId: copyProjectId,
-            revisionId: copyRevisionId,
-            title: "History holder copy",
-            state: "ready",
+            project: {
+              id: copyProjectId,
+              title: "History holder copy",
+              createdAt: "2026-10-19T00:00:00.000Z",
+              currentRevisionId: copyRevisionId,
+            },
+            revision: revision(copyRevisionId, copyProjectId),
           },
         });
       if (request.operation === "project.delete") {
