@@ -102,6 +102,7 @@ if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
 {
   try await runCaptureAudioGapProbe(output: output, corpus: corpus)
 } else {
+  runMarkRecognizerTests()
   try await runLivePCMTimingTests()
   try await runCaptureInputAuthorityTests()
   try await runPrimaryCameraInputTests()
