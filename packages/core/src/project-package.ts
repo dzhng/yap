@@ -15,6 +15,7 @@ import {
 } from "@yap/composition";
 import { CatalogError } from "./catalog.js";
 import { hdrConversionEvidenceMatchesMetadata } from "./asset-origins.js";
+import { packageMemberFromVersion6 } from "./record-identity-migration.js";
 import { compositionAsset, portableAssetSchema } from "./assets.js";
 import { sourcePublicationFiles } from "./source-admission.js";
 import {
@@ -388,10 +389,11 @@ export function importedTranscriptMemberPath(
     .digest("hex");
   return `transcripts/imported/${id}/source.${resource.origin.format}`;
 }
-const projectPackageVersion = 6;
+const projectPackageVersion = 7;
 const manifestSchema = z.strictObject({
   format: z.literal("yap-project"),
-  version: z.literal(projectPackageVersion),
+  // Version 6 is read through `packageMemberFromVersion6`; this build writes version 7.
+  version: z.union([z.literal(6), z.literal(projectPackageVersion)]),
   project: z.unknown(),
   undo: z.array(z.string()).max(1000),
   references: projectSnapshotReferencesSchema,
@@ -484,11 +486,13 @@ export function parseProjectPackageManifest(
     typeof value === "object" &&
     "format" in value &&
     value.format === "yap-project" &&
-    (!("version" in value) || value.version !== projectPackageVersion)
+    (!("version" in value) || (value.version !== 6 && value.version !== projectPackageVersion))
   )
     throw new CatalogError("INVALID_PACKAGE", "Unsupported project package version", {
       supportedVersion: projectPackageVersion,
     });
+  if (value && typeof value === "object" && "version" in value && value.version === 6)
+    value = packageMemberFromVersion6("manifest", value);
   const parsed = manifestSchema.safeParse(value);
   if (!parsed.success) invalid("Invalid project manifest");
   const manifest = parsed.data;
@@ -564,11 +568,13 @@ export function resolveProjectPackage(
     )
       invalid("Project revision hash or size differs");
     consumed.add(path);
+    let document: unknown;
     try {
-      return JSON.parse(text);
+      document = JSON.parse(text);
     } catch {
       invalid("Invalid project revision JSON");
     }
+    return manifest.version === 6 ? packageMemberFromVersion6("revision", document) : document;
   });
   if (revisions.size !== documents.length) invalid("Unexpected project revision member");
   const snapshot = validateProjectSnapshot({
@@ -595,6 +601,7 @@ export function resolveProjectPackage(
     } catch {
       invalid("Invalid resource metadata JSON");
     }
+    if (manifest.version === 6) value = packageMemberFromVersion6("metadata", value);
     const parsed = resourceSchema.safeParse(value);
     if (!parsed.success || key(resourceIdentity(parsed.data)) !== key(serialized.identity))
       invalid("Invalid portable resource metadata identity or schema");

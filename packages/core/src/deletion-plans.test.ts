@@ -9,15 +9,18 @@ test("deletion plan tables are additive and idempotent on format 29", async () =
   const path = join(home, "catalog.sqlite");
   try {
     const first = new Catalog(path);
-    expect(catalogFormat).toBe(29);
     const plans = new DeletionPlans(first);
     expect(plans).toBeDefined();
-    expect(first.catalog.prepare("PRAGMA user_version").get()).toEqual({ user_version: 29 });
+    expect(first.catalog.prepare("PRAGMA user_version").get()).toEqual({
+      user_version: catalogFormat,
+    });
     first.close();
 
     const second = new Catalog(path);
     new DeletionPlans(second);
-    expect(second.catalog.prepare("PRAGMA user_version").get()).toEqual({ user_version: 29 });
+    expect(second.catalog.prepare("PRAGMA user_version").get()).toEqual({
+      user_version: catalogFormat,
+    });
     expect(
       second.catalog
         .prepare(

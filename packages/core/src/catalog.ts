@@ -1,12 +1,13 @@
 import { DatabaseSync } from "node:sqlite";
 import { refusalRetryable } from "@yap/protocol";
+import { migrateToFormat30 } from "./record-identity-migration.js";
 /**
  * The persisted contract shared by catalog owners. Additive tables are created idempotently.
  * Changes to existing shapes or required ownership records need a bump and an explicit
- * migration owner. Launch version 0.1.33 is the compatibility floor and already uses 29;
- * earlier catalogs are refused until a deliberately tested migration is added.
+ * migration owner. Launch version 0.1.33 is the compatibility floor and uses 29; format 30
+ * names every stored record by `id` (`migrateToFormat30`). Earlier catalogs are refused.
  */
-export const catalogFormat = 29;
+export const catalogFormat = 30;
 export const minimumSupportedCatalogFormat = 29;
 export class CatalogError extends Error {
   readonly retryable: boolean;
@@ -50,6 +51,11 @@ export class Catalog {
     };
     if (format === 0 && !this.catalog.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get())
       this.catalog.exec(`PRAGMA user_version=${catalogFormat}`);
+    else if (format === 29)
+      this.transaction(() => {
+        migrateToFormat30(this.catalog);
+        this.catalog.exec(`PRAGMA user_version=${catalogFormat}`);
+      });
     else if (format !== catalogFormat) {
       this.catalog.close();
       throw new CatalogError(

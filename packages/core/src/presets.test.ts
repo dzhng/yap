@@ -101,6 +101,34 @@ describe("presets facade", () => {
     }
   });
 
+  it("replays a preset deletion 0.1.61 recorded in the current shape", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-receipts-"));
+    try {
+      await createPresets({ root, bundled });
+      const result = {
+        trashed: true,
+        trashedPaths: [join(root, "gone")],
+        instructions: ["Preset gone is in the Trash."],
+      };
+      const input = JSON.stringify({ operation: "preset.delete", presetId: "gone" });
+      const path = join(root, ".request-receipts.json");
+      await writeFile(
+        path,
+        JSON.stringify({ "delete-gone": { input, result: { presetId: "gone", ...result } } }),
+      );
+      const presets = await createPresets({ root, bundled });
+      await expect(presets.delete("gone", "delete-gone")).resolves.toEqual({
+        id: "gone",
+        ...result,
+      });
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        "delete-gone": { input, result: { id: "gone", ...result } },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("replays a preset request after the facade is reconstructed", async () => {
     const root = await mkdtemp(join(tmpdir(), "presets-replay-"));
     try {

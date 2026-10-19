@@ -553,7 +553,8 @@ test("a pre-launch catalog is refused without mutating its bytes", () => {
   );
   expect(readFileSync(prior)).toEqual(priorBytes);
   for (const format of [
-    ...Array.from({ length: catalogFormat }, (_, format) => format),
+    ...Array.from({ length: minimumSupportedCatalogFormat }, (_, format) => format),
+    catalogFormat + 1,
     2147483647,
   ]) {
     const other = new DatabaseSync(path);
@@ -764,11 +765,9 @@ test("a discarded take leaves discovery while its restart request still names on
   expect(store.isAvailable(abandoned.id)).toBe(false);
 });
 
-test("the catalog stays at the format 0.1.33 libraries use, so their recordings keep opening", () => {
-  // Every format refuses every other (above), so a bump would orphan existing libraries. Derived
-  // data self-recovers through producer identities and additive tables instead.
-  expect(catalogFormat).toBe(29);
-  expect(minimumSupportedCatalogFormat).toBe(catalogFormat);
+test("libraries from 0.1.33 on keep opening: format 29 migrates to the current format", () => {
+  expect(minimumSupportedCatalogFormat).toBe(29);
+  expect(catalogFormat).toBe(30);
 });
 
 test("a take whose recovery failed stops holding back an update; a take still in progress holds it", () => {

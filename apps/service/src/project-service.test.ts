@@ -33,7 +33,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { fstatSync } from "node:fs";
 import { AssetStore } from "@yap/core/assets";
-import { Catalog, catalogFormat } from "@yap/core/catalog";
+import { Catalog } from "@yap/core/catalog";
 import { callLocal } from "@yap/client";
 import { startProjectService } from "./project-service.js";
 import { PassThrough, Writable } from "node:stream";
@@ -2544,11 +2544,10 @@ test("model.remove reports exact model bytes, fences running requests, and rejec
   catalog.close();
 });
 
-test("preset reads cross the public wire without changing the catalog format", async () => {
+test("preset reads cross the public wire", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { bundled: join(import.meta.dirname, "../../../presets") },
   });
-  expect(catalogFormat).toBe(29);
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
     data: {
@@ -2711,7 +2710,6 @@ test("a local preset is created, read and trashed over the public wire", async (
     await f.call("preset.delete", { presetId: "other", requestId: "preset-delete-replay" }),
   ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(trashed).toHaveLength(1);
-  expect(catalogFormat).toBe(29);
 });
 
 test("a persisted queued voice request reaches its initialized owner after startup recovery", async () => {

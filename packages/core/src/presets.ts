@@ -5,6 +5,7 @@ import {
   newerThanInstalled,
 } from "./preset-install.js";
 import { presetId, scaffold } from "./preset-scaffold.js";
+import { presetReceiptsFrom0161 } from "./record-identity-migration.js";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { readFile, rm } from "node:fs/promises";
@@ -59,11 +60,14 @@ export class Presets {
     this.requestReceiptPath = join(this.store.root, ".request-receipts.json");
     if (existsSync(this.requestReceiptPath)) {
       try {
-        const saved = JSON.parse(readFileSync(this.requestReceiptPath, "utf8")) as Record<
+        const stored = JSON.parse(readFileSync(this.requestReceiptPath, "utf8")) as Record<
           string,
           { input: string; result: unknown }
         >;
-        for (const [id, receipt] of Object.entries(saved)) this.requestReceipts.set(id, receipt);
+        const migrated = presetReceiptsFrom0161(stored);
+        for (const [id, receipt] of Object.entries(migrated ?? stored))
+          this.requestReceipts.set(id, receipt);
+        if (migrated) this.writeRequestReceipts();
       } catch {
         // A damaged receipt file cannot authorize a replay; the preset files remain the source.
       }
@@ -71,6 +75,9 @@ export class Presets {
   }
   private saveRequestReceipt(requestId: string, receipt: { input: string; result: unknown }): void {
     this.requestReceipts.set(requestId, receipt);
+    this.writeRequestReceipts();
+  }
+  private writeRequestReceipts(): void {
     const temporary = `${this.requestReceiptPath}.tmp`;
     writeFileSync(temporary, JSON.stringify(Object.fromEntries(this.requestReceipts)), {
       mode: 0o600,

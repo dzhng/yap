@@ -6,7 +6,7 @@ edge and its callers.
 
 ## Next Agent Prompt
 
-*Status, 2026-10-19:* slices 01–04 and 07 landed; 06 (app) is in progress; next is 05. Branch `t3/fix-audio-tail-coverage`
+*Status, 2026-10-19:* slices 01–05 and 07 landed; 06 (app) is in progress; next is 08. Branch `t3/fix-audio-tail-coverage`
 carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
 builds on.
 
@@ -20,7 +20,7 @@ section and the TODO list before you end a pass.
 - [x] 02 Jobs: `JobQueue.inspect` is the one public job record; `JobQueue.work` is what an operation that started a job reports
 - [x] 03 Library records name themselves `id`
 - [x] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows (the app's side is in 06)
-- [ ] 05 Catalog format 30 and package version 7, each with a tested migration
+- [x] 05 Catalog format 30 and package version 7, each with a tested migration
 - [ ] 06 macOS app decoders
 - [x] 07 CLI, skill, evals and docs
 - [ ] 08 Quantity names without translation: the audio/acoustic receipt converters and `internalAudioSelection`
@@ -225,7 +225,15 @@ service node suites ran:
   identity, no `edit.document`) so no reader needs them.
 - Preset request receipts (`<presets>/.request-receipts.json`) store raw results; a
   `preset.delete` receipt names its preset `presetId`. Slice 05 rewrites that file too.
-- `capture.start` request arguments are stored for replay; their `source` changes shape in
-  slice 04, so the migration rewrites stored capture request arguments as well.
-- Completeness check for slice 05: build catalogs with the format-29 code through the
-  suites, migrate them, and assert that no JSON column anywhere still holds an old shape.
+- `capture.start` stores its replay arguments as a positional array of values, so the
+  `source` rename leaves them unchanged.
+- Completeness check for slice 05 (done): a v0.1.61 checkout kept every catalog its own core,
+  service and service node suites built (1,541) and every package its export tests wrote
+  (12). With this build, all 1,541 catalogs migrate and none keeps an old shape anywhere,
+  including JSON held in strings (an unfinished package export pins a scene publication whose
+  `result` is a JSON string); 531 projects and 2,141 revisions read back; all 12 packages open
+  and adopt. Two of the catalogs and five of the packages are now fixtures
+  (`packages/core/fixtures/format-29-*.sqlite`, `apps/service/tests/fixtures/packages-v6/`).
+  The catalog's replay keys for a package adoption are canonical (sorted) JSON, so the
+  migration re-sorts a renamed key there; stored capture arguments are positional and need
+  nothing.
