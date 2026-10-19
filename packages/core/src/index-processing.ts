@@ -12,6 +12,7 @@ import {
   type ProjectIndexIdentity,
   type ProjectIndexRecords,
 } from "./project-index.js";
+import { projectIndexPolicy } from "./project-index-selection.js";
 import {
   materializeProjectIndex,
   retainedProjectIndexIssues,
@@ -29,6 +30,7 @@ import {
 import { type SourceSelection } from "./source-selection.js";
 import type { SourceIndexIdentity, SourceIndexRecords } from "./source-index.js";
 import { sourceIndexPolicy } from "./source-index-selection.js";
+import type { SourceEvidenceReader } from "./evidence-read.js";
 import { materializeSourceIndex } from "./source-index-materialization.js";
 import { RetainedIndexRead, type IndexCoverageCursor, type IndexReadCursor } from "./index-read.js";
 import { setImmediate } from "node:timers/promises";
@@ -84,6 +86,7 @@ type MediaIndexOwners = {
   acquisitions: AcquisitionStore;
   scenes: SceneProcessing;
   records: SceneEvidenceStore;
+  evidence?: SourceEvidenceReader;
   frames: MediaFrameInspection;
   cache: DerivedCache;
 };
@@ -317,8 +320,11 @@ export class IndexProcessing {
     const owner = { kind: "project" as const, projectId };
     await this.project.index.reclaim(
       owner,
-      ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
+      (identity) =>
+        identity.selectionPolicy === projectIndexPolicy.id &&
+        this.jobs.retainsAttempt(owner, artifact, identity.generation),
       signal,
+      (identity) => identity.selectionPolicy !== projectIndexPolicy.id,
     );
   }
   admitProject(job: Job): ReturnType<JobAdmission> {
@@ -705,8 +711,11 @@ export class IndexProcessing {
     const owner = { kind: "asset" as const, assetId };
     await this.asset.index.reclaim(
       owner,
-      ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
+      (identity) =>
+        identity.selectionPolicy === sourceIndexPolicy.id &&
+        this.jobs.retainsAttempt(owner, artifact, identity.generation),
       signal,
+      (identity) => identity.selectionPolicy !== sourceIndexPolicy.id,
     );
   }
   private async executeSource({ job, signal }: JobExecution) {

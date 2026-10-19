@@ -1,7 +1,9 @@
 import { textSeedResources } from "./text-seeds.js";
 import { portablePreparedAudioSchema, preparedAudioResource } from "./prepared-audio.js";
 import { portableProjectIndexMetadataSchema } from "./project-index.js";
+import { projectIndexPolicy } from "./project-index-selection.js";
 import { portableSourceIndexMetadataSchema } from "./source-index.js";
+import { sourceIndexPolicy } from "./source-index-selection.js";
 import { indexGenerationResource } from "./screenshot-index.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -604,6 +606,15 @@ export function resolveProjectPackage(
     const resource = parsed.data;
     consumed.add(ref.path);
     metadataCount++;
+    const foreignIndex =
+      (resource.kind === "index-generation" &&
+        resource.metadata.selectionPolicy !== sourceIndexPolicy.id) ||
+      (resource.kind === "project-index-generation" &&
+        resource.metadata.selectionPolicy !== projectIndexPolicy.id);
+    if (foreignIndex) {
+      for (const member of resourceMembers(resource)) consumed.add(member.path);
+      continue;
+    }
     resolved.push(resource);
     if (
       (resource.kind === "index-generation" || resource.kind === "project-index-generation") &&
@@ -643,7 +654,7 @@ export function resolveProjectPackage(
     resources.set(identity, resource);
   }
   if (metadata.size !== metadataCount) invalid("Unexpected resource metadata member");
-  const roots = projectResourceRoots(snapshot);
+  const roots = projectResourceRoots(snapshot).filter((identity) => resources.has(key(identity)));
   const closure = collectPortableResources(
     roots,
     (identity) => resources.get(key(identity)) ?? invalid("Missing transitive project dependency"),

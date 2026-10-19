@@ -19,8 +19,12 @@ import {
   sourceIndexChunks,
   sourceIndexQueryRanges,
   selectSourceIndex,
+  type IndexMoment,
+  type IndexPointerSample,
   type SourceIndexRequest,
 } from "./source-index-selection.js";
+import type { AcquisitionStore } from "./acquisitions.js";
+import type { SourceEvidenceReader } from "./evidence-read.js";
 
 type Resolved = { request: SourceIndexRequest } & (
   | { ordinal: number; frame: SourceFrameArtifact }
@@ -37,6 +41,8 @@ export async function materializeSourceIndex(
   owners: {
     index: ScreenshotIndexStore<SourceIndexRecords>;
     records: SceneEvidenceStore;
+    acquisitions: AcquisitionStore;
+    evidence?: SourceEvidenceReader;
     frames: MediaFrameInspection;
     cache: DerivedCache;
   },
@@ -44,6 +50,66 @@ export async function materializeSourceIndex(
   signal: AbortSignal,
 ) {
   const { index, records, frames, cache } = owners;
+  const moments: IndexMoment[] = [];
+  const pointerSamples: IndexPointerSample[] = [];
+  if (identity.acquisitionId && owners.evidence) {
+    const selection = {
+      assetId: identity.assetId,
+      streamId: identity.streamId,
+      acquisitionId: identity.acquisitionId,
+    };
+    const acquisition = owners.acquisitions.get(identity.acquisitionId);
+    const offset =
+      acquisition.bindings.find((binding) => binding.streamId === identity.streamId)
+        ?.sourceToAssetOffsetUs ?? 0;
+    const offsetUs =
+      typeof offset === "number" ? offset : Number(offset.numerator) / Number(offset.denominator);
+    const toAssetUs = (sourceUs: number) => sourceUs + offsetUs;
+    let after: [number, number] | null = null;
+    const marks: { sourceUs: number; sequence: number; data: Record<string, unknown> }[] = [];
+    for (;;) {
+      const page = owners.evidence.eventRecords(acquisition.evidence, "marks", after, 256);
+      if (!page.length) break;
+      marks.push(
+        ...page.map((row) => ({
+          sourceUs: row.sourceUs!,
+          sequence: row.sequence,
+          data: JSON.parse(row.content),
+        })),
+      );
+      after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
+    }
+    const retracted = new Set(
+      marks.map((row) => row.data.retracts).filter((id): id is string => typeof id === "string"),
+    );
+    for (const mark of marks.filter(
+      (row) => row.data.retracts == null && !retracted.has(row.data.id as string),
+    )) {
+      const kind = mark.data.kind === "stroke" ? "mark" : mark.data.kind;
+      if (kind === "mark" || kind === "pin" || kind === "click")
+        moments.push({ sourceUs: toAssetUs(mark.sourceUs), kind, markId: mark.data.id as string });
+    }
+    let afterSequence: number | undefined;
+    for (;;) {
+      const page = owners.evidence.page({
+        ...acquisition.evidence,
+        range: { startUs: 0, endUs: Number.MAX_SAFE_INTEGER },
+        ...(afterSequence === undefined ? {} : { afterSequence }),
+        limit: 5000,
+      });
+      pointerSamples.push(
+        ...page.samples.map((sample) => ({
+          sourceUs: toAssetUs(sample.sourceUs),
+          x: typeof sample.x === "number" ? sample.x : null,
+          y: typeof sample.y === "number" ? sample.y : null,
+        })),
+      );
+      if (page.nextSequence === null) break;
+      afterSequence = page.nextSequence;
+    }
+    moments.sort((a, b) => a.sourceUs - b.sourceUs);
+    pointerSamples.sort((a, b) => a.sourceUs - b.sourceUs);
+  }
   const stillness = new SourceIndexStillness(sourceIndexPoints(records, identity, signal));
   let ordinal = 0,
     through = 0,
@@ -153,6 +219,8 @@ export async function materializeSourceIndex(
     for await (const request of selectSourceIndex(
       sourceIndexQueryRanges(source.support),
       sourceIndexChunks(records, identity.scenes, signal),
+      moments,
+      pointerSamples,
       signal,
     )) {
       if (previous && previous.request.support !== request.support) {
