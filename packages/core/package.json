@@ -120,6 +120,10 @@
       "types": "./dist/transcript-processing.d.ts",
       "default": "./dist/transcript-processing.js"
     },
+    "./transcript-backlog": {
+      "types": "./dist/transcript-backlog.d.ts",
+      "default": "./dist/transcript-backlog.js"
+    },
     "./transcript-import": {
       "types": "./dist/transcript-import.d.ts",
       "default": "./dist/transcript-import.js"
