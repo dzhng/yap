@@ -1,8 +1,8 @@
 {"data":{"height":80,"microphone":false,"schemaVersion":3,"sessionID":"schema3-marks","source":{"kind":"window","windowID":7},"systemAudio":false,"width":120},"event":"header","sequence":1}
 {"data":{"epoch":1,"geometry":{"boundingRect":null,"contentRect":{"height":80,"width":120,"x":0,"y":0},"contentScale":1,"outputHeight":80,"outputWidth":120,"requestedSourceRect":null,"scaleFactor":1,"screenRect":{"height":80,"width":120,"x":0,"y":0}},"hostUs":1000,"sourceUs":0},"event":"geometry","sequence":2}
-{"data":{"epoch":1,"hostUs":1100,"id":"stroke-1","kind":"stroke","points":[{"hostUs":1100,"x":10,"y":20},{"hostUs":1200,"x":20,"y":30}],"sourceUs":100},"event":"mark","sequence":3}
-{"data":{"epoch":1,"hostUs":2000,"id":"pin-1","kind":"pin","pin":1,"points":[{"hostUs":2000,"x":30,"y":40}],"sourceUs":1000,"window":{"app":"Safari","bounds":{"height":600,"width":800,"x":40,"y":50},"title":"Deploys"}},"event":"mark","sequence":4}
-{"data":{"epoch":1,"hostUs":3000,"id":"click-1","kind":"click","points":[{"hostUs":3000,"x":50,"y":60}],"sourceUs":2000},"event":"mark","sequence":5}
+{"data":{"epoch":1,"hostUs":1100,"id":"stroke-1","kind":"stroke","points":[{"globalX":10,"globalY":20,"hostUs":1100,"x":10,"y":20},{"globalX":20,"globalY":30,"hostUs":1200,"x":20,"y":30}],"sourceUs":100},"event":"mark","sequence":3}
+{"data":{"epoch":1,"hostUs":2000,"id":"pin-1","kind":"pin","pin":1,"points":[{"globalX":30,"globalY":40,"hostUs":2000,"x":30,"y":40}],"sourceUs":1000,"window":{"app":"Safari","bounds":{"height":600,"width":800,"x":40,"y":50},"title":"Deploys"}},"event":"mark","sequence":4}
+{"data":{"epoch":1,"hostUs":3000,"id":"click-1","kind":"click","points":[{"globalX":50,"globalY":60,"hostUs":3000,"x":50,"y":60}],"sourceUs":2000},"event":"mark","sequence":5}
 {"data":{"epoch":1,"hostUs":4000,"id":"retract-1","kind":"stroke","points":[],"retracts":"stroke-1","sourceUs":3000},"event":"mark","sequence":6}
 {"data":{"epoch":2,"geometry":{"boundingRect":null,"contentRect":{"height":80,"width":120,"x":0,"y":0},"contentScale":1,"outputHeight":120,"outputWidth":160,"requestedSourceRect":null,"scaleFactor":1,"screenRect":{"height":120,"width":160,"x":0,"y":0}},"hostUs":5000,"sourceUs":4000},"event":"geometry","sequence":7}
 {"data":{"hostUs":6000},"event":"pauseBegan","sequence":8}

@@ -42,6 +42,7 @@ function matches(index: EvidenceIndex, row: RecordRow, data: Record<string, unkn
   if (index === "geometry") return row.event === "geometry" && row.sourceUs !== null;
   if (index === "unplaced") return row.event === "geometry" && row.sourceUs === null;
   if (index === "pauses") return row.event === "pause";
+  if (index === "marks") return row.event === "mark";
   return row.event === "audioAcquired" && data.role === index;
 }
 

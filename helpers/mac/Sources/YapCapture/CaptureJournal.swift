@@ -714,11 +714,17 @@ public struct JournalDisplaySpace: Codable, Sendable {
 }
 
 public struct JournalMarkPoint: Codable, Sendable, Equatable {
-    public let x: Double
-    public let y: Double
     public let hostUs: Int64
-    public init(x: Double, y: Double, hostUs: Int64) {
-        self.x = x; self.y = y; self.hostUs = hostUs
+    public let globalX: Double
+    public let globalY: Double
+    public let x: Double?
+    public let y: Double?
+    public init(globalX: Double, globalY: Double, x: Double?, y: Double?, hostUs: Int64) {
+        self.hostUs = hostUs
+        self.globalX = globalX
+        self.globalY = globalY
+        self.x = x
+        self.y = y
     }
 }
 
@@ -758,7 +764,11 @@ private func validMark(_ mark: JournalMark) -> Bool {
         mark.retracts == nil || (!mark.retracts!.isEmpty && mark.retracts!.utf8.count <= 256),
         mark.retracts == nil ? !mark.points.isEmpty : mark.points.isEmpty,
         mark.kind == "pin" ? (mark.pin ?? 0) > 0 : mark.pin == nil else { return false }
-    guard mark.points.allSatisfy({ $0.hostUs >= 0 && $0.x.isFinite && $0.y.isFinite }) else { return false }
+    guard mark.points.allSatisfy({
+        $0.hostUs >= 0 && $0.globalX.isFinite && $0.globalY.isFinite
+            && (($0.x == nil) == ($0.y == nil))
+            && ($0.x == nil || ($0.x!.isFinite && $0.y!.isFinite))
+    }) else { return false }
     if let window = mark.window {
         guard !window.app.isEmpty, window.app.utf8.count <= 256,
             window.title.utf8.count <= 4096,
