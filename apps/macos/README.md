@@ -16,6 +16,25 @@ and do not activate the app over the source being recorded. Opening the capture
 panel from the menu bar activates its window, so its native glass and controls
 are ready before the first content click.
 
+## Show your agent
+
+The global shortcuts are one catalog, [ShortcutBindings](Sources/YapControls/ShortcutBindings.swift),
+shared by Settings, registration and the `shortcuts.get`/`shortcuts.set` app operations, so a key
+means the same thing however it was set. Bindings are physical key codes, and they apply as soon as
+they change. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
+pause, restart) only while a take or countdown is live, so they take no characters away otherwise.
+A hotkey start records the display under the pointer, whatever the menu has selected, and a
+restart reuses the running take's own source; the menu's Start keeps the menu's source. The
+countdown is off unless someone turns it on.
+
+Marks are drawn and recorded without any new permission: ⇧ is read with the pointer, and clicks
+come from a global mouse monitor, which needs no Accessibility. The recognizer and the journal
+live in [native capture](../../helpers/mac/Sources/YapCapture/README.md); the app only draws what
+it is told and hides that ink from every capture. Pasting is the one place Accessibility helps:
+with it, `⌥⇧V` posts ⌘V into the front app; without it, the prompt is copied and the person
+presses ⌘V. The prompt text comes from the service's `recording.prompt`, so the app never writes
+its own.
+
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
 controls share that one preference.
@@ -195,7 +214,7 @@ shows what would be recorded rather than Yap's own panel. The window list, in th
 [window rule](Sources/YapControls/WindowSource.swift) owns what that means, and takes Yap's own
 windows from the same exclusion.
 When a recording is available, the popover appends the latest library item below its transport
-actions and routes Play and Copy agent prompt through the same controls actions as Library.
+actions and routes Play and Copy prompt through the same controls actions as Library.
 
 Run `node apps/macos/tests/capture-view-shots.mjs` from the repository root for
 focused native interaction, applicability and scroll checks plus offscreen images.

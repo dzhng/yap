@@ -2,6 +2,22 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## Unreleased
+
+Show your agent, in four keys. Press ⌥⇧S to record the display under your pointer, talk,
+hold ⇧ and move to draw, ⇧-click to drop a numbered pin, and press ⌥⇧S again. ⌥⇧V pastes a
+short prompt into your agent describing what you captured and where you pointed; allow
+Accessibility in Settings and it pastes for you, otherwise it is copied. ⌥⇧Z undoes a mark,
+⌥⇧X cancels and ⌥⇧P pauses. Shortcuts are recorded right in Settings and apply at once. The
+countdown is now off unless you turn it on. Every recording and import is transcribed in the
+background, without slowing anything you ask for.
+
+For scripts and agents: new operations `recording.prompt`, `shortcuts.get` and
+`shortcuts.set`. `timeline.events` lists a recording's marks, and screenshot indexes take a
+frame at every mark, pin and click while adding fewer frames over long still stretches;
+existing indexes rebuild on their next request. Recordings now carry capture journal
+schema 3, which older Yap versions cannot open in packages.
+
 ## 0.1.60
 
 You can now delete anything that takes up space, and see what it frees first. The

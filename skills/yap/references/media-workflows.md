@@ -40,8 +40,11 @@ when requesting a source transcript; include `acquisitionId` only when you inten
 its capture gaps. These ranges are normalized file timestamps, not project time.
 Keep the complete returned cursor when paging or searching; changing selection or
 generation requires a fresh read. The app prepares the default transcript model in
-the background at install and update; ordinary calls use it directly. Call
-`transcript.transcribe` when a bounded or new execution is required;
+the background at install and update; ordinary calls use it directly. Every
+recording and import is then transcribed automatically, each audio stream on its own,
+at a priority that never delays your requests; asking for the same full-source
+transcript joins that work. Call `transcript.transcribe` when a bounded or new
+execution is required;
 `transcript.get` and search inspect retained evidence and never run inference. If
 an operation reports `MODEL_NOT_PREPARED`, ask the user before acquiring the
 optional model/runtime, then use `model.prepare` and retry after it is ready. A

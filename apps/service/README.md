@@ -74,6 +74,15 @@ plans; [native workers](../../helpers/mac/README.md) execute physical media work
 Authoring support and execution readiness are separate. Capability discovery
 must report actual prepared/native requirements rather than inventing a fallback.
 
+Work someone asked for always comes first. Jobs carry a priority: on the single heavy lane an
+interactive job starts before any background job, a running job is never preempted, and
+background work has its own bound outside the interactive limits and never waits on a
+dependency, so it cannot hold an update. The one background producer today is the
+[transcript backlog](../../packages/core/src/transcript-backlog.ts): every published recording
+and real import records its audio streams, and the backlog submits them once the speech model
+is ready, at startup or after preparation. Nothing waits on the model; an explicit request for
+the same transcript joins the queued job and promotes it.
+
 `service.health` remains a cheap listener-readiness check. Its model readiness comes
 from preparation receipts; hashing a prepared runtime grows with its size, so that
 stays with preparation, explicit `model.status` and execution. Startup preparation

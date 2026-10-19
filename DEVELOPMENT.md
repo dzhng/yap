@@ -41,6 +41,11 @@ Yap should not re-align a transcript merely because it can.
 
 ## Evidence and edits
 
+Evidence may be gathered automatically; edits never are. Every recording and import is
+transcribed in the background as soon as the speech model is ready, because the transcript
+is the first thing every agent reads, and that work never blocks or delays a request
+someone made. Nothing automatic ever changes a project or source media.
+
 Read operations return evidence and do not mutate projects. Edit operations carry
 explicit intent, pin the revision they apply to and retain enough history to
 inspect, undo or restore the result. Candidate detectors for fillers, pauses or
