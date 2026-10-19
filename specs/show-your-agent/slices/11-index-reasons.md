@@ -10,10 +10,11 @@
   (`source-index.ts:42-50`) gains the acquisition evidence generation.
 - Project: the project selector (`project-index-selection.ts:34-50`) receives moments through
   the occurrences it already maps.
-- Coverage (D21), one pure rule both selectors use:
-  `coverageDue({ sinceLastChosenUs, pictureChanged, pointerTravelPt, displayWidthPt })` is true
-  only when the picture changed since the last chosen frame and either 30 s passed with no
-  other frame or travel during continuous change reached one display width. Project indexes
+- Coverage (D21), one owner both selectors use: `CoverageTracker`
+  (`packages/core/src/index-coverage.ts`) records every chosen picture and scans forward over
+  the pointer path. A coverage picture is due only when the picture changed since the last
+  chosen frame and either 30 s passed with no other frame or pointer travel since it reached
+  the picture's long edge in pixels (`pictureLongEdgePx`). Project indexes
   lose the unconditional 5 s cadence (`project-index-selection.ts:137-142`) and use the scene
   evidence they already read (`:171-174`).
 - Policy ids bump (`source-presentation-selection-v2`, `project-picture-selection-v2` → v3).
