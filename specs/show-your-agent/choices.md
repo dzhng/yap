@@ -18,3 +18,34 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
 - **Package-context jobs still count toward the interactive queued limit whatever their
   priority.** Why: context jobs are always interactive today. Verdict: sound until a
   background context job exists.
+
+## Slice 01 (mark contract)
+
+- **Every screen take now writes journal schema 3**, not only takes that contain marks. Why:
+  one writer version is simpler than switching on content; schema 3 is a superset. Camera-only
+  takes stay schema 1. Verdict: sound.
+- **`markEvents` is optional in the receipt and counts as 0 when absent.** Why: receipts from
+  schema 1/2 journals have no such field. Verdict: sound.
+- **A retracting mark still carries a `kind`** (the retracted mark's kind). Why: the frozen
+  shape made `kind` required; it lets readers count retractions per kind. Verdict: sound.
+
+## Slice 03 (recognizer)
+
+- **A press's own ⇧ flag decides pin versus click**, not the last polled sample. Why: a ⇧+click
+  inside one 60 Hz tick of pressing ⇧ would otherwise become a click; the global monitor
+  reports the flag (probe 1). Verdict: sound.
+- **The recognizer owns no undo state**; pin numbers only count up. Why: undo retracts the last
+  mark of any kind, which slice 04 tracks by journal id. Verdict: sound.
+- **Window bounds reuse `GeometryRect`**. Why: existing geometry owner. Verdict: sound.
+
+## Slice 06 (shortcut bindings)
+
+- **Modifiers are stored as the Carbon mask** (`⌥⇧` = 2560) in `shortcuts.json` and
+  `shortcuts.set`. Why: it is what `RegisterEventHotKey` takes; the label carries the human
+  form. Verdict: sound, but the CLI contract exposes a platform number; revisit if the CLI
+  ever needs portable names.
+- **Duplicate identity is key code plus modifiers**, ignoring the label. Verdict: sound.
+- **`shortcuts.set` replaces the whole binding set** (missing actions fall back to defaults)
+  and errors are `DUPLICATE_SHORTCUT` / `SHORTCUTS_WRITE_FAILED`. Verdict: sound.
+- **Paste prompt and undo mark are registered but do nothing** until slices 12/13 and 04/08.
+  Verdict: provisional, removed by those slices.
