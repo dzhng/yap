@@ -433,17 +433,17 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func shortcutRows(for lifetime: ShortcutLifetime) -> some View {
-        ForEach(ShortcutBindings.actions.filter {
+        ForEach(ShortcutBindings.catalog.filter {
             model.shortcuts[$0.action]?.lifetime == lifetime
-        }, id: \.action.id) { action, name in
-            LabeledContent(name) { shortcutValue(action) }
+        }, id: \.action.id) { entry in
+            LabeledContent(entry.name) { shortcutValue(entry.action) }
         }
     }
 
     @ViewBuilder
     private func shortcutValue(_ action: ControlsAction) -> some View {
         let binding = model.shortcuts[action]
-        let unavailable = binding.map { model.state.unavailableShortcuts.contains($0.shortcut.display) } ?? false
+        let unavailable = model.state.unavailableShortcuts.contains(action.id)
         let status = binding.map {
             ShortcutPresentation.state(
                 for: $0, registered: model.registered.contains(action.id),
@@ -459,7 +459,7 @@ struct SettingsView: View {
             // fitting size never reaches the row's layout and the row stays one line tall.
             Text(model.recordingAction == action
                 ? "Type shortcut"
-                : binding.map { $0.shortcut.display.map(String.init).joined(separator: "\u{2009}") } ?? "Off")
+                : binding.map { $0.shortcut.label.map(String.init).joined(separator: "\u{2009}") } ?? "Off")
                 .font(.system(size: 13))
                 .foregroundStyle(model.recordingAction == action ? .secondary : .primary)
                 .lineLimit(1)

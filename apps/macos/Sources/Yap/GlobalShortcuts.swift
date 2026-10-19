@@ -30,14 +30,12 @@ final class GlobalShortcuts {
     private var appliedIdentifiers: Set<UInt32> = []
     private var handler: EventHandlerRef?
     private var nextIdentifier: UInt32 = 1
-    private var applied: [ControlsAction: ShortcutBindings.Binding] = [:]
-    private var applyHandler: ((ControlsAction) -> Void)?
-    private var recording = false
 
     func apply(
         _ bindings: [ControlsAction: ShortcutBindings.Binding], recording: Bool = false,
         perform: @escaping (ControlsAction) -> Void
     ) throws(ApplyError) -> (held: Set<String>, unavailable: [String]) {
+        // Both answers are action ids: the physical key is the identity, a label only shows it.
         // The physical key and modifiers are the identity; a label is only how it is shown.
         let grouped = Dictionary(grouping: bindings) {
             [$0.value.shortcut.keyCode, $0.value.shortcut.modifiers]
@@ -46,20 +44,16 @@ final class GlobalShortcuts {
             throw .duplicate(duplicate.map { $0.key.id }.sorted().joined(separator: ", "))
         }
         releaseApplied()
-        applied = bindings
-        applyHandler = perform
-        self.recording = recording
-        let active = bindings.filter { $0.value.lifetime == .app || recording }
         let systemHeld = SystemShortcuts.taken()
         var held: Set<String> = []
         var unavailable: [String] = []
-        // One stable order, so a launch that cannot claim two combinations names them the same way
-        // every time rather than in whatever order a dictionary happened to hold.
-        for action in active.keys.sorted(by: { $0.id < $1.id }) {
-            guard let shortcut = active[action]?.shortcut else { continue }
+        // The catalog's order, so a launch that cannot claim two combinations names them the same
+        // way every time rather than in whatever order a dictionary happened to hold.
+        for action in ShortcutBindings.catalog.map(\.action) {
+            guard let binding = bindings[action], binding.lifetime == .app || recording else { continue }
             guard let identifier = register(
-                shortcut, systemHeld: systemHeld, perform: { perform(action) }) else {
-                unavailable.append(shortcut.display)
+                binding.shortcut, systemHeld: systemHeld, perform: { perform(action) }) else {
+                unavailable.append(action.id)
                 continue
             }
             appliedIdentifiers.insert(identifier)
@@ -71,10 +65,6 @@ final class GlobalShortcuts {
     /// Releases only the registrations made by `apply`; temporary `hold` claims have their own
     /// lifetime and remain active until their release closure runs.
     func suspend() { releaseApplied() }
-
-    func resume() throws(ApplyError) -> (held: Set<String>, unavailable: [String]) {
-        try apply(applied, recording: recording, perform: applyHandler ?? { _ in })
-    }
 
     func hold(_ shortcut: Shortcut, perform: @escaping () -> Void) -> (() -> Void)? {
         guard let identifier = register(
@@ -99,7 +89,7 @@ final class GlobalShortcuts {
             option: modifiers & UInt32(optionKey) != 0,
             command: modifiers & UInt32(cmdKey) != 0,
             shift: modifiers & UInt32(shiftKey) != 0)) {
-            diagnostic("shortcut \(shortcut.display) is held by macOS itself")
+            diagnostic("shortcut \(shortcut.label) is held by macOS itself")
             return nil
         }
         let identifier = nextIdentifier

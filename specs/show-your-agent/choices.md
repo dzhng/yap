@@ -170,3 +170,19 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
   files are not in it and no test needed them. Verdict: process note.
 - **Fixed a pre-existing lint error on `main`** (`blend-public.mjs` declared `created` twice).
   Verdict: sound.
+
+## Whole-feature review
+
+- **A refused shortcut is named by its action in the capture notice** ("The Undo Mark shortcut
+  was refused by macOS."), not by its key label. Why: refusal is now reported by action id, and
+  the notice reads only controls state; Settings shows the key beside the action. Verdict:
+  provisional, copy.
+- **The restart source is held under the take it started** (`activeStart` keyed to the
+  recordingId the start answer named), rather than cleared when the device leaves the live
+  states. Why: a status poll already in flight could report idle just after the start answered
+  and clear it; a key cannot go stale. Verdict: sound.
+- **`shortcuts.json` and `shortcuts.set` share one merge rule**, so a file with any invalid
+  entry is ignored whole (it used to skip that entry). Why: one owner of what a valid binding
+  is; only Yap writes the file. Verdict: sound.
+- **A duplicate binding in `shortcuts.json` at launch registers the defaults** and shows the
+  duplicate failure, so Settings never shows bindings that are not held. Verdict: sound.

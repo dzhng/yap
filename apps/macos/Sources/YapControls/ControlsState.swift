@@ -43,13 +43,19 @@ public struct ControlsState: Equatable, Sendable {
     public var storageFailure: String?
     /// The last failure a person's own action produced, kept visible until the next action.
     public var failure: String?
-    /// Shortcuts whose key combination this app could not claim, so nothing was stolen.
+    /// The action ids whose key combination this app could not claim, so nothing was stolen.
     public var unavailableShortcuts: [String] = []
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
     public private(set) var unansweredStart: StartRequest?
     /// Whether any source was ever selected. Only before then is a display offered by default.
     private var sourceWasSelected = false
-    private var activeStart: CaptureSelection.Start?
+    /// The start this app made for a take, under that take's ID.
+    private var activeStart: ActiveStart?
+
+    private struct ActiveStart: Equatable, Sendable {
+        let recordingId: String
+        let start: CaptureSelection.Start
+    }
 
     public enum ServiceState: Equatable, Sendable {
         case starting
@@ -328,8 +334,12 @@ public struct ControlsState: Equatable, Sendable {
     }
 
     /// The source owned by the live take, retained before the next catalog poll can refresh the
-    /// menu selection. A restart must use this identity when a hotkey chose another display.
-    public var restartStart: CaptureSelection.Start? { activeStart ?? start() }
+    /// menu selection. A restart must use this identity when a hotkey chose another display. It
+    /// belongs to one take: a later take, however it was started, restarts on its own selection.
+    public var restartStart: CaptureSelection.Start? {
+        if let activeStart, activeStart.recordingId == device?.recordingId { return activeStart.start }
+        return start()
+    }
 }
 
 extension ControlsState.CaptureSelection {
@@ -661,7 +671,8 @@ extension ControlsState {
     public mutating func finishStart(_ request: StartRequest, _ answer: StartAnswer) -> Bool {
         guard answer != .unanswered else { return false }
         if unansweredStart?.requestId == request.requestId { unansweredStart = nil }
-        if answer == .live { activeStart = request.start }
+        // The answer's take has just been observed, so it names the take this start made.
+        if answer == .live, let recordingId = take?.recordingId { activeStart = ActiveStart(recordingId: recordingId, start: request.start) }
         else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }
         return answer == .ended && request.repeatsUnanswered
     }

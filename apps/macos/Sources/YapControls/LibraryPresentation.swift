@@ -34,7 +34,7 @@ public enum LibraryPresentation {
                 return .init(id: id, kind: .imported, title: row.title, badge: "Imported",
                     status: request == nil ? nil : pending ? "Deleting" : "Attention", details: details, actions: [
                         .init(.playAsset(id), "Play", enabled: usable),
-                        .init(.copyAssetPrompt(id), "Copy agent prompt", enabled: usable),
+                        .init(.copyAssetPrompt(id), "Copy prompt", enabled: usable),
                         .init(.deleteAsset(id), deleteTitle, enabled: usable),
                     ], opens: .playAsset(id), attention: request?.failure != nil)
             case .recording(let id):
@@ -54,7 +54,7 @@ public enum LibraryPresentation {
                 return .init(id: id, kind: .recording, title: ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt),
                     status: status, details: details, actions: [
                         .init(.playRecording(id), "Play", enabled: usable && state != "canceled"),
-                        .init(.copyRecordingPrompt(id), "Copy agent prompt", enabled: usable),
+                        .init(.copyRecordingPrompt(id), "Copy prompt", enabled: usable),
                         .init(.deleteRecording(id), deleteTitle, enabled: usable),
                     ], opens: .playRecording(id), attention: status == "Attention")
             case .project:
@@ -84,7 +84,7 @@ public enum LibraryPresentation {
             items.append(.init(id: project.projectId, kind: .project, title: project.title,
                 details: ["Created \(ElapsedTime.shortTime(of: project.createdAt))"], actions: [
                 .init(.previewProject(project.projectId), "Preview", enabled: usable),
-                .init(.copyProjectPrompt(project.projectId), "Copy agent prompt", enabled: usable),
+                .init(.copyProjectPrompt(project.projectId), "Copy prompt", enabled: usable),
                 .init(.exportProject(project.projectId, .video), "Export Video…", enabled: usable && exports.choosing == nil),
                 .init(.exportProject(project.projectId, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
                 .init(.deleteProject(project.projectId), "Delete Project", enabled: usable),

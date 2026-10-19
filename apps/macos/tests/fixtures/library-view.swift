@@ -19,7 +19,7 @@ import YapControls
         func choose(_ item: NSMenuItem) { NSApplication.shared.sendAction(item.action!, to: item.target, from: item) }
         guard let play = view.actionItem(identifier: ControlsAction.playRecording("fixture-recording").id),
               let copy = view.actionItem(identifier: ControlsAction.copyRecordingPrompt("fixture-recording").id) else {
-            preconditionFailure("The recording offers play and copy-agent-prompt actions")
+            preconditionFailure("The recording offers play and copy-prompt actions")
         }
         choose(play)
         choose(copy)
@@ -27,7 +27,7 @@ import YapControls
         guard let playImport = view.actionItem(identifier: ControlsAction.playAsset("fixture-import").id),
               let copyImport = view.actionItem(identifier: ControlsAction.copyAssetPrompt("fixture-import").id),
               let deleteImport = view.actionItem(identifier: ControlsAction.deleteAsset("fixture-import").id) else {
-            preconditionFailure("An imported video offers play, copy-agent-prompt and delete actions")
+            preconditionFailure("An imported video offers play, copy-prompt and delete actions")
         }
         choose(playImport)
         choose(copyImport)
