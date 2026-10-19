@@ -72,8 +72,8 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
         operation: "place",
         clip: {
           trackId: { label: "track" + i },
-          assetId: asset.id,
-          streamId: stream.id,
+          assetId: asset.assetId,
+          streamId: stream.streamId,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: {
             kind: "project",
