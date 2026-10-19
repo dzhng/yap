@@ -1,241 +1,120 @@
 # Record identity
 
-One identity rule for every record Yap stores or returns, held by the producers
-themselves, with no key translation anywhere between storage, core, the service
-edge and its callers.
-
-## Next Agent Prompt
-
-*Status, 2026-10-19:* slices 01–08 landed; next is 09, the closeout. Branch `t3/fix-audio-tail-coverage`
-carries unpushed work (probe deletion, work-state rule, naming lint removal) that this
-builds on.
-
-You are picking this up. Read this README, then work the slices in order; each one leaves
-every suite it touches green. For each slice: invoke `write-tests` first, run that slice's
-narrow checks only, and commit. Slices 06 and 07 (Swift app, skill/evals/docs) can run in
-parallel once 05 lands. Run the full repository check once, in slice 09. Update this
-section and the TODO list before you end a pass.
-
-- [x] 01 Owner references are `{kind, id}` everywhere (core `JobOwner`/`JobTarget`, evidence owners)
-- [x] 02 Jobs: `JobQueue.inspect` is the one public job record; `JobQueue.work` is what an operation that started a job reports
-- [x] 03 Library records name themselves `id`
-- [x] 04 Pictures and capture devices: faces, regions, words, cameras, microphones, displays, windows (the app's side is in 06)
-- [x] 05 Catalog format 30 and package version 7, each with a tested migration
-- [x] 06 macOS app decoders
-- [x] 07 CLI, skill, evals and docs
-- [x] 08 Quantity names without translation: `internalAudioSelection` removed; receipt converters kept as the worker-to-public boundary, now typed truthfully
-- [ ] 09 Closeout: full run, close-spec, release
+Every record Yap stores or returns names itself the same way, and the code that produces a
+record owns its names: nothing renames keys between storage, core, the service edge and its
+callers.
 
 ## The rule
 
 1. A record names its own identity `id`.
 2. A reference to one kind of record is `<noun>Id` (`<noun>Ids` for a list).
-3. A reference that can point at several kinds is `{kind, id}`; a kind with no identity
-   (the output of a processing graph) is `{kind}` alone. Qualifiers stay references:
-   a project job's target is `{kind: "project", id, revisionId}`.
+3. A reference that can point at several kinds is `{kind, id}`; a kind with no identity is
+   `{kind}` alone (a processing graph's output). Qualifiers stay references: a project
+   job's target is `{kind: "project", id, revisionId}`.
 
-Operation parameters name what they act on by reference, so `asset.get {assetId}`
-returns `{id, …}`, and a delete returns the deleted record's stub `{id, deleted,
-freedBytes}`. The rule is the edit document's, which already follows it, and the common
-resource-identifier convention (JSON:API's `{type, id}`). It replaces the earlier
-"identities are `<noun>Id`" rule from [library deletion](../done/library-deletion/README.md),
-which renamed core `id`s at the service edge.
+Operation parameters name what they act on by reference, so `asset.get {assetId}` returns
+`{id, …}`, a delete returns the deleted record's stub `{id, deleted, freedBytes}`
+(`preset.delete` moves a preset to the Trash and says so: `{id, trashed, …}`), and a
+record a caller writes into parameters (an observation region, a layout text, a speaker
+correction) names itself `id` too. Operations that start a job report the status of that
+work, which refers to the job (`{target, state, jobId, attemptId, …}`); `job.get`,
+`job.retry` and `job.cancel` return the job itself (`{id, state, attemptGeneration, …}`),
+so an import's response is never mistaken for the new asset.
 
-Producers own the names. Core records use the rule; the service passes them through. No
-`({ id, ...x }) => ({ ...x, assetId: id })` survives anywhere, in either direction.
+## Why this rule
 
-Storage follows the records it holds. SQLite column names are the store's own schema and
-stay; a store maps its row to its record as it always has. JSON that stores a public
-record verbatim (revisions, replay receipts) is rewritten once by a catalog migration, so
-no reader accepts two shapes.
+The edit document, the format agents write most, already followed it: clips and tracks are
+`id`, references are `trackId`/`assetId`, routing and processing targets are `{kind, id}`.
+It is also the common resource-identifier convention (JSON:API's `{type, id}`). The rule it
+replaced, from [library deletion](../library-deletion/README.md), named every identity
+`<noun>Id` and was enforced by renaming core's `id` at the service edge (asset, preset,
+package admission, cue), while other records were renamed the other way (texts,
+corrections) and some core records already said `projectId` of themselves. Two shapes for
+one concept, held together by translations, was the defect; this rule has no exceptions,
+so no translation is needed anywhere.
 
-## Public contract after this spec
+`{kind, id}` won over `{kind, assetId}` because the kind is said once, a consumer finds the
+identity in one place whatever the kind, and a kind with no identity (`{kind: "output"}`)
+fits the same shape. The job queue already stored targets as `targetKind`/`targetId`.
 
-What a caller sees, operation by operation. Parameters keep `<noun>Id` throughout.
+## What must hold
 
-- **Records name themselves `id`:** `project.get/list/create/duplicate` (`project.id`,
-  `revision.id`), `revision.get/history`, `edit.apply` and other edits (`revision.id`),
-  `inspect.open` (`history[].id`), `recording.get/list` and every `capture.*` result,
-  `asset.get/list` (and `streams[].id`), `export.create/status/recover/list` (and
-  `export.abandon` → `{id, abandoned}`), `preset.list/get/create/delete`,
-  `package.open/status/close`, `model.list/status/prepare/remove` and
-  `service.health.models[]`, `job.get/retry/cancel`, `correspondence.prepare/get`'s
-  receipt, transcript word rows (`rows[].id`, `caption.propose`'s `words[].id`),
-  `media.list` items, faces (`faces[].id`), observation regions (`regions[].id`, in
-  `frame.get`/`frame.batch`/`index.get` parameters too), and `capture.sources` displays,
-  windows, cameras and microphones.
-- **Deletes** return `{id, deleted, freedBytes}` (`asset`, `project`, `recording`, `model`
-  delete/remove); `preset.delete` returns `{id, trashed, trashedPaths, instructions}`.
-- **Polymorphic references are `{kind, id}`:** a job's `target` (`{kind: "project", id,
-  revisionId}` for project work), evidence `owner`, IN_USE details (`usedBy[]`,
-  `acquisitions[]`, `derivedAssets[]`), `media.list` items (`kind` is `"recording"` or
-  `"asset"`), and `capture.start`'s `source` (`{kind: "display"|"window"|"camera", id}`;
-  a region is `{kind: "region", displayId, x, y, width, height}`).
-- **Starting a job reports its work:** `asset.import`/`acquisition.import` return
-  `{target, state, jobId, attemptId, attemptGeneration, reason, retryable, published}`;
-  `job.get` returns the job itself, `{id, state, attemptGeneration, target, …}`. The CLI's
-  `--wait` output names the job it waited on as `wait.job.id`.
-- **References stay `<noun>Id`** wherever a record points at another: `revision.projectId`,
-  `project.currentRevisionId`, `export.projectId`/`jobId`, work statuses' `jobId`, refusal
-  details naming the subject, and every operation parameter.
+- **No key translation.** No `({ id, ...x }) => ({ ...x, assetId: id })` in either
+  direction, in the service or anywhere else. A field changes name at its producer.
+- **Storage holds the record's shape.** SQLite columns are the store's own schema and stay;
+  JSON that stores a record verbatim holds the current shape. An older shape changes only
+  through a versioned migration, never through a reader that accepts both.
+- **One job record.** `JobQueue.inspect` is the public job: `job.get` and every job nested in
+  another answer (capture source admissions) are the same record, in the public state
+  words. `JobQueue.work` is what an operation that started a job reports.
+- **Internal worker wires keep their own contracts** (the native capture files, worker PCM
+  receipts). The owner that turns a worker's receipt into a public one maps it inside
+  itself and types each side truthfully; see the audio receipts below.
 
-## Decisions
+## Pointers
 
-- **`{kind, id}` over `{kind, assetId}`** (user asked for the correct solution). The kind
-  is said once, a consumer finds the identity in one place, and `{kind: "output"}` fits
-  the same shape. The job queue already stores targets as `targetKind`/`targetId`.
-- **The job owner speaks WorkState.** A job record is `{id, state, …}` with no `jobId`, so
-  the edge's "state and `jobId`" rule cannot reach it. `JobQueue.inspect` maps its stored
-  words through `workState` itself, and is the only job projection: `job.get` and every
-  nested `job` (capture source admissions) are the same record.
-- **Catalog 29 → 30 with a migration, not read-time compatibility.** The catalog's own
-  rule: a changed stored shape needs a format bump and an explicit migration owner. This is
-  the first since launch. It rewrites stored JSON in `project_revisions.content`,
-  `projects.createResult`, `project_requests.result`, `deletion_requests.result` and any
-  other row that stores a renamed record, and re-points `export_intents.snapshot`'s
-  `$.revisionId` query if the snapshot's shape changes. A library at 29 opens at 30;
-  nothing older is newly supported.
-- **Package version 7 with a version-6 converter on import.** Packages live outside the
-  library, so a user may hold version-6 files. Import converts them once into the version-7
-  shape before validation; export writes 7.
-- **Internal wires keep their contracts unless they carry a public record.** The native
-  capture files (`source.publication.json`, journal headers) hold references, not a record's
-  own identity, and stay. The native face and region producers emit public records and
-  change at the producer (Swift), with retained index frames refusing `ARTIFACT_CHANGED`
-  and regenerating, as they already do.
-- **Edit results stop renaming away from `id`.** `createdIds[]` entries are `{kind, id}`
-  references (was `entityId`), `changes[]` entries name themselves `id` (was `changeId`),
-  and a model's `generationProfile` keeps its `id` (was `profileId`).
+- Owner references: `JobOwner`/`Owner<Kind>`/`ownerIdentity` in `packages/core/src/jobs.ts`,
+  `EvidenceOwner` in `evidence.ts`.
+- Jobs: `JobQueue.inspect` and `JobQueue.work` (`jobs.ts`); `jobStatusSchema` and
+  `waitJobSchema` (`packages/protocol`). The CLI's `--wait` follows a job record by its `id`
+  and a work status by its `jobId` (`jobOf` in `apps/cli/src/wait.ts`), and pins a
+  returned record's `id` to that record's getter (`recordGetters`).
+- Migration: `packages/core/src/record-identity-migration.ts` owns every rewrite of an older
+  stored shape: `migrateToFormat30` (run by `Catalog` when it opens a format-29 library,
+  in one transaction), `packageMemberFromVersion6` (project packages, `project-package.ts`),
+  and `presetReceiptsFrom0161` (`presets.ts`, for the unversioned receipts file 0.1.61
+  wrote; this build writes version 2). `catalogFormat` is 30 and
+  `minimumSupportedCatalogFormat` 29 (`catalog.ts`); packages are written at version 7.
+- Tests that pin it: `record-identity-migration.test.ts` (a round trip from what this build
+  writes, aged into 0.1.61's shapes, back to the same bytes; and two catalogs 0.1.61 wrote,
+  `packages/core/fixtures/format-29-*.sqlite`); `apps/service/tests/package-version-6.mjs`
+  (five packages 0.1.61 wrote, `apps/service/tests/fixtures/packages-v6/`);
+  `presets.test.ts` (a 0.1.61 deletion receipt); `jobs.test.ts` ("a job's public record").
 
-## Inventory
+## How it diverged from the plan
 
-From responses recorded across the service, CLI and service node suites (2026-10-19), and a
-producer trace. Own identities to rename to `id`:
+- **Starting a job reports its work, not the job.** The plan had `asset.import` keep
+  returning the job record; once that record named itself `id`, an agent would read the
+  import's `id` as the new asset's. Imports and `recording.cleanup` return `JobQueue.work`.
+- **Job targets went further than planned.** Core's `JobOwner` had two shapes inside core
+  (`{kind, assetId}` beside `ResourceOwner`'s `{kind, id}`); 267 sites now use one, and the
+  per-kind converters between them are gone.
+- **The migration became generic.** One rule (an owner reference becomes `{kind, id}`)
+  runs over every JSON column and every JSON document held in a string; a few
+  table-specific rules handle stored revisions, project create/edit/undo replays, project
+  snapshots and delete replays. A job input that changes recomputes its `inputSha256` in
+  the same row. Replay keys stored as canonical (sorted) JSON are re-sorted. Stored
+  capture arguments are positional and needed nothing.
+- **Real data drove it.** A temporary v0.1.61 checkout kept every catalog (1,541) and
+  package (12) its own suites wrote. The first pass missed an INTEGER PRIMARY KEY quirk,
+  project snapshots inside adoption keys and unfinished package exports, and JSON held in
+  strings (a packaged scene publication's `result`); after those, every catalog migrates
+  with no old shape left and every package opens and adopts.
+- **The audio receipt converters stayed.** They looked like edge translations but map the
+  native worker's receipt (`bytes`, `frames`, `sampleRange.start/end`) to the public one
+  inside the owner. What was wrong was the type: the published receipt was typed as the
+  worker's shape while carrying the public one, which hid that the native mixer test in
+  `project-audio.test.ts` had failed since 0.1.60. It is now `PublicSourceAudioReceipt`/
+  `PublicProjectAudioReceipt`. The one real edge translation, `internalAudioSelection`
+  (public `sourceRange` → core `range`), is gone: core's source audio inputs take
+  `sourceRange` (`selectedRange` reads either domain's).
+- **Faces and regions regenerate rather than migrate.** Retained index frames hold them;
+  the frame and still renderers moved versions, so old results miss instead of failing.
+- **Bugs found on the way:** the preview timeline never showed (it decoded
+  `revision.history` as `{id}` while the service sent `revisionId`); `model.prepare` named
+  no model; nested capture jobs had a different shape from `job.get`; the CLI waited on a
+  package admission by a key the service had renamed; the app decoded `job.retry`'s answer
+  as an export or a preview (it now reads the export or preview back); and library
+  deletion's identity change had rewritten an archived evidence file
+  (`specs/done/video-editing-feedback/assets/14-picture-statistics/control-receipts.json`),
+  now back to its frozen bytes.
 
-| Record | Today | Producer |
-|---|---|---|
-| project | `projectId` | `packages/core/src/projects.ts` (`Project`, list/get/create/duplicate) |
-| revision | `revisionId` | `projects.ts` (`ProjectRevision`, history, apply/undo/restore) |
-| job | `jobId` | `packages/core/src/jobs.ts` `inspect`; service `status()` folds into it |
-| export | `exportId` | `apps/service/src/exports.ts` status/publicStatus/list/abandon |
-| recording | `recordingId` | `packages/core/src/capture-store.ts` `Recording` |
-| asset | `assetId` (edge rename) | `packages/core/src/assets.ts` (already `id`) |
-| stream | `streamId` | `assets.ts` `describe` renames core `id` |
-| preset | `presetId` (edge rename) | `packages/core/src/presets.ts`, `preset-store.ts` (already `id`) |
-| package admission | `packageId` (edge rename) | `apps/service/src/package-registry.ts` (already `id`) |
-| model | `modelId` | `packages/core/src/models.ts` list/statuses/remove; service `model.*` |
-| correspondence receipt | `evidenceId` | `packages/core/src/correspondence.ts` |
-| media item | `assetId`/`recordingId` + `kind` | `packages/core/src/media-listing.ts` |
-| transcript word | `wordId` | `packages/core/src/transcript-read.ts` |
-| face, region | `faceId`, `regionId` | `helpers/mac/Sources/YapFrames/*Observations.swift`, protocol `faces.ts`/`picture.ts` |
-| camera, microphone, display, window | `cameraId`, `microphoneId`, `displayId`, `windowId` | macOS app `CaptureController.swift`, protocol `capture.ts` |
-| text, speaker correction | core `textId`/`correctionId` (edge renames to `id`) | `layout-diagnostics.ts`, `speaker-attribution.ts` |
-| delete results, IN_USE details | `<noun>Id` | `apps/service/src/library-deletion.ts` and retirements, `library-users.ts`, protocol `in-use.ts` |
+## Dead ends
 
-Polymorphic references to convert to `{kind, id}`: job `target`, evidence `owner`, core
-`JobOwner`/`JobTarget` (267 sites), `media.list` items.
-
-Bugs the trace found, fixed by the owning slice:
-- The preview timeline decodes `revision.history` entries as `{id}` while the service sends
-  `revisionId`, so it never shows (slice 03 makes the service right; 06 checks the app).
-- The CLI waits on `package.status` with `pins.id` while the service renames it to
-  `packageId` (03).
-- `model.prepare` returns no model identity though `modelStatusSchema` requires one (03).
-- Nested `sourceAdmissions[].job` is a different shape from `job.get` (02).
-- `ProjectStore` replay refuses a stored revision that has `id` and no `revisionId` as
-  obsolete (05 removes the guard with the migration).
-
-## Slices
-
-**01 Owner references.** `JobOwner`/`JobTarget` become `{kind, id}` (`revisionId` stays
-on project targets), one type with `ResourceOwner`/`ResourceReference` if they mean the
-same thing. Evidence `owner` likewise. Storage is unchanged (`targetKind`/`targetId`).
-Check: core and service type-check and suites; job.get `target` shape test.
-
-**02 Jobs.** `JobQueue.inspect` returns the public job record: `id`, WorkState `state`,
-`attemptGeneration`, the publication with a string generation. The service's `status()`
-wrapper and capture's raw use both read it. An operation that starts a job
-(`asset.import`, `acquisition.import`) reports `JobQueue.work`: the status of that work,
-`{target, state, jobId, attemptId, attemptGeneration, reason, retryable, published}`, like
-every other work-starting operation, so its `id` is never mistaken for the new asset's. The
-CLI's `--wait` follows a job record by its `id` and a work status by its `jobId`. Check: core
-jobs tests; CLI wait tests; service publication tests.
-
-**03 Library records.** Every producer in the inventory except pictures and devices names
-itself `id`; the service edge's renames are deleted; delete results and IN_USE details
-follow; `model.prepare` returns the model record. Protocol schemas (`modelStatusSchema`,
-`jobStatusSchema`, `inUse*`, `waitJobSchema`, correspondence) follow. Fix the three edit-result
-renames. Check: protocol, core, service, CLI suites; rerun the identity inventory (record
-every `id`/`*Id` key path across the suites) and confirm no own identity is `<noun>Id`.
-
-**04 Pictures and devices.** Swift producers emit `id` for faces and regions; region
-parameters take `id`; capture device lists use `id`. Check: helpers/mac tests, native
-picture suite, index refusal of an old retained frame.
-
-**05 Storage.** Catalog format 30 with a migration owner (a named module, one transaction,
-tested against a format-29 fixture built by the previous release's code paths); package
-version 7 with a version-6 import converter tested on a real version-6 package. Remove the
-obsolete-revision guard. Check: migration tests, package import/export tests, opening a
-real 0.1.61 library copy.
-
-**06 macOS app.** Every `Decodable` that reads a renamed record. Check: app unit tests,
-controller journey, a real launch reading the library, the preview timeline showing.
-
-**07 CLI, skill, evals, docs.** `wait.ts` pins, skill scripts and references, eval
-fixtures, protocol and package readmes. Check: CLI suite, `test:tools`, eval tests.
-
-**08 Quantity names without translation (done).** `internalAudioSelection` renamed the public
-`sourceRange` to core's `range` at the service edge; core's source audio inputs now take
-`sourceRange`, and the edge passes parameters through. The owners' own job recipes keep
-their internal `range`, so no stored artifact changes. The audio and acoustic receipt
-converters are not edge renames: inside the owner they map the native worker's receipt
-(`bytes`, `frames`, `sampleRange.start/end`, `range`) to the public receipt, the same
-boundary every internal worker wire keeps. What was wrong was the type: the published
-receipt was typed as the worker's shape while carrying the public one, which hid that
-`project-audio.test.ts`'s native mixer test had failed since slice 07b of library deletion.
-Published audio is now typed `PublicSourceAudioReceipt`/`PublicProjectAudioReceipt`, the
-media math decodes it through its owner's parser, and an export's untyped
-`sizeBytes ?? bytes` read became a typed choice between the PCM receipt and an encoding.
-
-**09 Closeout.** Full repository check once; `close-spec`; release after the user's go.
-
-## Firewalls
-
-- No compatibility readers, aliases or edge renames; a stored shape changes only through
-  the migration.
-- The edit document's format does not change; it already follows the rule.
-- Internal worker wires keep their names unless they carry a public record (see Decisions).
-
-## Findings for the migration (2026-10-19)
-
-Recorded by logging every job input with an owner object while the core, service and
-service node suites ran:
-
-- Only two job inputs embed an owner: frame and index work carries scene evidence
-  metadata (`scenes.owner`, `scenes[].owner`), and project audio processing carries its
-  recipe's `target`. No transcript, alignment or speaker input does, and no owner hides in
-  a nested input string. Both are derived without model inference.
-- Input hashes key only the `jobs` and `artifacts` rows (exports hash their own id), so the
-  migration rewrites those inputs and recomputes `inputSha256` in both tables; no file
-  path changes.
-- Owners in evidence tables are already stored as `ownerKind`/`ownerId` columns; only the
-  JSON metadata copies (strictly validated: transcript, scene, speaker, alignment evidence)
-  need rewriting.
-- Slice 07b of library deletion left two read-time shims in `ProjectStore`'s replay: one
-  refused a stored revision named by `id`, the other stripped an `edit.document` older replays
-  carried. Slice 03 removed both; the migration rewrites `project_requests.result` (revision
-  identity, no `edit.document`) so no reader needs them.
-- Preset request receipts (`<presets>/.request-receipts.json`) store raw results; a
-  `preset.delete` receipt names its preset `presetId`. Slice 05 rewrites that file too.
-- `capture.start` stores its replay arguments as a positional array of values, so the
-  `source` rename leaves them unchanged.
-- Completeness check for slice 05 (done): a v0.1.61 checkout kept every catalog its own core,
-  service and service node suites built (1,541) and every package its export tests wrote
-  (12). With this build, all 1,541 catalogs migrate and none keeps an old shape anywhere,
-  including JSON held in strings (an unfinished package export pins a scene publication whose
-  `result` is a JSON string); 531 projects and 2,141 revisions read back; all 12 packages open
-  and adopt. Two of the catalogs and five of the packages are now fixtures
-  (`packages/core/fixtures/format-29-*.sqlite`, `apps/service/tests/fixtures/packages-v6/`).
-  The catalog's replay keys for a package adoption are canonical (sorted) JSON, so the
-  migration re-sorts a renamed key there; stored capture arguments are positional and need
-  nothing.
+- **`<noun>Id` everywhere** (library deletion's rule): it needed edge renames for every
+  record core named `id`, and records written by callers went the other way.
+- **Read-time compatibility.** Library deletion's naming change (0.1.60) had left two such shims in
+  `ProjectStore`'s replay; a reader that accepts two shapes never stops accepting them.
+- **A naming lint over every response**: it cost more than the mistakes it caught, and
+  agents learn the API on demand; the convention lives here and in the
+  [protocol readme](../../../packages/protocol/README.md).

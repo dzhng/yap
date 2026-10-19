@@ -31,7 +31,7 @@ shares the same ordering, result shape and replay.
   acquisition that holds it. A recording's own acquisitions are not users. Every
   revision counts, undo history included, and nothing is pruned.
 - **The result is `{id, deleted: true, freedBytes}`** (originally `{<noun>Id, …}`; see
-  [record identity](../../record-identity/README.md)), and `freedBytes` is the
+  [record identity](../record-identity/README.md)), and `freedBytes` is the
   storage the delete actually removed: on a real library, `storage.usage` falls by
   exactly that much at every step.
 
@@ -100,14 +100,13 @@ Each concept has one owner, and the operation schemas are the reference:
 - **Errors:** each code has one category and one retryability, both in
   `packages/protocol/src/refusal-ledger.json`, which the protocol tests hold to every
   literal in product source.
-- **Naming:** superseded for identities by [record identity](../../record-identity/README.md):
+- **Naming:** superseded for identities by [record identity](../record-identity/README.md):
   a record names itself `id` and refers to others by `<noun>Id`, and stored shapes migrate
   with the catalog format. Quantities carry their unit unless the parent already says it
   (`count`, `bytes`, a `start` under `sampleRange`). No lint enforces it. Three
-  translations were kept here on purpose and are slated for removal (record identity,
-  slice 08): a typed converter per record in `audio-inspection.ts` and
-  `acoustic-inspection.ts`, and `internalAudioSelection` in `project-service.ts`, which
-  turns a public `sourceRange` into the core owners' `range`.
+  translations were kept here on purpose; [record identity](../record-identity/README.md)
+  removed `internalAudioSelection` and kept the audio receipt converters as the
+  worker-to-public boundary inside their owner.
 
 ## Where it shows
 
