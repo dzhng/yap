@@ -138,6 +138,26 @@ it("advertises shortcut bindings as synchronous app operations", () => {
   expect(operationWaitMs("shortcuts.set")).toBe(operationWaitMs("update.setEnabled"));
 });
 
+it("advertises recording.prompt as a read-only operation naming at most one media owner", () => {
+  expect(operationNames.has("recording.prompt")).toBe(true);
+  expect(readOnlyOperations.has("recording.prompt")).toBe(true);
+  expect(operationSchema.parse({ operation: "recording.prompt", params: {} })).toEqual({
+    operation: "recording.prompt",
+    params: {},
+  });
+  for (const params of [{ recordingId: "rec-1" }, { projectId: "p-1" }, { assetId: "a-1" }])
+    expect(operationSchema.parse({ operation: "recording.prompt", params })).toEqual({
+      operation: "recording.prompt",
+      params,
+    });
+  expect(
+    operationSchema.safeParse({
+      operation: "recording.prompt",
+      params: { recordingId: "rec-1", projectId: "p-1" },
+    }).success,
+  ).toBe(false);
+});
+
 it("has no per-item retry operations", () => {
   for (const operation of [
     "index.retry",

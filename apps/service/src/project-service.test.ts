@@ -71,6 +71,78 @@ test("recording.get without an id resolves the latest take and removed recording
   expect(latest.recordingId).not.toBe(older.recordingId);
 });
 
+test("recording.prompt hands off projects and imports by their own ID", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const created = await f.call("project.create", {
+    requestId: "prompt-project",
+    title: "Prompt project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  expect(await f.call("recording.prompt", { projectId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this project with this ID with the Yap CLI: ${projectId}`,
+      facts: { projectId },
+    },
+  });
+  const imported = await f.call("asset.import", { requestId: "prompt-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  expect(await f.call("recording.prompt", { assetId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this imported video with this asset ID with the Yap CLI: ${assetId}`,
+      facts: { assetId },
+    },
+  });
+  expect(await f.call("recording.prompt", { projectId: assetId })).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+});
+
+test("recording.prompt without an id describes the latest recording without a transcript claim", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(await f.call("recording.prompt", {})).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+  f.service.captures.allocate({ requestId: "prompt-older", arguments: "{}" });
+  const latest = f.service.captures.allocate({
+    requestId: "prompt-latest",
+    arguments: "{}",
+  }).recording;
+  const answer = await f.call("recording.prompt", {});
+  if (!answer.ok) throw new Error(JSON.stringify(answer));
+  const { text, facts } = answer.data as {
+    text: string;
+    facts: { recordingId: string; transcript: string };
+  };
+  expect(facts).toMatchObject({ recordingId: latest.recordingId, transcript: "none" });
+  expect(text).toContain(`Recording: ${latest.recordingId} (`);
+  expect(text).not.toContain("transcript");
+});
+
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
   const canvas = {

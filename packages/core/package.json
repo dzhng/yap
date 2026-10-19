@@ -184,6 +184,10 @@
       "types": "./dist/capture-source-read.d.ts",
       "default": "./dist/capture-source-read.js"
     },
+    "./recording-prompt": {
+      "types": "./dist/recording-prompt.d.ts",
+      "default": "./dist/recording-prompt.js"
+    },
     "./frame-inspection": {
       "types": "./dist/frame-inspection.d.ts",
       "default": "./dist/frame-inspection.js"
