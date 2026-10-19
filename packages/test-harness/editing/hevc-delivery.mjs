@@ -57,11 +57,11 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       background: "#000000ff",
     },
   });
-  const projectId = project.project.projectId;
+  const projectId = project.project.id;
   const placed = await call("edit.apply", {
     requestId: randomUUID(),
     projectId,
-    expectedRevisionId: project.revision.revisionId,
+    expectedRevisionId: project.revision.id,
     operations: assets.flatMap(({ asset, stream }, i) => [
       {
         operation: "track.add",
@@ -72,8 +72,8 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
         operation: "place",
         clip: {
           trackId: { label: "track" + i },
-          assetId: asset.assetId,
-          streamId: stream.streamId,
+          assetId: asset.id,
+          streamId: stream.id,
           source: { kind: "range", range: { startUs: 0, endUs: 1000000 } },
           placement: {
             kind: "project",
@@ -83,7 +83,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       },
     ]),
   });
-  const revisionId = placed.revision.revisionId;
+  const revisionId = placed.revision.id;
   for (const codec of ["h264", "hevc"]) {
     const request = {
       projectId,
@@ -95,7 +95,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       settings: { video: { codec } },
     };
     const admitted = await call("export.create", request);
-    const exportId = admitted.exportId;
+    const exportId = admitted.id;
     const receipt = await poll(
       () => call("export.status", { exportId }),
       (v) => v.state === "ready" && !v.cleanupPending,
@@ -163,7 +163,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       assert.ok(Math.abs(marker.position - 16800) <= 2);
     }
     const replay = await call("export.create", request);
-    assert.equal(replay.exportId, exportId);
+    assert.equal(replay.id, exportId);
     assert.equal(hash(await readFile(path)), report.operands[codec].sha256);
   }
   assert.equal(hash(await readFile(source)), report.sourceSha256);
