@@ -155,3 +155,18 @@ and a verdict (sound / provisional / user-only). Consolidated at closeout.
   never prompts for it. Verdict: sound.
 - **A failed `recording.prompt` from ⌥⇧V (no recordings yet) reports where the menu shows
   failures, not in the notice.** Verdict: provisional.
+
+## Closeout (full repository run)
+
+- **`startProjectService` takes `autoTranscribe`, off unless asked; the installed service's
+  entry turns it on** (`YAP_AUTO_TRANSCRIBE=0` opts out, like `YAP_AUTO_PREPARE_MODELS`). Why:
+  service tests that were not about transcription started background jobs once their fixture
+  model was ready. The product still transcribes everything (D13). Verdict: sound; library
+  callers must opt in.
+- **The shared index evidence passes only asset, stream and acquisition to the capture
+  reader.** Why: passing a whole index identity broke every recording's index; found only by
+  a real-capture macOS test. Verdict: fixed, regression-tested.
+- **Fixtures and spec evidence came from the shared local LFS cache**; five launch-video media
+  files are not in it and no test needed them. Verdict: process note.
+- **Fixed a pre-existing lint error on `main`** (`blend-public.mjs` declared `created` twice).
+  Verdict: sound.
