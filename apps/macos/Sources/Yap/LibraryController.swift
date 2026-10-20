@@ -46,7 +46,7 @@ final class LibraryController {
         state.progressFailure = nil
         // An unanswered deletion keeps its identity but must be explicitly retried on the new service.
         for target in state.deletions.keys where state.deletions[target]?.isPending == true {
-            state.finishDelete(target, failure: "SERVICE_STOPPED: Delete was not confirmed.")
+            state.finishDelete(target, failure: "Delete was not confirmed.")
         }
         recordingPages = [nil]; recordingPageIndex = 0; state.hasPreviousRecordingPage = false
         state.nextRecordingCursor = nil

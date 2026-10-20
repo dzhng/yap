@@ -47,11 +47,32 @@
         "packages/core/src/prepared-audio.ts": 1
       }
     },
+    "APP_CLOSING": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
     "APP_NOT_FOUND": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "packages/client/src/discovery.ts": 2
+      }
+    },
+    "APP_QUIT": {
+      "category": "issue-code",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 1
+      }
+    },
+    "APP_STARTING": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 2
       }
     },
     "ARCHIVE_CHANGED": {
@@ -218,6 +239,7 @@
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/YapControls/Permissions.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 2
       }
     },
@@ -317,6 +339,7 @@
       "category": "issue-code",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 2,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
       }
@@ -386,6 +409,20 @@
         "apps/service/src/project-packages.ts": 4,
         "packages/core/src/files.ts": 3,
         "packages/core/src/jobs.ts": 1
+      }
+    },
+    "CONTROL_LIMIT_EXCEEDED": {
+      "category": "resource-bound",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
+    "CONTROL_PROTOCOL": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 5
       }
     },
     "CONTROL_RESPONSE_INVALID": {
@@ -489,6 +526,13 @@
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1
       }
     },
+    "DISABLE_TELEMETRY": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/SkillArtifact.swift": 1
+      }
+    },
     "DOMAIN_MAX": {
       "category": "issue-code",
       "retryable": false,
@@ -501,6 +545,13 @@
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/CubeLUT.swift": 2
+      }
+    },
+    "DUPLICATE_SHORTCUT": {
+      "category": "conflict",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/RecordingControls.swift": 1
       }
     },
     "ENCODER_UNAVAILABLE": {
@@ -556,6 +607,14 @@
       "retryable": false,
       "files": {
         "skills/yap/scripts/task-notes.mjs": 1
+      }
+    },
+    "FIXTURE_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/CaptureProbe.swift": 2,
+        "apps/macos/Sources/Yap/CursorGeometryProbe.swift": 5
       }
     },
     "FONT_CHANGED": {
@@ -633,10 +692,18 @@
         "skills/yap/scripts/timeline-inspection.mjs": 1
       }
     },
+    "INSPECT_UNAVAILABLE": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
     "INTERNAL_ERROR": {
       "category": "execution-failure",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/service/src/capture.ts": 1,
         "apps/service/src/control.ts": 1,
         "apps/service/src/index.ts": 2,
@@ -733,6 +800,13 @@
         "packages/composition/src/scalar-program.ts": 1,
         "packages/composition/src/source-projection.ts": 1,
         "packages/composition/src/visual-plan.ts": 1
+      }
+    },
+    "INVALID_DESTINATION": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ExportController.swift": 1
       }
     },
     "INVALID_EDIT": {
@@ -920,6 +994,9 @@
       "category": "malformed",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/RecordingControls.swift": 4,
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 4,
+        "apps/macos/Sources/Yap/main.swift": 1,
         "apps/service/src/asset-conversion.ts": 1,
         "apps/service/src/exports.ts": 3,
         "apps/service/src/join-verification.ts": 4,
@@ -1026,6 +1103,11 @@
       "files": {
         "apps/cli/src/artifact-delivery.ts": 1,
         "apps/cli/src/main.ts": 2,
+        "apps/macos/Sources/Yap/AppSocket.swift": 1,
+        "apps/macos/Sources/Yap/CaptureController.swift": 10,
+        "apps/macos/Sources/Yap/CaptureProbe.swift": 11,
+        "apps/macos/Sources/Yap/CursorGeometryProbe.swift": 4,
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/service/src/control.ts": 2,
         "apps/service/src/package-registry.ts": 1,
         "apps/service/src/voice.ts": 2,
@@ -1112,6 +1194,11 @@
         "apps/cli/src/artifact-delivery.ts": 6,
         "apps/cli/src/main.ts": 1,
         "apps/cli/src/wait.ts": 10,
+        "apps/macos/Sources/Yap/ExportController.swift": 8,
+        "apps/macos/Sources/Yap/LibraryController.swift": 1,
+        "apps/macos/Sources/Yap/RecordingControls.swift": 3,
+        "apps/macos/Sources/Yap/ServiceHost.swift": 4,
+        "apps/macos/Sources/Yap/UpdateCoordinator.swift": 2,
         "apps/service/src/audio-processing.ts": 7,
         "apps/service/src/capture.ts": 1,
         "apps/service/src/project-render.ts": 2,
@@ -1166,6 +1253,7 @@
       "category": "malformed",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 4,
         "apps/service/src/capture-cleanup.ts": 1,
         "apps/service/src/capture.ts": 10,
         "apps/service/src/exports.ts": 3,
@@ -1230,6 +1318,7 @@
       "category": "destructive",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/LibraryController.swift": 1,
         "apps/service/src/asset-retirement.ts": 1,
         "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/recording-retirement.ts": 1
@@ -1293,6 +1382,7 @@
       "category": "execution-failure",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 2,
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
@@ -1330,6 +1420,7 @@
       "files": {
         "apps/cli/src/artifact-delivery.ts": 3,
         "apps/cli/src/main.ts": 1,
+        "apps/macos/Sources/Yap/ServiceHost.swift": 3,
         "apps/service/src/archive-write.ts": 1,
         "apps/service/src/control.ts": 6,
         "apps/service/src/exports.ts": 2,
@@ -1398,6 +1489,13 @@
         "packages/core/src/transcript.ts": 1,
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 1
+      }
+    },
+    "LOGIN_ITEM_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 2
       }
     },
     "LUT_3D_SIZE": {
@@ -1474,6 +1572,7 @@
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/YapControls/Permissions.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1
       }
@@ -1577,6 +1676,8 @@
       "category": "execution-failure",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 1,
+        "apps/macos/Sources/Yap/CaptureProbe.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureStreamInputs.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1
@@ -1587,6 +1688,13 @@
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/NativeFailure.swift": 1
+      }
+    },
+    "NODE_UNAVAILABLE": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/NodeRuntime.swift": 1
       }
     },
     "NOTES_REFERENCE_UNAVAILABLE": {
@@ -1608,6 +1716,9 @@
       "retryable": false,
       "files": {
         "apps/cli/src/wait.ts": 1,
+        "apps/macos/Sources/Yap/ExportController.swift": 3,
+        "apps/macos/Sources/Yap/LibraryController.swift": 1,
+        "apps/macos/Sources/Yap/RecordingControls.swift": 1,
         "apps/service/src/acquisition-retirement.ts": 1,
         "apps/service/src/capture-sources.ts": 1,
         "apps/service/src/exports.ts": 2,
@@ -1642,6 +1753,7 @@
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
+        "apps/macos/Sources/Yap/ExportController.swift": 1,
         "apps/service/src/audio-processing.ts": 1,
         "apps/service/src/capture-sources.ts": 1,
         "apps/service/src/exports.ts": 2,
@@ -1817,6 +1929,9 @@
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureProbe.swift": 2,
+        "apps/macos/Sources/Yap/CursorGeometryProbe.swift": 1,
+        "apps/macos/Sources/YapControls/Permissions.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1,
         "helpers/mac/Sources/YapCapture/SelectedCaptureProbe.swift": 1,
         "helpers/mac/Sources/YapCapture/SelectedCaptureRequest.swift": 1
@@ -2044,10 +2159,41 @@
         "skills/yap/scripts/review-bundle.mjs": 1
       }
     },
+    "SERVICE_ENDED": {
+      "category": "issue-code",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
+    "SERVICE_LOST": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 2
+      }
+    },
+    "SERVICE_MISSING": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceBundle.swift": 1
+      }
+    },
+    "SERVICE_STARTING": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
     "SERVICE_STOPPED": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
+        "apps/macos/Sources/Yap/ExportController.swift": 1,
+        "apps/macos/Sources/Yap/ServiceHost.swift": 5,
+        "apps/macos/Sources/YapControls/ControlsState.swift": 1,
         "apps/service/src/capture.ts": 1,
         "apps/service/src/control.ts": 2,
         "apps/service/src/exports.ts": 3,
@@ -2056,12 +2202,29 @@
         "packages/core/src/jobs.ts": 1
       }
     },
+    "SERVICE_TIMEOUT": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
     "SERVICE_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/ExportController.swift": 1,
+        "apps/macos/Sources/Yap/RecordingControls.swift": 1,
+        "apps/macos/Sources/Yap/ServiceHost.swift": 2,
         "apps/service/src/main.ts": 1,
         "apps/service/src/startup.ts": 6
+      }
+    },
+    "SHORTCUTS_WRITE_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/RecordingControls.swift": 2
       }
     },
     "SMPTE_ST_2084_PQ": {
@@ -2075,7 +2238,29 @@
       "category": "resource-bound",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/AppSocket.swift": 1,
         "apps/service/src/startup.ts": 3
+      }
+    },
+    "SOCKET_PATH_OCCUPIED": {
+      "category": "conflict",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/AppSocket.swift": 1
+      }
+    },
+    "SOCKET_PATH_TOO_LONG": {
+      "category": "resource-bound",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/AppSocket.swift": 1
+      }
+    },
+    "SOCKET_UNAVAILABLE": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/AppSocket.swift": 2
       }
     },
     "SOURCE_CHANGED": {
@@ -2116,6 +2301,7 @@
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/CaptureController.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 9,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 4,
         "helpers/mac/Sources/YapCapture/SelectedCaptureRequest.swift": 1,
@@ -2248,6 +2434,11 @@
       "retryable": false,
       "files": {
         "apps/cli/src/main.ts": 2,
+        "apps/macos/Sources/Yap/CaptureController.swift": 1,
+        "apps/macos/Sources/Yap/HomeLifecycle.swift": 1,
+        "apps/macos/Sources/Yap/SkillArtifact.swift": 1,
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 1,
+        "apps/macos/Sources/Yap/main.swift": 1,
         "apps/service/src/index.ts": 1,
         "apps/service/src/project-service.ts": 2,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
@@ -2273,6 +2464,7 @@
       "category": "issue-code",
       "retryable": true,
       "files": {
+        "apps/macos/Sources/YapControls/ControlsState.swift": 1,
         "apps/service/src/capture.ts": 1
       }
     },
@@ -2390,6 +2582,72 @@
         "packages/core/src/storage.ts": 1
       }
     },
+    "UPDATE_BUSY": {
+      "category": "resource-bound",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
+      }
+    },
+    "UPDATE_DISABLED": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 1
+      }
+    },
+    "UPDATE_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 1,
+        "apps/macos/Sources/Yap/UpdateCoordinator.swift": 2
+      }
+    },
+    "UPDATE_INCOMPATIBLE": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 1
+      }
+    },
+    "UPDATE_LOCK_INVALID": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 3
+      }
+    },
+    "UPDATE_PREPARATION_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
+      }
+    },
+    "UPDATE_SHUTDOWN_FAILED": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1,
+        "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
+      }
+    },
+    "UPDATE_SHUTDOWN_TIMEOUT": {
+      "category": "execution-failure",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
+    "UPDATE_UNAVAILABLE": {
+      "category": "missing-prerequisite",
+      "retryable": true,
+      "files": {
+        "apps/macos/Sources/Yap/SparkleDriver.swift": 1,
+        "apps/macos/Sources/Yap/main.swift": 2
+      }
+    },
     "UPDATING": {
       "category": "conflict",
       "retryable": true,
@@ -2409,11 +2667,83 @@
         "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 2
       }
     },
+    "YAP_DEFAULTS": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
+    "YAP_FFMPEG_DIRECTORY": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
+    "YAP_FFMPEG_RECEIPT_SHA256": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1
+      }
+    },
+    "YAP_FIXTURE_CONTROLS": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/ControlsProbe.swift": 1,
+        "apps/macos/Sources/Yap/PreviewWindow.swift": 1
+      }
+    },
+    "YAP_FIXTURE_PERMISSIONS": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/ControlsProbe.swift": 1
+      }
+    },
+    "YAP_FIXTURE_START_HOLD": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/CaptureFixture.swift": 1
+      }
+    },
+    "YAP_FIXTURE_WINDOW": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
+    "YAP_HOME": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
+      }
+    },
     "YAP_NATIVE": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
+        "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/service/src/worker.ts": 1
+      }
+    },
+    "YAP_NODE": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/NodeRuntime.swift": 1
+      }
+    },
+    "YAP_SERVICE_LAUNCH": {
+      "category": "not-a-refusal",
+      "retryable": false,
+      "files": {
+        "apps/macos/Sources/Yap/main.swift": 1
       }
     }
   }

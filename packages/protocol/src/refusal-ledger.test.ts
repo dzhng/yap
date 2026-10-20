@@ -17,6 +17,7 @@ const sourceRoots = [
       .filter((dir) => exists(dir)),
   ),
   "helpers/mac/Sources",
+  "apps/macos/Sources",
   "skills/yap/scripts",
 ];
 const refusalCategories = new Set([
