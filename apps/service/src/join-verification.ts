@@ -234,9 +234,13 @@ export async function verifyJoin(
       .map((range) => ({ clipId: entry.clipId, range })),
   );
   if (unavailable.length)
-    throw new CatalogError("NOT_READY", "Prepared join-review audio contains unavailable samples", {
-      unavailable,
-    });
+    throw new CatalogError(
+      "UNAVAILABLE_SUPPORT",
+      "Prepared join-review audio contains unavailable samples",
+      {
+        unavailable,
+      },
+    );
   const preparedFile = owners.preparedAudio.open(prepared.resourceId, prepared.audio.sampleRange);
   const retained: RetainedRead = {
     bytes: prepared.audio.bytes,

@@ -218,7 +218,7 @@ class Preparation {
         state: "failed",
         code: unsupported.code,
         message: unsupported.message,
-        retryable: false,
+        retryable: unsupported.retryable,
       };
     if (this.flight)
       return (() => {

@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { refusalRetryable } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 import { journalCapabilities } from "./evidence.js";
 
@@ -50,7 +51,10 @@ const outcome = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("published"), source: published }),
   z.strictObject({
     state: z.literal("pending"),
-    error: diagnostic.extend({ retryable: z.boolean() }),
+    error: diagnostic.strip().transform((error) => ({
+      ...error,
+      retryable: refusalRetryable(error.code),
+    })),
   }),
   z.strictObject({ state: z.literal("unavailable"), error: diagnostic }),
 ]);

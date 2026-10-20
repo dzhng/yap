@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -15,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
-import { stageServiceLedger } from "./fixtures/service-ledger.mjs";
+import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 const defaultFramework = fileURLToPath(
@@ -70,7 +71,11 @@ server.listen(0,'127.0.0.1',()=>writeFileSync(join(root,'feed-url'),'http://127.
     const contents = join(app, "Contents");
     const executable = join(contents, "MacOS", "SparkleCheck");
     mkdirSync(dirname(executable), { recursive: true });
-    stageServiceLedger(join(contents, "Resources"));
+    mkdirSync(join(contents, "Resources/service"), { recursive: true });
+    copyFileSync(
+      new URL("../../../packages/protocol/src/refusal-ledger.json", import.meta.url),
+      join(contents, "Resources/service/refusal-ledger.json"),
+    );
     const metadata = {
       CFBundleIdentifier: identity,
       CFBundleName: "SparkleCheck",
@@ -212,6 +217,7 @@ func diagnostic(_ message: String) {}
         "-swift-version",
         "6",
         "-parse-as-library",
+        ...mediaLinkArguments(),
         "-F",
         dirname(framework),
         "-framework",
@@ -278,7 +284,7 @@ func diagnostic(_ message: String) {}
           availability: "available",
           availableVersion: null,
           blockers: [],
-          error: { code: "UPDATE_FAILED", message: "Localized result", retryable: false },
+          error: { code: "UPDATE_FAILED", message: "Localized result", retryable: true },
         },
       });
     }

@@ -988,3 +988,33 @@ test("pause analysis exposes resolved detector settings and low-energy intervals
   });
   expect(ready.jobId).toEqual(expect.any(String));
 });
+
+test("audio inspection refuses a selected video stream as invalid input", async () => {
+  const f = await fixture();
+  const path = join(f.home, "video.mov");
+  await writeFile(path, "immutable selected video fixture");
+  const video = await f.assets.import(path, { kind: "import" }, async () => ({
+    originUs: 0,
+    streams: [
+      {
+        id: "video",
+        kind: "video",
+        codec: "fixture",
+        decodable: true,
+        width: 16,
+        height: 16,
+        orientedWidth: 16,
+        orientedHeight: 16,
+        startUs: 0,
+        endUs: 1000000,
+        segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+      },
+    ],
+  }));
+  await expect(
+    f.inspection.request({ assetId: video.id, streamId: "video" }),
+  ).rejects.toMatchObject({
+    code: "INVALID_PARAMS",
+    retryable: false,
+  });
+});

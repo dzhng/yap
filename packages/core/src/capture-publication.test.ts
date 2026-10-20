@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { readCapturePublication, readRecoveryReceipt } from "./capture-publication.js";
+import {
+  readCapturePublication,
+  readCaptureSourceOutcome,
+  readRecoveryReceipt,
+} from "./capture-publication.js";
 
 test("recovery receipt rejects unknown top-level fields", () => {
   expect(() =>
@@ -164,4 +168,16 @@ test("shared schema4 publication fixture retains the new take facts", () => {
   expect(admitted.authorities.primary).toEqual(source);
   expect(admitted.authorities.primary?.take).toEqual({ kind: "display" });
   expect(admitted.authorities.primary?.marks).toEqual({ pins: true, strokes: true });
+});
+
+test("pending diagnostics project the ledger verdict without a wire retry bit", () => {
+  expect(
+    readCaptureSourceOutcome({
+      state: "pending",
+      error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed" },
+    }),
+  ).toEqual({
+    state: "pending",
+    error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed", retryable: false },
+  });
 });

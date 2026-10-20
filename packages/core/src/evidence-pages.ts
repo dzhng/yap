@@ -133,7 +133,7 @@ export function readSourceMetadata(
   try {
     value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
-    throw new CatalogError("INVALID_EVIDENCE", "Invalid portable source metadata");
+    throw new CatalogError("INVALID_INPUT_EVIDENCE", "Invalid portable source metadata");
   }
   const parsed = evidenceIdentitySchema.extend({ receipt: z.unknown() }).strict().safeParse(value);
   if (
@@ -143,8 +143,14 @@ export function readSourceMetadata(
     parsed.data.generation !== identity.generation
   )
     throw new CatalogError(
-      "INVALID_EVIDENCE",
+      "INVALID_INPUT_EVIDENCE",
       "Portable source metadata belongs to another generation",
     );
-  return { ...identity, receipt: validateSourceReceipt(parsed.data.receipt, identity.sourceId) };
+  try {
+    return { ...identity, receipt: validateSourceReceipt(parsed.data.receipt, identity.sourceId) };
+  } catch (error) {
+    if (error instanceof CatalogError && error.code === "INVALID_EVIDENCE")
+      throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, error.details);
+    throw error;
+  }
 }

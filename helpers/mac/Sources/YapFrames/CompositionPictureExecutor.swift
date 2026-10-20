@@ -967,7 +967,7 @@ public final class CompositionPictureExecutor {
         NativeFailure("INVALID_REQUEST", message)
     }
     private static func unsupported(_ message: String) -> NativeFailure {
-        NativeFailure("NOT_READY", message)
+        NativeFailure("PREREQUISITE_MISSING", message)
     }
 
 }

@@ -192,7 +192,7 @@ test("absent model files are unavailable and changed ones invalid, before any lo
     const [reply] = transcribe(request);
     assert.equal(reply.ok, false, code);
     assert.equal(reply.error.code, code, reply.error.message);
-    assert.equal(retryable(reply.error), false);
+    assert.equal(retryable(reply.error), true);
     // Nothing was created or repaired: no output, no staging, no model folder, no download.
     assert.deepEqual(snapshot(home), before, reply.error.message);
     assert.deepEqual(readdirSync(attempt), []);

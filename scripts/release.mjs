@@ -1,3 +1,4 @@
+import { launcherVerdicts } from "./launcher/verdicts.mjs";
 import { releaseSigningInputs, withReleaseIdentity, signReleaseTree } from "./release-signing.mjs";
 import { appcast, bundleFacts, configureReleasePlist, verifiedFramework } from "./release-info.mjs";
 import { createHash } from "node:crypto";
@@ -188,6 +189,7 @@ async function packageRelease(tag) {
     mkdirSync(dirname(launcher), { recursive: true });
     run("xcrun", [
       "clang",
+      launcherVerdicts,
       "-Wall",
       "-Wextra",
       "-Werror",

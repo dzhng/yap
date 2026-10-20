@@ -42,6 +42,7 @@ type Ledger = {
       retryable: boolean;
       retryAfterMs?: number;
       cause?: string;
+      reason?: string;
       files: Record<string, number>;
     }
   >;
@@ -95,7 +96,7 @@ function scan() {
   const codes = new Map<string, Record<string, number>>();
   for (const [file, source] of text) {
     const found = [
-      ...[...source.matchAll(/"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"/g)].map((match) => match[1]!),
+      ...[...source.matchAll(/["']([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)["']/g)].map((match) => match[1]!),
       // A single-word code carries no underscore, so it is recognised only where a refusal is built.
       ...[...source.matchAll(/(?:Error|operationError|NativeFailure)\(\s*"([A-Z][A-Z0-9]+)"/g)].map(
         (match) => match[1]!,
@@ -115,12 +116,13 @@ const scanned = scan();
 
 if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
   const codes: Ledger["codes"] = {};
-  for (const code of [...scanned.keys()].sort()) {
+  // Reserved codes may be registered before their producers ship.
+  for (const code of [...new Set([...scanned.keys(), ...Object.keys(ledger.codes)])].sort()) {
     codes[code] = {
       ...ledger.codes[code],
       category: ledger.codes[code]?.category ?? null,
       retryable: ledger.codes[code]?.retryable ?? false,
-      files: Object.fromEntries(Object.entries(scanned.get(code)!).sort()),
+      files: Object.fromEntries(Object.entries(scanned.get(code) ?? {}).sort()),
     };
   }
   writeFileSync(ledgerPath, `${JSON.stringify({ ...ledger, codes }, null, 2)}\n`);
@@ -128,6 +130,32 @@ if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
 }
 
 describe("refusal ledger", () => {
+  it("explains verdict exceptions and supplies causes and retryable wait delays", () => {
+    const usual: Record<string, boolean> = {
+      malformed: false,
+      ambiguous: false,
+      conflict: false,
+      "resource-bound": true,
+      "missing-prerequisite": true,
+      destructive: false,
+      "execution-failure": true,
+      "issue-code": true,
+      "not-a-refusal": false,
+    };
+    for (const [code, entry] of Object.entries(ledger.codes)) {
+      // LUT format tokens retain their historical issue-code classification.
+      if (entry.category !== "not-a-refusal" && !["DOMAIN_MIN", "DOMAIN_MAX"].includes(code))
+        expect(entry.cause, code).toBeTruthy();
+      if (entry.retryable !== usual[entry.category!]) expect(entry.reason, code).toBeTruthy();
+      if (entry.retryAfterMs !== undefined) {
+        expect(entry.retryable, code).toBe(true);
+        expect(entry.retryAfterMs, code).toBeGreaterThan(0);
+      }
+    }
+    expect(ledger.codes.INVALID_EVIDENCE?.retryable).toBe(true);
+    expect(ledger.codes.JOB_INTERRUPTED?.retryable).toBe(true);
+    expect(ledger.codes.NOT_READY?.retryAfterMs).toBe(15000);
+  });
   it("constructs refusal envelopes only through operationError", () => {
     const offenders: string[] = [];
     for (const [file, source] of text) {
@@ -161,7 +189,9 @@ describe("refusal ledger", () => {
       ]),
     );
     const recorded = Object.fromEntries(
-      Object.entries(ledger.codes).map(([code, entry]) => [code, entry.files]),
+      Object.entries(ledger.codes)
+        .filter(([, entry]) => Object.keys(entry.files).length > 0)
+        .map(([code, entry]) => [code, entry.files]),
     );
     expect(actual).toEqual(recorded);
     const unclassified = Object.entries(ledger.codes).filter(
@@ -187,6 +217,14 @@ describe("refusal ledger", () => {
         nativeCodes.add(code!);
     }
     expect([...nativeCodes].filter((code) => !(code in ledger.codes))).toEqual([]);
+  });
+
+  it("registers every Swift app failure code with a plain cause", () => {
+    for (const file of files.filter((file) => file.startsWith("apps/macos/Sources/"))) {
+      for (const [, code] of text.get(file)!.matchAll(/ServiceFailure\(\s*code:\s*"([A-Z_]+)"/g)) {
+        expect(ledger.codes[code!]?.cause, `${file}: ${code}`).toBeTruthy();
+      }
+    }
   });
 
   it("never names a quality gate as a refusal", () => {

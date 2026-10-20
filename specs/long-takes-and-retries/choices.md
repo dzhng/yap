@@ -64,3 +64,34 @@ at close.
   where the pointer is. Sound.
 - **`cursor.raw` returns the held sample at a page's start outside the page's forward allowance**,
   so pagination still advances. Sound.
+
+## Slice 05
+
+- **One Swift reader of the ledger, `YapMedia.RefusalLedger`, serves the app and the native
+  helper.** Inside an `.app` it reads the bundled `service/refusal-ledger.json` (fatal if
+  missing); a source-built tool or test reads the checkout's JSON. Sound (corrected in review:
+  the app and helper first had separate readers, and the app's fixtures staged copies).
+- **The C launcher's verdicts are compiled from the ledger at build** (`scripts/launcher/verdicts.mjs`),
+  because the launcher must answer when the app's files can't be opened. Sound: a generated
+  projection, not a second table.
+- **Caller-supplied evidence is classified at the boundary that knows provenance**
+  (`INVALID_INPUT_EVIDENCE`), so a reader never guesses from file names. Sound.
+- **Stored capture diagnostics ignore their historical retry bit on read** and use the ledger.
+  Sound, and needs no migration.
+- **A test fixture hard-links verified immutable tool files** instead of cloning them, because the
+  clone missed an existing 2-second probe deadline under the pinned Node. Sound: test
+  infrastructure only, production deadlines unchanged.
+- **Codes that state a fact about immutable captured bytes are non-retryable** (13 codes, e.g.
+  `AUDIO_UNAVAILABLE`, `INVALID_JOURNAL_PREFIX`, `PUBLICATION_CONFLICT`), because the native
+  helper publishes a take without a source whose failure is non-retryable and holds it pending
+  otherwise. Sound (corrected after the recovery tests failed: making them retryable would have
+  held such takes pending forever). Codes where our reader wrongly rejected valid bytes, such as
+  `INVALID_EVIDENCE`, stay retryable.
+
+## Integration (05 with 07–09)
+
+- **Only schema 4 can declare held cursor samples**; an older header's `holds: true` is ignored.
+  Slice 09's capability gate is the rule, and slice 08's schema test now asserts it. Sound.
+- **The schema-3 long-stroke fixture was regenerated** after slice 09 added `written` to the
+  `finished` cursor statistics. Nothing decodes those statistics from old journals (Swift's
+  `JournalFinished` reads only state, duration and failure; TS never parses them). Sound.

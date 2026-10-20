@@ -1301,7 +1301,7 @@ export async function startProjectService(options: {
           case "correspondence.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Correspondence package reads are not available for service-local receipts",
               );
             const key = `${operation.params.evidenceId}:${operation.params.generation}`;
@@ -1468,7 +1468,7 @@ export async function startProjectService(options: {
               const latest = captures.latest();
               return latest
                 ? { ok: true, data: describeCapture(latest) }
-                : operationError(["NOT", "FOUND"].join("_"), "Recording does not exist");
+                : operationError("NOT_READY", "There are no recordings yet");
             }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
           case "recording.prompt": {
@@ -2041,7 +2041,7 @@ export async function startProjectService(options: {
           case "speaker.continuity.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Continuity package reads are not available for service-local receipts",
               );
             const key = `${operation.params.assetId}:${operation.params.streamId}:${operation.params.channel}:${operation.params.modelId}:${operation.params.generation}`;
@@ -2903,7 +2903,7 @@ export async function startProjectService(options: {
                 ),
               };
             return operationError(
-              "NOT_READY",
+              "INVALID_PARAMS",
               "This service inspects asset and project capture evidence",
             );
           }
@@ -3235,7 +3235,7 @@ export async function startProjectService(options: {
               );
               if (!rowIndexes.length) {
                 throw new CatalogError(
-                  "NOT_READY",
+                  "INVALID_PARAMS",
                   "The selected project transcript contains no word evidence",
                   { state: transcript.state },
                 );

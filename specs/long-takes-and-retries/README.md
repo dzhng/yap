@@ -11,20 +11,23 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–04 and 07–09 are done (audits passed H1 unchanged). Slice 05 is in
+Status 2026-10-20: slices 00–05 and 07–09 are done (audits passed H1 unchanged). Slice 10 is in
 progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Pick up at [slice 05](slices/05-ledger-verdicts.md) → 06 on the
-error track; the journal track is through [slice 09](slices/09-change-only-cursor.md).
-[10](slices/10-derived-limits.md) is the next independent limits slice. Both audits passed H1; apply them as written.
+You are implementing this spec. Pick up at [slice 06](slices/06-job-retryability.md) and
+[slice 11](slices/11-prompt-and-wait.md); [10](slices/10-derived-limits.md) is in progress; 12
+follows 06 and 11. Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
 repository run happens once, in slice 13.
 
 Warnings:
+- Codes stating a fact about immutable captured bytes are non-retryable: the native helper
+  publishes a take without such a source and holds retryable ones pending
+  ([slice 05 review](assets/verification/05-ledger-verdicts.md)).
 - Fresh checkouts lack the native helper binary and ffmpeg, so four service tests
   (alignment, join, measurement, speaker) fail there on the unchanged baseline too. Build the
   native helper before treating them as regressions.
@@ -44,7 +47,7 @@ TODO:
 - [x] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [x] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
-- [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
+- [x] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
 - [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
 - [x] 07 Linear journal readers with a derived record bound ([slice](slices/07-journal-readers.md))
 - [x] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))

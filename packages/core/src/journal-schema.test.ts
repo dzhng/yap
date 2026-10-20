@@ -35,10 +35,11 @@ test("historical sampling defaults and explicit sampling share one interpretatio
       intervalUs: 16_667,
       holds: false,
     });
+    // Only schema 4 writes change-only samples; an older header cannot declare holds.
     expect(
       journalCapabilities({ schemaVersion, cursorSampling: { intervalUs: 20_000, holds: true } })
         ?.cursorSampling,
-    ).toEqual({ intervalUs: 20_000, holds: true });
+    ).toEqual({ intervalUs: 20_000, holds: schemaVersion === 4 });
   }
   for (const schemaVersion of [5, "4", null, 0, 1.5])
     expect(journalCapabilities({ schemaVersion })).toBeUndefined();

@@ -460,7 +460,7 @@ test("asset.delete refuses a live project user with structured IN_USE details", 
       ok: false,
       error: {
         code: "IN_USE",
-        retryable: false,
+        retryable: true,
         details: {
           assetId,
           usedBy: [{ kind: "project", id: projectId, revisions: 1 }],

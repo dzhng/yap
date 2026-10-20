@@ -376,7 +376,7 @@ final class UpdateCoordinator {
     }
     func fail(code: String, message: String) {
         status.state = "failed"
-        status.error = .init(code: code, message: message, retryable: false)
+        status.error = .init(code: code, message: message, retryable: ServiceFailure(code: code, message: message).retryable)
         publish()
     }
     private func stop(state: String) {

@@ -133,7 +133,7 @@ test("lease limit is explicit and dispose releases every reader and refuses reop
   f.delivery.dispose();
   expect(() => f.cache.remove(f.file.id)).not.toThrow();
   expect(() => f.delivery.open({ kind: "recording", id: f.recordingId }, forbiddenAcquire)).toThrow(
-    expect.objectContaining({ code: "OWNER_CLOSED", retryable: false }),
+    expect.objectContaining({ code: "OWNER_CLOSED", retryable: true }),
   );
 });
 

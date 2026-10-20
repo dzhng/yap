@@ -694,8 +694,8 @@ test("retiming recipe changes invalidate produced previews and refuse old export
   await f.jobs.idle();
   const next = f.replaceRenderer({ ...renderer, retime: "retime-v2", async validateAudio() {} });
   await expect(next.request(prepared.snapshot)).rejects.toMatchObject({
-    code: "NOT_READY",
-    retryable: true,
+    code: "PINNED_IMPLEMENTATION_UNAVAILABLE",
+    retryable: false,
   });
   const second = await next.request({ projectId: f.projectId });
   expect(second.jobId).not.toBe(first.jobId);

@@ -23,6 +23,7 @@ import {
   captureSourcesSchema,
   nativeStartSchema,
   operationWaitMs,
+  refusalRetryable,
   type CaptureReport,
   type CaptureSelection,
   type OperationResult,
@@ -555,21 +556,18 @@ export class CaptureService {
         if (this.store.isDeleting(current.id)) return;
         const selected = this.store.get(current.id);
         if (isSettled(selected.state)) return;
+        let code =
+          controller.signal.aborted || this.lifetime.signal.aborted
+            ? "RECOVERY_CANCELED"
+            : error instanceof CatalogError
+              ? error.code
+              : "RECOVERY_FAILED";
+        if (code.length > 128) code = "RECOVERY_FAILED";
         const finalizationError = {
-          code:
-            controller.signal.aborted || this.lifetime.signal.aborted
-              ? "RECOVERY_CANCELED"
-              : error instanceof CatalogError
-                ? error.code
-                : "RECOVERY_FAILED",
+          code,
           message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-          retryable:
-            controller.signal.aborted ||
-            this.lifetime.signal.aborted ||
-            !(error instanceof CatalogError) ||
-            error.retryable,
+          retryable: refusalRetryable(code),
         };
-        if (finalizationError.code.length > 128) finalizationError.code = "RECOVERY_FAILED";
         this.author(selected, { state: "finalizing", finalizationError });
         this.log(
           `recovery failed for ${selected.id}: ${finalizationError.code}: ${finalizationError.message}`,
@@ -661,7 +659,7 @@ export class CaptureService {
               error: {
                 code,
                 message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-                retryable: !(error instanceof CatalogError) || error.retryable,
+                retryable: refusalRetryable(code),
               },
             },
           });
@@ -886,7 +884,15 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
       state: "finalizing",
       ...(report.finalizationError === undefined
         ? {}
-        : { finalizationError: report.finalizationError }),
+        : {
+            finalizationError:
+              report.finalizationError === null
+                ? null
+                : {
+                    ...report.finalizationError,
+                    retryable: refusalRetryable(report.finalizationError.code),
+                  },
+          }),
     };
   return { ...identity, state: report.state };
 }

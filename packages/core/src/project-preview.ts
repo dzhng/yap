@@ -141,10 +141,14 @@ export class ProjectPreviewInspection {
       );
     const retime = plan.retained ? undefined : retimeImplementation(plan.window, this.renderer);
     if (input.retimeImplementationId !== undefined && input.retimeImplementationId !== retime)
-      throw new CatalogError("NOT_READY", "Pinned retiming implementation is not available", {
-        implementationId: input.implementationId ?? this.renderer.implementationId,
-        retimeImplementationId: input.retimeImplementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned retiming implementation is not available",
+        {
+          implementationId: input.implementationId ?? this.renderer.implementationId,
+          retimeImplementationId: input.retimeImplementationId,
+        },
+      );
     const pinned: PinnedProjectPreview = {
       projectId: input.projectId,
       revisionId: plan.window.manifest.revisionId,
@@ -251,9 +255,13 @@ export class ProjectPreviewInspection {
   }
   private requireImplementation(implementationId: string) {
     if (implementationId !== this.renderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned preview implementation is not available", {
-        implementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned preview implementation is not available",
+        {
+          implementationId,
+        },
+      );
   }
 
   private plan(input: ProjectPreviewInput) {
