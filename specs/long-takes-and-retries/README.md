@@ -16,10 +16,9 @@ progress; slice 05 is next on the error track. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Continue the error track
-([04](slices/04-error-envelope.md) → 05 → 06); slices 07 and 10 consume the limits verdicts.
-The orchestrator runs the limits verdicts' non-blocking H1 window described in
-[Review checkpoints](#review-checkpoints) before any slice that applies them.
+You are implementing this spec. Pick up at [slice 05](slices/05-ledger-verdicts.md) on the
+error track (05 → 06) and the journal track ([07](slices/07-journal-readers.md) → 08 → 09;
+10 after 07). Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
