@@ -33,7 +33,6 @@ public struct ControlsState: Equatable, Sendable {
     /// Read from native capture in this process, so it is known before the service is.
     public var permissions: Permissions?
     public var sources = SourceCatalog()
-    public var libraryFailure: String?
     public var selection = CaptureSelection()
     public var library = LibraryState()
     public var updates = UpdateControls()
@@ -46,8 +45,40 @@ public struct ControlsState: Equatable, Sendable {
     public var storage: StorageObservation?
     public var storageRefreshing = false
     public var storageFailure: String?
-    /// The last failure a person's own action produced, kept visible until the next action.
-    public var failure: String?
+    /// A failure belongs to its surface and request; only that request's success resolves it.
+    public var failure: Failure?
+    public struct Failure: Equatable, Sendable {
+        public enum Scope: Equatable, Sendable { case capture, library }
+        public enum Action: Equatable, Sendable {
+            case start(StartRequest)
+            case copyPrompt(MediaTarget?)
+        }
+        public let message: String
+        public let scope: Scope
+        public let request: String?
+        public let action: Action?
+        public init(_ message: String, scope: Scope = .capture, request: String? = nil, action: Action? = nil, operation: String? = nil) {
+            let task: String? = switch operation {
+            case "capture.start": "start recording"
+            case "capture.stop": "finish recording"
+            case "capture.pause": "pause recording"
+            case "capture.resume": "resume recording"
+            case "capture.cancel": "cancel recording"
+            case "capture.restart": "restart recording"
+            case "capture.setCamera": "change the camera"
+            default: nil
+            }
+            self.message = task.map { "Couldn't \($0): \(message)" } ?? message
+            self.scope = scope; self.request = request; self.action = action
+        }
+    }
+    public mutating func observeAction(_ action: ControlsAction, failure message: String?, on scope: Failure.Scope) {
+        if let message { failure = .init(message, scope: scope, request: action.id) }
+        else { resolveFailure(request: action.id) }
+    }
+    public mutating func resolveFailure(request: String) {
+        if failure?.request == request { failure = nil }
+    }
     /// The action ids whose key combination this app could not claim, so nothing was stolen.
     public var unavailableShortcuts: [String] = []
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
@@ -509,7 +540,7 @@ extension ControlsState {
     public mutating func setCamera(_ on: Bool) -> SetCamera? {
         if isLive {
             guard device?.camera != nil, let recordingId = device?.recordingId else {
-                failure = "This take has no camera to turn on or off."
+                failure = .init("This take has no camera to turn on or off.")
                 return nil
             }
             return .init(recordingId: recordingId, on: on)
@@ -552,7 +583,7 @@ extension ControlsState {
     /// Takes a fresh catalog, keeping the selection to what still exists.
     public mutating func observeSources(_ catalog: SourceCatalog) {
         sources = catalog
-        if let lost = reconcileSelection() { failure = lost }
+        if let lost = reconcileSelection(), failure == nil { failure = .init(lost) }
         // Until a person picks a camera, the system's preferred one is picked. Picking never turns
         // the camera on: the switch alone does that.
         if selection.cameraDeviceId == nil, let preferred = defaultCamera { selection.cameraDeviceId = preferred }
@@ -576,7 +607,9 @@ extension ControlsState {
     /// the selection stand. Absent screen authorization is a successful catalog with empty
     /// screen choices; cameras and microphones are discovered independently.
     public mutating func sourcesUnavailable(description: String) {
-        failure = description
+        if failure == nil || failure?.request == "capture.sources" {
+            failure = .init(description, request: "capture.sources")
+        }
     }
 
     /// Refreshes labels by identity: a browser navigation changes a title without closing its
@@ -650,10 +683,10 @@ extension ControlsState {
     /// A start whose answer has not arrived is asked for again under its own request ID, so the
     /// service resolves the take it already allocated instead of allocating another.
     public mutating func beginStart(
-        newRequestId: String, origin: StartOrigin = .menu
+        newRequestId: String, origin: StartOrigin = .menu, retrying: StartRequest? = nil
     ) -> StartRequest? {
-        guard let start = self.start(origin: origin) else {
-            failure = "Choose a source before recording."
+        guard let start = retrying?.start ?? self.start(origin: origin) else {
+            failure = .init("Choose a source before recording.")
             return nil
         }
         if let unansweredStart, unansweredStart.start == start {
@@ -663,15 +696,14 @@ extension ControlsState {
             self.unansweredStart = replay
             return replay
         }
-        if selection.source == .camera {
-            guard let selected = selection.cameraDeviceId,
-                sources.cameras.contains(where: { $0.id == selected }) else {
-                failure = "Choose an available camera before recording."
+        if case .camera(let selected) = start.source {
+            guard sources.cameras.contains(where: { $0.id == selected }) else {
+                failure = .init("Choose an available camera before recording.")
                 return nil
             }
         }
         let request = StartRequest(
-            requestId: newRequestId, start: start, origin: origin, repeatsUnanswered: false)
+            requestId: newRequestId, start: start, origin: retrying?.origin ?? origin, repeatsUnanswered: false)
         unansweredStart = request
         return request
     }

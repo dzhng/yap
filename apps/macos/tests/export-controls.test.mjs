@@ -80,6 +80,7 @@ import YapControls
     @MainActor static func main() async {
         let script = Script()
         var failures: [String] = []
+        var feedback = ControlsState()
         var chosen: [(ExportsState.Kind, String)] = []
         var destination: URL? = nil
         let exports = ExportController(
@@ -90,7 +91,10 @@ import YapControls
                 script.revision = "r4"
                 return destination
             },
-            reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            reveal: { _ in }, changed: {}, failure: { action, message in
+                feedback.observeAction(action, failure: message, on: .library)
+                if let message { failures.append(message) }
+            })
 
         exports.export("take", kind: .video)
         await until { exports.state.choosing == nil && chosen.count == 1 }
@@ -136,12 +140,16 @@ import YapControls
         script.createFailures = [(ServiceFailure(code: "INVALID_PARAMS", message: "Parameters do not match"), false)]
         exports.export("take", kind: .video)
         await until { !failures.isEmpty }
-        precondition(exports.state.requests.isEmpty && failures == ["INVALID_PARAMS: Parameters do not match"])
+        precondition(exports.state.requests.isEmpty && failures == ["Some request settings are missing or incorrect."])
+
+        precondition(feedback.failure?.request == ControlsAction.exportProject("take", .video).id)
+        exports.export("take", kind: .video)
+        await until { feedback.failure == nil && exports.state.choosing == nil }
 
         // A restarted app rediscovers every unfinished page, then acts on what it found.
         let restarted = ExportController(
             call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
-            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
         let cursor = "opaque-export-cursor"
         script.pages = [
             ["exports": [["id": first]], "nextCursor": cursor],
@@ -294,11 +302,11 @@ import YapControls
             call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
             choose: { _, _ in preconditionFailure("Discovery must not choose a destination") },
             reveal: { revealed.append($0) }, changed: { changes += 1 },
-            failure: { preconditionFailure("No create failure expected: \($0)") })
+            failure: { _, message in if let message { preconditionFailure("No create failure expected: \(message)") } })
         exports.discover()
         await until { changes > 0 }
         precondition(exports.state.records.map(\.exportId) == [recordingId, projectId], "A malformed item must not hide later items/pages")
-        precondition(exports.state.discoveryFailure?.contains("INVALID_RESPONSE") == true,
+        precondition(exports.state.discoveryFailure?.contains("Yap returned an unreadable or inconsistent response.") == true,
             "Malformed status must remain visible after the last successful page")
         let lists = script.calls.filter { $0.0 == "export.list" }.map { $0.1 }
         precondition(lists.count == 2 && lists[1]["cursor"] as? String == cursor)
@@ -310,7 +318,7 @@ import YapControls
         precondition(originalProject.target == .project(projectOwner), "The export stays attributed to its project")
         precondition(!exportLines(exports).contains { $0.contains(projectOwner) || $0.contains(originalProject.revisionId) },
                      "Presentation shows no identifiers")
-        precondition(exportLines(exports).contains { $0.contains("Unreadable export status for malformed") },
+        precondition(exportLines(exports).contains { $0.contains("Yap returned an unreadable or inconsistent response.") },
             "Discovery failure is visible in shared export facts")
 
         // Neither/both owners are malformed, not implicit recording/project defaults.
@@ -333,12 +341,12 @@ import YapControls
         exports.tick()
         await until { exports.state.readFailures[projectId] != nil }
         let unreadable = exports.state.readFailures[projectId]!
-        precondition(unreadable.contains("INVALID_RESPONSE") && exports.state.records.last == originalProject)
+        precondition(unreadable.contains("Yap returned an unreadable or inconsistent response.") && exports.state.records.last == originalProject)
         precondition(exportLines(exports).contains { $0 == unreadable }, "Polling failure is visible")
         script.refusedRetries[projectId] = ServiceFailure(code: "INVALID_PARAMS", message: "Retry was refused")
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
-        precondition(exports.state.failures[projectId]?.contains("Retry was refused") == true)
+        precondition(exports.state.failures[projectId]?.contains("Some request settings are missing or incorrect.") == true)
         script.refusedRetries[projectId] = nil
         let refusedRetry = exports.state.failures[projectId]
         script.statuses[projectId] = script.json(project)
@@ -350,7 +358,7 @@ import YapControls
         script.statuses[projectId] = script.json(recording)
         exports.tick()
         await until { exports.state.readFailures[projectId] != nil }
-        precondition(exports.state.readFailures[projectId]!.contains("different exportId"))
+        precondition(exports.state.readFailures[projectId]!.contains("Yap returned an unreadable or inconsistent response."))
         precondition(exports.state.records == [originalRecording, originalProject])
         script.statuses[projectId] = script.json(project)
         exports.tick()
@@ -370,7 +378,7 @@ import YapControls
         script.refusedRetries[projectId] = ServiceFailure(code: "INVALID_PARAMS", message: "Retry was refused")
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
-        precondition(exports.state.failures[projectId]?.contains("Retry was refused") == true)
+        precondition(exports.state.failures[projectId]?.contains("Some request settings are missing or incorrect.") == true)
         precondition(!exports.state.observed.contains(projectId), "A definite refusal does not make a settled export poll forever")
         script.refusedRetries[projectId] = nil
         script.acceptedRetries[projectId] = script.json(committed)
@@ -385,7 +393,7 @@ import YapControls
             exports.retry(projectId)
             await until { exports.state.acting[projectId] == nil }
             precondition(exports.state.observed.contains(projectId), "Accepted retry uncertainty \(code) needs status recovery even when the old receipt was settled")
-            precondition(exportLines(exports).contains { $0.contains(code) })
+            precondition(exportLines(exports).contains { $0.contains(ServiceFailure(code: code, message: "").localizedDescription) })
             exports.tick()
             await until { exports.state.records.last?.committed == true }
             precondition(exports.state.readFailures[projectId] == nil && !exports.state.observed.contains(projectId))
@@ -558,7 +566,7 @@ import YapControls
                     "expectedRevisionId": pinnedRevision, "operations": [["operation": "trim", "clipId": clipId, "range": ["startUs": 0, "endUs": 1_000_000], "ripple": "none"]]])
                 return URL(fileURLWithPath: directory).appendingPathComponent("demo.mp4")
             },
-            reveal: { revealed.append($0) }, changed: {}, failure: { failures.append($0) })
+            reveal: { revealed.append($0) }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
 
         first.export(projectId, kind: .video)
         await until(60, first.tick) { first.state.records.first?.settled == true || !failures.isEmpty }
@@ -577,7 +585,7 @@ import YapControls
         let occupied = ExportController(
             call: { operation, params throws(ServiceFailure) in try await service.call(operation, params) },
             choose: { _, _ in URL(fileURLWithPath: directory).appendingPathComponent("occupied.mp4") },
-            reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
         occupied.export(projectId, kind: .video)
         await until(60, occupied.tick) { occupied.state.records.first?.state == "failed" || !failures.isEmpty }
         precondition(failures.isEmpty, "Occupied export was refused before admission: \(failures)")
@@ -588,7 +596,7 @@ import YapControls
         service = await Service.start(resolved)
         let restarted = ExportController(
             call: { operation, params throws(ServiceFailure) in try await service.call(operation, params) },
-            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
         restarted.discover()
         await until(20, {}) { !restarted.state.records.isEmpty || restarted.state.discoveryFailure != nil }
         precondition(restarted.state.discoveryFailure == nil, "\(restarted.state.discoveryFailure!)")

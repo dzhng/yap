@@ -152,7 +152,7 @@ func runSelectionTests() {
     failing.sourcesUnavailable(description: "TIMEOUT: capture.sources did not answer in time")
     precondition(
         failing.selection.source == .window(window) && failing.sources.windows == [window]
-            && failing.failure == "TIMEOUT: capture.sources did not answer in time",
+            && failing.failure?.message == "TIMEOUT: capture.sources did not answer in time",
         "A catalog read that failed keeps the selection and states its own failure")
     print("PASS a selection becomes exactly the take it describes")
 }

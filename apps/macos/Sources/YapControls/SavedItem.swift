@@ -23,6 +23,8 @@ public struct SavedItem: Equatable, Sendable {
     public let badge: String?
     public let status: String?
     public let details: [String]
+    /// Explanation beneath the metadata, separate from the short state label.
+    public let message: String?
     public let actions: [PresentedControlsAction]
     /// Something about this item needs the person: a failure, an unconfirmed request, a retry.
     public let attention: Bool
@@ -34,7 +36,7 @@ public struct SavedItem: Equatable, Sendable {
         return opens
     }
     public init(id: String, kind: Kind, title: String, badge: String? = nil, status: String? = nil,
-                details: [String] = [], actions: [PresentedControlsAction] = [],
+                details: [String] = [], message: String? = nil, actions: [PresentedControlsAction] = [],
                 opens: ControlsAction? = nil, attention: Bool = false) {
         self.id = id
         self.kind = kind
@@ -42,6 +44,7 @@ public struct SavedItem: Equatable, Sendable {
         self.badge = badge
         self.status = status
         self.details = details
+        self.message = message
         self.actions = actions
         self.opens = opens
         self.attention = attention

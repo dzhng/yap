@@ -1,4 +1,5 @@
 import Foundation
+import YapMedia
 
 /// Shared saved-media facts and action applicability; renderers consume these directly.
 public enum LibraryPresentation {
@@ -43,20 +44,36 @@ public enum LibraryPresentation {
                 if take?.sourceAdmissions?.contains(where: { $0.kind == "primary" && $0.publication?.state == .published }) == true {
                     details.append("Microphone audio")
                 }
-                if let failure = take?.finalizationError { details.append("Finalization failed — \(failure.code): \(failure.message)") }
+                if let failure = take?.finalizationError { details.append("Finalization failed — \(RefusalLedger.cause(failure.code) ?? failure.message)") }
                 if let failure = request?.failure { details.append("Delete not confirmed — \(failure)") }
+                let primary = take?.sourceAdmissions?.first { $0.kind == "primary" }?.job
+                let importFailed = primary?.state == "failed"
+                let importing = primary.map { ["queued", "running"].contains($0.state) || library.retryingImports.contains($0.id) } ?? false
+                var message: String?
+                if importFailed, let job = primary {
+                    let cause = job.errorCode.flatMap(RefusalLedger.cause) ?? job.reason ?? "The import could not finish."
+                    message = "Couldn't import your \(ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt)) recording: \(cause.trimmingCharacters(in: CharacterSet(charactersIn: "."))). Your recording is safe."
+                }
+                if let job = primary, let failure = library.importFailures[job.id] { details.append(failure) }
                 let state = take?.state ?? "complete"
-                let status = request != nil ? pending ? "Deleting" : "Attention" : take?.finalizationError != nil ? "Attention" : state == "complete" ? "Ready" : state.capitalized
+                let status = request != nil ? pending ? "Deleting" : "Attention" : importing ? "Importing…" : importFailed ? "Import failed" : take?.finalizationError != nil ? "Attention" : state == "complete" ? "Ready" : state.capitalized
                 // The title is when; how long and what state it is in read once, on the line below.
                 if state == "complete" || state == "interrupted" {
                     details.insert(ElapsedTime.format(take?.sourceDurationUs ?? row.durationUs), at: 0)
                 }
+                var recordingActions: [PresentedControlsAction] = [
+                    .init(.playRecording(id), "Play", enabled: usable && state != "canceled"),
+                    .init(.copyRecordingPrompt(id), "Copy prompt", enabled: usable),
+                    .init(.deleteRecording(id), deleteTitle, enabled: usable),
+                ]
+                if importFailed, let job = primary, let retry = job.details?.retry,
+                    retry.operation == "job.retry", retry.params.jobId == job.id {
+                    recordingActions.append(.init(.retryImport(job.id), importing ? "Retrying…" : "Retry",
+                        enabled: usable && job.retryable && !importing))
+                }
                 return .init(id: id, kind: .recording, title: ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt),
-                    status: status, details: details, actions: [
-                        .init(.playRecording(id), "Play", enabled: usable && state != "canceled"),
-                        .init(.copyRecordingPrompt(id), "Copy prompt", enabled: usable),
-                        .init(.deleteRecording(id), deleteTitle, enabled: usable),
-                    ], opens: .playRecording(id), attention: status == "Attention")
+                    status: status, details: details, message: message, actions: recordingActions,
+                    opens: .playRecording(id), attention: status == "Attention" || status == "Import failed")
             case .project:
                 preconditionFailure("media.list never lists projects")
             }

@@ -1,5 +1,6 @@
 import Foundation
 import YapControls
+import YapMedia
 
 private func action(_ entries: [PresentedControlsAction], _ id: String) -> PresentedControlsAction {
     guard let found = entries.first(where: { $0.action.id == id }) else {
@@ -59,13 +60,13 @@ func runCapturePresentationTests() {
 
     var interrupted = ready()
     interrupted.take = .init(id: "rec-2", state: "interrupted", interruptionReason: "SOURCE_LOST", sourceDurationUs: 4_000_000)
-    precondition(CapturePresentation.noticeLines(for: interrupted).contains("Last take interrupted — SOURCE_LOST"))
+    precondition(CapturePresentation.noticeLines(for: interrupted).contains("Last take interrupted — The selected capture source disconnected or disappeared."))
 
     interrupted.take = .init(id: "camera-start", state: "interrupted",
         interruptionReason: "SOURCE_UNAVAILABLE", sourceDurationUs: nil,
         interruptionMessage: "Camera session did not start.")
     precondition(CapturePresentation.noticeLines(for: interrupted).contains(
-        "Last take interrupted — SOURCE_UNAVAILABLE: Camera session did not start."),
+        "Last take interrupted — The selected capture source is unavailable right now."),
         "A camera failure must show its actionable native explanation")
 
     var endedCamera = ready(source: .camera)
@@ -77,7 +78,7 @@ func runCapturePresentationTests() {
     precondition(endedCamera.observeTake(interrupted.take), "A newly interrupted take reopens its controls")
     endedCamera.observeTake(nil)
     precondition(CapturePresentation.noticeLines(for: endedCamera).contains(
-        "Last take interrupted — SOURCE_UNAVAILABLE: Camera session did not start."))
+        "Last take interrupted — The selected capture source is unavailable right now."))
     precondition(endedCamera.takeNeedingResolution == nil, "A terminal take needs no further reads")
     precondition(!endedCamera.observeTake(interrupted.take), "Polling must not reopen dismissed controls")
     endedCamera.observeTake(.init(id: "next-camera", state: "recording",
@@ -104,17 +105,22 @@ func runCapturePresentationTests() {
     precondition(recovering.isLive && CapturePresentation.statusTitle(for: recovering) == "Finalization needs attention")
     precondition(action(recovery, "capture.startOrStop").title == "Retry Finalization" && action(recovery, "capture.startOrStop").enabled)
     precondition(action(recovery, "capture.cancel").title == "Cancel Finalization" && !action(recovery, "capture.restart").enabled)
-    precondition(CapturePresentation.noticeLines(for: recovering).contains("Finalization failed — MEDIA_WORKER_TIMEOUT: Recovery can be retried"))
+    precondition(CapturePresentation.noticeLines(for: recovering).contains("Finalization failed — \(RefusalLedger.cause("MEDIA_WORKER_TIMEOUT")!)"))
 
     var refused = ready()
-    refused.failure = "PERMISSION_REQUIRED: Screen recording permission is not authorized."
-    precondition(CapturePresentation.noticeLines(for: refused).contains(refused.failure!))
     // Refusal is reported by action, since the physical key, not its label, is the identity.
     refused.unavailableShortcuts = [ControlsAction.startOrStop.id, ControlsAction.undoMark.id]
     precondition(CapturePresentation.noticeLines(for: refused).contains(
         "The Start or Finish Recording and Undo Mark shortcuts were refused by macOS."),
         "Refused shortcuts are named by action, got \(CapturePresentation.noticeLines(for: refused))")
+    for message in ["Recording media is unavailable.", "The prompt could not be copied."] {
+        var failed = ready()
+        failed.failure = .init(message, scope: .library)
+        precondition(CapturePresentation.failureAction(for: failed) == nil,
+                     "Playback and prompt-copy failures must never offer a recording Retry")
+    }
     print("PASS shared capture lifecycle and transport applicability")
+    runFailureTests()
     runOverlayCameraTests()
 }
 
@@ -362,4 +368,41 @@ func runSavedPagingTests() {
     precondition(refreshing.map(\.action) == [.nextRecordings] && !refreshing[0].enabled,
                  "Another page stays offered while a refresh disables it")
     print("PASS paging appears where another page exists and stays put while refreshing")
+}
+
+private func runFailureTests() {
+    var state = ready()
+    let start = state.beginStart(newRequestId: "failed-start")!
+    _ = state.finishStart(start, .unanswered)
+    state.failure = .init("Yap's background service didn't respond in time.", request: "failed-start", action: .start(start), operation: "capture.start")
+    precondition(state.failure?.message == "Couldn't start recording: Yap's background service didn't respond in time.",
+                 "A failed request names its own action")
+    let original = state.failure
+    state.selection.systemAudio.toggle()
+    state.sourcesUnavailable(description: "A background source read failed.")
+    state.observeSources(state.sources)
+    state.resolveFailure(request: "capture.setCamera")
+    state.resolveFailure(request: "another-start")
+    precondition(state.failure == original, "Unrelated toggles, reads and successful operations cannot erase the failed start")
+    precondition(CapturePresentation.failureAction(for: state)?.action == .retryFailure)
+    let retry = state.beginStart(newRequestId: "must-not-allocate", retrying: start)!
+    precondition(retry.requestId == "failed-start" && retry.start == start.start,
+                 "Start Retry reuses admission and its original selection despite unrelated toggles")
+    _ = state.finishStart(retry, .live)
+    precondition(state.failure?.message == original?.message, "A later recording state cannot relabel the failed start")
+    state.resolveFailure(request: "failed-start")
+    precondition(state.failure == nil, "Only that start's success resolves its failure")
+
+    state.failure = .init("The prompt could not be read.", request: "recording.prompt", action: .copyPrompt(.recording("take")))
+    precondition(CapturePresentation.failureAction(for: state)?.title == "Copy", "A failed paste offers Copy")
+    state.failure = .init("Recording media is unavailable.", scope: .library)
+    precondition(CapturePresentation.noticeLines(for: state).isEmpty && CapturePresentation.failureAction(for: state) == nil,
+                 "Library failures never appear in the capture panel")
+    var refusedStart = ready()
+    let refused = refusedStart.beginStart(newRequestId: "refused")!
+    _ = refusedStart.finishStart(refused, .refused)
+    let fresh = refusedStart.beginStart(newRequestId: "fresh", retrying: refused)!
+    precondition(fresh.requestId == "fresh" && fresh.start == refused.start && !fresh.repeatsUnanswered,
+                 "A refused start retries its selection through fresh admission; only unanswered starts replay")
+    print("PASS scoped failures retain their request through unrelated toggles and reads; paste offers Copy")
 }

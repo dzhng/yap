@@ -130,6 +130,16 @@ if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
 }
 
 describe("refusal ledger", () => {
+  it("explains saved recording failures without internal vocabulary", () => {
+    expect(ledger.codes.INVALID_EVIDENCE?.cause).toBe(
+      "Yap couldn't read the details it saved with this recording.",
+    );
+    for (const [code, entry] of Object.entries(ledger.codes)) {
+      expect(entry.cause ?? "", code).not.toMatch(
+        /\b(evidence|retain(?:ed)?|authority|receipts?|acquisitions?|pinned|operations?|verif(?:y|ied|ication)|publications?|journals?)\b/i,
+      );
+    }
+  });
   it("explains verdict exceptions and supplies causes and retryable wait delays", () => {
     const usual: Record<string, boolean> = {
       malformed: false,

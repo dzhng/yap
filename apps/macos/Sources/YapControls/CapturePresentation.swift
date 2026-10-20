@@ -1,4 +1,5 @@
 import Foundation
+import YapMedia
 
 /// Capture labels and action applicability; observations supply lifecycle and time.
 public enum CapturePresentation {
@@ -68,13 +69,20 @@ public enum CapturePresentation {
         ]
     }
 
+    public static func failureAction(for state: ControlsState) -> PresentedControlsAction? {
+        guard let failure = state.failure, failure.scope == .capture, let action = failure.action else { return nil }
+        switch action {
+        case .start: return .init(.retryFailure, "Retry", enabled: state.service == .ready && !state.isLive && !state.counting)
+        case .copyPrompt: return .init(.retryFailure, "Copy", enabled: state.service == .ready)
+        }
+    }
+
     public static func noticeLines(for state: ControlsState) -> [String] {
         var lines: [String] = []
-        if let failure = state.failure { lines.append(failure) }
-        if let failure = state.take?.finalizationError { lines.append("Finalization failed — \(failure.code): \(failure.message)") }
+        if let failure = state.take?.finalizationError { lines.append("Finalization failed — \(RefusalLedger.cause(failure.code) ?? failure.message)") }
         if let take = state.take, take.state == "interrupted", !state.isLive {
-            let detail = take.interruptionMessage.map { ": \($0)" } ?? ""
-            lines.append("Last take interrupted — \(take.interruptionReason ?? "reason unavailable")\(detail)")
+            let cause = take.interruptionReason.flatMap(RefusalLedger.cause) ?? take.interruptionMessage ?? "The reason is unavailable."
+            lines.append("Last take interrupted — \(cause)")
         }
         if state.take?.state == "complete", state.take?.completionReason == "maximumDuration" {
             lines.append("Take complete — reached 12 hours.")

@@ -11,12 +11,12 @@ private func entry(_ items: [SavedItem], _ id: String) -> PresentedControlsActio
 
 private func record(
     _ exportId: String, state: String, projectId: String = "rec-1", output: String? = nil,
-    retryable: Bool = false, abandoning: Bool = false, cleanupPending: Bool = false
+    retryable: Bool = false, abandoning: Bool = false, cleanupPending: Bool = false, jobId: String? = "fixture-job"
 ) -> ExportsState.Record {
     .init(
         exportId: exportId, target: .project(projectId), kind: .video, revisionId: "r2", state: state,
         directory: "/Users/me/Exports", leaf: "demo.mp4", output: output, reason: nil,
-        retryable: retryable, abandoning: abandoning, cleanupPending: cleanupPending)
+        retryable: retryable, abandoning: abandoning, cleanupPending: cleanupPending, jobId: jobId)
 }
 
 func runExportTests() {
@@ -40,6 +40,10 @@ func runExportTests() {
         "A sent request does not block exporting again")
     precondition(exports.resend("e1") == nil, "An outstanding send is not sent twice")
 
+    exports.records = [record("no-job", state: "failed", retryable: true, jobId: nil)]
+    precondition(entry(exportItems(state, exports), "export.jobRetry.no-job")?.enabled == false,
+                 "An export without a retained job cannot retry")
+    exports.records = []
     // A lost reply keeps the original identity for the person's explicit retry.
     exports.unanswered("e1", reason: "TIMEOUT: export.create did not answer in time")
     let pending = exportItems(state, exports)
@@ -131,7 +135,7 @@ func runExportTests() {
             "snapshot": ["revisionId": "r", "settings": ["container": leaf.hasSuffix("wav") ? "wav" : "m4a"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": leaf],
             "retryable": true, "abandoning": false, "cleanupPending": false,
-            "output": NSNull(), "reason": "fixture failure",
+            "output": NSNull(), "reason": "fixture failure", "jobId": "fixture-job",
         ]
         let record = try! JSONDecoder().decode(ExportsState.Record.self,
             from: JSONSerialization.data(withJSONObject: fields))
@@ -148,7 +152,7 @@ func runExportTests() {
             "snapshot": ["revisionId": "r", "placementIds": ["caption"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": "captions." + kind],
             "retryable": true, "abandoning": false, "cleanupPending": false,
-            "output": NSNull(), "reason": "fixture failure",
+            "output": NSNull(), "reason": "fixture failure", "jobId": "fixture-job",
         ]
         guard let record = try? JSONDecoder().decode(ExportsState.Record.self,
             from: JSONSerialization.data(withJSONObject: fields)) else {

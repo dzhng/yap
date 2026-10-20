@@ -93,7 +93,7 @@ struct Refused: LocalizedError { var errorDescription: String? { "NOT_FOUND: pro
         NSApp.setActivationPolicy(.accessory)
         let service = Service(CommandLine.arguments[1])
         var failures: [String] = []
-        let owner = PreviewController(call: service.call, failure: { failures.append($0) })
+        let owner = PreviewController(call: service.call, failure: { _, message in if let message { failures.append(message) } })
         owner.open("take")
         await settle()
         owner.tick()
@@ -269,7 +269,7 @@ struct PlaybackFailure: LocalizedError {
         var observations: [[String: Any]] = []
         var report: [String: Any] = ["passed": false, "pid": ProcessInfo.processInfo.processIdentifier,
             "scope": "Unchanged production controller/presenter; controlled ready receipt; muted retained current A/V movie, not listening or moving-pointer verification"]
-        let owner = PreviewController(call: service.call, failure: { failures.append($0) })
+        let owner = PreviewController(call: service.call, failure: { _, message in if let message { failures.append(message) } })
             .titled { $0 == service.project ? "Fixture project" : nil }
         owner.open(service.project, revisionId: service.revision)
         let window = NSApp.windows.first { $0.isVisible && $0.title == "Fixture project" }!

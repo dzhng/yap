@@ -232,6 +232,12 @@ owns synthetic scenarios; its images and metadata record native size, appearance
 and backing scale. This renderer never enumerates devices, inspects permissions,
 starts capture or activates the app.
 
+Action failures retain their originating surface and request until that action succeeds or
+its notice is dismissed. Background observations and unrelated controls cannot clear them.
+An import Retry acts on the primary source's admitted job; playback and prompt handoff remain
+available while import needs repair. The ledger owns plain-language causes. Existing permission
+controls supply fixes; errors without a simple supported action remain status text.
+
 The [Library view](Sources/Yap/LibraryView.swift) consumes shared
 saved-item facts from the controls presentation owners. Those owners retain title,
 failure detail and action applicability; the view keeps only its session-local tab,

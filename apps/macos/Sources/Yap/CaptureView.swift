@@ -52,6 +52,8 @@ struct CaptureViewInput: Equatable {
     var notices: [String] = []
     /// A message from the Yap team for this version; it leads the panel as a banner.
     var adminMessage: String?
+    var failureMessage: String?
+    var failureAction: PresentedControlsAction?
     var permissionActions: [PresentedControlsAction] = []
     var transport: [PresentedControlsAction] = []
     var startTitle: String = "Start Recording"
@@ -330,6 +332,30 @@ final class CaptureView: NSView {
             y += rowHeight
         }
         y += 12
+        if let message = input.failureMessage {
+            let text = NSTextField(wrappingLabelWithString: message)
+            text.font = .systemFont(ofSize: 11)
+            text.textColor = .secondaryLabelColor
+            let styled = NSMutableAttributedString(attributedString: text.attributedStringValue)
+            let lead = (message as NSString).range(of: ":")
+            if lead.location != NSNotFound {
+                styled.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: NSRange(location: 0, length: lead.location + 1))
+            }
+            text.attributedStringValue = styled
+            let height = max(18, ceil(text.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: 322, height: CGFloat.greatestFiniteMagnitude)).height ?? 0))
+            text.frame = NSRect(x: 16, y: y, width: 322, height: height)
+            document.addSubview(text)
+            y += height + 8
+            var actionX: CGFloat = 18
+            if let action = input.failureAction {
+                button(action.title, id: action.action.id, frame: NSRect(x: actionX, y: y, width: 64, height: 24),
+                       intent: .controls(action.action), kind: .secondary, enabled: action.enabled)
+                actionX += 72
+            }
+            button("Dismiss", id: ControlsAction.dismissFailure.id, frame: NSRect(x: actionX, y: y, width: 72, height: 24),
+                   intent: .controls(.dismissFailure), kind: .secondary, enabled: true)
+            y += 36
+        }
         if !input.notices.isEmpty || !input.permissionActions.isEmpty {
             for notice in input.notices {
                 let font = NSFont.systemFont(ofSize: 11)

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { createServer } from "node:net";
+import { promisify } from "node:util";
 import { compileControlsCheck } from "./fixtures/swift-controls.mjs";
 
 test(
@@ -155,7 +157,7 @@ import YapControls
         precondition(library.state.projects == lastProjects && library.state.nextProjectCursor == nil)
         script.failure = ("project.list", "SERVICE_UNAVAILABLE")
         library.refreshProjects()
-        await until { library.state.projectFailure?.contains("SERVICE_UNAVAILABLE") == true }
+        await until { library.state.projectFailure?.contains("Yap's background helper is unavailable.") == true }
         precondition(library.state.projects == lastProjects)
         script.projects = [["id": "later", "title": "Later caller project", "createdAt": "2026-10-01T02:00:00Z", "currentRevisionId": "r-later"]]
         library.refreshProjects()
@@ -175,7 +177,7 @@ import YapControls
         let lastTake = library.state.recent
         script.failure = ("media.list", "SERVICE_UNAVAILABLE")
         library.refreshRecordings()
-        await until { library.state.recordingFailure?.contains("SERVICE_UNAVAILABLE") == true }
+        await until { library.state.recordingFailure?.contains("Yap's background helper is unavailable.") == true }
         precondition(library.state.recent == lastTake, "Failed source reads retain the last good facts")
         library.refreshRecordings()
         await until { library.state.recordingFailure == nil }
@@ -233,10 +235,10 @@ import YapControls
         progressOwner.refreshRecordings()
         await until { progressOwner.state.recent.first?.id == "new-progress-owner" }
         overlapping.failure = ("media.list", "NOT_READY"); progressOwner.refreshRecordings()
-        await until { progressOwner.state.recordingFailure?.contains("NOT_READY") == true }
+        await until { progressOwner.state.recordingFailure?.contains("The requested work is not ready yet.") == true }
         overlapping.release()
         for _ in 0..<20 { await Task.yield() }
-        precondition(progressOwner.state.recent.first?.id == "new-progress-owner" && progressOwner.state.recordingFailure?.contains("NOT_READY") == true, "An obsolete job reply must not clear another owner's read failure")
+        precondition(progressOwner.state.recent.first?.id == "new-progress-owner" && progressOwner.state.recordingFailure?.contains("The requested work is not ready yet.") == true, "An obsolete job reply must not clear another owner's read failure")
         progressOwner.serviceChanged(ready: false)
 
         // Lost/malformed deletion keeps the typed identity even after discovery hides its owner.
@@ -247,7 +249,7 @@ import YapControls
         await until { deletion.state.projects.count == 1 && deletion.state.recent.count == 1 }
         lost.lostDelete = "TIMEOUT"
         deletion.delete(.project("same"))
-        await until { deletion.state.deletions[.project("same")]?.failure?.contains("TIMEOUT") == true }
+        await until { deletion.state.deletions[.project("same")]?.failure?.contains("Yap's background service didn't respond in time.") == true }
         deletion.refreshProjects()
         await until { deletion.state.projects.isEmpty && !deletion.state.projectsRefreshing }
         precondition(deletion.state.recent.first?.id == "same" && lostForgotten.isEmpty)
@@ -259,7 +261,7 @@ import YapControls
         lost.wrongDelete = true
         deletion.delete(.project("same"))
         await until { deletion.state.deletions[.project("same")]?.failure != nil || !lostForgotten.isEmpty }
-        precondition(lostForgotten.isEmpty && deletion.state.deletions[.project("same")]?.failure?.contains("INVALID_RESPONSE") == true, "A different typed deletion receipt must not forget the selected owner")
+        precondition(lostForgotten.isEmpty && deletion.state.deletions[.project("same")]?.failure?.contains("Yap returned an unreadable or inconsistent response.") == true, "A different typed deletion receipt must not forget the selected owner")
         lost.wrongDelete = false
         deletion.delete(.project("same"))
         await until { lostForgotten == [.project("same")] }
@@ -322,7 +324,7 @@ import YapControls
             await until { recovery.state.projects.count == 1 && !recovery.state.projectsRefreshing }
             ambiguous.lostDelete = code
             recovery.delete(.project("same"))
-            await until { recovery.state.deletions[.project("same")]?.failure?.contains(code) == true }
+            await until { recovery.state.deletions[.project("same")]?.failure?.contains(ServiceFailure(code: code, message: "").localizedDescription) == true }
             precondition(retired.isEmpty && ambiguous.count("project.delete") == 1)
             recovery.delete(.project("same"))
             await until { retired == [.project("same")] }
@@ -386,7 +388,7 @@ import YapControls
         // A deletion pinned on one page stays the same typed request after navigation.
         paged.lostDelete = "TIMEOUT"
         browsing.delete(.recording("take-7"))
-        await until { browsing.state.deletions[.recording("take-7")]?.failure?.contains("TIMEOUT") == true && !browsing.state.recordingsRefreshing }
+        await until { browsing.state.deletions[.recording("take-7")]?.failure?.contains("Yap's background service didn't respond in time.") == true && !browsing.state.recordingsRefreshing }
         let deleteTitle = browsing.state.deletions[.recording("take-7")]!.title
         browsing.nextRecordings()
         await until { browsing.state.hasPreviousRecordingPage && !browsing.state.recordingsRefreshing }
@@ -449,6 +451,171 @@ import YapControls
       assert.match(output, /PASS native library pages/);
       process.stdout.write(output);
     } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "failed primary import retries its admission job through the service boundary and reads ready",
+  { timeout: 90_000 },
+  async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "yap-import-retry-"));
+    const socketPath = join(scratch, "service.sock");
+    const calls = [];
+    let retried = false;
+    const job = (state) => ({
+      id: "primary-import-job",
+      state,
+      target: { kind: "acquisition", id: "primary-acquisition" },
+      reason: state === "failed" ? "diagnostic journal reader detail" : null,
+      errorCode: state === "failed" ? "INVALID_EVIDENCE" : null,
+      retryable: state === "failed",
+      details:
+        state === "failed"
+          ? { retry: { operation: "job.retry", params: { jobId: "primary-import-job" } } }
+          : {},
+    });
+    const server = createServer((connection) => {
+      let pending = "";
+      connection.on("data", (chunk) => {
+        pending += chunk;
+        while (pending.includes("\n")) {
+          const end = pending.indexOf("\n");
+          const request = JSON.parse(pending.slice(0, end));
+          pending = pending.slice(end + 1);
+          const { operation, params } = request;
+          calls.push({ operation, params });
+          let data;
+          switch (operation) {
+            case "media.list":
+              data = {
+                media: [
+                  {
+                    kind: "recording",
+                    id: "take",
+                    title: "2026-10-05T19:18:00Z",
+                    createdAt: "2026-10-05T19:18:00Z",
+                    durationUs: 9_000_000,
+                    sizeBytes: 4096,
+                  },
+                ],
+                nextCursor: null,
+              };
+              break;
+            case "project.list":
+              data = { projects: [], nextCursor: null };
+              break;
+            case "recording.get":
+              data = {
+                id: "take",
+                createdAt: "2026-10-05T19:18:00Z",
+                state: "complete",
+                sourceDurationUs: 9_000_000,
+                sourceAdmissions: [
+                  {
+                    kind: "primary",
+                    sourceId: "primary-source",
+                    acquisitionId: "primary-acquisition",
+                    job: job(retried ? "ready" : "failed"),
+                  },
+                  {
+                    kind: "camera",
+                    sourceId: "camera-source",
+                    publication: {
+                      state: "unavailable",
+                      error: { code: "CAMERA_NOT_TURNED_ON", message: "Camera stayed off" },
+                    },
+                  },
+                ],
+              };
+              break;
+            case "job.retry":
+              assert.deepEqual(params, { jobId: "primary-import-job" });
+              retried = true;
+              data = job("queued");
+              break;
+            case "job.get":
+              assert.deepEqual(params, { jobId: "primary-import-job" });
+              data = job("ready");
+              break;
+            default:
+              throw new Error(`Unexpected ${operation}`);
+          }
+          connection.write(JSON.stringify({ id: request.id, ok: true, data }) + "\n");
+        }
+      });
+    });
+    try {
+      await new Promise((resolve) => server.listen(socketPath, resolve));
+      // The app uses a child control channel. This transport peer forwards it unchanged to the
+      // socket; the fake service lives only at that boundary, not inside either controller.
+      const peer = join(scratch, "peer.mjs");
+      writeFileSync(
+        peer,
+        `import net from 'node:net'; import {createInterface} from 'node:readline';
+const socket = net.createConnection(${JSON.stringify(socketPath)});
+const send = (value) => process.stdout.write(JSON.stringify(value)+'\\n');
+let buffer=''; socket.on('data', chunk => { buffer+=chunk; while(buffer.includes('\\n')) { const end=buffer.indexOf('\\n'); send({event:'result',response:JSON.parse(buffer.slice(0,end))}); buffer=buffer.slice(end+1); }});
+socket.on('connect', () => send({event:'started',pid:process.pid,socketPath:${JSON.stringify(socketPath)}}));
+createInterface({input:process.stdin}).on('line', line => { const message=JSON.parse(line); if(message.request) socket.write(JSON.stringify(message.request)+'\\n'); }).on('close',()=>socket.end());`,
+      );
+      const executable = compileControlsCheck(
+        scratch,
+        ["LibraryController", "ServiceHost", "ServiceBundle", "NodeRuntime"],
+        String.raw`
+import Foundation
+import YapControls
+func diagnostic(_ message: String) {}
+@main struct Check {
+    @MainActor static func until(_ ready: () -> Bool) async {
+        for _ in 0..<200 where !ready() { try? await Task.sleep(for: .milliseconds(10)) }
+        precondition(ready(), "Timed out")
+    }
+    @MainActor static func main() async {
+        let bundle = ServiceBundle(script: URL(fileURLWithPath: CommandLine.arguments[1]), node: CommandLine.arguments[2],
+            native: URL(fileURLWithPath: "/unused"), controlFrameBytes: 65536, maxPendingCalls: 32, callTimeout: 2,
+            startupDeadline: Date().addingTimeInterval(3))
+        var serviceReady = false
+        let host = ServiceHost(bundle: bundle, onNativeCall: { _, _, _ in preconditionFailure("No hardware") },
+            onState: { status in MainActor.assumeIsolated { if case .ready = status { serviceReady = true } } })
+        host.start(); await until { serviceReady }
+        let library = LibraryController(call: { op, params throws(ServiceFailure) in try await host.call(op, params) },
+            confirm: { _ in false }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+        library.serviceChanged(ready: true)
+        await until { !library.state.recordingsRefreshing && library.state.recent.count == 1 }
+        func row() -> SavedItem {
+            var state = ControlsState(); state.service = .ready; state.library = library.state
+            return LibraryPresentation.recordings(for: state).items.first { $0.id == "take" }!
+        }
+        let failed = row()
+        precondition(failed.status == "Import failed", "Failed import must name its state: \(failed.status ?? "nil")")
+        precondition(failed.message == "Couldn't import your \(failed.title) recording: Yap couldn't read the details it saved with this recording. Your recording is safe.", "Failed import needs a plain cause and safety message: \(failed.message ?? "nil")")
+        let retry = failed.actions.first { $0.title == "Retry" }
+        precondition(retry?.enabled == true, "Failed import must offer Retry")
+        let handoff = failed.actions.filter { [.playRecording("take"), .copyRecordingPrompt("take")].contains($0.action) }
+        precondition(Set(handoff.map(\.action)) == Set([.playRecording("take"), .copyRecordingPrompt("take")]) && handoff.allSatisfy(\.enabled))
+        precondition(library.perform(retry!.action))
+        await until { library.state.recent.first?.sourceAdmissions?.first?.job?.state == "queued" }
+        precondition(row().status == "Importing…", "A retrying row describes pending work")
+        library.tick()
+        await until { library.state.recent.first?.sourceAdmissions?.first?.job?.state == "ready" }
+        precondition(row().status == "Ready" && !row().attention && !row().actions.contains { $0.title == "Retry" })
+        library.serviceChanged(ready: false); host.shutdown()
+        print("PASS failed import, exact admission retry, ready without camera failure")
+    }
+}
+`,
+      );
+      const result = await promisify(execFile)(executable, [peer, process.execPath], {
+        timeout: 15_000,
+      });
+      assert.match(result.stdout, /PASS failed import/);
+      assert.equal(calls.filter((call) => call.operation === "job.retry").length, 1);
+      assert.ok(calls.some((call) => call.operation === "job.get"));
+    } finally {
+      server.closeAllConnections?.();
+      server.close();
       rmSync(scratch, { recursive: true, force: true });
     }
   },

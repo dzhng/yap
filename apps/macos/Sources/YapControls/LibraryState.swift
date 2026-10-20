@@ -17,6 +17,8 @@ public struct LibraryState: Equatable, Sendable {
     public var recordingFailure: String?
     public var progressFailure: String?
     public var projectFailure: String?
+    public var retryingImports: Set<String> = []
+    public var importFailures: [String: String] = [:]
     public var deletions: [MediaTarget: DeleteRequest] = [:]
 
     public typealias RecordingCursor = String
@@ -60,6 +62,17 @@ public struct LibraryState: Equatable, Sendable {
         public let id: String
         public let state: String
         public let reason: String?
+        public let errorCode: String?
+        public let retryable: Bool
+        public let details: Details?
+        public struct Details: Decodable, Equatable, Sendable {
+            public let retry: Retry?
+            public struct Retry: Decodable, Equatable, Sendable {
+                public let operation: String
+                public let params: Params
+                public struct Params: Decodable, Equatable, Sendable { public let jobId: String }
+            }
+        }
         public let target: Target
         /// The record the job works for, `{kind, id}`.
         public struct Target: Decodable, Equatable, Sendable {

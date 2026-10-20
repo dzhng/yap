@@ -11,7 +11,7 @@ let package = Package(
     products: [.executable(name: "Yap", targets: ["Yap"])],
     dependencies: [.package(path: "../../helpers/mac")],
     targets: [
-        .target(name: "YapControls"),
+        .target(name: "YapControls", dependencies: [.product(name: "YapMedia", package: "mac")]),
         .executableTarget(
             name: "Yap",
             dependencies: [

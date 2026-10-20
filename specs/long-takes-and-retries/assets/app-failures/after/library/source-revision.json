@@ -1,0 +1,11 @@
+{
+  "revision": "d9614fb3bf5d7548c44266a54b92ca0a8c71561a",
+  "hashes": {
+    "Sources/Yap/LibraryView.swift": "3400d006c4dccdbf06cb8fdcbe74217b89433f80749716a0ecfb52378388e222",
+    "Sources/YapControls/LibraryPresentation.swift": "f1e1a9c17338f1f04b560106eb42bc129ff0d51e0ff823a2e1a7635b4ac1a9ee",
+    "Sources/YapControls/ExportPresentation.swift": "7d3665ac72c0b571a28c2e5569d0cd724baedb5fa4e5a5b398362b4b5b69461d",
+    "Sources/YapControls/SavedItem.swift": "66a67bc85b006ffd0effb3d4deea35bf97f07ed33f5134a3a97f1ef05e1a01c2",
+    "tests/fixtures/library-view.swift": "028271e6af8291e9bdeda970ab43bc5808bf7324fac75d85801dd84a17ae7338"
+  },
+  "facts": "synthetic; no service/device/permission reads or activation"
+}

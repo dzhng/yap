@@ -65,6 +65,9 @@ import YapControls
         let labelled = CommandLine.arguments[2] != "omit"
         var observations: [[String: Any]] = []
         for (name, facts, deliveries, tab, height) in [
+            ("retrying-import", importFixture(jobState: "queued"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
+            ("recovered-import", importFixture(jobState: "ready"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
+            ("failed-import", importFixture(), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("recordings", fixture(), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("projects", fixture(), ExportsState(), .projects, CGFloat(476)),
             ("exports", fixture(), exportFixture(), .exports, CGFloat(476)),
@@ -75,6 +78,12 @@ import YapControls
         ] {
             let content = LibraryView(state: facts, exports: deliveries) { actions.append($0) }
             content.frame.size = NSSize(width: 768, height: height)
+            if name == "failed-import" {
+                let retry = content.control(identifier: "recording.retryImport.fixture-import-job") as? NSButton
+                precondition(retry != nil, "A failed import shows Retry directly on its row")
+                retry!.performClick(nil)
+                precondition(actions.last == .retryImport("fixture-import-job"), "The row's Retry preserves its job identity")
+            }
             let shot = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 768, height: height), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
             shot.title = labelled ? "Library · Synthetic presentation fixture" : "Library"
             shot.isReleasedWhenClosed = false
@@ -169,6 +178,22 @@ import YapControls
         state.library.projects = try! JSONDecoder().decode([LibraryState.Project].self, from: Data(projectJSON.utf8))
         return state
     }
+    @MainActor static func importFixture(jobState: String = "failed") -> ControlsState {
+        var state = fixture()
+        let failed = jobState == "failed"
+        let errorCode = failed ? "\"INVALID_EVIDENCE\"" : "null"
+        let reason = failed ? "\"Diagnostic detail for the journal reader\"" : "null"
+        let retry = failed ? #"{"retry":{"operation":"job.retry","params":{"jobId":"fixture-import-job"}}}"# : "{}"
+        let admissions = """
+        [{"kind":"primary","sourceId":"fixture-primary","acquisitionId":"fixture-acquisition","job":{"id":"fixture-import-job","state":"\(jobState)","reason":\(reason),"errorCode":\(errorCode),"retryable":\(failed),"details":\(retry),"target":{"kind":"acquisition","id":"fixture-acquisition"}},"publication":{"state":"published","error":null}},
+        {"kind":"camera","sourceId":"fixture-camera","publication":{"state":"unavailable","error":{"code":"CAMERA_NOT_TURNED_ON","message":"The camera was never on"}}}]
+        """
+        let sources = try! JSONDecoder().decode([LibraryState.SourceAdmission].self, from: Data(admissions.utf8))
+        let take = state.library.recent[0]
+        state.library.recent[0] = .init(id: take.id, createdAt: take.createdAt, state: take.state,
+            sourceDurationUs: take.sourceDurationUs, interruptionReason: nil, sourceAdmissions: sources)
+        return state
+    }
     @MainActor static func deletionFixture() -> ControlsState {
         var state = fixture()
         _ = state.library.beginDelete(.recording("fixture-recording-one"))
@@ -179,7 +204,7 @@ import YapControls
     }
     static func exportFixture() -> ExportsState {
         var state = ExportsState()
-        state.records = [.init(exportId: "fixture-export", target: .project("fixture-project"), kind: .video, revisionId: "fixture-revision", state: "ready", directory: "/Synthetic/Exports", leaf: "Product demonstration.mp4", output: "/Synthetic/Exports/Product demonstration.mp4", reason: "Committed output is intact; private cleanup still needs retry.", retryable: true, abandoning: false, cleanupPending: true)]
+        state.records = [.init(exportId: "fixture-export", target: .project("fixture-project"), kind: .video, revisionId: "fixture-revision", state: "ready", directory: "/Synthetic/Exports", leaf: "Product demonstration.mp4", output: "/Synthetic/Exports/Product demonstration.mp4", reason: "Committed output is intact; private cleanup still needs retry.", retryable: true, abandoning: false, cleanupPending: true, jobId: "fixture-export-job")]
         return state
     }
 

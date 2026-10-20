@@ -26,7 +26,7 @@ struct ServiceFailure: LocalizedError, Sendable {
         return result
     }
 
-    var errorDescription: String? { "\(code): \(message)" }
+    var errorDescription: String? { RefusalLedger.cause(code) ?? message }
 }
 
 /// What the build placed in `Contents/Resources/service`: the bundled entrypoint, the

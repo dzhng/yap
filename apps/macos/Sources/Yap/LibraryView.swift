@@ -44,7 +44,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         let changed = state.library != self.state.library || state.service != self.state.service
             || state.storage != self.state.storage || state.storageRefreshing != self.state.storageRefreshing
             || state.storageFailure != self.state.storageFailure || exports != self.exports
-            || state.libraryFailure != self.state.libraryFailure
+            || state.failure != self.state.failure
         self.state = state
         self.exports = exports
         guard changed else { return }
@@ -194,10 +194,15 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         case .exports: page = ExportPresentation.items(for: state, exports: exports)
         }
         var y: CGFloat = 88
-        for failure in [state.libraryFailure, state.storageFailure].compactMap({ $0 }) {
+        for failure in [state.failure?.scope == .library ? state.failure?.message : nil, state.storageFailure].compactMap({ $0 }) {
             let height = max(38, wrappedHeight(failure, size: 12, width: width - 44))
             label(failure, frame: NSRect(x: 22, y: y, width: width - 44, height: height), size: 12, color: .secondaryLabelColor, in: document, wrap: true)
             y += height + 6
+        }
+        if state.failure?.scope == .library {
+            button("Dismiss", id: ControlsAction.dismissFailure.id, frame: NSRect(x: 22, y: y, width: 84, height: 26),
+                action: .dismissFailure, in: document)
+            y += 32
         }
         let firstRow = y
         for row in page.items {
@@ -208,7 +213,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             }
             let details = row.details
             // Everything the row shows can be filtered on, its state included.
-            guard filter.isEmpty || ([row.title] + (row.status.map { [$0] } ?? []) + details)
+            guard filter.isEmpty || ([row.title] + (row.status.map { [$0] } ?? []) + details + (row.message.map { [$0] } ?? []))
                 .contains(where: { $0.localizedCaseInsensitiveContains(filter) }) else { continue }
             let id = row.id
             let top = y
@@ -216,7 +221,9 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             let textWidth = width - textX - 72
             let subtitle = ((row.status.map { [$0] } ?? []) + details).joined(separator: " · ")
             let subtitleHeight = subtitle.isEmpty ? 0 : wrappedHeight(subtitle, size: 11, width: textWidth)
-            let height = max(60, 33 + subtitleHeight + 13)
+            let messageHeight = row.message.map { wrappedHeight($0, size: 11, width: textWidth) + 6 } ?? 0
+            let retry = row.actions.first { if case .retryImport = $0.action { return true }; return false }
+            let height = max(60, 33 + subtitleHeight + messageHeight + 13) + (retry == nil ? 0 : 30)
             // The row is its own button: the whole card opens it, with its text and icon passing clicks through.
             let card = LibraryRowButton(frame: NSRect(x: 12, y: top + 2, width: width - 24, height: height - 4), clickable: row.open != nil)
             card.setAccessibilityLabel(row.open == nil ? row.title : "Open \(row.title)")
@@ -265,7 +272,25 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
                 document.addSubview(chip)
             }
             if !subtitle.isEmpty {
-                label(subtitle, frame: NSRect(x: textX, y: top + 32, width: textWidth, height: subtitleHeight), size: 11, color: attention ? .systemOrange : .secondaryLabelColor, in: document, wrap: true, passive: true)
+                let field = label(subtitle, frame: NSRect(x: textX, y: top + 32, width: textWidth, height: subtitleHeight), size: 11, color: .secondaryLabelColor, in: document, wrap: true, passive: true)
+                if attention, let status = row.status {
+                    let text = NSMutableAttributedString(attributedString: field.attributedStringValue)
+                    text.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: NSRange(location: 0, length: (status as NSString).length))
+                    field.attributedStringValue = text
+                }
+            }
+            if let message = row.message {
+                label(message, frame: NSRect(x: textX, y: top + 38 + subtitleHeight, width: textWidth, height: messageHeight - 6), size: 11, color: .secondaryLabelColor, in: document, wrap: true, passive: true)
+            }
+            if let retry {
+                button(retry.title, id: retry.action.id,
+                    frame: NSRect(x: textX, y: top + 38 + subtitleHeight + messageHeight, width: 70, height: 26),
+                    action: retry.action, enabled: retry.enabled, in: document)
+                if let button = controls[retry.action.id] {
+                    // Labels have a two-point text inset; align the bezel with their visible text.
+                    let aligned = button.frame.offsetBy(dx: 2, dy: 0)
+                    button.frame = button.frame(forAlignmentRect: aligned)
+                }
             }
             if !row.actions.isEmpty {
                 let more = NSPopUpButton(frame: NSRect(x: width - 56, y: top + 8, width: 30, height: 26), pullsDown: true)
@@ -276,7 +301,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
                 let handle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
                 handle.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "Actions")
                 menu.addItem(handle)
-                for command in row.actions {
+                for command in row.actions where command.action != retry?.action {
                     let action = command.action
                     let item = NSMenuItem(title: command.title, action: #selector(activateItem(_:)), keyEquivalent: "")
                     item.target = self

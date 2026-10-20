@@ -39,7 +39,7 @@ export function compileControlsCheck(scratch, appSources, check, onCompile = () 
     "-swift-version",
     "6",
     "-parse-as-library",
-    ...(appSources.includes("ServiceBundle") ? mediaLinkArguments() : []),
+    ...mediaLinkArguments(build),
     "-I",
     join(build, "Modules"),
     ...objects,
