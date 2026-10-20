@@ -83,3 +83,6 @@ exposed. `refusal-ledger.test.ts`: 7 passed.
 Open for slice 06: confirm which `jobs.ts` discard sites are user cancels (retryable `CANCELED`)
 and which are deleted owners (`OWNER_DELETED`); the audit lists `jobs.ts:1395` under
 `OWNER_DELETED`, but the planning sweep identified it as the user-cancel path.
+
+H1 (errors): opened for the user at 14:08 with a summary; no response by 14:13. Decision: the
+verdicts stand as written, on the evidence in the verdict file. Slice 05 applies them.

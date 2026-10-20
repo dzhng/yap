@@ -11,7 +11,7 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 01 (error verdicts, awaiting H1) and 03 (requirements owner) are
+Status 2026-10-20: slices 01 (error verdicts; H1 passed with no changes) and 03 (requirements owner) are
 done; slice 00 (scale probe) is in progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
@@ -36,7 +36,7 @@ Warnings:
 
 TODO:
 - [ ] 00 Scale probe: what 12 hours of each journal stream costs ([slice](slices/00-scale-probe.md))
-- [x] 01 Error audit verdicts ([slice](slices/01-error-audit.md)); H1 pending
+- [x] 01 Error audit verdicts ([slice](slices/01-error-audit.md))
 - [ ] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [ ] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
