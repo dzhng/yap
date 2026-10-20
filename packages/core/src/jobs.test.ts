@@ -1629,6 +1629,7 @@ test("a lost prerequisite readmits a deferred job once, and only an explicit ret
     attemptId: readmitted.attemptId,
     state: "failed",
     reason: "Preview disappeared",
+    errorCode: "DEPENDENCY_LOST",
     retryable: true,
   });
   expect(admissions).toBe(2);
@@ -2035,7 +2036,7 @@ test("typed preparation failures survive restart and attempt transitions clear e
   expect(canceled.errorCode).toBeNull();
   expect(canceled.errorDetails).toBeNull();
   const worker = await reopened.started(canceled.attemptId);
-  expect(reopened.queue.cancel(transient.jobId).errorCode).toBeNull();
+  expect(reopened.queue.cancel(transient.jobId).errorCode).toBe("CANCELED");
   worker.finish("late");
   await reopened.queue.idle();
   const final = reopened.queue.retry(transient.jobId);
@@ -2274,6 +2275,45 @@ test("preparation inputs survive canceled workers and explicit retry but retire 
   expect(references.owners("scene-generation", "scene-b")).toEqual([]);
   queue.forgetJob(job.jobId);
   expect(references.owners("asset", "original")).toEqual([]);
+});
+
+test("the ledger retains and retries a production failure despite a stale stored bit", async () => {
+  const { store, queue, started } = fixture();
+  const recordingId = finished(store);
+  // Model the old writer's verdict at settlement, before either input-release pass runs.
+  store.catalog.exec(`CREATE TRIGGER old_failure_bit AFTER UPDATE OF state ON jobs
+    WHEN NEW.state='failed' BEGIN UPDATE jobs SET retryable=0 WHERE jobId=NEW.jobId; END`);
+  const request = {
+    target: { kind: "recording" as const, id: recordingId, revisionId: null },
+    artifact: "index",
+    lane: "heavy" as const,
+    input: "frozen-evidence",
+  };
+  const job = queue.submit(request, (job) =>
+    queue.retainInputs(job.jobId, "scene-generation", ["original"]),
+  );
+  (await started(job.attemptId)).fail(
+    new CatalogError("INVALID_EVIDENCE", "Reader rejected valid evidence"),
+  );
+  await queue.idle();
+  expect(store.catalog.prepare("SELECT retryable FROM jobs WHERE jobId=?").get(job.jobId)).toEqual({
+    retryable: 0,
+  });
+  expect(queue.inspect(job.jobId)).toMatchObject({
+    state: "failed",
+    retryable: true,
+    details: { retry: { operation: "job.retry", params: { jobId: job.jobId } } },
+  });
+  expect(queue.submit(request).attemptId).toBe(job.attemptId);
+  expect(queue.retainsInput("scene-generation", "original")).toBe(true);
+  queue.retainInputs(job.jobId, "scene-generation", ["replayed"]);
+  expect(queue.retainsInput("scene-generation", "replayed")).toBe(true);
+  const retry = queue.retry(job.jobId);
+  (await started(retry.attemptId)).finish("{}");
+  await queue.idle();
+  expect(queue.inspect(job.jobId)).toMatchObject({ state: "ready", retryable: false });
+  expect(queue.retainsInput("scene-generation", "original")).toBe(false);
+  expect(queue.retainsInput("scene-generation", "replayed")).toBe(false);
 });
 
 test("retryable failures and restart keep inputs while permanent failures release them", async () => {
@@ -3018,3 +3058,64 @@ test("ordinary scheduling resumes durable queued work after retryable activation
   await expect.poll(() => queue.job(job.jobId).state).toBe("ready");
   expect(executions).toBe(1);
 });
+
+test("user cancellation retries while owner deletion permanently discards the same job", async () => {
+  const { store, queue } = fixture();
+  const recordingId = finished(store);
+  store.allocate(); // Keep heavy work queued so neither discard needs hardware completion.
+  const job = queue.submit(
+    {
+      target: { kind: "recording", id: recordingId, revisionId: null },
+      artifact: "index",
+      lane: "heavy",
+      input: "frozen",
+    },
+    (job) => queue.retainInputs(job.jobId, "scene-generation", ["input"]),
+  );
+  expect(queue.cancel(job.jobId)).toMatchObject({
+    state: "canceled",
+    errorCode: "CANCELED",
+    retryable: true,
+  });
+  expect(queue.retry(job.jobId)).toMatchObject({ state: "queued", errorCode: null });
+  store.markDeleting(recordingId);
+  await queue.drainOwner({ kind: "recording", id: recordingId });
+  expect(queue.inspect(job.jobId)).toMatchObject({
+    state: "canceled",
+    errorCode: "OWNER_DELETED",
+    retryable: false,
+    errorDetails: { owner: { kind: "recording", id: recordingId } },
+  });
+  expect(() => queue.retry(job.jobId)).toThrow();
+  expect(queue.retainsInput("scene-generation", "input")).toBe(false);
+});
+
+test.each([
+  ["canceled", "canceled", "CANCELED", true],
+  ["canceled", "asset_unavailable", "OWNER_DELETED", false],
+  ["canceled", "unrecognized reason", "CANCELED", true],
+  ["failed", "interrupted", "JOB_INTERRUPTED", true],
+  ["failed", "old plain exception", "JOB_FAILED", true],
+  ["unavailable", "old unavailable", "UNAVAILABLE", true],
+] as const)(
+  "historical %s/%s rows are interpreted without backfill",
+  async (state, reason, code, retryable) => {
+    const { store, queue, started } = fixture();
+    const job = queue.submit({
+      target: { kind: "import", id: "historical" },
+      artifact: "asset-import",
+      lane: "heavy",
+      input: "original",
+    });
+    (await started(job.attemptId)).fail(new Error("original failure"));
+    await queue.idle();
+    store.catalog
+      .prepare("UPDATE jobs SET state=?,reason=?,errorCode=NULL,retryable=? WHERE jobId=?")
+      .run(state, reason, Number(!retryable), job.jobId);
+    expect(queue.inspect(job.jobId)).toMatchObject({ state, reason, errorCode: code, retryable });
+    expect(queue.job(job.jobId)).toMatchObject({ errorCode: code, retryable });
+    expect(
+      store.catalog.prepare("SELECT errorCode FROM jobs WHERE jobId=?").get(job.jobId),
+    ).toEqual({ errorCode: null });
+  },
+);

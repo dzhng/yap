@@ -20,30 +20,24 @@ async function backlogWith(driver: Partial<TranscriptBacklogDriver>) {
     readiness: () => true,
     status: () => ({ state: "not_requested", retryable: false }),
     submit: () => {},
-    retry: () => {},
     report: (error) => reported.push(error),
     ...driver,
   });
   return { backlog, reported };
 }
 
-test("transcript backlog waits for readiness and resubmits retryable failures", async () => {
+test("transcript backlog waits for readiness and admits first work", async () => {
   const selection = { assetId: "asset", streamId: "audio" };
   let ready = false;
   let status: "not_requested" | "failed" | "queued" | "ready" = "not_requested";
   let submissions = 0;
   let priority: "background" | undefined;
-  let retries = 0;
   const { backlog } = await backlogWith({
     readiness: () => ready,
     status: () => ({ state: status, retryable: status === "failed" }),
     submit: (_selection, submittedPriority) => {
       submissions++;
       priority = submittedPriority;
-      status = "queued";
-    },
-    retry: () => {
-      retries++;
       status = "queued";
     },
   });
@@ -59,10 +53,6 @@ test("transcript backlog waits for readiness and resubmits retryable failures", 
   expect(submissions).toBe(1);
   expect(priority).toBe("background");
   expect(backlog.pending(selection)).toBe(true);
-
-  status = "failed";
-  backlog.drain();
-  expect(retries).toBe(1);
 
   status = "queued";
   backlog.drain();
@@ -117,34 +107,24 @@ test("wake never rejects, even when the backlog cannot be read at all", async ()
   expect(reported).toEqual([expect.objectContaining({ message: "readiness exploded" })]);
 });
 
-test("a terminal failure leaves the backlog and is not read again", async () => {
-  let reads = 0;
-  const selection = { assetId: "asset", streamId: "audio" };
-  const { backlog } = await backlogWith({
-    status: () => {
-      reads++;
-      return { state: "failed", retryable: false };
-    },
-  });
-  backlog.enqueue(selection);
-  backlog.drain();
-  expect(backlog.pending(selection)).toBe(false);
-  backlog.drain();
-  expect(reads).toBe(1);
-});
-
-test("a failure that keeps coming back retryable is retried a bounded number of times", async () => {
-  let retries = 0;
-  const selection = { assetId: "asset", streamId: "audio" };
-  const { backlog } = await backlogWith({
-    status: () => ({ state: "failed", retryable: true }),
-    retry: () => {
-      retries++;
-    },
-  });
-  backlog.enqueue(selection);
-  for (let drain = 0; drain < 10; drain++) backlog.drain();
-  expect(retries).toBeGreaterThan(0);
-  expect(retries).toBeLessThan(10);
-  expect(backlog.pending(selection)).toBe(false);
-});
+test.each(["failed", "canceled"] as const)(
+  "%s work leaves the backlog even when retryable",
+  async (state) => {
+    let reads = 0;
+    const selection = { assetId: "asset", streamId: "audio" };
+    const { backlog } = await backlogWith({
+      status: () => {
+        reads++;
+        return { state, retryable: true };
+      },
+      submit: () => {
+        throw new Error("Failed work must not be submitted again");
+      },
+    });
+    backlog.enqueue(selection);
+    backlog.drain();
+    expect(backlog.pending(selection)).toBe(false);
+    backlog.drain();
+    expect(reads).toBe(1);
+  },
+);

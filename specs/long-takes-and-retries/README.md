@@ -11,14 +11,13 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–05 and 07–10 are done (audits passed H1 unchanged). Slices 06 and
-11 are in progress. Origin take
+Status 2026-10-20: slices 00–10 are done (audits passed H1 unchanged). Slice 11 is in
+progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Finish [slice 06](slices/06-job-retryability.md) and
-[slice 11](slices/11-prompt-and-wait.md), then [12](slices/12-app-failures.md) and
-[13](slices/13-closeout.md). Both audits passed H1; apply them as written.
+You are implementing this spec. Finish [slice 11](slices/11-prompt-and-wait.md), then
+[12](slices/12-app-failures.md) and [13](slices/13-closeout.md).
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
@@ -48,7 +47,7 @@ TODO:
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [x] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
 - [x] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
-- [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
+- [x] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
 - [x] 07 Linear journal readers with a derived record bound ([slice](slices/07-journal-readers.md))
 - [x] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
 - [x] 09 Change-only cursor samples and hold readers ([slice](slices/09-change-only-cursor.md))

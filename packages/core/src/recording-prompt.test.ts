@@ -289,6 +289,12 @@ test("the transcript is claimed only while the backlog owes it, a job runs it, o
   expect(await transcript({ backlog: true, status: { state: "failed", retryable: false } })).toBe(
     "none",
   );
+  expect(await transcript({ backlog: true, status: { state: "failed", retryable: true } })).toBe(
+    "none",
+  );
+  expect(await transcript({ backlog: false, status: { state: "failed", retryable: true } })).toBe(
+    "none",
+  );
   expect(
     await transcript({
       backlog: true,

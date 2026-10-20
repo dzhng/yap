@@ -56,3 +56,53 @@ SQLite function name; historical null-code interpretation details.
 
 Attempt draining and fencing, donor retention, deletion safety (`library-users.ts` ignores job
 references), stranded-take recovery, first admission.
+
+## Implementation and evidence
+
+Implemented in the working tree, without committing. The ledger is the only read authority;
+`ledger_retryable(code)` shares the connection with `job_input_digest`. Both obsolete catalog
+columns remain in place; neither is selected by runtime code. Public failed-job records add
+`details.retry`; the existing `errorDetails` diagnostics keep their meaning.
+
+Discard classification follows the call paths:
+
+- `project-service.ts` public `job.cancel` → `drainJob` → `cancel` → `discard("canceled")`,
+  and `cancelContextJob`, use `CANCELED`. `CaptureSources.retire` also drains individual
+  borrowers through this path: that transient donor fence does not delete their acquisition
+  owner. Export retirement drains individual jobs before forgetting them.
+- Recording/project/asset/acquisition retirement registrations → `drainOwner` use
+  `OWNER_DELETED`. So do `resumeAdmission` when `isDeleting`, and `claim`/`settle` when
+  `isAvailable` fails. These retain the owner kind and ID in diagnostics.
+- `closeContext` uses `CONTEXT_CLOSED`: its process-local handle cannot be retried.
+
+Historical null codes are interpreted by one SQL expression shared by projections and
+retention: canceled + `reason=<kind>_unavailable` → `OWNER_DELETED`; every other canceled
+outcome → `CANCELED`; failed + `reason=interrupted` → `JOB_INTERRUPTED`; other failures →
+`JOB_FAILED`; unavailable → `UNAVAILABLE`; active/ready outcomes keep a null code. Unknown
+canceled reasons are retryable cancels: non-retryable is reserved for a known deleted owner. No
+rows are backfilled. Startup skips only real finalization failures; a recovery cut short by
+shutdown (`RECOVERY_CANCELED`) is finished at the next start.
+
+Red/green evidence uses generated fixtures only. The capture-import test drives the public
+socket with a production-written journal/video and native publication/import. A real SQLite
+trigger failure produces `JOB_FAILED`; only the obsolete stored bit is then changed to zero.
+Reopening leaves that attempt failed, `recording.get` supplies its resolving call, and that
+exact `job.retry` imports the same acquisition. Against the original job reader this test was
+red (`retryable=false`, missing `details.retry`). The core regression also sets the old bit
+inside settlement, proving both input-release passes retain the inputs; restoring the old
+release SQL makes it fail with lost inputs.
+
+Startup finalization was characterized before changing it: reconciliation made a second
+attempt. The revised test was red (2 attempts instead of 1), then green: startup preserves the
+recorded error and `capture.stop` recovers it. Restoring the old backlog made the service
+regression red with 8 native transcription attempts instead of 2. Model readiness and first
+admission still proceed. No user library or origin take was accessed; final origin acceptance
+remains with slice 13.
+
+Focused verification passed: 101 core tests (jobs, backlog, prompt), 51 service capture tests
+(finalizing, capture projection, source lifetime), 2 service backlog failure cases, and 16
+ledger/deletion-reference tests. Core build and core/service type checks passed. Native helper
+and fixture-writer builds passed with the native build system. Focused lint reported no errors
+and two existing unused-parameter warnings outside the changed test. The independent read-only
+Codex review returned no verdict because its selected model was at capacity; the local
+shape/diff/docs review and the Contract/Verification checklist found no remaining slice gap.

@@ -22,16 +22,11 @@ export type TranscriptBacklogDriver = {
   readiness(): boolean;
   status(selection: TranscriptBacklogSelection): TranscriptStatus;
   submit(selection: TranscriptBacklogSelection, priority: "background"): void;
-  retry(selection: TranscriptBacklogSelection): void;
   /** Where a failure nobody awaits goes; a drain never rejects on one row's behalf. */
   report(error: unknown): void;
 };
 
-type BacklogRow = { assetId: string; streamId: string; acquisitionId: string; retries: number };
-
-// An automatic retry is for a transient failure (an update interrupted the job). One that keeps
-// failing is left for the caller to retry explicitly rather than rerun after every job.
-const automaticRetries = 3;
+type BacklogRow = { assetId: string; streamId: string; acquisitionId: string };
 // Selections a source no longer has: the row can never be satisfied.
 const gone = new Set(["NOT_FOUND", "ASSET_DELETED", "ACQUISITION_NOT_FOUND"]);
 
@@ -97,9 +92,7 @@ export class TranscriptBacklog {
   drain(): void {
     if (!this.driver.readiness()) return;
     const rows = this.catalog.catalog
-      .prepare(
-        "SELECT assetId,streamId,acquisitionId,retries FROM transcript_backlog ORDER BY rowid",
-      )
+      .prepare("SELECT assetId,streamId,acquisitionId FROM transcript_backlog ORDER BY rowid")
       .all() as BacklogRow[];
     for (const row of rows) {
       const selection = {
@@ -108,7 +101,7 @@ export class TranscriptBacklog {
         ...(row.acquisitionId ? { acquisitionId: row.acquisitionId } : {}),
       };
       try {
-        this.drainRow(selection, row.retries);
+        this.drainRow(selection);
       } catch (error) {
         if (!(error instanceof CatalogError)) {
           this.driver.report(error);
@@ -122,21 +115,13 @@ export class TranscriptBacklog {
     }
   }
 
-  private drainRow(selection: TranscriptBacklogSelection, retries: number): void {
+  private drainRow(selection: TranscriptBacklogSelection): void {
     const status = this.driver.status(selection);
     switch (status.state) {
       case "not_requested":
         return this.driver.submit(selection, "background");
       case "failed":
       case "canceled":
-        if (!status.retryable || retries >= automaticRetries) return this.remove(selection);
-        this.driver.retry(selection);
-        this.catalog.catalog
-          .prepare(
-            "UPDATE transcript_backlog SET retries=retries+1 WHERE assetId=? AND streamId=? AND acquisitionId=?",
-          )
-          .run(...key(selection));
-        return;
       case "ready":
         return this.remove(selection);
       case "unavailable":

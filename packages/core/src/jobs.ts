@@ -1,5 +1,5 @@
 import { omit, type Issue } from "@yap/composition";
-import { workState } from "@yap/protocol";
+import { refusalRetryable, workState } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ResourceReferences, type ResourceKind } from "./references.js";
@@ -177,14 +177,18 @@ type ContextState = {
 };
 type ClaimedJob = { job: Job; context?: never } | { job: ContextJob; context: ContextState };
 function contextValue(row: ContextRow): ContextJob {
-  return omit(row, "queuedSequence");
+  return { ...omit(row, "queuedSequence"), retryable: refusalRetryable(row.errorCode ?? "") };
 }
 const contextLimit = 4;
 const contextJobLimit = 32;
 const contextValueBytes = 64 * 1024;
 
-const summaryColumns =
-  "jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,priority,state,reason,retryable,generation,errorCode,errorDetails";
+// Historical rows have no code. Interpret their outcome without rewriting the catalog.
+const jobErrorCode = `COALESCE(errorCode, CASE state
+  WHEN 'canceled' THEN CASE WHEN reason GLOB '*_unavailable' THEN 'OWNER_DELETED' ELSE 'CANCELED' END
+  WHEN 'failed' THEN CASE WHEN reason='interrupted' THEN 'JOB_INTERRUPTED' ELSE 'JOB_FAILED' END
+  WHEN 'unavailable' THEN 'UNAVAILABLE' END)`;
+const summaryColumns = `jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,priority,state,reason,generation,${jobErrorCode} AS errorCode,errorDetails`;
 const jobColumns = `${summaryColumns},input`;
 function inputDigest(input: string): string {
   return createHash("sha256").update(input).digest("hex");
@@ -200,7 +204,7 @@ function requireExactInput(actual: string, expected: string): void {
 }
 type TargetRow = { targetKind: JobOwner["kind"]; targetId: string; revisionId: string };
 type JobRow = Omit<Job, "target" | "retryable" | "errorDetails"> &
-  TargetRow & { retryable: number; errorDetails: string | null };
+  TargetRow & { errorDetails: string | null };
 type ArtifactRow = Omit<Artifact, "target"> & TargetRow;
 /** An owner's catalog key, as its `kind`/`id` column pair. */
 export function ownerIdentity(owner: JobOwner): [JobOwner["kind"], string] {
@@ -226,7 +230,7 @@ function toJob({ targetKind, targetId, revisionId, ...row }: JobRow): Job {
     ...row,
     target: targetFrom({ targetKind, targetId, revisionId }),
     errorDetails: row.errorDetails === null ? null : JSON.parse(row.errorDetails),
-    retryable: row.retryable === 1,
+    retryable: refusalRetryable(row.errorCode ?? ""),
   };
 }
 function sameOwner(first: JobOwner | undefined, second: JobOwner): boolean {
@@ -279,19 +283,25 @@ function failureDetails(details: Record<string, unknown>): Record<string, unknow
   }
 }
 
-/** An absent artifact is unavailable; anything else fails, retryable unless a CatalogError says not. */
+/** An absent artifact is unavailable; every other failure keeps its code and ledger verdict. */
 function failure(error: unknown): Pick<
   Job,
   "reason" | "retryable" | "errorCode" | "errorDetails"
 > & {
   state: "failed" | "unavailable";
 } {
+  const errorCode =
+    error instanceof JobDependencyLost
+      ? "DEPENDENCY_LOST"
+      : error instanceof CatalogError
+        ? error.code
+        : "JOB_FAILED";
   return {
     state: error instanceof CatalogError && error.code === "UNAVAILABLE" ? "unavailable" : "failed",
-    errorCode: error instanceof CatalogError ? error.code : "JOB_FAILED",
+    errorCode,
     errorDetails: error instanceof CatalogError ? failureDetails(error.details) : null,
     reason: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-    retryable: !(error instanceof CatalogError) || error.retryable,
+    retryable: refusalRetryable(errorCode),
   };
 }
 
@@ -370,6 +380,9 @@ export class JobQueue {
       if (typeof input !== "string") throw new TypeError("Job input must be text");
       return inputDigest(input);
     });
+    this.store.catalog.function("ledger_retryable", { deterministic: true }, (code) =>
+      typeof code === "string" && refusalRetryable(code) ? 1 : 0,
+    );
     this.references = new ResourceReferences(this.store);
     this.targets = options.targets;
     this.execute = options.execute;
@@ -532,7 +545,7 @@ export class JobQueue {
       Object.assign(state.jobs.get(jobId)!, {
         state: "canceled",
         reason: "canceled",
-        errorCode: null,
+        errorCode: "CANCELED",
         errorDetails: null,
         retryable: true,
       });
@@ -562,7 +575,7 @@ export class JobQueue {
           Object.assign(job, {
             state: "canceled",
             reason: "context_closed",
-            errorCode: null,
+            errorCode: "CONTEXT_CLOSED",
             errorDetails: null,
             retryable: false,
           });
@@ -829,7 +842,6 @@ export class JobQueue {
       targetKind,
       targetId,
       revisionId,
-      retryable,
       errorDetails,
       ...summary
     } = row;
@@ -843,14 +855,22 @@ export class JobQueue {
           | { generation: number; attemptId: string; result: string }
           | undefined)
       : undefined;
+    const details = errorDetails === null ? null : JSON.parse(errorDetails);
     return {
       id,
       state: workState(state),
       ...summary,
       attemptGeneration: generation,
       target,
-      retryable: Boolean(retryable),
-      errorDetails: errorDetails ? JSON.parse(errorDetails) : null,
+      retryable: refusalRetryable(row.errorCode ?? ""),
+      errorDetails: details,
+      ...(state === "failed"
+        ? {
+            details: {
+              retry: { operation: "job.retry", params: { jobId: id } },
+            },
+          }
+        : {}),
       published: publication
         ? {
             generation: String(publication.generation),
@@ -1109,9 +1129,9 @@ export class JobQueue {
     if (!this.targets.isDeleting(owner))
       throw new CatalogError("INVALID_STATE", "Target deletion has not been requested");
     this.store.catalog
-      .prepare(`UPDATE jobs SET state='canceled',reason=?,errorCode=NULL,errorDetails=NULL,retryable=0
+      .prepare(`UPDATE jobs SET state='canceled',reason=?,errorCode='OWNER_DELETED',errorDetails=?,retryable=0
       WHERE targetKind=? AND targetId=? AND state IN ('waiting','queued','running')`)
-      .run(`${owner.kind}_unavailable`, ...ownerIdentity(owner));
+      .run(`${owner.kind}_unavailable`, JSON.stringify({ owner }), ...ownerIdentity(owner));
     const active = [...this.attempts.values()].filter((attempt) =>
       sameOwner(attempt.target, owner),
     );
@@ -1199,9 +1219,13 @@ export class JobQueue {
 
   /** Called within admission's transaction; published replays no longer need preparation inputs. */
   retainInputs(jobId: string, kind: ResourceKind, ids: readonly string[]): void {
-    const job = this.job(jobId);
-    if (!["waiting", "queued", "running"].includes(job.state) && !job.retryable) return;
-    this.references.retain(kind, { kind: "job-input", id: jobId }, ids);
+    const row = this.store.catalog
+      .prepare(`SELECT
+      (state IN ('waiting','queued','running') OR ledger_retryable(${jobErrorCode})=1) AS retained
+      FROM jobs WHERE jobId=?`)
+      .get(jobId) as { retained: number } | undefined;
+    if (!row) throw new CatalogError("NOT_FOUND", "Job does not exist", { jobId });
+    if (row.retained) this.references.retain(kind, { kind: "job-input", id: jobId }, ids);
   }
 
   /** Normalized resource-first lookup, independent of recipe shape and scene count. */
@@ -1211,7 +1235,7 @@ export class JobQueue {
         .prepare(`SELECT 1 FROM resource_references AS ref
       JOIN jobs ON jobs.jobId=ref.ownerId
       WHERE ref.resourceKind=? AND ref.resourceId=? AND ref.ownerKind='job-input'
-      AND (jobs.state IN ('waiting','queued','running') OR jobs.retryable=1) LIMIT 1`)
+      AND (jobs.state IN ('waiting','queued','running') OR ledger_retryable(${jobErrorCode})=1) LIMIT 1`)
         .get(kind, id)
     )
       return true;
@@ -1237,7 +1261,7 @@ export class JobQueue {
     this.store.catalog
       .prepare(`DELETE FROM resource_references
       WHERE ownerKind='job-input' AND ownerId=? AND EXISTS
-      (SELECT 1 FROM jobs WHERE jobId=? AND state NOT IN ('waiting','queued','running') AND retryable=0)`)
+      (SELECT 1 FROM jobs WHERE jobId=? AND state NOT IN ('waiting','queued','running') AND ledger_retryable(${jobErrorCode})=0)`)
       .run(jobId, jobId);
   }
 
@@ -1390,11 +1414,21 @@ export class JobQueue {
   }
 
   private discard(jobId: string, reason: string): void {
+    const target = this.job(jobId).target;
+    const owner: JobOwner = { kind: target.kind, id: target.id };
+    // Only a vanished owner is permanent; every other cancellation can be requested again.
+    const code = reason.endsWith("_unavailable") ? "OWNER_DELETED" : "CANCELED";
     this.store.catalog
       .prepare(
-        "UPDATE jobs SET state='canceled',reason=?,errorCode=NULL,errorDetails=NULL,retryable=? WHERE jobId=?",
+        "UPDATE jobs SET state='canceled',reason=?,errorCode=?,errorDetails=?,retryable=? WHERE jobId=?",
       )
-      .run(reason, reason === "canceled" ? 1 : 0, jobId);
+      .run(
+        reason,
+        code,
+        code === "OWNER_DELETED" ? JSON.stringify({ owner }) : null,
+        Number(refusalRetryable(code)),
+        jobId,
+      );
     this.releaseFinishedInputs(jobId);
   }
 

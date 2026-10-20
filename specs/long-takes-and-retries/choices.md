@@ -113,3 +113,20 @@ at close.
   Sound.
 - **Stop-time journal passes are not folded**: measured journal work stayed under the derived
   budget. Sound, per the H1 decision.
+
+## Slice 06
+
+- **Historical cancelled rows are classified by reason**: `<kind>_unavailable` means the owner
+  was deleted (non-retryable `OWNER_DELETED`); every other reason, including unrecognised ones,
+  is a retryable `CANCELED`. One SQL expression interprets them; no backfill. Sound (corrected in
+  review: unrecognised reasons first defaulted to non-retryable, against the user's rule that
+  non-retryable is the last resort).
+- **Startup skips only takes whose finalization actually failed**; a recovery cut short by
+  shutdown or an app update (`RECOVERY_CANCELED`) is finished automatically at the next start.
+  Sound (corrected in review: every recorded finalization error was skipped, which would have
+  left update-interrupted takes stuck until a manual retry).
+- **A failed capture recovery is retried only by `capture.stop`** (Retry Finalization), and the
+  test fake now answers `INVALID_STATE` for a stop with no take, as the native helper does.
+  Sound.
+- **Existing `errorDetails` diagnostics stay; the resolving call is added as `details.retry`.**
+  Sound.
