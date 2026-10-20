@@ -35,13 +35,21 @@ messages and diagnostics belong on stderr. Before parsing establishes a mode,
 usage failures cannot safely be written as a CLI response. Structured operation
 failures retain their code and retry meaning across both adapters.
 
+The operation envelope has `id`, `ok` and either `data` or `error`, with optional
+`wait` metadata. An error carries `code`, human `message`, `retryable`, optional
+`retryAfterMs`, and `details`; when recovery is available, `details.retry` names
+the exact operation and parameters to call. The [protocol contract](../../packages/protocol/README.md)
+owns these fields and their meanings.
+
 Explicit waiting observes admitted work within one caller budget. The
 [wait observer](src/wait.ts) freezes selection and current attempt identity,
 continues from dependencies to the requested getter, and never resubmits a write
-or retries a failed job. Its top-level outcome describes observation separately
-from the service's acknowledgement; terminal work can still fail. Help owns
-flags, polling cadence and exit behavior. Cancellation stops observation and
-bounded lease cleanup continues independently; it does not roll back admission.
+or retries a failed job. For `recording.get --wait`, that means staying pending
+through recording/finalization and every source import, then returning the settled
+recording response. Its top-level outcome describes observation separately from
+the service's acknowledgement; terminal work can still fail. Help owns flags,
+polling cadence and exit behavior. Cancellation stops observation and bounded
+lease cleanup continues independently; it does not roll back admission.
 
 Small MCP results retain complete text and structured data. Large results use a
 service-owned lease for the complete encoded response. Verify chunk identity,

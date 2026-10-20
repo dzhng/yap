@@ -2,6 +2,14 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## Next release
+
+A take can now run for up to 12 hours (long takes used to fail after about two), and a long
+drawing no longer breaks its import. A recording whose import failed says why in the Library
+and offers **Retry**; your recording stays safe either way. **Copy prompt** works right after a
+take, even while it imports. An error in the capture panel now names what failed, and its
+**Retry** repeats that action instead of starting a new recording.
+
 ## 0.1.66
 
 Settings has a "Reset All Shortcuts to Defaults" button, and `yap shortcuts.reset` does the
