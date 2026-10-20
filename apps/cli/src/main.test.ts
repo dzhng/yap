@@ -807,7 +807,7 @@ it("default CLI delivery reports a disappeared service without bootstrap or oper
           error: {
             code: "INVALID_RESPONSE",
             message: "Connection ended before the JSON line terminator",
-            retryable: false,
+            retryable: true,
           },
         },
         {

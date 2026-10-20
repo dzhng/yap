@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stageServiceLedger } from "./service-ledger.mjs";
+import { mediaLinkArguments } from "./swift-media.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/Yap/", import.meta.url));
 export function checkServiceHost(
@@ -16,7 +16,6 @@ export function checkServiceHost(
 ) {
   const scratch = mkdtempSync(join(tmpdir(), "yap-update-host-"));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
-  stageServiceLedger(scratch);
   const script = join(scratch, "peer.mjs");
   writeFileSync(script, peer);
   const main = join(scratch, "Main.swift");
@@ -56,6 +55,7 @@ func diagnostic(_ message: String) {}
       "-swift-version",
       "6",
       "-parse-as-library",
+      ...mediaLinkArguments(),
       ...["ServiceHost", "ServiceBundle", "NodeRuntime", ...extraSources].map((name) =>
         join(sources, `${name}.swift`),
       ),

@@ -64,7 +64,8 @@ import {
   type ImportedTranscriptSource,
 } from "@yap/core/imported-transcript";
 import { AcquisitionStore, AcquisitionImporter } from "@yap/core/acquisitions";
-import { SourceEvidenceStore } from "@yap/core/evidence";
+import { SourceEvidenceStore, journalCapabilities } from "@yap/core/evidence";
+import { cursorTrail, type CursorPoint } from "@yap/core/trails";
 import { MediaExports } from "./exports.js";
 import { PointerPreparation } from "@yap/core/pointer-preparation";
 import { ProjectPreviewInspection } from "@yap/core/project-preview";
@@ -988,41 +989,52 @@ export async function startProjectService(options: {
       },
       cursorOverlay: async (input, signal) => {
         const startUs = Math.max(0, input.atUs - input.trailUs);
-        const page = capture.cursor({
+        const request = {
           ...input,
           sourceRange: { startUs, endUs: Math.min(input.atUs + 1, Number.MAX_SAFE_INTEGER) },
           limit: 5000,
-        });
+        };
+        let page = capture.cursor(request);
         if (page.state !== "ready" || !page.page)
           throw new CatalogError(
             "UNAVAILABLE",
             "Cursor rendering requires captured-video authority",
           );
-        if (page.page.nextCursor)
-          throw new CatalogError(
-            "LIMIT_EXCEEDED",
-            "Cursor trail has too many observations; narrow the request",
+        const holds = journalCapabilities(page.context.evidence?.receipt.header ?? {})!
+          .cursorSampling.holds;
+        const trail = cursorTrail(holds);
+        let pointer: CursorPoint | null = null;
+        let previous: (typeof page.page.rows)[number] | undefined;
+        const consume = (row: typeof previous) => {
+          if (!row) return;
+          const observation = row.observation;
+          const point =
+            observation.eligibility === "inside" &&
+            typeof observation.x === "number" &&
+            typeof observation.y === "number"
+              ? { atSourceUs: Number(row.sourceAtUs), x: observation.x, y: observation.y }
+              : null;
+          trail.append(
+            holds && point ? { ...point, atSourceUs: Math.max(startUs, point.atSourceUs) } : point,
+            Number(row.sourceAtUs),
           );
-        const rows = page.page.rows;
-        const runs: Array<Array<{ atSourceUs: number; x: number; y: number }>> = [];
-        let run: Array<{ atSourceUs: number; x: number; y: number }> = [];
-        for (const row of rows) {
+          if (holds || point) pointer = point;
+        };
+        for (;;) {
           signal.throwIfAborted();
-          const observation = row.observation as { x?: number; y?: number; eligibility?: string };
-          if (
-            observation.eligibility !== "inside" ||
-            typeof observation.x !== "number" ||
-            typeof observation.y !== "number"
-          ) {
-            if (run.length) runs.push(run);
-            run = [];
-            continue;
+          for (const row of page.page!.rows) {
+            if (!holds || !previous || previous.sourceAtUs !== row.sourceAtUs) consume(previous);
+            previous = row;
           }
-          run.push({ atSourceUs: Number(row.sourceAtUs), x: observation.x, y: observation.y });
+          if (!page.page!.nextCursor) break;
+          page = capture.cursor({ ...request, cursor: page.page!.nextCursor });
         }
-        if (run.length) runs.push(run);
-        const pointer = runs.at(-1)?.at(-1) ?? null;
-        return { trail: runs, trailUs: input.trailUs, pointer };
+        consume(previous);
+        return {
+          trail: !holds || input.trailUs > 0 ? trail.finish(input.atUs) : [],
+          trailUs: input.trailUs,
+          pointer,
+        };
       },
     });
     const projectIndex = new ScreenshotIndexStore<ProjectIndexRecords>(
@@ -1289,7 +1301,7 @@ export async function startProjectService(options: {
           case "correspondence.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Correspondence package reads are not available for service-local receipts",
               );
             const key = `${operation.params.evidenceId}:${operation.params.generation}`;
@@ -1456,7 +1468,7 @@ export async function startProjectService(options: {
               const latest = captures.latest();
               return latest
                 ? { ok: true, data: describeCapture(latest) }
-                : operationError(["NOT", "FOUND"].join("_"), "Recording does not exist");
+                : operationError("NOT_READY", "There are no recordings yet");
             }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
           case "recording.prompt": {
@@ -2029,7 +2041,7 @@ export async function startProjectService(options: {
           case "speaker.continuity.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Continuity package reads are not available for service-local receipts",
               );
             const key = `${operation.params.assetId}:${operation.params.streamId}:${operation.params.channel}:${operation.params.modelId}:${operation.params.generation}`;
@@ -2891,7 +2903,7 @@ export async function startProjectService(options: {
                 ),
               };
             return operationError(
-              "NOT_READY",
+              "INVALID_PARAMS",
               "This service inspects asset and project capture evidence",
             );
           }
@@ -3223,7 +3235,7 @@ export async function startProjectService(options: {
               );
               if (!rowIndexes.length) {
                 throw new CatalogError(
-                  "NOT_READY",
+                  "INVALID_PARAMS",
                   "The selected project transcript contains no word evidence",
                   { state: transcript.state },
                 );

@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import YapMedia
 
 /// Resolves the window evidence attached to a mark. The caller supplies it so gesture recognition
 /// remains independent of AppKit and ScreenCaptureKit.
@@ -135,13 +136,21 @@ public struct MarkRecognizer {
             return finishStroke()
         }
 
+        var events: [MarkEvent] = []
+        // A delayed tick belongs to a new stroke; it cannot extend the previous record past its bound.
+        if let first = stroke.first, sample.hostUs - first.hostUs > Requirements.maximumStrokeUs {
+            events += finishStroke(continuing: true)
+        }
         if let previous = stroke.last {
             let dx = sample.point.x - previous.x
             let dy = sample.point.y - previous.y
             strokeTravel += (dx * dx + dy * dy).squareRoot()
         }
         stroke.append(MarkPoint(x: sample.point.x, y: sample.point.y, hostUs: sample.hostUs))
-        return []
+        if let first = stroke.first, sample.hostUs - first.hostUs >= Requirements.maximumStrokeUs {
+            events += finishStroke(continuing: true)
+        }
+        return events
     }
 
     public mutating func feed(press: MarkPress) -> [MarkEvent] {
@@ -184,10 +193,11 @@ public struct MarkRecognizer {
 
     private var blocked: Bool { paused || !hasFirstFrame }
 
-    private mutating func finishStroke() -> [MarkEvent] {
-        guard !stroke.isEmpty else { return [] }
+    private mutating func finishStroke(continuing: Bool = false) -> [MarkEvent] {
         defer { stroke.removeAll(keepingCapacity: true) }
-        defer { strokeTravel = 0 }
+        // A duration boundary ends a record, while Shift release ends gesture recognition.
+        defer { if !continuing { strokeTravel = 0 } }
+        guard !stroke.isEmpty else { return [] }
         guard let first = stroke.first else { return [] }
         guard strokeTravel >= 8 else { return [] }
         return [

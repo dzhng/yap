@@ -77,7 +77,7 @@ package struct SourceEvidenceExport: Encodable {
         // Staged imports supply a closed set of immutable descriptor locators. Recording-owned
         // reads resolve canonical members under the existing journal lease.
         let hasCameraProof = FileManager.default.fileExists(atPath: source.appendingPathComponent("camera.publication.json").path)
-        let lease = CaptureJournal.isPacked(layout) || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
+        let lease = JournalSchema.isPacked(layout) || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
         defer { lease?.release() }
         let verifiedSourceAuthority: CapturePublishedSource?
         if let sourceAuthority {
@@ -85,7 +85,7 @@ package struct SourceEvidenceExport: Encodable {
             verifiedSourceAuthority = try await CaptureSourcePublication.verifyStaged(sourceAuthority, lease: lease, canonical: canonical)
         } else { verifiedSourceAuthority = nil }
         if let lease {
-            for role in CaptureJournal.isPacked(layout) ? ["narration", "system"] : [] {
+            for role in JournalSchema.isPacked(layout) ? ["narration", "system"] : [] {
                 let receipt = source.appendingPathComponent("\(role).publication.json")
                 let audio = canonical.map { $0[role] } ??
                     (FileManager.default.fileExists(atPath: source.appendingPathComponent("\(role).mov").path)
@@ -142,7 +142,7 @@ package struct SourceEvidenceExport: Encodable {
                 try emit("mark", $0)
                 markEvents += 1
             },
-            pcmAppend: CaptureJournal.isPacked(layout) ? { _ in } : nil,
+            pcmAppend: JournalSchema.isPacked(layout) ? { _ in } : nil,
             descriptor: lease?.descriptor, layout: layout)
         for interval in acquired {
             try emit("audioAcquired", interval)
@@ -152,7 +152,7 @@ package struct SourceEvidenceExport: Encodable {
         guard summary.header != nil else {
             throw CaptureFailure("INVALID_JOURNAL", "Evidence requires a readable journal header.")
         }
-        if hasCameraProof || (layout == 1 && summary.header?.source.kind == "camera") || summary.header?.cameraBinding != nil {
+        if hasCameraProof || (JournalSchema.isCompanion(layout) && summary.header?.source.kind == "camera") || summary.header?.cameraBinding != nil {
             let selected = canonical == nil ? source.appendingPathComponent("video.mov").path : canonical?["video"]
             guard let lease, hasCameraProof, let video = selected
             else { throw CaptureFailure("INVALID_CAMERA_MAPPING", "Declared camera requires verified camera publication.") }
@@ -180,7 +180,7 @@ package struct SourceEvidenceExport: Encodable {
             lastCursorSourceUs: summary.lastCursorSourceUs, lastSequence: summary.lastSequence,
             incompleteTail: summary.incompleteTail, invalidAtSequence: summary.invalidAtSequence,
             finished: summary.finished, lastLifecycle: summary.lastLifecycle,
-            completion: summary.completion, publications: CaptureJournal.isPacked(layout) || hasCameraProof ? publications : nil, bytes: bytes,
+            completion: summary.completion, publications: JournalSchema.isPacked(layout) || hasCameraProof ? publications : nil, bytes: bytes,
             verifiedSourceAuthority: verifiedSourceAuthority)
     }
 }

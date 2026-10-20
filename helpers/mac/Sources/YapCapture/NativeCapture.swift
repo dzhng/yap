@@ -353,7 +353,7 @@ public final class NativeCapture {
                 if value.durationUs > 0, let journal = closedCamera.journal {
                     let evidence = try await CaptureSourcePublication.publish(kind: .camera,
                         durationUs: value.durationUs, originHostUs: value.hostOriginUs,
-                        tracks: value.tracks, diagnostic: value.failure, lease: journal.lease, layout: 1)
+                        tracks: value.tracks, diagnostic: value.failure, lease: journal.lease, layout: JournalSchema.companion)
                     publication?.camera = .published(evidence)
                 } else {
                     publication?.camera = .unavailable(CaptureFailure(bounded: value.failure

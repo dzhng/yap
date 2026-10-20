@@ -1,3 +1,4 @@
+import { launcherVerdicts } from "./launcher/verdicts.mjs";
 import assert from "node:assert/strict";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
 import {
@@ -35,6 +36,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
       "-Werror",
       "-Dgetpwuid=fixture_getpwuid",
       "scripts/launcher/main.c",
+      launcherVerdicts,
       accountShim,
       "-o",
       launcher,
@@ -82,6 +84,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
       code: "UPDATING",
       message: "Installation is being replaced; retry after the update",
       retryable: true,
+      retryAfterMs: 15000,
     });
     holder.kill("SIGKILL");
     await exclusiveClosed;
@@ -138,6 +141,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
       "-Dgetpwuid=fixture_getpwuid",
       `-DYAP_SYSTEM_APPLICATIONS=${JSON.stringify(system)}`,
       "scripts/launcher/main.c",
+      launcherVerdicts,
       accountShim,
       "-o",
       launcher,
@@ -175,7 +179,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
     assert.deepEqual(JSON.parse(missing.stdout).error, {
       code: "SERVICE_UNAVAILABLE",
       message: "Bundled Node could not start; verify the installed app",
-      retryable: false,
+      retryable: true,
     });
 
     const systemApp = fakeApp(join(system, "Yap.app"));
@@ -212,6 +216,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
       "-Werror",
       "-Dgetpwuid=fixture_getpwuid",
       "scripts/launcher/main.c",
+      launcherVerdicts,
       accountShim,
       "-o",
       launcher,
@@ -318,6 +323,7 @@ struct passwd *fixture_getpwuid(uid_t uid) { static struct passwd account; accou
   execFileSync("clang", [
     "-Dgetpwuid=fixture_getpwuid",
     "scripts/launcher/main.c",
+    launcherVerdicts,
     accountShim,
     "-o",
     launcher,

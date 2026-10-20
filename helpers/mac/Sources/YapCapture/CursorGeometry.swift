@@ -186,9 +186,10 @@ public struct CursorSample: Codable, Sendable, Equatable {
 
 public struct CursorStats: Codable, Sendable, Equatable {
     public init() {}
-    /// Readings placed in source time and handed to a batch. Counted on acceptance, before the
-    /// journal writes that batch, so a take whose journal failed reports more than the file holds.
+    /// Readings placed in source time, including unchanged readings.
     public var sampled = 0
+    /// Projected changes handed to the journal.
+    public var written = 0
     /// Readings that landed in a pause or before source zero: omitted, never backfilled.
     public var omittedPaused = 0
     /// Cadence ticks the sampler queue missed.
@@ -210,8 +211,10 @@ public struct CursorStats: Codable, Sendable, Equatable {
 /// arrival would credit readings taken after a window moved to the position it just left. It never
 /// invents a reading for a tick that did not happen, and a paused take records nothing.
 public struct CursorTrack: Sendable {
-    public init(batchSize: Int = 30, placementLimit: Int = 240) {
-        self.batchSize = batchSize
+    public static let defaultFlushIntervalUs: Int64 = 500_000
+    public init(flushIntervalUs: Int64 = Self.defaultFlushIntervalUs, placementLimit: Int = 240) {
+        self.flushIntervalUs = flushIntervalUs
+        self.nextFlushUs = flushIntervalUs
         self.placementLimit = max(1, placementLimit)
     }
 
@@ -223,9 +226,14 @@ public struct CursorTrack: Sendable {
     private struct Pending {
         let reading: CursorReading
         let sourceUs: Int64
+        let force: Bool
     }
 
-    private let batchSize: Int
+    private let flushIntervalUs: Int64
+    private var nextFlushUs: Int64
+    private var forceNext = true
+    private var lastWritten: CursorSample?
+    // Live working set only; forgotten placements remain explicit in the statistics.
     private let placementLimit: Int
     private var placements: [Placed] = []
     private var pending: [Pending] = []
@@ -274,20 +282,33 @@ public struct CursorTrack: Sendable {
         return JournalGeometry(epoch: epoch, hostUs: hostUs, sourceUs: sourceUs, geometry: observed)
     }
 
-    /// Accepts a reading already placed in source time, returning a batch once one is full.
+    /// Accepts every reading; elapsed take time, rather than changes, drives flushing.
     /// `sourceUs` is nil when the take's clock refuses the reading's host time.
     public mutating func accept(_ reading: CursorReading, sourceUs: Int64?) -> [CursorSample]? {
         lastReadingHostUs = reading.hostUs
         stats.skippedTicks += reading.skippedTicks
         guard let sourceUs else {
+            forceNext = true
             stats.omittedPaused += 1
             return nil
         }
-        pending.append(Pending(reading: reading, sourceUs: sourceUs))
+        pending.append(Pending(reading: reading, sourceUs: sourceUs, force: forceNext))
+        forceNext = false
         stats.sampled += 1
-        guard pending.count >= batchSize else { return nil }
+        guard sourceUs >= nextFlushUs else { return nil }
+        return flush(through: sourceUs)
+    }
+
+    /// The capture clock calls this even when no further readings arrive.
+    public mutating func flush(through sourceUs: Int64) -> [CursorSample] {
+        guard sourceUs >= nextFlushUs else { return [] }
+        nextFlushUs = flushIntervalUs > 0
+            ? (sourceUs / flushIntervalUs + 1) * flushIntervalUs : sourceUs
         return writePending()
     }
+
+    /// Resume has its own first observation, even when its projected state is unchanged.
+    public mutating func resume() { forceNext = true }
 
     /// Records how many readings the sampler's bounded handoff refused, so one type reports the
     /// take's cursor evidence.
@@ -302,7 +323,19 @@ public struct CursorTrack: Sendable {
             pending = []
             forgetSupersededPlacements()
         }
-        return pending.map(project)
+        var samples: [CursorSample] = []
+        for item in pending {
+            let sample = project(item)
+            if !item.force, let last = lastWritten,
+                sample.x == last.x, sample.y == last.y, sample.buttons == last.buttons,
+                sample.eligibility == last.eligibility, sample.geometryEpoch == last.geometryEpoch {
+                continue
+            }
+            samples.append(sample)
+            lastWritten = sample
+        }
+        stats.written += samples.count
+        return samples
     }
 
     private func project(_ item: Pending) -> CursorSample {
@@ -377,7 +410,7 @@ public enum GlobalPointSpace {
 /// it works on this host rather than a guarantee from the platform.
 public final class CursorSampler: Sendable {
     public init(
-        intervalUs: Int64 = 16_667, pendingLimit: Int = 240, target: DispatchQueue,
+        intervalUs: Int64 = CursorSampling.defaultIntervalUs, pendingLimit: Int = 240, target: DispatchQueue,
         deliver: @escaping @Sendable (CursorReading) -> Void
     ) {
         self.intervalUs = intervalUs
@@ -391,6 +424,7 @@ public final class CursorSampler: Sendable {
     private let queue = DispatchQueue(label: "com.dzhng.yap.cursor-sampler")
     private let timer: any DispatchSourceTimer
     private let intervalUs: Int64
+    // Instantaneous backpressure: 240 / 60 = four seconds of in-flight readings.
     private let pendingLimit: Int
     private let target: DispatchQueue
     private let deliver: @Sendable (CursorReading) -> Void

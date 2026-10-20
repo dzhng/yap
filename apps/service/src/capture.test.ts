@@ -53,7 +53,7 @@ it(
             error: {
               code: "INVALID_STATE",
               message: "No take held",
-              retryable: false,
+              retryable: true,
               details: {},
             },
           };
@@ -280,7 +280,7 @@ function capturingPeer(
           error: {
             code: "INVALID_STATE",
             message: "Another take is already capturing.",
-            retryable: false,
+            retryable: true,
             details: {},
           },
         };
@@ -458,7 +458,7 @@ it("reports the device while the take it is capturing awaits deletion", async ()
     operation === "capture.cancel"
       ? {
           ok: false,
-          error: { code: "INVALID_STATE", message: "not held", retryable: false, details: {} },
+          error: { code: "INVALID_STATE", message: "not held", retryable: true, details: {} },
         }
       : capturing(operation, params),
   );
@@ -852,7 +852,7 @@ function heldStartPeer(): NativePeer {
           error: {
             code: "INVALID_STATE",
             message: "Another take is already capturing.",
-            retryable: false,
+            retryable: true,
             details: {},
           },
         };

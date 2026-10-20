@@ -411,8 +411,8 @@ test("invalid page directories fail before returning misleading empty evidence",
     writeFileSync(path, JSON.stringify(value));
     expect(() => new FileSourceEvidence(output, f.identity)).toThrow();
   }
-  writeFileSync(path, Buffer.alloc(4_194_305, 32));
-  expect(() => new FileSourceEvidence(output, f.identity)).toThrow("budget");
+  writeFileSync(path, " ");
+  expect(() => new FileSourceEvidence(output, f.identity)).toThrow("Malformed");
   writeFileSync(path, original);
   const reader = new FileSourceEvidence(output, f.identity);
   writeFileSync(join(output, manifest.indexes.cursor[0].file), Buffer.alloc(7_416_003, 32));
@@ -480,7 +480,9 @@ test("portable receipt uses the native ingest validator and its pinned source ge
   );
   const invalid = { ...f.metadata, receipt: { ...f.metadata.receipt, cursorSamples: -1 } };
   writeFileSync(path, JSON.stringify(invalid));
-  expect(() => readSourceMetadata(f.root, f.identity)).toThrow("Invalid evidence receipt");
+  expect(() => readSourceMetadata(f.root, f.identity)).toThrow(
+    expect.objectContaining({ code: "INVALID_INPUT_EVIDENCE", retryable: false }),
+  );
   await expect(
     f.evidence.ingest({
       ...f.identity,

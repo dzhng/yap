@@ -12,13 +12,12 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
-import { stageServiceLedger } from "./fixtures/service-ledger.mjs";
+import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 let scratch, probe;
 before(() => {
   scratch = mkdtempSync("/tmp/yap-runtime-");
-  stageServiceLedger(scratch);
   const source = join(scratch, "main.swift");
   writeFileSync(
     source,
@@ -37,6 +36,7 @@ exit(3)
   execFileSync(
     "swiftc",
     [
+      ...mediaLinkArguments(),
       join(root, "apps/macos/Sources/Yap/ServiceBundle.swift"),
       join(root, "apps/macos/Sources/Yap/NodeRuntime.swift"),
       source,

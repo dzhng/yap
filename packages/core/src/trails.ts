@@ -38,15 +38,46 @@ export const trailPolicy = Object.freeze({
   id: "requested-time-trail-v1",
   defaultUs: 2_000_000,
   maximumUs: maximumPointerTrailUs,
-  maximumPoints: 1200,
-  maximumObservations: 5000,
 });
 export type PointerResetFloor = {
   atSourceUs: number;
+  /** Hard resets (physical gaps) also invalidate a held pointer. */
+  pointerAtSourceUs?: number;
   allowAtBoundary: boolean;
   reason: TrailCutoff["reason"];
 };
 type CursorObservation = RawCursorSample & { sequence: number };
+
+/** Held positions have temporal extent; repeated storage observations add no geometry. */
+export function cursorTrail(holds: boolean) {
+  const runs: CursorPoint[][] = [];
+  let run: CursorPoint[] = [];
+  const extend = (atSourceUs: number) => {
+    const last = run.at(-1);
+    if (holds && last && last.atSourceUs < atSourceUs) run.push({ ...last, atSourceUs });
+  };
+  return {
+    append(point: CursorPoint | null, atSourceUs: number) {
+      if (!point) {
+        extend(atSourceUs - 1);
+        if (run.length) runs.push(run);
+        run = [];
+        return;
+      }
+      const last = run.at(-1);
+      if (holds && last) {
+        if (last.x === point.x && last.y === point.y) return;
+        extend(point.atSourceUs - 1);
+      }
+      run.push(point);
+    },
+    finish(atSourceUs: number) {
+      extend(atSourceUs);
+      if (run.length) runs.push(run);
+      return runs;
+    },
+  };
+}
 
 /** Core selects temporal evidence; the native overlay only draws these already-clipped points. */
 export async function planFrameTrail(
@@ -105,6 +136,7 @@ export async function planVisualTrail(
   signal: AbortSignal,
 ) {
   const { evidence, identity, scene, readScene, resetFloor, presentationClock } = dependencies;
+  const holds = evidence.cursorSampling(identity).holds;
   const at = request.requestedSourceUs;
   const trailUs = request.trailUs ?? trailPolicy.defaultUs;
   const actual = scene.lastSample.actualSourceUs;
@@ -203,8 +235,8 @@ export async function planVisualTrail(
   let stalePointerScene: VisualScene | null = null;
   let missingPriorPicture = false;
   let stalePointerComparison: ReturnType<typeof compareVisualSamples> | null = null;
-  const eligible = (observation: CursorObservation) =>
-    observation.sourceUs >= reset &&
+  const eligible = (observation: CursorObservation, pointer = false) =>
+    observation.sourceUs >= (holds && pointer ? (resetFloor?.pointerAtSourceUs ?? 0) : reset) &&
     observation.sourceUs > pauseReset &&
     observation.geometryEpoch === requestedGeometry.epoch &&
     observation.eligibility === "inside" &&
@@ -225,35 +257,37 @@ export async function planVisualTrail(
   };
   if (!veto) {
     if (trailUs > 0) {
-      const page = evidence.page({
-        ...identity,
-        range: { startUs: start, endUs: at + 1 },
-        limit: trailPolicy.maximumObservations,
-      });
-      if (page.nextSequence !== null)
-        throw new CatalogError("LIMIT_EXCEEDED", "Too many raw cursor observations for one trail");
-      let run: CursorPoint[] = [];
-      let total = 0;
-      for (let i = 0; i < page.samples.length; i++) {
-        const observation = page.samples[i]!;
-        // Duplicate source times use the final normalized observation, just like the pointer read.
-        if (page.samples[i + 1]?.sourceUs === observation.sourceUs) continue;
-        if (!eligible(observation)) {
-          if (run.length) overlay.trail.push(run);
-          run = [];
-          continue;
+      const trail = cursorTrail(holds);
+      const consume = (observation: CursorObservation) =>
+        trail.append(eligible(observation) ? point(observation) : null, observation.sourceUs);
+      const held = holds ? evidence.latestCursor(identity, start) : null;
+      if (held && held.sourceUs < start && eligible(held, true))
+        consume({ ...held, sourceUs: start });
+      let buffered: CursorObservation | null = null;
+      for (const rows of evidence.exportRecords(identity, "cursor", {
+        startUs: start,
+        endUs: at + 1,
+      })) {
+        signal.throwIfAborted();
+        for (const row of rows) {
+          const observation: CursorObservation = {
+            ...JSON.parse(row.content),
+            sequence: row.sequence,
+          };
+          // Equal times use the final normalized observation, including across page boundaries.
+          if (buffered && buffered.sourceUs !== observation.sourceUs) consume(buffered);
+          buffered = observation;
         }
-        if (++total > trailPolicy.maximumPoints)
-          throw new CatalogError("LIMIT_EXCEEDED", "Trail exceeds the native point budget");
-        run.push(point(observation));
       }
-      if (run.length) overlay.trail.push(run);
+      if (buffered) consume(buffered);
+      overlay.trail = trail.finish(at);
     }
-    if (latest && eligible(latest)) {
+    if (latest && eligible(latest, true)) {
       if (
-        presentationClock
+        !holds &&
+        (presentationClock
           ? comparePresentationTimes(microsecondTime(latest.sourceUs), presentationClock.at) < 0
-          : latest.sourceUs < scene.range.startUs
+          : latest.sourceUs < scene.range.startUs)
       ) {
         geometryAt(latest.sourceUs);
         const prior = await readScene(latest.sourceUs, 0);

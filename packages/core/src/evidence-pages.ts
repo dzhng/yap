@@ -4,6 +4,7 @@ import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { fileAccess, type FileAccess } from "./files.js";
 import { CatalogError } from "./catalog.js";
 import {
+  journalCapabilities,
   validateRecord,
   validateSourceReceipt,
   type SourceEvidenceMetadata,
@@ -50,6 +51,7 @@ function matches(index: EvidenceIndex, row: RecordRow, data: Record<string, unkn
 const metadataSchema = z.strictObject({
   kind: z.literal("source"),
   identity: evidenceIdentitySchema,
+  cursorSampling: z.strictObject({ intervalUs: integer.min(1), holds: z.boolean() }).optional(),
 });
 const codec: OrderedPageCodec<RecordRow, z.infer<typeof metadataSchema>> = {
   metadata: metadataSchema,
@@ -82,9 +84,14 @@ export function writeSourceEvidencePages(
   signal?: AbortSignal,
 ): Promise<void> {
   const { owner, sourceId, generation } = identity;
+  const cursorSampling = reader.cursorSampling(identity);
   return writeOrderedPages(
     directory,
-    { kind: "source" as const, identity: { owner, sourceId, generation } },
+    {
+      kind: "source" as const,
+      identity: { owner, sourceId, generation },
+      ...(cursorSampling.holds ? { cursorSampling } : {}),
+    },
     codec,
     (index) => reader.exportRecords(identity, index as EvidenceIndex),
     signal,
@@ -96,6 +103,10 @@ export class FileSourceEvidence extends SourceEvidenceReader {
     super();
     this.pages = new OrderedPages(root, codec);
     this.requireComplete(identity);
+  }
+  cursorSampling(identity: EvidenceIdentity) {
+    this.requireComplete(identity);
+    return this.pages.metadata.cursorSampling ?? journalCapabilities({})!.cursorSampling;
   }
   protected requireComplete(identity: EvidenceIdentity): void {
     const expected = this.pages.metadata.identity;
@@ -121,7 +132,7 @@ export function readSourceMetadata(
   try {
     value = readJsonMember(fileAccess(root), "metadata.json");
   } catch {
-    throw new CatalogError("INVALID_EVIDENCE", "Invalid portable source metadata");
+    throw new CatalogError("INVALID_INPUT_EVIDENCE", "Invalid portable source metadata");
   }
   const parsed = evidenceIdentitySchema.extend({ receipt: z.unknown() }).strict().safeParse(value);
   if (
@@ -131,8 +142,14 @@ export function readSourceMetadata(
     parsed.data.generation !== identity.generation
   )
     throw new CatalogError(
-      "INVALID_EVIDENCE",
+      "INVALID_INPUT_EVIDENCE",
       "Portable source metadata belongs to another generation",
     );
-  return { ...identity, receipt: validateSourceReceipt(parsed.data.receipt, identity.sourceId) };
+  try {
+    return { ...identity, receipt: validateSourceReceipt(parsed.data.receipt, identity.sourceId) };
+  } catch (error) {
+    if (error instanceof CatalogError && error.code === "INVALID_EVIDENCE")
+      throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, error.details);
+    throw error;
+  }
 }

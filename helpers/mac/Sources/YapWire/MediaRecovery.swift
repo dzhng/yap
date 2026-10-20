@@ -180,13 +180,13 @@ package enum MediaRecovery {
             layout = nil
         }
         let cameraReceipt = URL(fileURLWithPath: directory).appendingPathComponent("camera.publication.json")
-        if layout == 1 && FileManager.default.fileExists(atPath: cameraReceipt.path) {
+        if JournalSchema.isCompanion(layout) && FileManager.default.fileExists(atPath: cameraReceipt.path) {
             return try await recoverCamera(directory: directory, leased: leased)
         }
-        guard CaptureJournal.isPacked(layout) else {
+        guard JournalSchema.isPacked(layout) else {
             let result = await inspect(directory: directory)
             try Task.checkCancellation()
-            if layout == 1 && (result.journal?.header?.source.kind == "camera" || result.journal?.header?.cameraBinding != nil) {
+            if JournalSchema.isCompanion(layout) && (result.journal?.header?.source.kind == "camera" || result.journal?.header?.cameraBinding != nil) {
                 return try await recoverCamera(directory: directory, leased: leased)
             }
             if let failure = result.tracks.compactMap(\.failure).first(where: { $0.code == "MEDIA_UNAVAILABLE" }) { throw failure }
@@ -259,7 +259,7 @@ package enum MediaRecovery {
         let verified = try await CameraMedia.readPublished(lease: lease, canonical: canonical)
         let journal = try CaptureJournal.readEvidence(directory: directory, maximumBytes: nil,
             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
-            descriptor: lease.descriptor, layout: 1)
+            descriptor: lease.descriptor, layout: JournalSchema.companion)
         let intervals = try verified.identity.availability.intervals.map { try $0.roundedSpan() }
         let track = RecoveredTrack(role: "video", file: "video.mov", intervals: intervals,
             decodedSamples: nil, representedFrames: JournalInteger(wrappedValue: Int64(verified.identity.representedFrames)),

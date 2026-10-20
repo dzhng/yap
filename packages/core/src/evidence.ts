@@ -227,12 +227,32 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
   } else invalid("Unknown normalized evidence event");
 }
 
-/**
- * Whether a journal uses the packed layout (separate published media, verified proofs): schema 2,
- * or 3 once it can carry marks. Schema 1 is the camera companion's own journal.
- */
-export function packedSchema(version: unknown): boolean {
-  return version === 2 || version === 3;
+// Journal version literals belong only in this capability table.
+const journalSchemas = {
+  1: { isPacked: false, carriesMarks: false, holdsCursor: false },
+  2: { isPacked: true, carriesMarks: false, holdsCursor: false },
+  3: { isPacked: true, carriesMarks: true, holdsCursor: false },
+  4: { isPacked: true, carriesMarks: true, holdsCursor: true },
+} as const;
+export function journalCapabilities(header: { schemaVersion?: unknown; cursorSampling?: unknown }) {
+  const version = header.schemaVersion === undefined ? 1 : header.schemaVersion;
+  if (
+    typeof version !== "number" ||
+    !Number.isInteger(version) ||
+    !Object.hasOwn(journalSchemas, version)
+  )
+    return undefined;
+  let cursorSampling = { intervalUs: 16_667, holds: false };
+  if (header.cursorSampling !== undefined) {
+    const sampling = object(header.cursorSampling);
+    const { intervalUs, holds } = sampling;
+    if (!integer(intervalUs) || intervalUs === 0 || typeof holds !== "boolean")
+      invalid("Invalid journal cursor sampling");
+    cursorSampling = { intervalUs, holds };
+  }
+  const capabilities = journalSchemas[version as keyof typeof journalSchemas];
+  cursorSampling.holds &&= capabilities.holdsCursor;
+  return { ...capabilities, cursorSampling };
 }
 
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
@@ -240,8 +260,8 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   const receipt = object(value);
   const header = object(receipt.header);
   if (header.sessionID !== sourceId) invalid("Evidence identity does not match its recording");
-  if (header.schemaVersion !== undefined && ![1, 2, 3].includes(header.schemaVersion as number))
-    invalid("Unsupported evidence journal schema");
+  const capabilities = journalCapabilities(header);
+  if (!capabilities) invalid(`Unsupported evidence journal schema ${header.schemaVersion}`);
   if (
     typeof receipt.file !== "string" ||
     !receipt.file ||
@@ -299,7 +319,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   if (receipt.publications !== undefined) {
     for (const [role, proof] of Object.entries(object(receipt.publications))) {
       if (!["video", "narration", "system"].includes(role)) invalid("Invalid publication role");
-      if (role !== "video" && !packedSchema(header.schemaVersion))
+      if (role !== "video" && !capabilities.isPacked)
         invalid("Audio publication proof requires the packed journal layout");
       const identity = object(proof);
       for (const kind of role === "video"
@@ -325,14 +345,13 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       if (role === "video" && !validCameraGaps(identity.support as SelectionRange, identity.gaps))
         invalid("Invalid verified camera gaps");
     }
-  } else if (packedSchema(header.schemaVersion))
-    invalid("Packed evidence requires verified publications");
+  } else if (capabilities.isPacked) invalid("Packed evidence requires verified publications");
   const camera = header.source != null && object(header.source).kind === "camera";
-  if ((camera && !packedSchema(header.schemaVersion)) || header.cameraBinding !== undefined) {
+  if ((camera && !capabilities.isPacked) || header.cameraBinding !== undefined) {
     const binding = object(header.cameraBinding);
     if (
       !camera ||
-      header.schemaVersion !== 1 ||
+      capabilities.isPacked ||
       binding.sourceId !== sourceId ||
       ![binding.recordingId, binding.sourceId, binding.deviceId].every(
         (id) => typeof id === "string" && id.length > 0 && id.length <= 256,
@@ -359,6 +378,7 @@ export async function* sourceEvidenceRecords(
     pauses = 0,
     audio = 0,
     marks = 0;
+  const carriesMarks = journalCapabilities(receipt.header ?? {})?.carriesMarks;
   const audioEnds = new Map<string, number>();
   let first: number | null = null,
     last: number | null = null;
@@ -378,8 +398,8 @@ export async function* sourceEvidenceRecords(
       const event = record.event as string,
         data = object(record.data);
       validateRecord(event, data);
-      if (event === "mark" && receipt.header?.schemaVersion !== 3)
-        invalid("Marks require schema 3 evidence");
+      if (event === "mark" && !carriesMarks)
+        invalid("Marks require a journal schema that carries marks");
       if (event === "cursorSample") {
         cursors++;
         first ??= data.sourceUs as number;
@@ -558,6 +578,18 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       .run(ownerKind, ownerId, sourceId, generation);
   }
 
+  cursorSampling(identity: EvidenceIdentity) {
+    this.requireComplete(identity);
+    const row = this.store.catalog
+      .prepare(
+        "SELECT receipt FROM source_evidence_generations WHERE ownerKind=? AND ownerId=? AND sourceId=? AND generation=?",
+      )
+      .get(...evidenceOwnerKey(identity.owner), identity.sourceId, identity.generation) as {
+      receipt: string;
+    };
+    return journalCapabilities(JSON.parse(row.receipt).header ?? {})!.cursorSampling;
+  }
+
   protected requireComplete({ owner, sourceId, generation }: EvidenceIdentity): void {
     const [ownerKind, ownerId] = evidenceOwnerKey(owner);
     if (
@@ -656,6 +688,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
 export type SourceTrailRead = Pick<
   SourceEvidenceStore,
   | "page"
+  | "exportRecords"
+  | "cursorSampling"
   | "latestCursor"
   | "timedGeometryAt"
   | "nextTimedGeometry"

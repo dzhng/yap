@@ -546,7 +546,7 @@ test("source evidence retries actual journal access failures without changing so
   assert.deepEqual(readFileSync(f.journal), before);
 });
 
-test("a linked journal is invalid input rather than an operational retry", (t) => {
+test("a linked retained journal cannot establish immutable source authority", (t) => {
   const f = fixture(t, []);
   const original = join(f.root, "original.jsonl");
   writeFileSync(original, f.text);

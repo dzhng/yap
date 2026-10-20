@@ -39,3 +39,59 @@ at close.
 - **Golden pre-change exports are stored gzip-compressed** (364 KB for 6.7 MB). Sound.
 - **The 1 MiB writer guard stays for all writes until slice 08** switches new takes to
   schema 4. Sound: schema 3 must keep its rule.
+
+## Slice 08
+
+- **The take summary's kind is `take.kind`**, not `kind`, because the published source already
+  uses `kind` for its authority (primary vs camera). Sound.
+- **`cursorSampling.intervalUs` is an integer of microseconds** (16,667). Sound: every other
+  journal time is integer µs.
+- **A stroke split at 5 minutes keeps its gesture recognition**: travel accumulates across the
+  split, so a continuation shorter than the 8-point travel threshold isn't dropped. Sound
+  (found in review).
+- **Readers select behaviour by the persisted layout**, so inspection accepts schemas 1–4 and
+  refuses higher with the version in the message. Sound.
+
+## Slice 09
+
+- **Trail length is bounded only by its duration** (`maximumTrailUs`, 10 s); the 1,200-point and
+  5,000-observation caps are deleted in TS and Swift, and trails stream instead of reading one
+  page. Sound: the limits audit derives point counts from time.
+- **A held sample carries its position across cuts and scene changes** for `holds: true`
+  journals; physical gaps (pauses) still reset it, and trails still reset at cuts. Old journals
+  keep today's rules and outputs. Sound.
+- **The stale-pointer suppression is skipped for held samples**, because a held sample is still
+  where the pointer is. Sound.
+- **`cursor.raw` returns the held sample at a page's start outside the page's forward allowance**,
+  so pagination still advances. Sound.
+
+## Slice 05
+
+- **One Swift reader of the ledger, `YapMedia.RefusalLedger`, serves the app and the native
+  helper.** Inside an `.app` it reads the bundled `service/refusal-ledger.json` (fatal if
+  missing); a source-built tool or test reads the checkout's JSON. Sound (corrected in review:
+  the app and helper first had separate readers, and the app's fixtures staged copies).
+- **The C launcher's verdicts are compiled from the ledger at build** (`scripts/launcher/verdicts.mjs`),
+  because the launcher must answer when the app's files can't be opened. Sound: a generated
+  projection, not a second table.
+- **Caller-supplied evidence is classified at the boundary that knows provenance**
+  (`INVALID_INPUT_EVIDENCE`), so a reader never guesses from file names. Sound.
+- **Stored capture diagnostics ignore their historical retry bit on read** and use the ledger.
+  Sound, and needs no migration.
+- **A test fixture hard-links verified immutable tool files** instead of cloning them, because the
+  clone missed an existing 2-second probe deadline under the pinned Node. Sound: test
+  infrastructure only, production deadlines unchanged.
+- **Codes that state a fact about immutable captured bytes are non-retryable** (13 codes, e.g.
+  `AUDIO_UNAVAILABLE`, `INVALID_JOURNAL_PREFIX`, `PUBLICATION_CONFLICT`), because the native
+  helper publishes a take without a source whose failure is non-retryable and holds it pending
+  otherwise. Sound (corrected after the recovery tests failed: making them retryable would have
+  held such takes pending forever). Codes where our reader wrongly rejected valid bytes, such as
+  `INVALID_EVIDENCE`, stay retryable.
+
+## Integration (05 with 07–09)
+
+- **Only schema 4 can declare held cursor samples**; an older header's `holds: true` is ignored.
+  Slice 09's capability gate is the rule, and slice 08's schema test now asserts it. Sound.
+- **The schema-3 long-stroke fixture was regenerated** after slice 09 added `written` to the
+  `finished` cursor statistics. Nothing decodes those statistics from old journals (Swift's
+  `JournalFinished` reads only state, duration and failure; TS never parses them). Sound.

@@ -31,7 +31,7 @@ pause exclusions remain distinct. The journal retains the callback timestamps
 independently of their admitted placement.
 
 Marks a person makes during a screen take (strokes while ⇧ is held, ⇧-click pins, plain
-clicks) are capture evidence like the pointer, so they live in the same journal, schema 3,
+clicks) are capture evidence like the pointer, so they live in the same journal
 with the same clock and geometry epoch. The [recognizer](MarkRecognizer.swift) owns the gesture
 rules and stays free of AppKit; the writer feeds it modifier state and pointer readings, never
 keys, and projects each point through the same placement cursor samples use. Undo appends a

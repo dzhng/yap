@@ -49,7 +49,7 @@ import {
 } from "./files.js";
 import {
   cameraProofIntervals,
-  packedSchema,
+  journalCapabilities,
   validateSourceReceipt,
   type CameraPublicationProof,
   type SourceEvidenceMetadata,
@@ -139,11 +139,17 @@ export const portableAcquisitionSchema = z
         "INVALID_PACKAGE",
         "Portable acquisition receipt must not contain a local path",
       );
-    const receipt = omit(
-      validateSourceReceipt({ ...value.receipt, file: "source.jsonl" }, value.sourceId),
-      "file",
-    );
-    return { ...value, receipt };
+    try {
+      const receipt = omit(
+        validateSourceReceipt({ ...value.receipt, file: "source.jsonl" }, value.sourceId),
+        "file",
+      );
+      return { ...value, receipt };
+    } catch (error) {
+      if (error instanceof CatalogError && error.code === "INVALID_EVIDENCE")
+        throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, error.details);
+      throw error;
+    }
   });
 export type PortableAcquisition = z.infer<typeof portableAcquisitionSchema>;
 export type PortableAcquisitionFiles = Record<
@@ -162,14 +168,21 @@ function portableAcquisition(value: Acquisition): PortableAcquisition {
       "Acquisition evidence identity conflicts with its owner",
     );
   const receipt = omit(value.evidence.receipt, "file");
-  return portableAcquisitionSchema.parse({
-    id: value.id,
-    sourceId: value.sourceId,
-    generation: value.evidence.generation,
-    receipt,
-    journal: { bytes: value.journal.bytes, sha256: value.journal.sha256 },
-    bindings: value.bindings,
-  });
+  try {
+    return portableAcquisitionSchema.parse({
+      id: value.id,
+      sourceId: value.sourceId,
+      generation: value.evidence.generation,
+      receipt,
+      journal: { bytes: value.journal.bytes, sha256: value.journal.sha256 },
+      bindings: value.bindings,
+    });
+  } catch (error) {
+    // This serializer consumes our retained receipt, rather than supplied package content.
+    if (error instanceof CatalogError && error.code === "INVALID_INPUT_EVIDENCE")
+      throw new CatalogError("INVALID_EVIDENCE", error.message, error.details);
+    throw error;
+  }
 }
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
@@ -264,7 +277,7 @@ function deferredReadFailure(error: unknown, frozen: boolean): never {
     );
   if (frozen) throw new CatalogError("SOURCE_CHANGED", error.message, error.details);
   if (error.code === "NOT_FOUND")
-    throw new CatalogError("ACQUISITION_NOT_FOUND", error.message, error.details);
+    throw new CatalogError("MEDIA_UNAVAILABLE", error.message, error.details);
   throw error;
 }
 
@@ -1107,7 +1120,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            packedSchema(receipt.header?.schemaVersion) &&
+            journalCapabilities(receipt.header ?? {})?.isPacked &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )

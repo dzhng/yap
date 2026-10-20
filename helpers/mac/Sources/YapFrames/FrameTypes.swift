@@ -48,9 +48,7 @@ public enum FrameLimits {
     public static let maximumEncodedBytes = 32 * 1024 * 1024
     /// Mirrors the per-request trail cap the public contract fixes at ten seconds.
     public static let maximumTrailUs: Int64 = 10_000_000
-    /// A 60 Hz sampler fills a ten-second trail with 600 points; this leaves headroom for denser
-    /// evidence while keeping one request's drawing work and memory bounded.
-    public static let maximumTrailPoints = 1_200
+
 }
 
 extension FrameOverlay {
@@ -81,12 +79,6 @@ extension FrameOverlay {
                 }
                 previousUs = point.atSourceUs
             }
-        }
-        guard total <= FrameLimits.maximumTrailPoints else {
-            throw NativeFailure(
-                "INVALID_RANGE",
-                "Trail holds \(total) points, over the \(FrameLimits.maximumTrailPoints) point limit."
-            )
         }
         guard total == 0 || overlay.trailUs > 0 else {
             throw NativeFailure(

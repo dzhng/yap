@@ -91,18 +91,18 @@ public struct ExactTime: Codable, Sendable, Equatable {
         let bottom: UInt128
         if exponent >= 0 {
             guard exponent < 127, top <= UInt128(Int128.max) >> exponent else {
-                throw NativeFailure("NOT_READY", "Observed seconds exceed exact arithmetic capacity.")
+                throw NativeFailure("LIMIT_EXCEEDED", "Observed seconds exceed exact arithmetic capacity.")
             }
             top <<= exponent
             bottom = 1
         } else {
             guard -exponent < 127 else {
-                throw NativeFailure("NOT_READY", "Observed seconds exceed exact arithmetic capacity.")
+                throw NativeFailure("LIMIT_EXCEEDED", "Observed seconds exceed exact arithmetic capacity.")
             }
             bottom = UInt128(1) << -exponent
         }
         guard let numerator = Int128(exactly: top), let denominator = Int128(exactly: bottom) else {
-            throw NativeFailure("NOT_READY", "Observed seconds exceed exact arithmetic capacity.")
+            throw NativeFailure("LIMIT_EXCEEDED", "Observed seconds exceed exact arithmetic capacity.")
         }
         self.init(seconds.sign == .minus ? -numerator : numerator, denominator)
     }

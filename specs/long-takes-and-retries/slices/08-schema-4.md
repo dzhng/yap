@@ -7,10 +7,10 @@ Depends on: 03, 07.
 New takes write `schemaVersion: 4`. Readers accept 1–4 and refuse higher versions clearly. An
 older app refuses schema 4 clearly instead of misreading it. Schema 4 adds:
 
-- header `cursorSampling: {intervalUs, holds: true}`; absent means 60 Hz with every tick written;
+- header `cursorSampling: {intervalUs, holds}`; absent means 60 Hz with every tick written;
 - strokes end at `MAXIMUM_STROKE_US`: a stroke still held at 5 minutes is committed and a new
   one begins, so a stroke record never exceeds the derived record bound;
-- the take summary (`source.publication.json`) gains optional `kind` (`display` / `window` /
+- the take summary (`source.publication.json`) gains optional `take: {kind}` (`display` / `window` /
   `area` / `camera`) and `marks: {pins: bool, strokes: bool}`, true only for marks still live
   after undo retractions.
 
@@ -55,3 +55,32 @@ Field names (keep them short and match header style); whether `intervalUs` is an
 ## Stays green
 
 Marks/undo, live ink, camera companion journals (schema 1), recovery.
+
+## Implementation decisions
+
+- The receipt already requires `kind: primary | camera` for source authority. Keep it and add
+  optional `take: {kind}` for capture kind; the optional top-level `marks` holds live-mark facts.
+  Native `region` capture is summarized as `area`. Only newly published schema-4 takes receive these facts. Existing receipts are returned unchanged.
+- `intervalUs` is an integer number of microseconds, sharing the native sampler's default;
+  `holds` is false until slice 09 changes writing semantics.
+- A boundary tick exactly at the stroke limit ends that stroke. A later tick begins the next;
+  each observation is retained once, and a delayed tick cannot extend the preceding stroke.
+- `inspect` selects the persisted layout, like streaming readers, so all read entry points accept
+  supported journals and report future schemas clearly. Packed inspection does not invent audio ranges.
+
+## Verification result
+
+Focused native schema/recognizer and journal/lease/PCM checks pass. The six-minute hardware replay
+retains all 21,601 points across two bounded strokes. Publication checks live marks, undo-all,
+historical omission, immutable replay and read-only recovery. Both readers consume the shared
+writer-produced schema-4 fixtures; future headers identify the unsupported schema.
+
+Core's three focused files pass 45 tests; its type check passes. All four slice-07 historical
+normalized-byte and receipt goldens pass unchanged. The source scan was falsified with a stray
+version check, and undo coverage with a deliberately disabled retraction, before restoring green.
+No full repository suite was run; whole-file/count ceilings remain slice 10's work.
+
+Independent Codex review found two edge cases, both reproduced red and fixed: native `region`
+now reports `area`, and duration splits retain recognition so short continuation segments are
+not dropped. The final native slice selector passes 18 checks and journal/lease/PCM passes 12.
+The current worker still passes all four historical byte goldens after these fixes.

@@ -280,7 +280,7 @@ test("admitted duplicate batch preserves metadata, item errors and actual conten
           error: {
             code: "INVALID_RESPONSE",
             message: "Ready artifact has no valid delivery",
-            retryable: false,
+            retryable: true,
             details: {},
           },
         },
@@ -351,7 +351,7 @@ test("an admitted batch keeps owned connection failures isolated after its selec
         error: {
           code: "INVALID_RESPONSE",
           message: "Connection ended before the JSON line terminator",
-          retryable: false,
+          retryable: true,
           details: {},
         },
       },
@@ -448,7 +448,7 @@ for (const [name, operation, published, bytes, message, closes] of [
         ? {
             id: response.id,
             ok: false,
-            error: { code: "LIMIT_EXCEEDED", message, retryable: false, details: {} },
+            error: { code: "LIMIT_EXCEEDED", message, retryable: true, details: {} },
           }
         : { id: response.id, ...f.result },
     );

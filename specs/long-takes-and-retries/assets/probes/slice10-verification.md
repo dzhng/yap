@@ -1,7 +1,7 @@
 # Slice 10 verification
 
-Working-tree evidence, 2026-10-20. No commit, full repository run, user library or
-user recording was involved. The [probe report](README.md#slice-10-derived-limits-12-hour-combined-profiles)
+Implementation evidence recorded before the initial slice commit, 2026-10-20.
+No full repository run, user library or user recording was involved. The [probe report](README.md#slice-10-derived-limits-12-hour-combined-profiles)
 owns the before/after measurements; [the visual receipt](slice10-visual-review.md)
 owns the completion-notice review.
 
@@ -151,6 +151,67 @@ this evidence was retained.
   Neither produced a review verdict. Manual shape/diff/docs review completed;
   independent code review remains unavailable, not clean. No unchanged third retry
   or model override was made.
+
+## Feature-branch integration
+
+Slice commit `4b418bbd` was merged with feature head `b7fc5843` (slices 05, 08 and
+09). Conflicts combine the uncapped publication summary with schema-4 live-mark
+facts, cursor flush scheduling with the injectable capture clock, and all focused
+native test selectors. The new cursor timer uses the writer's existing clock too.
+`CaptureJournal.swift`, `trails.ts` and `FrameTypes.swift` exactly match the feature
+head: schema/record bounds remain slice 08's and time-based trails remain slice 09's.
+
+The native generators reproduced `schema3-long-stroke.jsonl` byte-for-byte and
+regenerated all three schema-4 fixtures. The journals now include slice 09's
+`written` cursor statistic; summary byte/hash identities came from the generated
+native output. No fixture content was hand-edited.
+
+Requested checks on the integrated tree:
+
+| Check | Result |
+| --- | --- |
+| `swift build --build-system native --package-path helpers/mac --product YapCaptureTests` | Pass |
+| `swift build --build-system native --package-path helpers/mac --product yap-native` | Pass |
+| `YAP_SCHEMA4_TESTS=1 helpers/mac/.build/debug/YapCaptureTests` | Pass, 0.68 s |
+| `YAP_JOURNAL_TESTS=1 helpers/mac/.build/debug/YapCaptureTests` | Pass, also rerun after fixture regeneration |
+| `YAP_RECOVERY_TESTS=1 helpers/mac/.build/debug/YapCaptureTests` | Pass, 15.13 s |
+| `YAP_CURSOR_TESTS=1 helpers/mac/.build/debug/YapCaptureTests` | Pass, 2.07 s |
+| `YAP_REQUIREMENTS=1 helpers/mac/.build/debug/YapCaptureTests` | Pass |
+| `YAP_MAXIMUM_TAKE=1 helpers/mac/.build/debug/YapCaptureTests` | Pass, 8.03 s; exact T, 20-hour pause excluded |
+| Core requested selection plus retired-literal scan, `YAP_NATIVE` set | Pass, 104 tests in 10 files, 2.19 s |
+| `UPDATE_REFUSAL_LEDGER=1 bun run --cwd packages/protocol test src/refusal-ledger.test.ts` | Pass, 10 tests; counts refreshed for nine codes |
+| `bun run --cwd packages/protocol test` without update mode | Pass, 85 tests in 14 files |
+| `bun run --cwd packages/core check-types` | Pass |
+| Composition, protocol, core and service builds | Pass |
+| `node --test apps/service/tests/maximum-take.mjs` | Pass, 8.28 s; one admitted video binding at exact T |
+| `bun run --cwd apps/service check-types` | Pass |
+| Service `cursor-render.test.ts`, `YAP_PRESETS_REFRESH=0`, `YAP_NATIVE` set | Pass, two tests, 6.73 s; real dense/held native render equivalence |
+
+The core command was:
+
+```sh
+YAP_NATIVE=$PWD/helpers/mac/.build/debug/yap-native bun run --cwd packages/core test \
+  src/trails.test.ts src/evidence.test.ts src/evidence-pages.test.ts \
+  src/ordered-pages.test.ts src/capture-publication.test.ts src/source-admission.test.ts \
+  src/journal-schema.test.ts src/project-package.test.ts src/transcript-import.test.ts \
+  src/derived-limits.test.ts
+```
+
+The initial integrated core run exposed two stale calls to slice 10's deleted
+pointer-budget helper and one deleted manifest-size refusal expectation. Those
+three tests were reconciled with the new contracts, then all 104 passed. No
+compatibility helper was restored. Exact comparison with feature-head ledger
+JSON, excluding only each code's `files` map, confirms no verdict, retryability,
+cause, delay or other non-count metadata changed.
+The additional service typecheck exposed the same deleted pointer-budget API in
+its native cursor-render fixture. A focused red run also identified the fixture's
+obsolete private `maxBytes` operand. Both were removed; service type checking and
+both cursor-render cases then passed with real native work.
+
+A read-only independent review of this merge was attempted. It exited 1 with
+`turn.failed: Selected model is at capacity. Please try a different model.` and
+produced no verdict. Manual review and all checks above completed; the failed
+independent review is not counted as a clean review.
 
 ## Files changed
 

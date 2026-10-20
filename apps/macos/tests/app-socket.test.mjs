@@ -5,7 +5,6 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -17,21 +16,14 @@ import { fileURLToPath } from "node:url";
 import { callLocal } from "../../../packages/client/dist/index.js";
 import { operationSchema } from "../../../packages/protocol/dist/index.js";
 
+import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
+
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 
 /** Builds the app's real AppSocket with a handler standing in for the app's operation owners. */
 function build(t) {
   const scratch = realpathSync(mkdtempSync("/tmp/yap-app-socket-"));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
-  const ledger = JSON.parse(
-    readFileSync(
-      new URL("../../../packages/protocol/src/refusal-ledger.json", import.meta.url),
-      "utf8",
-    ),
-  );
-  ledger.codes.NOT_READY.retryAfterMs = 15000;
-  mkdirSync(join(scratch, "service"));
-  writeFileSync(join(scratch, "service/refusal-ledger.json"), JSON.stringify(ledger));
   const main = join(scratch, "Main.swift");
   writeFileSync(
     main,
@@ -41,7 +33,7 @@ final class Box: @unchecked Sendable { var data: Data; init(_ data: Data) { self
 @main struct Check {
     static func main() {
         if CommandLine.arguments[1] == "--check-ledger" {
-            print(ServiceFailure(code: "NOT_READY", message: "Ledger check").retryable)
+            print(String(decoding: try! JSONSerialization.data(withJSONObject: ServiceFailure(code: "NOT_READY", message: "Ledger check").envelope), as: UTF8.self))
             return
         }
         signal(SIGPIPE, SIG_IGN) // as the app does at launch
@@ -79,6 +71,7 @@ final class Box: @unchecked Sendable { var data: Data; init(_ data: Data) { self
       "-swift-version",
       "6",
       "-parse-as-library",
+      ...mediaLinkArguments(),
       ...["AppSocket", "ServiceBundle", "NodeRuntime"].map((name) =>
         join(sources, `${name}.swift`),
       ),
@@ -100,8 +93,26 @@ function serve(t, executable, path) {
   });
 }
 
-test("a packaged app fails loudly when its bundled refusal ledger is missing", (t) => {
+test("an unbundled app reads checkout verdicts without staging a ledger beside its executable", (t) => {
   const { scratch, executable } = build(t);
+  assert.equal(existsSync(join(scratch, "service/refusal-ledger.json")), false);
+  const result = spawnSync(executable, ["--check-ledger"], {
+    cwd: "/",
+    encoding: "utf8",
+    timeout: 10000,
+    env: { ...process.env, SWIFT_BACKTRACE: "enable=no" },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    code: "NOT_READY",
+    message: "Ledger check",
+    retryable: true,
+    retryAfterMs: 15000,
+    details: {},
+  });
+});
+
+function packageProbe(scratch, executable) {
   const contents = join(scratch, "LedgerCheck.app/Contents");
   mkdirSync(join(contents, "MacOS"), { recursive: true });
   mkdirSync(join(contents, "Resources/service"), { recursive: true });
@@ -113,6 +124,36 @@ test("a packaged app fails loudly when its bundled refusal ledger is missing", (
   );
   const packaged = join(contents, "MacOS/check");
   copyFileSync(executable, packaged);
+  return { contents, packaged };
+}
+
+test("a packaged app takes its verdict and delay from its bundled service ledger", (t) => {
+  const { scratch, executable } = build(t);
+  const { contents, packaged } = packageProbe(scratch, executable);
+  writeFileSync(
+    join(contents, "Resources/service/refusal-ledger.json"),
+    JSON.stringify({
+      codes: { NOT_READY: { retryable: true, retryAfterMs: 1234 } },
+    }),
+  );
+  const result = spawnSync(packaged, ["--check-ledger"], {
+    cwd: "/",
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    code: "NOT_READY",
+    message: "Ledger check",
+    retryable: true,
+    retryAfterMs: 1234,
+    details: {},
+  });
+});
+
+test("a packaged app fails loudly when its bundled refusal ledger is missing", (t) => {
+  const { scratch, executable } = build(t);
+  const { packaged } = packageProbe(scratch, executable);
   const result = spawnSync(packaged, ["--check-ledger"], {
     encoding: "utf8",
     timeout: 10000,

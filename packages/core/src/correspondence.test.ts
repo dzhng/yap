@@ -78,5 +78,5 @@ test("accepted mapping rejects an unselected anchor or duplicate endpoint", () =
       right: endpoint("b"),
       measurement: { ...measurement, anchors: [{ ...firstAnchor, selected: null }] },
     }),
-  ).toThrow("selected");
+  ).toThrow(expect.objectContaining({ code: "INVALID_INPUT_EVIDENCE", retryable: false }));
 });

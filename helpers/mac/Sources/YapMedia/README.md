@@ -4,6 +4,11 @@ This module owns the native meaning of media handles, time support, failures and
 new-output publication. Capture, recovery, picture and audio consumers share these
 rules so the same bytes cannot acquire different availability in different workers.
 
+[Failure verdicts](RefusalLedger.swift) are the app and workers' single Swift reader of the
+protocol ledger. Native diagnostics serialize the code and message; consumers derive
+retryability and retry delays from that code. Executables inside an app require its bundled
+service ledger; source-built tools and tests read the checkout's authoritative JSON directly.
+
 ## Held authority beats a mutable path
 
 Storage operations use inherited descriptors and retained file identity, then

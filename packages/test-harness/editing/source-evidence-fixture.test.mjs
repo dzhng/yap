@@ -19,7 +19,7 @@ import { listenLocal, DerivativeDelivery } from ${JSON.stringify(serviceEntry)};
 const home = process.argv[2], attempt = join(home, "attempt"), joined = join(home, "joined");
 if (!existsSync(attempt)) {
   writeFileSync(attempt, "first");
-  process.send({error: {code: "RENDER_WORKSPACE_BUSY", retryable: ${retryable}}});
+  process.send({error: {code: ${JSON.stringify(retryable ? "RENDER_WORKSPACE_BUSY" : "INVALID_PARAMS")}, retryable: ${retryable}}});
   process.once("exit", () => writeFileSync(joined, "closed"));
   setTimeout(() => { process.exitCode = 1; process.disconnect(); }, 50);
 } else {
@@ -64,7 +64,7 @@ if (!existsSync(attempt)) {
       await assert.rejects(service.stop(), (error) => error === closeFailure);
       assert.equal(service.child.exitCode, 0);
     } else {
-      await assert.rejects(service.start(), /RENDER_WORKSPACE_BUSY/);
+      await assert.rejects(service.start(), /INVALID_PARAMS/);
       assert.equal(await readFile(join(home, "attempt"), "utf8"), "first");
       assert.equal(service.child.exitCode, 1);
     }
@@ -72,7 +72,7 @@ if (!existsSync(attempt)) {
 });
 
 test("MCP complete results preserve values, reject corrupt delivery and close without replay", async () => {
-  const failure = { code: "NOT_READY", message: "Retained failure", retryable: false, details: {} };
+  const failure = { code: "NOT_READY", message: "Retained failure", retryable: true, details: {} };
   for (const mode of [
     "success",
     "failure",

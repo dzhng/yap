@@ -662,7 +662,7 @@ test("waiting work is bounded, while work already admitted still answers", async
   ).toBe("queued");
 });
 
-test("a validated absence is not retryable, while an ordinary failure is", async () => {
+test("unavailability and ordinary failure both require an explicit retry", async () => {
   const { store, queue, started } = fixture();
   const recordingId = finished(store);
   const absent = queue.submit({
@@ -685,10 +685,12 @@ test("a validated absence is not retryable, while an ordinary failure is", async
     state: "unavailable",
     jobId: absent.jobId,
     reason: "unavailable:no_narration",
-    retryable: false,
+    retryable: true,
     published: null,
   });
-  expect(() => queue.retry(absent.jobId)).toThrow(expect.objectContaining({ code: "UNAVAILABLE" }));
+  const restored = queue.retry(absent.jobId);
+  (await started(restored.attemptId)).finish("restored-narration");
+  await queue.idle();
 
   const failed = queue.submit({
     target: { kind: "recording" as const, id: recordingId, revisionId: null },
@@ -1532,10 +1534,10 @@ test("oversized result metadata fails explicitly and queue shutdown invalidates 
   await queue.idle();
   expect(queue.contextJob(context, job.jobId)).toMatchObject({
     state: "failed",
-    retryable: false,
+    retryable: true,
     result: null,
   });
-  expect(() => queue.retryContext(context, job.jobId)).toThrow("cannot be retried");
+  expect(queue.retryContext(context, job.jobId).jobId).toBe(job.jobId);
   await queue.close();
   expect(() => queue.contextJob(context, job.jobId)).toThrow("not open");
   expect(() => queue.submitContext(context, packageRequest("next"))).toThrow("queue is closed");
@@ -2013,12 +2015,10 @@ test("typed preparation failures survive restart and attempt transitions clear e
     reason: "Snapshot source changed",
     errorDetails: { streams: [{ codec: "unsupported" }] },
   });
-  expect(() => reopened.queue.retry(job.jobId)).toThrow(
-    expect.objectContaining({
-      code: "UNAVAILABLE",
-      details: expect.objectContaining({ errorCode: "SOURCE_CHANGED" }),
-    }),
-  );
+  const repaired = reopened.queue.retry(job.jobId);
+  expect(repaired.errorCode).toBeNull();
+  (await reopened.started(repaired.attemptId)).finish("repaired-source");
+  await reopened.queue.idle();
   const transient = reopened.queue.submit({
     target: { kind: "import", id: "transient" },
     artifact: "asset-import",
@@ -2458,7 +2458,7 @@ test("regeneration admission failure rolls back references, attempt and publishe
   expect(f.queue.status(job).published?.result).toBe("published");
 });
 
-test("permanent admission size limits fail while transient queue pressure remains waiting", async () => {
+test("admission size failures require an explicit retry while queue pressure remains waiting", async () => {
   const { store, queue } = fixture();
   const recordingId = finished(store);
   const request = {
@@ -2466,7 +2466,7 @@ test("permanent admission size limits fail while transient queue pressure remain
     artifact: "admission-size",
     lane: "heavy" as const,
   };
-  const permanent = queue.submitDeferred({ ...request, input: "permanent" });
+  const sizeFailure = queue.submitDeferred({ ...request, input: "sizeFailure" });
   const pressure = queue.submitDeferred({ ...request, input: "pressure" });
   let visits = 0;
   queue.startAdmission((job) => {
@@ -2477,14 +2477,14 @@ test("permanent admission size limits fail while transient queue pressure remain
       { bound: 10, observed: 11 },
     );
   });
-  expect(queue.job(permanent.jobId)).toMatchObject({
+  expect(queue.job(sizeFailure.jobId)).toMatchObject({
     state: "failed",
-    retryable: false,
+    retryable: true,
     errorCode: "LIMIT_EXCEEDED",
   });
   expect(queue.job(pressure.jobId)).toMatchObject({ state: "waiting" });
   queue.schedule();
-  expect(queue.job(permanent.jobId).attemptId).toBe(permanent.attemptId);
+  expect(queue.job(sizeFailure.jobId).attemptId).toBe(sizeFailure.attemptId);
   expect(queue.job(pressure.jobId).attemptId).toBe(pressure.attemptId);
   await queue.idle();
   const afterEvent = visits;
@@ -2538,7 +2538,7 @@ test("nested deferred children start without an external wake or recursive admis
 });
 
 test.each(["UNAVAILABLE", "LIMIT_EXCEEDED"] as const)(
-  "nested terminal %s admission settles parents without runnable work",
+  "nested settled %s admission settles parents without runnable work",
   async (code) => {
     const { store, queue, attempts } = fixture();
     const target = { kind: "recording" as const, id: finished(store), revisionId: null };
@@ -2551,7 +2551,7 @@ test.each(["UNAVAILABLE", "LIMIT_EXCEEDED"] as const)(
     let visits = 0;
     queue.startAdmission((job) => {
       visits++;
-      if (job.artifact === "child") throw new CatalogError(code, "Permanent source failure");
+      if (job.artifact === "child") throw new CatalogError(code, "Preparation failure");
       const child = queue.submitDeferred({
         target,
         artifact: "child",
@@ -2565,7 +2565,7 @@ test.each(["UNAVAILABLE", "LIMIT_EXCEEDED"] as const)(
     await queue.idle();
     expect(queue.job(parent.jobId)).toMatchObject({
       state: code === "UNAVAILABLE" ? "unavailable" : "failed",
-      retryable: false,
+      retryable: true,
       errorCode: code,
     });
     expect(attempts.size).toBe(0);
@@ -2735,7 +2735,7 @@ test("digest candidates never merge different exact recipes at admission, adopti
   expect(f.queue.job(candidate.jobId)).toMatchObject({
     state: "failed",
     errorCode: "IDENTITY_COLLISION",
-    retryable: false,
+    retryable: true,
   });
   expect(f.queue.retainedArtifact(target, receipt.artifact, receipt.attemptId)).toEqual(receipt);
 });

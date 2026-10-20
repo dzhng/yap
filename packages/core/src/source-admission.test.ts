@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { CatalogError } from "./catalog.js";
 import { fileIdentity } from "./files.js";
 import { verifySourceEvidence } from "./source-admission.js";
 import type { SourceEvidenceReceipt } from "./evidence.js";
@@ -74,7 +75,7 @@ test.runIf(Boolean(process.env.YAP_NATIVE))(
   },
 );
 
-test("canonical admission preserves historical receipt format but verifies current diagnostic text", async () => {
+test("portable source admission preserves historical receipts and separates caller content from generated failures", async () => {
   const directory = await mkdtemp("/tmp/source-diagnostic-");
   try {
     const journal = join(directory, "capture.journal.jsonl");
@@ -104,6 +105,7 @@ test("canonical admission preserves historical receipt format but verifies curre
       },
     };
     const receipt = omit(current, "file");
+    let nativeFailure: string | undefined;
     const verify = (expected: typeof receipt) =>
       verifySourceEvidence({
         directory,
@@ -120,6 +122,7 @@ test("canonical admission preserves historical receipt format but verifies curre
           normalized: { bytes: 0, sha256: digest("") },
         },
         exportSource: async (_source, output) => {
+          if (nativeFailure) throw new CatalogError(nativeFailure, "Native verification refused");
           await writeFile(output, "");
           return { ...current, file: output };
         },
@@ -138,6 +141,16 @@ test("canonical admission preserves historical receipt format but verifies curre
     await expect(
       verify({ ...historical, completion: { ...completion, failureCode: "ALTERED" } }),
     ).rejects.toMatchObject({ code: "INVALID_PACKAGE" });
+    nativeFailure = "INVALID_JOURNAL";
+    await expect(verify(receipt)).rejects.toMatchObject({
+      code: "INVALID_INPUT_EVIDENCE",
+      retryable: false,
+    });
+    nativeFailure = "INVALID_EVIDENCE";
+    await expect(verify(receipt)).rejects.toMatchObject({
+      code: "INVALID_EVIDENCE",
+      retryable: true,
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -58,6 +58,10 @@ afterEach(async () => {
 
 test("recording.get without an id resolves the latest take and removed recording.latest is unknown", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(await f.call("recording.get", {})).toMatchObject({
+    ok: false,
+    error: { code: "NOT_READY", retryable: true, retryAfterMs: 15000 },
+  });
   const older = f.service.captures.allocate({ requestId: "older", arguments: "{}" }).recording;
   const latest = f.service.captures.allocate({ requestId: "latest", arguments: "{}" }).recording;
   expect(await f.call("recording.latest", {})).toMatchObject({
@@ -2125,7 +2129,7 @@ test("non-retryable transcript failure is not resubmitted by a second drain", as
       return {
         ok: false as const,
         error: {
-          code: "INVALID_NATIVE_RESPONSE",
+          code: "INVALID_REQUEST",
           message: "fixture refusal",
           retryable: false,
           details: {},
@@ -3254,4 +3258,15 @@ test("an agent's inspect.open hands the app the project's name for its preview w
     data: { native: { opened: true } },
   });
   expect(forwarded).toMatchObject([{ projectId, title: "Launch video" }]);
+});
+
+test("unsupported service-local correspondence package reads are permanent input refusals", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(
+    await f.call("correspondence.get", {
+      packageHandle: "caller-package",
+      evidenceId: "evidence",
+      generation: "generation",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS", retryable: false } });
 });

@@ -1,6 +1,6 @@
 import { derivedBound, MAXIMUM_TAKE_US } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
-import type { SourceEvidenceMetadata } from "./evidence.js";
+import { journalCapabilities, type SourceEvidenceMetadata } from "./evidence.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
 import type { TimeRange } from "./presentation-time.js";
 
@@ -25,7 +25,10 @@ export type RawCursorOptions<Target extends CursorTarget> = {
 export function readRawCursor<Target extends CursorTarget>(
   target: Target,
   input: RawCursorOptions<Target>,
-  source: () => { metadata: SourceEvidenceMetadata; reader: Pick<SourceEvidenceReader, "page"> },
+  source: () => {
+    metadata: SourceEvidenceMetadata;
+    reader: Pick<SourceEvidenceReader, "page" | "latestCursor">;
+  },
 ) {
   const { startUs, endUs } = input.sourceRange;
   if (
@@ -62,13 +65,17 @@ export function readRawCursor<Target extends CursorTarget>(
     ...(cursor ? { afterSequence: cursor.afterSequence } : {}),
     ...(input.limit === undefined ? {} : { limit: input.limit }),
   });
+  const held =
+    !cursor && journalCapabilities(metadata.receipt.header ?? {})!.cursorSampling.holds
+      ? reader.latestCursor(metadata, startUs)
+      : null;
   return {
     ...target,
     sourceId: metadata.sourceId,
     sourceRevisionId: "r0",
     generation: metadata.generation,
     sourceRange,
-    samples: page.samples,
+    samples: held && held.sourceUs < startUs ? [held, ...page.samples] : page.samples,
     integrity: {
       finished: metadata.receipt.finished,
       incompleteTail: metadata.receipt.incompleteTail,

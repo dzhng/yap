@@ -363,7 +363,7 @@ test("an overloaded single-frame reason row refuses before any project picture w
     state: "failed",
     errorCode: "LIMIT_EXCEEDED",
     errorDetails: { limitKind: "index-record-bytes", maximum: 262144 },
-    retryable: false,
+    retryable: true,
   });
   expect(f.calls).toBe(0);
   expect(
@@ -375,7 +375,7 @@ test("an overloaded single-frame reason row refuses before any project picture w
       "scene-generation",
       sceneGenerationResource(recipe.scenes[0]),
     ),
-  ).toEqual([]);
+  ).toEqual([{ kind: "job-input", id: pending.jobId }]);
 });
 
 test("coordinator restart preserves interrupted index inputs and retries its interrupted frame child", async () => {

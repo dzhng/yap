@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { mkdtemp, rm, readFile, readdir, open } from "node:fs/promises";
 import { listenLocal } from "@yap/service";
-import type { OperationResponse } from "@yap/protocol";
+import { operationError, type OperationResponse } from "@yap/protocol";
 import { artifactBytes, consumeBatch, artifactFile } from "./artifact-delivery.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -125,12 +125,7 @@ test("timestamp batches preserve timestamp identity on failed media reads", asyn
     },
     "atUs",
     async () => ({}),
-    (error) => ({
-      code: (error as { code: string }).code,
-      message: (error as Error).message,
-      retryable: false,
-      details: {},
-    }),
+    (error) => operationError((error as { code: string }).code, (error as Error).message).error,
   );
   expect(result).toEqual({
     id: "time",
@@ -145,7 +140,7 @@ test("timestamp batches preserve timestamp identity on failed media reads", asyn
           error: {
             code: "INVALID_RESPONSE",
             message: "Media chunk does not advance within the delivery",
-            retryable: false,
+            retryable: true,
             details: {},
           },
         },

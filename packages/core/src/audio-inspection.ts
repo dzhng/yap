@@ -282,7 +282,7 @@ export class MediaAudioInspection {
     const { sourceRange: range, ...selection } = input;
     const source = selectSource(this.owners.assets, this.owners.acquisitions, selection);
     if (source.stream.kind !== "audio")
-      throw new CatalogError("UNSUPPORTED_MEDIA", "Audio inspection requires an audio stream");
+      throw new CatalogError("INVALID_PARAMS", "Audio inspection requires an audio stream");
     const admitted = admitReadRange(range === undefined ? source.stream.bounds : range, {
       startUs: 0,
       endUs: source.durationUs,
@@ -469,7 +469,8 @@ export class MediaAudioInspection {
   }
   private projectPlan(input: ProjectAudioInput) {
     const owner = this.owners.project;
-    if (!owner) throw new CatalogError("NOT_READY", "Project audio renderer is unavailable", {});
+    if (!owner)
+      throw new CatalogError("PREREQUISITE_MISSING", "Project audio renderer is unavailable", {});
     const composition = projectComposition(owner.projects, this.owners.assets, input);
     const retained =
       input.preparedResourceId === null
@@ -603,17 +604,25 @@ export class MediaAudioInspection {
       (input.implementationId !== snapshot.implementationId ||
         input.retimeImplementationId !== snapshot.retimeImplementationId)
     )
-      throw new CatalogError("NOT_READY", "Pinned project audio implementation is unavailable", {
-        implementationId: input.implementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned project audio implementation is unavailable",
+        {
+          implementationId: input.implementationId,
+        },
+      );
     if (
       settings.container === "m4a" &&
       "encodingImplementationId" in input &&
       input.encodingImplementationId !== snapshot.encodingImplementationId
     )
-      throw new CatalogError("NOT_READY", "Pinned audio encoding implementation is unavailable", {
-        implementationId: input.encodingImplementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned audio encoding implementation is unavailable",
+        {
+          implementationId: input.encodingImplementationId,
+        },
+      );
     if (
       settings.container === "m4a" &&
       !this.owners.jobs.status(this.exportIdentity(snapshot)).jobId
@@ -623,7 +632,7 @@ export class MediaAudioInspection {
         !this.owners.project.renderer.encode ||
         !this.owners.project.renderer.validateOutput
       )
-        throw new CatalogError("NOT_READY", "Standalone AAC output is unavailable", {});
+        throw new CatalogError("PREREQUISITE_MISSING", "Standalone AAC output is unavailable", {});
       await this.owners.project.renderer.validateOutput(settings);
     }
     const prepared = await this.prepareProject(input, plan);
@@ -670,16 +679,24 @@ export class MediaAudioInspection {
       pinned.settings.container === "m4a" &&
       pinned.encodingImplementationId !== this.owners.project!.renderer.encodingImplementationId
     )
-      throw new CatalogError("NOT_READY", "Pinned audio encoding implementation is unavailable", {
-        implementationId: pinned.encodingImplementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned audio encoding implementation is unavailable",
+        {
+          implementationId: pinned.encodingImplementationId,
+        },
+      );
     if (
       pinned.implementationId !== recipe.options.implementationId ||
       pinned.retimeImplementationId !== recipe.options.retimeImplementationId
     )
-      throw new CatalogError("NOT_READY", "Pinned project audio implementation is unavailable", {
-        implementationId: pinned.implementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned project audio implementation is unavailable",
+        {
+          implementationId: pinned.implementationId,
+        },
+      );
     return recipe;
   }
   resumeExport(pinned: PinnedProjectAudioExport) {
@@ -717,9 +734,13 @@ export class MediaAudioInspection {
     if (options.settings.container !== "m4a")
       throw new CatalogError("INVALID_JOB", "Encoded audio requires M4A settings");
     if (options.encodingImplementationId !== this.owners.project?.renderer.encodingImplementationId)
-      throw new CatalogError("NOT_READY", "Pinned audio encoding implementation is unavailable", {
-        implementationId: options.encodingImplementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned audio encoding implementation is unavailable",
+        {
+          implementationId: options.encodingImplementationId,
+        },
+      );
     return {
       ...options.pcm,
       encodingImplementationId: options.encodingImplementationId,
@@ -825,7 +846,11 @@ export class MediaAudioInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Audio job does not name a project window");
     const owner = this.owners.project;
     if (!owner || owner.renderer.implementationId !== parsed.data.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned project audio renderer is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned project audio renderer is unavailable",
+        {},
+      );
     const plan = this.projectPlan({
       projectId: job.target.id,
       revisionId: job.target.revisionId,
@@ -836,7 +861,11 @@ export class MediaAudioInspection {
       parsed.data.retimeImplementationId !==
       (plan.retained ? undefined : retimeImplementation(plan.window, owner.renderer))
     )
-      throw new CatalogError("NOT_READY", "Pinned retiming implementation is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned retiming implementation is unavailable",
+        {},
+      );
     signal.throwIfAborted();
     let prepared: PreparedAudioRead | undefined;
     try {
@@ -890,7 +919,11 @@ export class MediaAudioInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Audio job does not name a selected asset stream");
     const options = parsed.data;
     if (options.implementationId !== this.owners.sourceRenderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned audio renderer is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned audio renderer is unavailable",
+        {},
+      );
     const { source } = this.plan({ ...options.selection, sourceRange: options.range });
     if (source.supportDigest !== options.supportDigest)
       throw new CatalogError("ARTIFACT_CHANGED", "Selected source support changed");

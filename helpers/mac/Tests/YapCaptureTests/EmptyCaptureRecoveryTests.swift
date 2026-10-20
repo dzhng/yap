@@ -75,8 +75,8 @@ private func emptyRecoveryRefusals(root: URL, source: URL, params: [String: Any]
         // Retryability belongs to the shared refusal ledger; native carries only the code.
         precondition(error["retryable"] == nil, "\(name) must not state its own retryability: \(response)")
         if let retryable {
-            let expected = retryable ? "RECOVERY_FAILED" : "RECOVERY_REFUSED"
-            precondition(error["code"] as? String == expected, "\(name) must refuse as \(expected): \(response)")
+            guard let code = error["code"] as? String else { preconditionFailure("Missing refusal code") }
+            precondition(RefusalLedger.retryable(code) == retryable, "\(name) must retain its cause's verdict: \(response)")
         }
     }
     for name in ["unknown.bin", "camera.raw.mov", "camera.mapping.jsonl"] {

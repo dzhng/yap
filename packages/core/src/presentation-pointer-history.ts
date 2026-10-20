@@ -122,8 +122,14 @@ export class PresentationPointerHistory {
     reason: PointerResetFloor["reason"],
     allowAtBoundary = true,
   ) {
-    const next = { atSourceUs: ceilMicroseconds(at), reason, allowAtBoundary };
+    const atSourceUs = ceilMicroseconds(at);
+    const pointerAtSourceUs =
+      reason === "scene" || reason === "kept_start"
+        ? (this.reset.pointerAtSourceUs ?? 0)
+        : Math.max(this.reset.pointerAtSourceUs ?? 0, atSourceUs + (allowAtBoundary ? 0 : 1));
+    const next = { atSourceUs, pointerAtSourceUs, reason, allowAtBoundary };
     if (
+      next.pointerAtSourceUs > (this.reset.pointerAtSourceUs ?? 0) ||
       next.atSourceUs > this.reset.atSourceUs ||
       (next.atSourceUs === this.reset.atSourceUs && !allowAtBoundary)
     )

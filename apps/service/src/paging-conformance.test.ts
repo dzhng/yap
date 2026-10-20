@@ -507,7 +507,7 @@ const fixtures: Record<string, () => Promise<Fixture>> = {
       error: {
         code: "MEDIA_WORKER_UNAVAILABLE",
         message: "Controlled fixture has no native audio renderer",
-        retryable: false,
+        retryable: true,
         details: {},
       },
     }));

@@ -7,7 +7,7 @@ extension CompositionAudio {
 
     public static func validateRetimeImplementation(_ bound: String?) throws {
         if let bound, bound != retimeImplementation {
-            throw NativeFailure("NOT_READY", "The bound audio retiming implementation is unavailable.")
+            throw NativeFailure("PINNED_IMPLEMENTATION_UNAVAILABLE", "The bound audio retiming implementation is unavailable.")
         }
     }
     static func validateRetimeBinding(_ plan: CompositionAudioPlan) throws {
@@ -16,7 +16,7 @@ extension CompositionAudio {
             guard let range = clip.source.range else { throw invalid("A range clip requires source bounds.") }
             if !(try range.endUs.subtract(range.startUs)).equals(try clip.placement.endUs.subtract(clip.placement.startUs)) {
                 guard plan.retimeImplementationId == retimeImplementation else {
-                    throw NativeFailure("NOT_READY", "Retimed audio requires a bound native implementation.")
+                    throw NativeFailure("INTERNAL_ERROR", "Retimed audio requires a bound native implementation.")
                 }
             }
         }
@@ -35,10 +35,10 @@ extension CompositionAudio {
         let count = context.project.end - context.project.start
         if pitch == "preserve" {
             guard let input = Int(exactly: context.inputFrames), let output = Int(exactly: count) else {
-                throw NativeFailure("NOT_READY", "Retained retiming exceeds native sample capacity.")
+                throw NativeFailure("LIMIT_EXCEEDED", "Retained retiming exceeds native sample capacity.")
             }
             do { try SignalsmithProcessor.validate(inputFrames: input, outputFrames: output, sampleRate: rate, channels: source.channels) }
-            catch { throw NativeFailure("NOT_READY", "The retained pitch-preserving run is unsupported by the exact processor.") }
+            catch { throw NativeFailure("PREREQUISITE_MISSING", "The retained pitch-preserving run is unsupported by the exact processor.") }
         }
         _ = try ConvertedAudioInterval.configuration(source: source, start: context.sourceStart, outputRate: rate,
             owed: pitch == "follow" ? count : context.inputFrames, support: .finite(end: context.sourceEnd),

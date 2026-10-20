@@ -13,6 +13,16 @@ public struct CapturePublishedSource: Codable, Sendable {
         public let lastSequence: Int
         public let layout: Int
     }
+    public struct Take: Codable, Sendable, Equatable {
+        public enum Kind: String, Codable, Sendable { case display, window, area, camera }
+        public let kind: Kind
+    }
+    public struct Marks: Codable, Sendable, Equatable {
+        public let pins: Bool
+        public let strokes: Bool
+    }
+    public let take: Take?
+    public let marks: Marks?
     public let kind: Kind
     public let sourceId: String
     public let sourceDurationUs: Int64
@@ -139,7 +149,7 @@ package enum CaptureSourcePublication {
             facts.header?.sessionID == authority.sourceId,
             facts.header?.cameraBinding == authority.binding,
             authority.kind != .camera || facts.header?.source.kind == "camera",
-            authority.kind == .camera ? layout == 1 : CaptureJournal.isPacked(layout) else {
+            authority.kind == .camera ? JournalSchema.isCompanion(layout) : JournalSchema.isPacked(layout) else {
             throw invalid("Recovery differs from allocated source/device authority.")
         }
     }
@@ -199,7 +209,7 @@ package enum CaptureSourcePublication {
         var members: [String: CaptureMediaIdentity] = [:]
         for name in names { members[name] = try memberIdentity(name, lease: lease) }
         let diagnostic = recoveredDiagnostic
-        let source = CapturePublishedSource(kind: authority.kind, sourceId: header.sessionID,
+        let source = CapturePublishedSource(take: takeFacts(header), marks: facts.liveMarks, kind: authority.kind, sourceId: header.sessionID,
             sourceDurationUs: duration, originHostUs: origin, binding: header.cameraBinding, diagnostic: diagnostic,
             journal: .init(file: journalFile, bytes: original.bytes, sha256: original.sha256,
                 lastSequence: facts.lastSequence, layout: layout), members: members)
@@ -248,11 +258,13 @@ package enum CaptureSourcePublication {
             : ["video.mov", "narration.mov", "system.mov", "narration.publication.json", "system.publication.json"]
         guard whole == basis.original, whole.bytes == source.journal.bytes, whole.sha256 == source.journal.sha256,
             source.journal.file == (source.kind == .primary ? "source.journal.jsonl" : "capture.journal.jsonl"),
-            source.kind == .primary ? CaptureJournal.isPacked(source.journal.layout) : source.journal.layout == 1,
+            source.kind == .primary ? JournalSchema.isPacked(source.journal.layout) : JournalSchema.isCompanion(source.journal.layout),
             facts.validatedPrefix == basis.prefix, facts.lastSequence == basis.lastSequence,
             facts.lastSequence == source.journal.lastSequence, facts.finished == basis.finished,
             facts.incompleteTail == basis.incompleteTail, facts.invalidAtSequence == basis.invalidAtSequence,
             facts.completion == nil || facts.incompleteTail || facts.invalidAtSequence != nil,
+            source.take == nil || source.take == facts.header.flatMap(takeFacts),
+            source.marks == nil || source.marks == facts.liveMarks,
             facts.header?.sessionID == source.sourceId, facts.header?.cameraBinding == source.binding,
             facts.originHostUs == source.originHostUs, source.sourceDurationUs > 0,
             source.diagnostic?.code == recoveredDiagnostic.code, source.diagnostic?.message == recoveredDiagnostic.message,
@@ -368,7 +380,7 @@ package enum CaptureSourcePublication {
         }
         var members: [String: CaptureMediaIdentity] = [:]
         for name in names { members[name] = try memberIdentity(name, lease: lease) }
-        let receipt = CapturePublishedSource(kind: kind, sourceId: header.sessionID,
+        let receipt = CapturePublishedSource(take: takeFacts(header), marks: summary.liveMarks, kind: kind, sourceId: header.sessionID,
             sourceDurationUs: completion.durationUs, originHostUs: origin, binding: header.cameraBinding,
             diagnostic: diagnostic.map { CaptureFailure(bounded: $0) },
             journal: .init(file: journalFile, bytes: identity.bytes, sha256: identity.sha256,
@@ -398,7 +410,7 @@ package enum CaptureSourcePublication {
         let allowedMembers: Set<String> = receipt.kind == .primary
             ? ["video.mov", "narration.mov", "system.mov", "narration.publication.json", "system.publication.json"]
             : ["video.mov", "camera.publication.json", CameraMedia.mappingFile]
-        guard receipt.journal.file == expectedJournal, [1, 2, 3].contains(receipt.journal.layout),
+        guard receipt.journal.file == expectedJournal, JournalSchema.isSupported(receipt.journal.layout),
             Set(receipt.members.keys).isSubset(of: allowedMembers), receipt.members["video.mov"] != nil,
             receipt.kind != .camera || Set(receipt.members.keys) == allowedMembers else {
             throw invalid("Source receipt names invalid authority members.")
@@ -417,6 +429,8 @@ package enum CaptureSourcePublication {
             summary.validatedPrefix == JournalPrefix(bytes: identity.bytes, sha256: identity.sha256),
             !summary.incompleteTail, summary.invalidAtSequence == nil,
             summary.lastSequence == receipt.journal.lastSequence,
+            receipt.take == nil || receipt.take == summary.header.flatMap(takeFacts),
+            receipt.marks == nil || receipt.marks == summary.liveMarks,
             summary.header?.sessionID == receipt.sourceId, summary.header?.cameraBinding == receipt.binding,
             summary.originHostUs == receipt.originHostUs, receipt.sourceDurationUs > 0,
             summary.completion?.durationUs == receipt.sourceDurationUs else { throw invalid("Source receipt differs from its journal.") }
@@ -449,10 +463,24 @@ package enum CaptureSourcePublication {
         try lease.check()
     }
 
+    private static func takeFacts(_ header: CaptureJournalHeader) -> CapturePublishedSource.Take? {
+        guard JournalSchema.summarizesTake(header.schemaVersion),
+            let kind = CapturePublishedSource.Take.Kind(rawValue: header.source.kind == "region" ? "area" : header.source.kind) else { return nil }
+        return .init(kind: kind)
+    }
     private static func summary(lease: CaptureJournalLease, descriptor: Int32, layout: Int) throws -> CaptureJournalSummary {
-        try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
+        var live: [String: String] = [:]
+        var facts = try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
-            retainPrefix: true, descriptor: descriptor, layout: layout)
+            mark: { mark in
+                guard JournalSchema.summarizesTake(layout) else { return }
+                if let target = mark.retracts { live.removeValue(forKey: target) }
+                else if mark.kind == "pin" || mark.kind == "stroke" { live[mark.id] = mark.kind }
+            }, retainPrefix: true, descriptor: descriptor, layout: layout)
+        if let header = facts.header, JournalSchema.summarizesTake(header.schemaVersion) {
+            facts.liveMarks = .init(pins: live.values.contains("pin"), strokes: live.values.contains("stroke"))
+        }
+        return facts
     }
     private static func memberIdentity(_ name: String, lease: CaptureJournalLease, canonical: [String: String]? = nil) throws -> CaptureMediaIdentity {
         if let role = ["video", "narration", "system"].first(where: { name == "\($0).mov" }), canonical != nil {

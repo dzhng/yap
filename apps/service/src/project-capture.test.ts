@@ -409,7 +409,7 @@ test("source admission failure remains discoverable through stop replay and serv
             kind: "primary",
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND", retryable: true },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE", retryable: true },
           },
         ],
       },
@@ -511,7 +511,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND" },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE" },
           },
         ],
       },
@@ -653,7 +653,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "ACQUISITION_NOT_FOUND" },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE" },
           },
         ],
       },

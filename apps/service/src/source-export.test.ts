@@ -34,13 +34,13 @@ test("source exporter preserves retryable access failures and definitive identit
     await chmod(path, 0o600);
   }
   // chmod changes ctime: an already admitted descriptor identity must still refuse it.
-  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: false });
+  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: true });
   const restored = await open(path);
   canonical.narration.identity = fileIdentity(await restored.stat({ bigint: true }));
   await restored.close();
   await expect(run()).resolves.toMatchObject({ marker: "verified" });
   await writeFile(path, "changed identity");
-  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: false });
+  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: true });
 });
 
 test("video-only capture authority receives byte- and duration-scaled verification time", async () => {
@@ -161,13 +161,13 @@ test("canonical video metadata requires current alpha facts without inventing so
   const oldStream = omit(actual.streams[0]!, "hasAlpha");
   await expect(run({ originUs: 0, streams: [oldStream] })).rejects.toMatchObject({
     code: "PREREQUISITE_MISSING",
-    retryable: false,
+    retryable: true,
   });
   await expect(run(actual)).resolves.toMatchObject({ marker: "verified" });
   emitAlpha = false;
   await expect(run(actual)).rejects.toMatchObject({
     code: "PREREQUISITE_MISSING",
-    retryable: false,
+    retryable: true,
   });
   emitAlpha = true;
   await expect(

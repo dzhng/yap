@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
-import { readCapturePublication, readRecoveryReceipt } from "./capture-publication.js";
+import {
+  readCapturePublication,
+  readCaptureSourceOutcome,
+  readRecoveryReceipt,
+} from "./capture-publication.js";
 
 test("recovery receipt rejects unknown top-level fields", () => {
   expect(() =>
@@ -94,11 +99,85 @@ function screenPublication(layout: number) {
 
 test("a screen take journaled with marks (layout 3) publishes like one without", () => {
   const allocation = { id: "take", sourceId: "source", camera: null };
-  for (const layout of [2, 3])
+  for (const layout of [2, 3, 4])
     expect(
       readCapturePublication(screenPublication(layout), allocation, null).authorities.primary
         ?.journal.layout,
     ).toBe(layout);
-  for (const layout of [1, 4])
+  for (const layout of [1, 5])
     expect(() => readCapturePublication(screenPublication(layout), allocation, null)).toThrow();
+});
+
+test("new take facts are optional, strict and immutable once published", () => {
+  const allocation = { id: "take", sourceId: "source", camera: null };
+  const publication = screenPublication(4);
+  const source = {
+    ...publication.primary.source,
+    take: { kind: "display" },
+    marks: { pins: true, strokes: false },
+  };
+  const current = { ...publication, primary: { state: "published", source } };
+  const admitted = readCapturePublication(current, allocation, null);
+  expect(admitted.authorities.primary).toEqual(source);
+  const old = readCapturePublication(screenPublication(3), allocation, null);
+  expect(old.authorities.primary).not.toHaveProperty("take");
+  expect(old.authorities.primary).not.toHaveProperty("marks");
+  expect(() => readCapturePublication(current, allocation, old)).toThrow(/immutable/);
+  expect(() =>
+    readCapturePublication(
+      {
+        ...current,
+        primary: {
+          state: "published",
+          source: { ...source, marks: { pins: false, strokes: false } },
+        },
+      },
+      allocation,
+      admitted,
+    ),
+  ).toThrow(/immutable/);
+  expect(() =>
+    readCapturePublication(
+      {
+        ...current,
+        primary: { state: "published", source: { ...source, take: { kind: "other" } } },
+      },
+      allocation,
+      null,
+    ),
+  ).toThrow();
+});
+
+test("shared schema4 publication fixture retains the new take facts", () => {
+  const source = JSON.parse(
+    readFileSync(
+      new URL("../../../fixtures/journal/schema4-summary.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const publication = {
+    ...screenPublication(4),
+    sourceId: source.sourceId,
+    primary: { state: "published", source },
+  };
+  const admitted = readCapturePublication(
+    publication,
+    { id: "take", sourceId: source.sourceId, camera: null },
+    null,
+  );
+  expect(admitted.authorities.primary).toEqual(source);
+  expect(admitted.authorities.primary?.take).toEqual({ kind: "display" });
+  expect(admitted.authorities.primary?.marks).toEqual({ pins: true, strokes: true });
+});
+
+test("pending diagnostics project the ledger verdict without a wire retry bit", () => {
+  expect(
+    readCaptureSourceOutcome({
+      state: "pending",
+      error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed" },
+    }),
+  ).toEqual({
+    state: "pending",
+    error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed", retryable: false },
+  });
 });

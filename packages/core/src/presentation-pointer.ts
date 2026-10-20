@@ -124,11 +124,12 @@ export class PresentationPointer {
           ? { presentationClock: { at: eventTime, sampleTime: record.sampleTime } }
           : {}),
         readScene: async (at) => {
-          const { record: previous } = await this.prior.at(spanIndex, at);
+          const priorAt = Math.max(kept.startUs, at);
+          const { record: previous } = await this.prior.at(spanIndex, priorAt);
           return previous.empty
             ? { scene: null }
             : {
-                scene: pointScene(previous, at, kept, this.source),
+                scene: pointScene(previous, priorAt, kept, this.source),
                 presentationTime: previous.sampleTime,
               };
         },

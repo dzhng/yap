@@ -1,0 +1,8 @@
+{"data":{"cursorSampling":{"holds":false,"intervalUs":16667},"height":120,"microphone":false,"schemaVersion":4,"sessionID":"schema4-marks","source":{"displayID":1,"kind":"display"},"systemAudio":false,"width":160},"event":"header","sequence":1}
+{"data":{"declaredHostUs":"1000","rawPTS":{"epoch":"0","flags":1,"timescale":1000000,"value":"1000"}},"event":"pcmOrigin","sequence":2}
+{"data":{"epoch":1,"hostUs":1100,"id":"pin","kind":"pin","pin":1,"points":[{"globalX":10,"globalY":20,"hostUs":1100,"x":10,"y":20}],"sourceUs":100},"event":"mark","sequence":3}
+{"data":{"epoch":1,"hostUs":1200,"id":"stroke","kind":"stroke","points":[{"globalX":10,"globalY":20,"hostUs":1200,"x":10,"y":20},{"globalX":20,"globalY":20,"hostUs":1300,"x":20,"y":20}],"sourceUs":200},"event":"mark","sequence":4}
+{"data":{"epoch":1,"hostUs":1400,"id":"undo-pin","kind":"pin","pin":1,"points":[],"retracts":"pin","sourceUs":400},"event":"mark","sequence":5}
+{"data":{"epoch":1,"hostUs":1400,"id":"undo-stroke","kind":"stroke","points":[],"retracts":"stroke","sourceUs":400},"event":"mark","sequence":6}
+{"data":{"epoch":1,"hostUs":1500,"id":"click","kind":"click","points":[{"globalX":1,"globalY":2,"hostUs":1500,"x":1,"y":2}],"sourceUs":500},"event":"mark","sequence":7}
+{"data":{"cursor":{"droppedReadings":0,"forgottenPlacements":0,"geometryEpochs":0,"omittedPaused":0,"sampled":0,"skippedTicks":0,"written":0},"durationUs":200000,"height":120,"hostOriginUs":1000,"pauses":[],"source":{"displayID":1,"kind":"display"},"state":"complete","systemAudioScope":"disabled","tracks":[],"width":160},"event":"finished","sequence":8}

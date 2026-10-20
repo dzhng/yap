@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { launcherVerdicts } from "./launcher/verdicts.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { spawn, spawnSync, execFileSync } from "node:child_process";
@@ -310,6 +311,7 @@ try {
   writeFileSync(cfile, fixtureSource);
   run("xcrun", [
     "clang",
+    launcherVerdicts,
     "-Wall",
     "-Wextra",
     "-Werror",

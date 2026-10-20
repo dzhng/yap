@@ -465,7 +465,9 @@ export async function fixture(
     placed,
     jobs,
     cache,
-    preview,
+    get preview() {
+      return preview;
+    },
     exports,
     binding,
     deletion,

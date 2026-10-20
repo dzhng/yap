@@ -1,7 +1,9 @@
 import { Catalog, CatalogError } from "./catalog.js";
+import { refusalRetryable } from "@yap/protocol";
 import { pageCursor } from "./page-cursor.js";
 import {
   readCapturePublication,
+  readCaptureSourceOutcome,
   type CapturePublication,
   type CapturePublishedSource,
   type CapturePublicationState,
@@ -66,18 +68,28 @@ type RecordingRow = Omit<Recording, "finalizationError" | "camera" | "publicatio
 };
 function readRecording(row: RecordingRow): Recording {
   const { cameraSourceId, cameraDeviceId, ...recording } = row;
+  const failure =
+    row.finalizationError === null
+      ? null
+      : (JSON.parse(row.finalizationError) as FinalizationError);
+  const publication =
+    row.publication === null
+      ? null
+      : (JSON.parse(row.publication) as CapturePublicationState).observation;
   return {
     ...recording,
     camera:
       cameraSourceId === null ? null : { sourceId: cameraSourceId, deviceId: cameraDeviceId! },
     publication:
-      row.publication === null
+      publication === null
         ? null
-        : (JSON.parse(row.publication) as CapturePublicationState).observation,
+        : {
+            ...publication,
+            primary: readCaptureSourceOutcome(publication.primary),
+            camera: readCaptureSourceOutcome(publication.camera),
+          },
     finalizationError:
-      row.finalizationError === null
-        ? null
-        : (JSON.parse(row.finalizationError) as FinalizationError),
+      failure === null ? null : { ...failure, retryable: refusalRetryable(failure.code) },
   };
 }
 /** A settled take can no longer leave its state, so a missing source is final rather than pending. */

@@ -102,6 +102,11 @@ test("physical closure makes a published camera eligible while primary publicati
   expect(() => store.publishedSource(recordingId, sourceId)).toThrowError(
     expect.objectContaining({ code: "NOT_READY" }),
   );
+  store.catalog
+    .prepare(
+      "UPDATE recordings SET publication=json_set(publication,'$.observation.primary.error.retryable',json('false')) WHERE recordingId=?",
+    )
+    .run(recordingId);
   store.close();
   const reopened = new CaptureStore(path, providers);
   stores.push(reopened);
@@ -659,12 +664,16 @@ test("deletion replay pages use stable recording IDs and survive restart", () =>
 test("finalization failure survives reopen and reads until an explicit attempt or terminal result", () => {
   const { store, path, providers } = fixture();
   const take = store.allocate().recording;
-  const failure = { code: "RECOVERY_IO", message: "Retained media needs a retry", retryable: true };
+  const failure = {
+    code: "INVALID_EVIDENCE",
+    message: "Retained media needs a retry",
+    retryable: true,
+  };
   store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "finalizing",
-    finalizationError: failure,
+    finalizationError: { ...failure, retryable: false },
   });
   store.close();
   const reopened = new CaptureStore(path, providers);

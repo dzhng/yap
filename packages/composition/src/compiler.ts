@@ -290,7 +290,7 @@ export function createCompiler(model: ValidatedComposition, revisionId: string) 
       model.clips.some((value) => value.clip.id === target.id && value.track.kind === "audio")
     )
       throw new CompositionError(
-        "NOT_READY",
+        "INVALID_RANGE",
         "Audio clip tap has no output samples in the requested window",
       );
     let plan = processing(clips, request.tap, component);

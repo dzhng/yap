@@ -11,79 +11,101 @@
   "codes": {
     "ABORTED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/cli/src/artifact-delivery.ts": 1,
         "apps/cli/src/main.ts": 1,
         "apps/cli/src/wait.ts": 1,
         "packages/client/src/discovery.ts": 1,
         "packages/client/src/transport.ts": 2
-      }
+      },
+      "reason": "Cancel ends this attempt, not the validity of the request.",
+      "cause": "The request was canceled."
     },
     "ACQUISITION_BUSY": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "packages/core/src/acquisitions.ts": 1
-      }
+      },
+      "reason": "An existing worker can release its library lock.",
+      "cause": "Another import still owns the library.",
+      "retryAfterMs": 15000
     },
     "ACQUISITION_NOT_FOUND": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
-        "packages/core/src/acquisitions.ts": 1,
         "packages/core/src/transcript-backlog.ts": 1
-      }
+      },
+      "reason": "The referenced acquisition is absent; the current true ledger value contradicts the missing-reference rule.",
+      "cause": "The referenced import does not exist."
     },
     "ACQUISITION_PATH_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "packages/core/src/acquisitions.ts": 1
-      }
+      },
+      "reason": "Access to the retained source directory can be repaired.",
+      "cause": "The import’s source folder cannot be opened."
     },
     "AMBIGUOUS_PREPARED_AUDIO": {
       "category": "ambiguous",
       "retryable": false,
       "files": {
         "packages/core/src/prepared-audio.ts": 1
-      }
+      },
+      "reason": "The request needs an explicit retained-output selection.",
+      "cause": "Several prepared audio outputs match this request."
     },
     "APP_CLOSING": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "App lifetime can be renewed and the same operation requested again.",
+      "cause": "Yap is closing.",
+      "retryAfterMs": 15000
     },
     "APP_NOT_FOUND": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/client/src/discovery.ts": 2
-      }
+      },
+      "reason": "The app is our installation; reinstalling or repairing configuration can restore it.",
+      "cause": "The Yap app cannot be found at its configured location."
     },
     "APP_QUIT": {
       "category": "issue-code",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 1
-      }
+      },
+      "reason": "This interruption describes app lifetime, not a permanently invalid request.",
+      "cause": "Yap quit before the take finished normally."
     },
     "APP_STARTING": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 2
-      }
+      },
+      "reason": "Controls become available after initialization.",
+      "cause": "Yap is still starting.",
+      "retryAfterMs": 15000
     },
     "ARCHIVE_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 9,
         "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 2
-      }
+      },
+      "reason": "Assembly and admission operate on our staged files; restaging can repair them.",
+      "cause": "The package files changed while they were being copied."
     },
     "ARCHIVE_CLEANUP_FAILED": {
       "category": "execution-failure",
@@ -91,7 +113,9 @@
       "files": {
         "apps/service/src/archive-write.ts": 1,
         "apps/service/src/package-archive.ts": 1
-      }
+      },
+      "reason": "Workspace cleanup can succeed after filesystem repair.",
+      "cause": "A temporary package folder could not be cleaned up."
     },
     "ARTIFACT_CHANGED": {
       "category": "conflict",
@@ -144,7 +168,9 @@
         "skills/yap/scripts/review-bundle.mjs": 2,
         "skills/yap/scripts/task-notes.mjs": 2,
         "skills/yap/scripts/timeline-inspection.mjs": 2
-      }
+      },
+      "reason": "A caller pin to another generation/range/identity cannot select the requested immutable result; owned-file cases must split as described below.",
+      "cause": "The requested output no longer matches its pinned identity."
     },
     "ARTIFACT_EXPIRED": {
       "category": "conflict",
@@ -157,14 +183,18 @@
         "packages/core/src/audio-inspection.ts": 1,
         "packages/core/src/cache.ts": 1,
         "packages/core/src/pointer-preparation.ts": 1
-      }
+      },
+      "reason": "Derived bytes can be prepared again; expired delivery-token references need the separate treatment below.",
+      "cause": "The prepared output is no longer available."
     },
     "ASSET_CONFLICT": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/assets.ts": 2
-      }
+      },
+      "reason": "Our content-addressed asset bytes or metadata need repair, not different caller parameters.",
+      "cause": "Stored media conflicts with its recorded identity."
     },
     "ASSET_DELETED": {
       "category": "conflict",
@@ -172,54 +202,68 @@
       "files": {
         "packages/core/src/assets.ts": 2,
         "packages/core/src/transcript-backlog.ts": 1
-      }
+      },
+      "reason": "A deleted asset identity cannot be recreated by replaying its import request.",
+      "cause": "This media item was deleted."
     },
     "AUDIO_FORMAT_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClock.swift": 1,
         "helpers/mac/Sources/YapCapture/CapturePCM.swift": 1
-      }
+      },
+      "reason": "Device or capture implementation recovery can make another attempt succeed.",
+      "cause": "The audio device changed its format during capture."
     },
     "AUDIO_OVERLAP": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClock.swift": 1
-      }
+      },
+      "reason": "Capture clock classification is our implementation, even though the ledger calls this an issue.",
+      "cause": "Captured audio sample positions overlap."
     },
     "AUDIO_PUBLICATION_PARTIAL": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "Unresolved captured audio can be recovered or republished.",
+      "cause": "Some recorded audio has not been published yet."
     },
     "AUDIO_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2
-      }
+      },
+      "reason": "The immutable take has no retained or verified playable frames for the requested audio; retry cannot create them.",
+      "cause": "The recorded audio has no playable frames."
     },
     "CACHE_BUSY": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "packages/core/src/cache.ts": 3
-      }
+      },
+      "reason": "Readers can release the cache budget.",
+      "cause": "Prepared output is still being read.",
+      "retryAfterMs": 15000
     },
     "CAMERA_FORMAT_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 2
-      }
+      },
+      "reason": "The device can return to a usable format.",
+      "cause": "The camera changed its picture format during the take."
     },
     "CAMERA_NOT_RESERVED": {
       "category": "missing-prerequisite",
@@ -227,34 +271,39 @@
       "files": {
         "apps/service/src/capture.ts": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1
-      }
+      },
+      "reason": "This take’s admitted allocation contains no companion camera.",
+      "cause": "This take did not reserve a companion camera."
     },
     "CAMERA_NOT_TURNED_ON": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1
-      }
+      },
+      "reason": "A completed take cannot acquire pictures from a camera never used.",
+      "cause": "The camera stayed off for this take."
     },
     "CAMERA_PERMISSION_REQUIRED": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/YapControls/Permissions.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 2
-      }
+      },
+      "reason": "Granting camera access can make the identical operation succeed.",
+      "cause": "Yap needs camera access."
     },
     "CAMERA_TOGGLE_LIMIT": {
       "category": "resource-bound",
-      "retryable": false,
-      "files": {
-        "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1
-      }
+      "retryable": true,
+      "files": {},
+      "reason": "This is our capture counter limit, subject to the limits audit, not invalid caller data.",
+      "cause": "The take reached Yap’s camera-toggle limit."
     },
     "CANCELED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/package-registry.ts": 2,
         "apps/service/src/package-workspace.ts": 2,
@@ -263,7 +312,9 @@
         "apps/service/src/worker.ts": 2,
         "helpers/mac/Sources/YapWire/Wire.swift": 1,
         "packages/core/src/storage.ts": 2
-      }
+      },
+      "reason": "Cancellation is explicitly retryable under the contract.",
+      "cause": "The operation was canceled."
     },
     "CAPACITY_EXCEEDED": {
       "category": "resource-bound",
@@ -272,12 +323,15 @@
         "apps/service/src/delivery.ts": 1,
         "apps/service/src/exports.ts": 2,
         "apps/service/src/index.ts": 1,
-        "apps/service/src/package-registry.ts": 2,
+        "apps/service/src/package-registry.ts": 1,
         "helpers/mac/Sources/YapAudio/AudioWave.swift": 1,
         "packages/core/src/files.ts": 1,
         "packages/core/src/jobs.ts": 5,
         "packages/core/src/transcript-backlog.ts": 1
-      }
+      },
+      "reason": "Queue or execution capacity can become free.",
+      "cause": "Too much work is already waiting or running.",
+      "retryAfterMs": 15000
     },
     "CAPTURE_BUSY": {
       "category": "resource-bound",
@@ -286,65 +340,88 @@
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "The capture or journal owner can release its lock.",
+      "cause": "Another capture operation is still active.",
+      "retryAfterMs": 15000
     },
     "CAPTURE_EVIDENCE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1
-      }
+      },
+      "reason": "Our clock/journal writer can recover after a code or machine repair.",
+      "cause": "Capture could not retain its timing evidence."
     },
     "CAPTURE_INTERRUPTED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 2
-      }
+      },
+      "reason": "Capture interruption does not invalidate an explicit retry.",
+      "cause": "The take ended unexpectedly."
     },
     "CAPTURE_NOT_QUIET": {
       "category": "conflict",
       "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 2
-      }
+      },
+      "reason": "Active native work can finish.",
+      "cause": "Recording or media work is still active.",
+      "retryAfterMs": 15000
     },
     "CAPTURE_RECOVERED": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": 1
-      }
+      },
+      "reason": "Recovery is successful status; do not turn its diagnostic into a permanent refusal.",
+      "cause": "The take was recovered after an interruption."
     },
     "CAPTURE_RECOVERY_PENDING": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 2
-      }
+      },
+      "reason": "Publication or recovery can finish.",
+      "cause": "The take is still being recovered.",
+      "retryAfterMs": 15000
     },
     "CAPTURE_RECOVERY_UNRESOLVED": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 1
-      }
+      },
+      "reason": "Unproved native closure is our recovery state, not evidence of invalid input.",
+      "cause": "The take’s recovery has not been confirmed.",
+      "retryAfterMs": 15000
     },
     "CLEANUP_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "Our publication cleanup can succeed after repair.",
+      "cause": "Capture cleanup could not be verified."
     },
     "CLEANUP_PENDING": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 2,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "Retained publication cleanup can finish.",
+      "cause": "Temporary capture files still need cleanup.",
+      "retryAfterMs": 15000
     },
     "CLEANUP_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -352,37 +429,47 @@
       "files": {
         "apps/service/src/capture-cleanup.ts": 1,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "Permissions or I/O to our capture files can recover.",
+      "cause": "Capture cleanup cannot read its files right now."
     },
     "CLI_TIMEOUT": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 1
-      }
+      },
+      "reason": "A later CLI execution can answer.",
+      "cause": "The Yap command did not answer in time."
     },
     "CLI_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 1
-      }
+      },
+      "reason": "Our executable or its installation can be repaired.",
+      "cause": "The Yap command could not be started."
     },
     "CLOCK_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1
-      }
+      },
+      "reason": "The machine’s synchronization clock can become usable.",
+      "cause": "The selected device’s clock is unavailable."
     },
     "CONFLICT": {
       "category": "conflict",
       "retryable": false,
       "files": {
         "packages/core/src/imported-transcript.ts": 2
-      }
+      },
+      "reason": "A durable import request or generation already belongs to different input.",
+      "cause": "This transcript request identity was used for another source."
     },
     "CONNECTION_CLOSED": {
       "category": "missing-prerequisite",
@@ -391,7 +478,9 @@
         "apps/cli/src/wait.ts": 1,
         "packages/client/src/transport.ts": 1,
         "skills/yap/scripts/batch-prepare.mjs": 1
-      }
+      },
+      "reason": "A new connection can carry the same request.",
+      "cause": "The connection ended before a complete answer arrived."
     },
     "CONNECTION_ERROR": {
       "category": "execution-failure",
@@ -401,7 +490,9 @@
         "packages/client/src/discovery.ts": 1,
         "packages/client/src/transport.ts": 1,
         "skills/yap/scripts/batch-prepare.mjs": 1
-      }
+      },
+      "reason": "The local transport can recover.",
+      "cause": "Yap could not connect to its local service."
     },
     "CONTEXT_CLOSED": {
       "category": "missing-prerequisite",
@@ -411,21 +502,27 @@
         "apps/service/src/project-packages.ts": 4,
         "packages/core/src/files.ts": 3,
         "packages/core/src/jobs.ts": 1
-      }
+      },
+      "reason": "The exact process-local package handle has ended; opening a new handle changes the reference.",
+      "cause": "This package handle is closed."
     },
     "CONTROL_LIMIT_EXCEEDED": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "The oversized message is produced by our service control channel.",
+      "cause": "The service sent a control message larger than Yap accepts."
     },
     "CONTROL_PROTOCOL": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 5
-      }
+      },
+      "reason": "Our app/service protocol implementation can be repaired.",
+      "cause": "The app could not understand a service control message."
     },
     "CONTROL_RESPONSE_INVALID": {
       "category": "malformed",
@@ -433,35 +530,46 @@
       "files": {
         "apps/service/src/capture.ts": 1,
         "apps/service/src/control.ts": 1
-      }
+      },
+      "reason": "Our service’s control response can be corrected.",
+      "cause": "The service returned an invalid control response."
     },
     "COVERAGE_INCOMPLETE": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 1
-      }
+      },
+      "reason": "Our delivery verification can be repaired; this diagnostic does not authorize edits.",
+      "cause": "Delivery evidence does not cover every requested item."
     },
     "COVERAGE_OVERCLAIM": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 1
-      }
+      },
+      "reason": "Our evidence writer can correct its claimed coverage.",
+      "cause": "Delivery evidence claims coverage it does not demonstrate."
     },
     "CROSS_DEVICE_PUBLICATION": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 1
-      }
+      },
+      "reason": "Our staging placement can be repaired on the same filesystem as the destination.",
+      "cause": "Export staging and its destination are on different filesystems."
     },
     "DECODE_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
-        "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 4
-      }
+        "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 4,
+        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 1
+      },
+      "reason": "Our decoder or machine can recover.",
+      "cause": "The media decoder failed."
     },
     "DELETE_FAILED": {
       "category": "execution-failure",
@@ -470,7 +578,9 @@
         "apps/service/src/library-deletion.ts": 1,
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "Filesystem deletion or cleanup can succeed later.",
+      "cause": "The item could not be deleted completely."
     },
     "DELETE_IN_PROGRESS": {
       "category": "conflict",
@@ -479,7 +589,10 @@
         "apps/service/src/project-service.ts": 3,
         "packages/core/src/assets.ts": 2,
         "packages/core/src/references.ts": 1
-      }
+      },
+      "reason": "Our deletion/publication fence can clear; requests tied to a confirmed deleting or deleted owner use OWNER_DELETED instead.",
+      "cause": "Media deletion or publication is still being settled.",
+      "retryAfterMs": 15000
     },
     "DEPENDENCY_FAILED": {
       "category": "execution-failure",
@@ -490,7 +603,9 @@
         "packages/core/src/catalog.ts": 1,
         "packages/core/src/pointer-preparation.ts": 1,
         "packages/core/src/rendered-speech.ts": 1
-      }
+      },
+      "reason": "A prerequisite execution can be explicitly retried.",
+      "cause": "Work required by this operation failed."
     },
     "DEPENDENCY_LOST": {
       "category": "missing-prerequisite",
@@ -498,103 +613,127 @@
       "files": {
         "packages/core/src/acoustic-inspection.ts": 1,
         "packages/core/src/rendered-speech.ts": 1
-      }
+      },
+      "reason": "The derived prerequisite can be prepared again.",
+      "cause": "A required prepared result disappeared."
     },
     "DEPENDENCY_REFUSED": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "packages/core/src/catalog.ts": 1
-      }
+      },
+      "reason": "Reserve this wrapper for a permanently invalid dependency request/reference; repairable helper causes must keep their retryable code.",
+      "cause": "A required operation could not be completed."
     },
     "DESTINATION_CHANGED": {
       "category": "conflict",
       "retryable": false,
       "files": {
         "apps/service/src/exports.ts": 1
-      }
+      },
+      "reason": "The saved replacement identity names a different file; repeating it cannot authorize replacing the new file.",
+      "cause": "The export destination changed after you chose it."
     },
     "DESTINATION_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/service/src/exports.ts": 1
-      }
+      },
+      "reason": "The selected directory can be restored or made accessible.",
+      "cause": "The export destination folder cannot be opened."
     },
     "DEVICE_RESTORE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1
-      }
+      },
+      "reason": "Our device configuration restoration can succeed later.",
+      "cause": "Yap could not restore the device’s settings."
     },
     "DISABLE_TELEMETRY": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/SkillArtifact.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "DOMAIN_MAX": {
       "category": "issue-code",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/CubeLUT.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "DOMAIN_MIN": {
       "category": "issue-code",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/CubeLUT.swift": 2
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "DUPLICATE_SHORTCUT": {
       "category": "conflict",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/RecordingControls.swift": 1
-      }
+      },
+      "reason": "Two requested shortcut actions conflict and the caller must choose distinct keys.",
+      "cause": "Two actions were assigned the same shortcut."
     },
     "ENCODER_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1
-      }
+      },
+      "reason": "The machine’s encoder or our selected configuration can be repaired.",
+      "cause": "The media encoder is unavailable."
     },
     "EVIDENCE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "The native evidence export is our implementation.",
+      "cause": "Yap could not export capture evidence."
     },
     "EVIDENCE_LIMIT": {
       "category": "resource-bound",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
-        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 3
-      }
+        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1
+      },
+      "reason": "Our capture evidence limits and readers can be corrected; this is not proof of bad input.",
+      "cause": "Capture evidence exceeded Yap’s current read or output limit."
     },
     "EXPORT_ABANDONING": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/exports.ts": 2
-      }
+      },
+      "reason": "Abandonment cleanup can finish or be explicitly retried.",
+      "cause": "The export is still being abandoned.",
+      "retryAfterMs": 15000
     },
     "EXPORT_CLEANUP_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/service/src/exports.ts": 1
-      }
+      },
+      "reason": "Our export cleanup can succeed after repair.",
+      "cause": "The export’s temporary files could not be cleaned up."
     },
     "FFMPEG_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -602,14 +741,18 @@
       "files": {
         "apps/service/src/ffmpeg-tools.ts": 1,
         "packages/protocol/src/tools.ts": 1
-      }
+      },
+      "reason": "Our bundled tool installation can be repaired.",
+      "cause": "Yap’s media tools are unavailable."
     },
     "FILE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/task-notes.mjs": 1
-      }
+      },
+      "reason": "A filesystem access failure can be repaired; known missing caller references stay separate.",
+      "cause": "A referenced file could not be read."
     },
     "FIXTURE_FAILED": {
       "category": "execution-failure",
@@ -617,42 +760,54 @@
       "files": {
         "apps/macos/Sources/Yap/CaptureProbe.swift": 2,
         "apps/macos/Sources/Yap/CursorGeometryProbe.swift": 5
-      }
+      },
+      "reason": "The probe fixture, renderer and writer are ours.",
+      "cause": "The capture probe could not prepare or read its fixture."
     },
     "FONT_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapMedia/FontFile.swift": 1
-      }
+      },
+      "reason": "The imported font’s owned bytes can be restored to their immutable identity.",
+      "cause": "The stored font file differs from its imported identity."
     },
     "FONT_GLYPH_BOUNDS_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapFrames/TextRaster.swift": 1
-      }
+      },
+      "reason": "Our font layout implementation can be corrected.",
+      "cause": "Yap could not measure the text’s glyph bounds."
     },
     "FONT_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/FontFile.swift": 1
-      }
+      },
+      "reason": "The requested face does not exist in the selected immutable font file.",
+      "cause": "The selected font file has no face with that name."
     },
     "FORMAT_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1
-      }
+      },
+      "reason": "Our capture/device conversion can recover.",
+      "cause": "The selected capture device changed its format."
     },
     "FORMAT_UNAVAILABLE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 2
-      }
+      },
+      "reason": "The device’s active dimensions or cadence can change without changing the request.",
+      "cause": "The selected camera has no usable format for this request right now."
     },
     "FRAME_FAILED": {
       "category": "execution-failure",
@@ -660,130 +815,168 @@
       "files": {
         "packages/core/src/project-index-materialization.ts": 1,
         "packages/core/src/source-index-materialization.ts": 2
-      }
+      },
+      "reason": "Picture preparation or its dependency can succeed on retry.",
+      "cause": "A requested picture could not be prepared."
     },
     "FRAME_TOO_LARGE": {
       "category": "resource-bound",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/cli/src/main.ts": 2,
         "apps/service/src/control.ts": 1,
         "apps/service/src/index.ts": 1,
+        "packages/core/src/evidence.ts": 1,
         "packages/core/src/voice-generation.ts": 1,
         "packages/protocol/src/framing.ts": 5
-      }
+      },
+      "reason": "Our framing/output budgets can be repaired; caller admission failures must use INVALID_PARAMS instead.",
+      "cause": "The request or output exceeded Yap’s current frame budget."
     },
     "HUMAN_QA_REQUIRED": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 1
-      }
+      },
+      "reason": "Our verification output is incorrect if it requires human QA; repairing the producer can succeed.",
+      "cause": "Delivery evidence incorrectly requires human QA."
     },
     "IDENTITY_COLLISION": {
       "category": "ambiguous",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/jobs.ts": 1
-      }
+      },
+      "reason": "Our digest or retained metadata must be repaired.",
+      "cause": "Different job inputs resolved to the same internal identity."
     },
     "INSPECTION_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/timeline-inspection.mjs": 1
-      }
+      },
+      "reason": "Inspection is our execution and can be retried.",
+      "cause": "Yap could not finish inspecting the timeline."
     },
     "INSPECT_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "The native inspector becomes available after app repair or initialization.",
+      "cause": "The native project inspector is unavailable."
     },
     "INTERNAL_ERROR": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/service/src/capture.ts": 1,
         "apps/service/src/control.ts": 1,
         "apps/service/src/index.ts": 2,
-        "apps/service/src/operation-errors.ts": 1
-      }
+        "apps/service/src/operation-errors.ts": 1,
+        "helpers/mac/Sources/YapAudio/CompositionRetime.swift": 1,
+        "helpers/mac/Sources/YapAudio/CompositionState.swift": 1,
+        "helpers/mac/Sources/YapFrames/CompositionFrameRenderer.swift": 1,
+        "helpers/mac/Sources/YapFrames/LUTColor.swift": 1,
+        "helpers/mac/Sources/YapFrames/SDRCorrection.swift": 1
+      },
+      "reason": "Unclassified failures in our code are retryable by rule.",
+      "cause": "Yap encountered an internal error."
     },
     "INVALID_AUDIO": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapAudio/CompositionAudio.swift": 1,
         "helpers/mac/Sources/YapAudio/CompositionGain.swift": 1
-      }
+      },
+      "reason": "Nonfinite PCM or gain arithmetic is our processor output.",
+      "cause": "Audio processing produced invalid samples."
     },
     "INVALID_AUDIO_FORMAT": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CapturePCM.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 3
-      }
+      },
+      "reason": "Capture’s own PCM metadata can be repaired.",
+      "cause": "Recorded audio has unusable format metadata."
     },
     "INVALID_AUDIO_TIMING": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClock.swift": 5,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
-        "helpers/mac/Sources/YapCapture/PCMContainerTime.swift": 3
-      }
+        "helpers/mac/Sources/YapCapture/PCMContainerTime.swift": 3,
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "Capture’s clock and sample-grid arithmetic are ours.",
+      "cause": "Recorded audio has inconsistent timing."
     },
     "INVALID_CACHE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/exports.ts": 2,
         "packages/core/src/cache.ts": 6,
         "packages/core/src/visual-cache.ts": 2
-      }
+      },
+      "reason": "Our derived cache can be rebuilt.",
+      "cause": "Prepared output does not match its cache receipt."
     },
     "INVALID_CAMERA_FRAME": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1
-      }
+      },
+      "reason": "Device callbacks and our capture handling can recover.",
+      "cause": "The camera delivered a frame without usable video."
     },
     "INVALID_CAMERA_MAPPING": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraMedia.swift": 4,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
-        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1
-      }
+        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1,
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "Retained camera bytes, mapping or receipt disagree; the same immutable inputs cannot establish matching picture authority.",
+      "cause": "The recorded camera mapping or publication proof is invalid."
     },
     "INVALID_CATALOG": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/storage.ts": 1
-      }
+      },
+      "reason": "Our stored recording identity can be repaired.",
+      "cause": "The library contains an invalid recording storage identity."
     },
     "INVALID_CLI_RESPONSE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 2
-      }
+      },
+      "reason": "Our CLI response/exit behavior can be repaired.",
+      "cause": "The Yap command returned an unreadable or inconsistent answer."
     },
     "INVALID_CLOCK": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 7
-      }
+      },
+      "reason": "Our conversion of device timestamps can be corrected.",
+      "cause": "The capture clock returned an invalid timestamp."
     },
     "INVALID_COMPOSITION": {
       "category": "malformed",
@@ -802,14 +995,18 @@
         "packages/composition/src/scalar-program.ts": 1,
         "packages/composition/src/source-projection.ts": 1,
         "packages/composition/src/visual-plan.ts": 1
-      }
+      },
+      "reason": "The supplied selection or composition cannot describe the requested operation; owned compiler failures must split below.",
+      "cause": "The composition or selection is invalid for this operation."
     },
     "INVALID_DESTINATION": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ExportController.swift": 1
-      }
+      },
+      "reason": "The producer is a failed creation of our default Downloads folder, not invalid caller parameters.",
+      "cause": "Yap could not create its export destination folder."
     },
     "INVALID_EDIT": {
       "category": "malformed",
@@ -823,25 +1020,27 @@
         "packages/composition/src/ripple.ts": 6,
         "packages/composition/src/transform.ts": 1,
         "packages/core/src/text-seeds.ts": 1
-      }
+      },
+      "reason": "The edit request violates composition semantics.",
+      "cause": "The requested edit is invalid."
     },
     "INVALID_EVIDENCE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/alignment.ts": 2,
         "apps/service/src/join-verification.ts": 1,
         "apps/service/src/source-channel.ts": 1,
         "apps/service/src/speaker.ts": 1,
-        "packages/core/src/acquisitions.ts": 4,
+        "packages/core/src/acquisitions.ts": 6,
         "packages/core/src/alignment-evidence.ts": 2,
         "packages/core/src/alignment-operands.ts": 1,
         "packages/core/src/alignment-processing.ts": 1,
         "packages/core/src/capture-source-read.ts": 1,
         "packages/core/src/composition-pointer.ts": 8,
-        "packages/core/src/correspondence.ts": 3,
+        "packages/core/src/correspondence.ts": 1,
         "packages/core/src/evidence-merge.ts": 1,
-        "packages/core/src/evidence-pages.ts": 3,
+        "packages/core/src/evidence-pages.ts": 2,
         "packages/core/src/evidence-read.ts": 1,
         "packages/core/src/evidence.ts": 1,
         "packages/core/src/files.ts": 3,
@@ -867,16 +1066,32 @@
         "packages/core/src/transcript-read.ts": 1,
         "packages/core/src/transcript.ts": 4,
         "packages/core/src/visual-cache.ts": 1
-      }
+      },
+      "reason": "Our captured and retained evidence can be repaired; caller evidence moves to INVALID_INPUT_EVIDENCE.",
+      "cause": "Yap could not read or verify its retained evidence."
+    },
+    "INVALID_INPUT_EVIDENCE": {
+      "category": "malformed",
+      "files": {
+        "packages/core/src/acquisitions.ts": 2,
+        "packages/core/src/correspondence.ts": 2,
+        "packages/core/src/evidence-pages.ts": 3,
+        "packages/core/src/source-admission.ts": 1
+      },
+      "retryable": false,
+      "reason": "Malformed caller evidence or package content cannot succeed unchanged; do not use this for our capture journal.",
+      "cause": "The supplied evidence is invalid."
     },
     "INVALID_JOB": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/exports.ts": 4,
         "packages/core/src/audio-inspection.ts": 1,
         "packages/core/src/transcript.ts": 1
-      }
+      },
+      "reason": "Our persisted job recipe or export binding can be repaired.",
+      "cause": "The saved job does not match its expected work."
     },
     "INVALID_JOURNAL": {
       "category": "malformed",
@@ -884,11 +1099,13 @@
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 18,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/JournalPCM.swift": 2,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 4,
-        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 3
-      }
+        "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 3,
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "The retained journal is malformed or has invalid ownership or mapping records; replaying those same bytes cannot make them valid.",
+      "cause": "The capture journal is invalid."
     },
     "INVALID_JOURNAL_PREFIX": {
       "category": "malformed",
@@ -896,8 +1113,10 @@
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1
-      }
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "The immutable journal prefix or source/device allocation disagrees with recovery authority; retry cannot change that identity or invent provenance.",
+      "cause": "The capture journal does not match its recovery authority."
     },
     "INVALID_MEDIA": {
       "category": "malformed",
@@ -906,22 +1125,26 @@
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 8,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
-        "helpers/mac/Sources/YapMedia/MediaInput.swift": 1
-      }
+        "helpers/mac/Sources/YapMedia/MediaInput.swift": 1,
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "The captured member is absent, invalid or inconsistent with its recorded format or authority; the same immutable input cannot satisfy publication.",
+      "cause": "The recorded media is absent or invalid."
     },
     "INVALID_MODEL": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/runtime-materialization.ts": 1,
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "Our registered runtime resource definitions can be repaired.",
+      "cause": "A registered model resource does not match its required format."
     },
     "INVALID_NATIVE_RESPONSE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/archive-write.ts": 1,
         "apps/service/src/capture-cleanup.ts": 1,
@@ -930,7 +1153,7 @@
         "apps/service/src/loudness.ts": 4,
         "apps/service/src/managed-files.ts": 2,
         "apps/service/src/media-probe.ts": 3,
-        "apps/service/src/package-archive.ts": 1,
+        "apps/service/src/package-archive.ts": 2,
         "apps/service/src/package-workspace.ts": 1,
         "apps/service/src/project-render.ts": 1,
         "apps/service/src/publication.ts": 8,
@@ -939,18 +1162,22 @@
         "packages/core/src/hdr-conversion-facts.ts": 3,
         "packages/core/src/package-archive.ts": 1,
         "packages/core/src/prepared-audio.ts": 1
-      }
+      },
+      "reason": "Our native worker output can be corrected.",
+      "cause": "A native media worker returned an invalid answer."
     },
     "INVALID_NOTES": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "skills/yap/scripts/task-notes.mjs": 2
-      }
+      },
+      "reason": "The caller’s task-note document violates its schema.",
+      "cause": "The supplied task notes are invalid."
     },
     "INVALID_OUTPUT": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapMedia/OutputFile.swift": 15,
         "helpers/mac/Sources/YapSpeech/SourceTranscript.swift": 1,
@@ -958,7 +1185,9 @@
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 2,
         "packages/core/src/composition-pointer.ts": 1,
         "packages/core/src/pointer-schedule.ts": 1
-      }
+      },
+      "reason": "Our native output allocation and staging can be repaired; caller syntax failures split below.",
+      "cause": "Yap could not allocate or verify its output file."
     },
     "INVALID_PACKAGE": {
       "category": "malformed",
@@ -969,8 +1198,8 @@
         "apps/service/src/project-package-metadata.ts": 2,
         "apps/service/src/project-packages.ts": 6,
         "apps/service/src/source-export.ts": 1,
-        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 6,
-        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 11,
+        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 7,
+        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 14,
         "helpers/mac/Sources/YapWire/Wire.swift": 1,
         "packages/core/src/acquisitions.ts": 14,
         "packages/core/src/alignment-evidence.ts": 2,
@@ -990,7 +1219,9 @@
         "packages/core/src/speaker-processing.ts": 3,
         "packages/core/src/transcript-processing.ts": 5,
         "packages/core/src/transcript.ts": 7
-      }
+      },
+      "reason": "A malformed caller-supplied package cannot be admitted unchanged; owned assembly and I/O producers split below.",
+      "cause": "The supplied package is invalid."
     },
     "INVALID_PARAMS": {
       "category": "malformed",
@@ -999,20 +1230,21 @@
         "apps/macos/Sources/Yap/RecordingControls.swift": 4,
         "apps/macos/Sources/Yap/SparkleDriver.swift": 4,
         "apps/macos/Sources/Yap/main.swift": 1,
-        "apps/service/src/asset-conversion.ts": 1,
+        "apps/service/src/asset-conversion.ts": 2,
         "apps/service/src/exports.ts": 3,
         "apps/service/src/join-verification.ts": 4,
         "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/loudness.ts": 1,
         "apps/service/src/portable-speakers.ts": 2,
-        "apps/service/src/project-service.ts": 5,
+        "apps/service/src/project-service.ts": 9,
+        "helpers/mac/Sources/YapFrames/CompositionFrameRenderer.swift": 1,
         "packages/core/src/acoustic-inspection.ts": 4,
         "packages/core/src/acquisitions.ts": 2,
         "packages/core/src/alignment-evidence.ts": 3,
         "packages/core/src/alignment-read.ts": 5,
         "packages/core/src/assets.ts": 5,
         "packages/core/src/audio-extraction.ts": 1,
-        "packages/core/src/audio-inspection.ts": 1,
+        "packages/core/src/audio-inspection.ts": 2,
         "packages/core/src/audio-spectrum.ts": 1,
         "packages/core/src/audio-wave.ts": 1,
         "packages/core/src/capture-publication.ts": 1,
@@ -1047,7 +1279,9 @@
         "packages/core/src/voice-generation.ts": 4,
         "packages/protocol/src/index.ts": 1,
         "skills/yap/scripts/compact-transcripts.mjs": 1
-      }
+      },
+      "reason": "The request’s parameters must change.",
+      "cause": "The request contains invalid parameters."
     },
     "INVALID_PATH": {
       "category": "malformed",
@@ -1056,14 +1290,18 @@
         "packages/core/src/acquisitions.ts": 9,
         "packages/core/src/assets.ts": 3,
         "packages/core/src/files.ts": 1
-      }
+      },
+      "reason": "A caller path that violates the operation’s path contract cannot be admitted; owned and I/O sites split below.",
+      "cause": "The supplied path is invalid for this operation."
     },
     "INVALID_PERMIT": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "apps/service/src/update-admission.ts": 1
-      }
+      },
+      "reason": "The exact update permit reference is expired or superseded.",
+      "cause": "The update permit is no longer current."
     },
     "INVALID_RANGE": {
       "category": "malformed",
@@ -1071,9 +1309,11 @@
       "files": {
         "apps/service/src/delivery.ts": 1,
         "helpers/mac/Sources/YapAudio/ExcerptLayout.swift": 6,
-        "helpers/mac/Sources/YapFrames/FrameTypes.swift": 6,
+        "helpers/mac/Sources/YapFrames/FrameTypes.swift": 5,
+        "packages/composition/src/compiler.ts": 1,
         "packages/composition/src/edits.ts": 1,
         "packages/composition/src/errors.ts": 1,
+        "packages/composition/src/processing-state.ts": 1,
         "packages/composition/src/range-admission.ts": 3,
         "packages/core/src/audio-inspection.ts": 2,
         "packages/core/src/audio-spectrum.ts": 1,
@@ -1085,19 +1325,23 @@
         "packages/core/src/pointer-schedule.ts": 1,
         "packages/core/src/prepared-audio.ts": 2,
         "packages/core/src/presentation-evidence.ts": 3,
-        "packages/core/src/presentation-pointer-history.ts": 2,
+        "packages/core/src/presentation-pointer-history.ts": 1,
         "packages/core/src/presentation-pointer.ts": 2,
         "packages/core/src/raw-cursor.ts": 1,
         "packages/core/src/scenes.ts": 3,
         "packages/core/src/visual-cache.ts": 1
-      }
+      },
+      "reason": "The selected interval or offset is invalid; a valid interval requires new parameters.",
+      "cause": "The requested range is outside the available domain."
     },
     "INVALID_REFERENCE": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "packages/core/src/voice-generation.ts": 3
-      }
+      },
+      "reason": "The caller selected audio without the required canonical reference format.",
+      "cause": "The selected voice reference is not valid for this model."
     },
     "INVALID_REQUEST": {
       "category": "malformed",
@@ -1124,12 +1368,11 @@
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 3,
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 3,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 2,
+        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 2,
         "helpers/mac/Sources/YapCapture/SelectedCaptureProbe.swift": 4,
         "helpers/mac/Sources/YapCapture/SelectedCaptureRequest.swift": 2,
         "helpers/mac/Sources/YapFrames/AcousticImage.swift": 6,
-        "helpers/mac/Sources/YapFrames/CompositionFrameRenderer.swift": 1,
         "helpers/mac/Sources/YapFrames/CompositionPictureExecutor.swift": 4,
         "helpers/mac/Sources/YapFrames/CompositionVideoRenderer.swift": 1,
         "helpers/mac/Sources/YapFrames/FaceObservations.swift": 1,
@@ -1154,6 +1397,7 @@
         "helpers/mac/Sources/YapSpeech/SpeechWindows.swift": 1,
         "helpers/mac/Sources/YapWire/AcousticImageOperation.swift": 3,
         "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 3,
+        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 1,
         "helpers/mac/Sources/YapWire/ArchiveOperation.swift": 2,
         "helpers/mac/Sources/YapWire/AudioFileOperation.swift": 1,
         "helpers/mac/Sources/YapWire/CompositionAudioOperation.swift": 3,
@@ -1187,11 +1431,13 @@
         "skills/yap/scripts/timeline-inspection.mjs": 3,
         "skills/yap/scripts/use-case-routing.mjs": 3,
         "skills/yap/scripts/yap-cli.mjs": 1
-      }
+      },
+      "reason": "Malformed caller requests cannot succeed unchanged; internal encoding sites split below.",
+      "cause": "The request is malformed or unsupported."
     },
     "INVALID_RESPONSE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/cli/src/artifact-delivery.ts": 6,
         "apps/cli/src/main.ts": 1,
@@ -1235,25 +1481,31 @@
         "skills/yap/scripts/join-repair.mjs": 1,
         "skills/yap/scripts/review-bundle.mjs": 2,
         "skills/yap/scripts/timeline-inspection.mjs": 2
-      }
+      },
+      "reason": "Our response producers can be repaired.",
+      "cause": "Yap returned an unreadable or inconsistent response."
     },
     "INVALID_SOURCE": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 3
-      }
+      },
+      "reason": "The caller’s verification source violates the source-preservation contract.",
+      "cause": "The selected verification source is invalid."
     },
     "INVALID_SPEECH_TIMING": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapSpeech/SourceTranscript.swift": 2
-      }
+      },
+      "reason": "Our speech engine generated the invalid timing.",
+      "cause": "The speech engine returned invalid word timing."
     },
     "INVALID_STATE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 4,
         "apps/service/src/capture-cleanup.ts": 1,
@@ -1271,11 +1523,13 @@
         "packages/core/src/pointer-preparation.ts": 1,
         "packages/core/src/presentation-pointer-history.ts": 2,
         "packages/core/src/projects.ts": 1
-      }
+      },
+      "reason": "Most sites describe our transient capture, job or publication state; irrecoverable reference cases split below.",
+      "cause": "Yap is not currently in the state needed for this operation."
     },
     "INVALID_STORAGE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/archive-write.ts": 2,
         "apps/service/src/ffmpeg-artifact.ts": 2,
@@ -1284,6 +1538,7 @@
         "apps/service/src/project-packages.ts": 11,
         "apps/service/src/publication.ts": 7,
         "apps/service/src/render.ts": 2,
+        "apps/service/src/worker.ts": 1,
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
         "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 2,
         "helpers/mac/Sources/YapWire/ArchiveOperation.swift": 3,
@@ -1299,11 +1554,13 @@
         "packages/core/src/screenshot-index.ts": 1,
         "packages/core/src/transcript-processing.ts": 1,
         "packages/core/src/transcript.ts": 2
-      }
+      },
+      "reason": "Our managed directories and storage authority can be repaired.",
+      "cause": "Yap’s managed storage could not be verified."
     },
     "INVALID_TIME": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/composition/src/compiler.ts": 5,
         "packages/composition/src/errors.ts": 1,
@@ -1314,90 +1571,116 @@
         "packages/composition/src/sample-clock.ts": 1,
         "packages/composition/src/scalar-program.ts": 1,
         "packages/composition/src/source-projection.ts": 2
-      }
+      },
+      "reason": "Compiled clock precision and arithmetic are our implementation; malformed caller ranges belong to INVALID_RANGE.",
+      "cause": "Yap could not represent the requested timing accurately."
     },
     "IN_USE": {
       "category": "destructive",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/LibraryController.swift": 1,
         "apps/service/src/asset-retirement.ts": 1,
         "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/recording-retirement.ts": 1
-      }
+      },
+      "reason": "References can be explicitly removed before repeating the same delete request.",
+      "cause": "Other library items still use this item."
     },
     "IO_ERROR": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapAudio/RetainedPCMSource.swift": 1
-      }
+      },
+      "reason": "The machine can regain descriptor or I/O capacity.",
+      "cause": "Yap could not retain the prepared audio file."
     },
     "ITU_R_2020": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/service/src/hdr-conversion.ts": 2
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "ITU_R_2100_HLG": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/service/src/hdr-conversion.ts": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "ITU_R_709_2": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/service/src/hdr-conversion.ts": 3
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "JOB_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/jobs.ts": 1
-      }
+      },
+      "reason": "Plain executor exceptions already store true, despite the ledger’s false value.",
+      "cause": "The background operation failed."
+    },
+    "JOB_INTERRUPTED": {
+      "category": "execution-failure",
+      "files": {
+        "packages/core/src/jobs.ts": 2
+      },
+      "retryable": true,
+      "reason": "Service restart or lost execution can be explicitly retried; SQL single quotes escape the scanner.",
+      "cause": "The background operation was interrupted."
     },
     "JOURNAL_CHANGED": {
       "category": "conflict",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 2,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2
-      }
+      },
+      "reason": "The journal or directory no longer matches pinned immutable authority; retry cannot make replaced bytes the same input.",
+      "cause": "The capture journal changed while Yap was opening it."
     },
     "JOURNAL_CLOSED": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1
-      }
+        "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1
+      },
+      "reason": "The publication journal lease has ended; the same closed authority cannot publish or be revived.",
+      "cause": "The current capture journal lease has ended."
     },
     "JOURNAL_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 2,
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 2,
+        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
         "helpers/mac/Sources/YapCapture/ClosedCameraSource.swift": 1
-      }
+      },
+      "reason": "Our journal writer can be repaired.",
+      "cause": "The take could not record its own state transition."
     },
     "JOURNAL_MISSING": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2
-      }
+      },
+      "reason": "Our capture journal can be recovered or restored.",
+      "cause": "The take’s capture journal is missing."
     },
     "JOURNAL_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -1407,18 +1690,22 @@
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 4,
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1
-      }
+      },
+      "reason": "Our journal read permissions and I/O can recover.",
+      "cause": "Yap cannot read the capture journal right now."
     },
     "LAUNCH_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/client/src/discovery.ts": 2
-      }
+      },
+      "reason": "Our app launcher or machine can recover.",
+      "cause": "The Yap app could not be launched."
     },
     "LIMIT_EXCEEDED": {
       "category": "resource-bound",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/cli/src/artifact-delivery.ts": 3,
         "apps/cli/src/main.ts": 1,
@@ -1427,31 +1714,32 @@
         "apps/service/src/control.ts": 6,
         "apps/service/src/exports.ts": 2,
         "apps/service/src/index.ts": 1,
-        "apps/service/src/package-registry.ts": 1,
         "apps/service/src/portable-speakers.ts": 2,
-        "apps/service/src/project-packages.ts": 12,
-        "apps/service/src/project-service.ts": 3,
+        "apps/service/src/project-package-metadata.ts": 1,
+        "apps/service/src/project-packages.ts": 2,
+        "apps/service/src/project-service.ts": 2,
         "apps/service/src/worker.ts": 1,
         "helpers/mac/Sources/YapAudio/AudioSource.swift": 2,
         "helpers/mac/Sources/YapAudio/AudioWave.swift": 1,
+        "helpers/mac/Sources/YapAudio/CompositionRetime.swift": 1,
         "helpers/mac/Sources/YapAudio/ExcerptLayout.swift": 3,
         "helpers/mac/Sources/YapFrames/AcousticImage.swift": 1,
         "helpers/mac/Sources/YapFrames/CompositionPictureExecutor.swift": 1,
         "helpers/mac/Sources/YapFrames/FrameImage.swift": 1,
-        "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 2,
+        "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 1,
         "helpers/mac/Sources/YapFrames/PresentationSource.swift": 1,
         "helpers/mac/Sources/YapFrames/SourceVisualSamples.swift": 1,
         "helpers/mac/Sources/YapFrames/TextRaster.swift": 1,
-        "helpers/mac/Sources/YapMedia/DecodedAudioInspection.swift": 2,
+        "helpers/mac/Sources/YapMedia/DecodedAudioInspection.swift": 1,
         "helpers/mac/Sources/YapMedia/DescriptorAudioType.swift": 1,
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
+        "helpers/mac/Sources/YapMedia/ExactTime.swift": 3,
         "helpers/mac/Sources/YapMedia/MediaInput.swift": 2,
         "helpers/mac/Sources/YapMedia/StillImageSource.swift": 1,
-        "helpers/mac/Sources/YapSpeech/SourceTranscript.swift": 1,
         "helpers/mac/Sources/YapSpeech/SpeechWindows.swift": 1,
         "helpers/mac/Sources/YapWire/AcousticImageOperation.swift": 2,
-        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 4,
-        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 8,
+        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 3,
+        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 3,
         "helpers/mac/Sources/YapWire/ArchiveOperation.swift": 1,
         "helpers/mac/Sources/YapWire/CorrespondenceOperation.swift": 1,
         "helpers/mac/Sources/YapWire/ManagedFiles.swift": 1,
@@ -1461,72 +1749,75 @@
         "packages/composition/src/caption-sidecars.ts": 2,
         "packages/composition/src/errors.ts": 1,
         "packages/core/src/acoustic-inspection.ts": 2,
-        "packages/core/src/acquisitions.ts": 2,
         "packages/core/src/assets.ts": 1,
         "packages/core/src/audio-inspection.ts": 2,
         "packages/core/src/audio-spectrum.ts": 1,
         "packages/core/src/audio-wave.ts": 1,
         "packages/core/src/cache.ts": 1,
         "packages/core/src/capture-source-read.ts": 1,
-        "packages/core/src/composition-pointer.ts": 8,
-        "packages/core/src/evidence-read.ts": 3,
+        "packages/core/src/composition-pointer.ts": 3,
         "packages/core/src/jobs.ts": 4,
-        "packages/core/src/ordered-pages.ts": 3,
-        "packages/core/src/package-archive.ts": 1,
-        "packages/core/src/pointer-preparation.ts": 1,
+        "packages/core/src/ordered-pages.ts": 1,
         "packages/core/src/pointer-schedule.ts": 1,
         "packages/core/src/prepared-audio.ts": 1,
-        "packages/core/src/presentation-evidence.ts": 1,
-        "packages/core/src/presentation-pointer-history.ts": 2,
-        "packages/core/src/project-evidence.ts": 5,
+        "packages/core/src/project-evidence.ts": 3,
         "packages/core/src/project-index-selection.ts": 1,
-        "packages/core/src/project-package.ts": 1,
-        "packages/core/src/projects.ts": 4,
+        "packages/core/src/projects.ts": 3,
         "packages/core/src/scene-evidence.ts": 1,
         "packages/core/src/screenshot-index.ts": 3,
         "packages/core/src/source-index-selection.ts": 1,
         "packages/core/src/speaker-evidence.ts": 1,
         "packages/core/src/storage.ts": 3,
-        "packages/core/src/trails.ts": 2,
         "packages/core/src/transcript.ts": 1,
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 1
-      }
+      },
+      "reason": "These broad codes include our guessed storage/output limits; invalid caller parameters must remain separate.",
+      "cause": "The operation exceeded one of Yap’s current resource limits."
     },
     "LOGIN_ITEM_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 2
-      }
+      },
+      "reason": "The machine’s login registration or our response encoding can recover.",
+      "cause": "Yap could not read or change its login registration."
     },
     "LUT_3D_SIZE": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapMedia/CubeLUT.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "LUT_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapMedia/CubeLUT.swift": 1
-      }
+      },
+      "reason": "Our retained imported LUT bytes can be restored; currently this is a message operand of UNSUPPORTED_MEDIA.",
+      "cause": "The stored color LUT differs from its imported identity."
     },
     "MALFORMED_FRAME": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "packages/protocol/src/framing.ts": 7
-      }
+      },
+      "reason": "Malformed caller wire input needs correction; response/internal framing moves to INVALID_RESPONSE.",
+      "cause": "The request is not a valid JSON frame."
     },
     "MATERIALIZATION_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 1
-      }
+      },
+      "reason": "Our captured PCM materializer can be repaired.",
+      "cause": "Yap could not assemble the recorded audio."
     },
     "MEDIA_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -1539,81 +1830,105 @@
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2,
-        "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+        "helpers/mac/Sources/YapWire/Wire.swift": 1,
+        "packages/core/src/acquisitions.ts": 1
+      },
+      "reason": "Our retained media access can be repaired.",
+      "cause": "Yap cannot read the required media right now."
     },
     "MEDIA_WORKER_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/service/src/worker.ts": 3
-      }
+      },
+      "reason": "Our worker can succeed after repair or a fresh execution.",
+      "cause": "A media worker ended without a result."
     },
     "MEDIA_WORKER_NOT_RUNNABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/worker.ts": 1
-      }
+      },
+      "reason": "Our packaged worker executable or machine can be repaired.",
+      "cause": "The packaged media worker could not run."
     },
     "MEDIA_WORKER_TIMEOUT": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/service/src/worker.ts": 1
-      }
+      },
+      "reason": "A later worker execution can finish.",
+      "cause": "The media worker did not answer in time."
     },
     "MEDIA_WORKER_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/service/src/worker.ts": 2
-      }
+      },
+      "reason": "Our packaged executable and its path can be repaired.",
+      "cause": "The media worker is unavailable."
     },
     "MICROPHONE_PERMISSION_REQUIRED": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/YapControls/Permissions.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1
-      }
+      },
+      "reason": "Granting microphone access can make the request succeed.",
+      "cause": "Yap needs microphone access."
     },
     "MISSING_MEDIA": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1
-      }
+      },
+      "reason": "The requested source file is absent from the immutable take; retry cannot supply the missing captured bytes.",
+      "cause": "The take is missing its source media."
     },
     "MODEL_DOWNLOAD_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "A later acquisition of our registered artifact can succeed.",
+      "cause": "The model download failed."
     },
     "MODEL_HASH_MISMATCH": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/model-files.ts": 1,
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "Our downloaded/prepared model bytes can be reacquired.",
+      "cause": "The model files do not match their registered identity."
     },
     "MODEL_INVALID": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapSpeech/SpeechModelFiles.swift": 1
-      }
+      },
+      "reason": "Our prepared speech model files can be repaired.",
+      "cause": "The prepared speech model files are invalid."
     },
     "MODEL_IN_USE": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "Active jobs can release the model.",
+      "cause": "A running job is using this model.",
+      "retryAfterMs": 15000
     },
     "MODEL_NOT_PREPARED": {
       "category": "missing-prerequisite",
@@ -1623,95 +1938,122 @@
         "packages/core/src/models.ts": 1,
         "packages/core/src/rendered-speech.ts": 2,
         "packages/core/src/transcript-processing.ts": 4
-      }
+      },
+      "reason": "Explicit preparation can supply our model/runtime files.",
+      "cause": "The required model has not been prepared.",
+      "retryAfterMs": 15000
     },
     "MODEL_PLATFORM_UNSUPPORTED": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "The machine or our execution implementation can change; this is not malformed caller input.",
+      "cause": "This model cannot run on the current platform."
     },
     "MODEL_RUNTIME_EXTRACTION_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/runtime-materialization.ts": 1
-      }
+      },
+      "reason": "Our runtime assembly can succeed after repair.",
+      "cause": "Yap could not prepare the model’s runtime."
     },
     "MODEL_RUNTIME_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/models.ts": 1
-      }
+      },
+      "reason": "Our runtime adapter can be installed or repaired.",
+      "cause": "The model runtime adapter is unavailable."
     },
     "MODEL_SOURCE_REQUIRED": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "packages/core/src/models.ts": 2
-      }
+      },
+      "reason": "This request omits a required explicit local artifact source.",
+      "cause": "This model preparation requires a local artifact source."
     },
     "MODEL_STORAGE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/models.ts": 2
-      }
+      },
+      "reason": "Our model filesystem can be repaired.",
+      "cause": "Yap could not read or write its model files."
     },
     "MODEL_STORAGE_FULL": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "packages/core/src/model-files.ts": 1
-      }
+      },
+      "reason": "Disk space can be freed.",
+      "cause": "There is not enough free storage to prepare this model."
     },
     "MODEL_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapSpeech/SpeechModelFiles.swift": 1
-      }
+      },
+      "reason": "Our prepared model files can become readable.",
+      "cause": "The prepared model files cannot be opened."
     },
     "NATIVE_CAPTURE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 1,
         "apps/macos/Sources/Yap/CaptureProbe.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureStreamInputs.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1
-      }
+      },
+      "reason": "Our capture implementation or machine can recover.",
+      "cause": "Native capture failed."
     },
     "NATIVE_DECODE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapMedia/NativeFailure.swift": 1
-      }
+      },
+      "reason": "Our native decoder can be repaired.",
+      "cause": "Native media decoding failed."
     },
     "NODE_UNAVAILABLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/NodeRuntime.swift": 1
-      }
+      },
+      "reason": "Our interpreter installation or its configuration can be repaired.",
+      "cause": "Yap’s required Node interpreter is unavailable."
     },
     "NOTES_REFERENCE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/task-notes.mjs": 1
-      }
+      },
+      "reason": "The note resolver also wraps access/CLI failures; permanent missing identities must retain their specific code.",
+      "cause": "A task-note reference could not be resolved right now."
     },
     "NOTHING_TO_UNDO": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/projects.ts": 1
-      }
+      },
+      "reason": "The same unpinned undo request can succeed after a later edit exists.",
+      "cause": "There is no active edit to undo yet."
     },
     "NOT_FOUND": {
       "category": "missing-prerequisite",
@@ -1729,6 +2071,7 @@
         "apps/service/src/project-packages.ts": 4,
         "apps/service/src/project-service.ts": 9,
         "apps/service/src/voice.ts": 1,
+        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 1,
         "packages/core/src/acquisitions.ts": 7,
         "packages/core/src/alignment-evidence.ts": 2,
         "packages/core/src/assets.ts": 4,
@@ -1749,7 +2092,9 @@
         "packages/core/src/transcript-processing.ts": 1,
         "packages/core/src/transcript.ts": 1,
         "packages/core/src/voice-generation.ts": 1
-      }
+      },
+      "reason": "An explicit missing identity cannot be satisfied; unpinned latest-recording absence splits below.",
+      "cause": "The requested item does not exist."
     },
     "NOT_READY": {
       "category": "missing-prerequisite",
@@ -1758,40 +2103,28 @@
         "apps/macos/Sources/Yap/ExportController.swift": 1,
         "apps/service/src/audio-processing.ts": 1,
         "apps/service/src/capture-sources.ts": 1,
-        "apps/service/src/exports.ts": 2,
-        "apps/service/src/join-verification.ts": 1,
+        "apps/service/src/exports.ts": 1,
         "apps/service/src/loudness.ts": 1,
         "apps/service/src/project-packages.ts": 1,
         "apps/service/src/project-render.ts": 1,
-        "apps/service/src/project-service.ts": 9,
-        "helpers/mac/Sources/YapAudio/CompositionRetime.swift": 4,
-        "helpers/mac/Sources/YapAudio/CompositionState.swift": 3,
-        "helpers/mac/Sources/YapFrames/CompositionFrameRenderer.swift": 1,
-        "helpers/mac/Sources/YapFrames/CompositionPictureExecutor.swift": 1,
+        "apps/service/src/project-service.ts": 6,
+        "helpers/mac/Sources/YapAudio/CompositionState.swift": 2,
         "helpers/mac/Sources/YapFrames/CompositionVideoRenderer.swift": 1,
-        "helpers/mac/Sources/YapFrames/LUTColor.swift": 2,
-        "helpers/mac/Sources/YapFrames/SDRCorrection.swift": 1,
         "helpers/mac/Sources/YapFrames/VideoColorPolicy.swift": 1,
-        "helpers/mac/Sources/YapMedia/ExactTime.swift": 7,
-        "packages/composition/src/compiler.ts": 1,
+        "helpers/mac/Sources/YapMedia/ExactTime.swift": 4,
         "packages/composition/src/errors.ts": 1,
         "packages/composition/src/execution-window.ts": 1,
-        "packages/composition/src/processing-state.ts": 1,
-        "packages/core/src/acoustic-inspection.ts": 4,
         "packages/core/src/alignment-evidence.ts": 1,
         "packages/core/src/alignment-processing.ts": 1,
         "packages/core/src/alignment-read.ts": 1,
-        "packages/core/src/audio-extraction.ts": 1,
-        "packages/core/src/audio-inspection.ts": 12,
+        "packages/core/src/audio-inspection.ts": 2,
         "packages/core/src/cache.ts": 1,
         "packages/core/src/capture-store.ts": 1,
-        "packages/core/src/frame-inspection.ts": 4,
         "packages/core/src/index-frame.ts": 1,
-        "packages/core/src/index-processing.ts": 1,
         "packages/core/src/pointer-preparation.ts": 1,
         "packages/core/src/project-evidence.ts": 1,
         "packages/core/src/project-index.ts": 1,
-        "packages/core/src/project-preview.ts": 3,
+        "packages/core/src/project-preview.ts": 1,
         "packages/core/src/project-window.ts": 1,
         "packages/core/src/recording-prompt.ts": 1,
         "packages/core/src/speaker-evidence.ts": 1,
@@ -1799,41 +2132,50 @@
         "skills/yap/scripts/caption-proposals.mjs": 1,
         "skills/yap/scripts/delivered-scenes.mjs": 2,
         "skills/yap/scripts/join-repair.mjs": 2
-      }
+      },
+      "reason": "Ordinary preparation can finish; vanished pins and bad requests are removed from this wait code below.",
+      "cause": "The requested work is not ready yet.",
+      "retryAfterMs": 15000
     },
     "NOT_REQUESTED": {
       "category": "issue-code",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1,
         "packages/core/src/capture-publication.ts": 1
-      }
+      },
+      "reason": "The original take never requested this track; waiting cannot add it.",
+      "cause": "This take did not request that audio track."
     },
     "NO_CAMERA": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "The ended take contains no accepted camera pictures; retry cannot record historical frames.",
+      "cause": "The take contains no camera pictures."
     },
     "NO_NARRATION": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1
-      }
+      },
+      "reason": "Our microphone capture or verification can recover.",
+      "cause": "The requested microphone produced no verified audio."
     },
     "NO_RECOVERABLE_VIDEO": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 1
-      }
+      },
+      "reason": "Our recovery/decoder can be repaired; this status does not prove permanent loss.",
+      "cause": "Yap has not recovered playable video from this take."
     },
     "NO_SOURCE_MEDIA": {
       "category": "missing-prerequisite",
@@ -1841,32 +2183,41 @@
       "files": {
         "apps/service/src/capture.ts": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "The ended allocation contains no retained source media; retry cannot create historical content.",
+      "cause": "The take contains no source media."
     },
     "NO_SYSTEM_AUDIO": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1
-      }
+      },
+      "reason": "Our system-audio capture or verification can recover.",
+      "cause": "The requested system audio produced no verified samples."
     },
     "NO_TRACK": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1
-      }
+      },
+      "reason": "The captured file contains no requested track; replaying it cannot add that track.",
+      "cause": "The recorded media contains no requested track."
     },
     "NO_VIDEO": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
-        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1
-      }
+        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1,
+        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 1
+      },
+      "reason": "Our capture writer or decoder can recover.",
+      "cause": "Capture produced no verified video samples."
     },
     "OUTPUT_BUDGET_EXCEEDED": {
       "category": "resource-bound",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/caption-proposals.mjs": 2,
         "skills/yap/scripts/compact-transcripts.mjs": 2,
@@ -1875,24 +2226,37 @@
         "skills/yap/scripts/review-bundle.mjs": 2,
         "skills/yap/scripts/task-notes.mjs": 1,
         "skills/yap/scripts/timeline-inspection.mjs": 3
-      }
+      },
+      "reason": "Our script’s guessed cue/byte/output cap can be repaired; schema-invalid caller quantities belong to INVALID_PARAMS.",
+      "cause": "The requested output exceeds Yap’s current output budget."
     },
     "OUTPUT_EXISTS": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1
-      }
+      },
+      "reason": "The destination here is our owned private capture directory; staging can be repaired.",
+      "cause": "The private capture output folder is not empty."
     },
     "OWNER_CLOSED": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 2,
         "apps/service/src/delivery.ts": 1,
         "apps/service/src/package-registry.ts": 2,
         "apps/service/src/project-packages.ts": 1
-      }
+      },
+      "reason": "Our service or read owner can be reopened for a new request.",
+      "cause": "The operation’s internal owner is closing."
+    },
+    "OWNER_DELETED": {
+      "category": "missing-prerequisite",
+      "files": {},
+      "retryable": false,
+      "reason": "The deleted or deleting owner cannot be brought back by replaying its work request.",
+      "cause": "The item that owned this work was deleted."
     },
     "PACKAGE_STORAGE_UNAVAILABLE": {
       "category": "execution-failure",
@@ -1902,34 +2266,42 @@
         "apps/service/src/exports.ts": 1,
         "apps/service/src/package-workspace.ts": 1,
         "helpers/mac/Sources/YapWire/PackageWorkspace.swift": 1
-      }
+      },
+      "reason": "Our package workspace access can be repaired.",
+      "cause": "Yap’s package workspace is unavailable."
     },
     "PACKED_MEDIA_INVALID": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 2,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1
-      }
+        "packages/core/src/source-admission.ts": 1
+      },
+      "reason": "The pinned packed bytes cannot be parsed as the required single audio track; replaying those bytes cannot satisfy the capture format.",
+      "cause": "The packed capture media is invalid."
     },
     "PARITY_UNSUPPORTED": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 1
-      }
+      },
+      "reason": "The caller’s replay proof requests a parity mode the verification contract does not accept.",
+      "cause": "Delivery replay requires byte-exact parity evidence."
     },
     "PARTIAL_CAMERA": {
       "category": "issue-code",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/ClosedCameraSource.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
-      }
+      },
+      "reason": "Our camera publication or recovery can complete.",
+      "cause": "Some recorded camera media is still unresolved."
     },
     "PERMISSION_REQUIRED": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureProbe.swift": 2,
         "apps/macos/Sources/Yap/CursorGeometryProbe.swift": 1,
@@ -1937,18 +2309,41 @@
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 1,
         "helpers/mac/Sources/YapCapture/SelectedCaptureProbe.swift": 1,
         "helpers/mac/Sources/YapCapture/SelectedCaptureRequest.swift": 1
-      }
+      },
+      "reason": "Granting the requested machine permission can make the request succeed.",
+      "cause": "Yap needs screen-recording access."
+    },
+    "PINNED_IMPLEMENTATION_UNAVAILABLE": {
+      "category": "missing-prerequisite",
+      "files": {
+        "apps/service/src/exports.ts": 1,
+        "helpers/mac/Sources/YapAudio/CompositionRetime.swift": 1,
+        "helpers/mac/Sources/YapAudio/CompositionState.swift": 1,
+        "helpers/mac/Sources/YapFrames/LUTColor.swift": 1,
+        "helpers/mac/Sources/YapFrames/SDRCorrection.swift": 1,
+        "packages/core/src/acoustic-inspection.ts": 2,
+        "packages/core/src/audio-extraction.ts": 1,
+        "packages/core/src/audio-inspection.ts": 8,
+        "packages/core/src/frame-inspection.ts": 4,
+        "packages/core/src/index-processing.ts": 1,
+        "packages/core/src/project-preview.ts": 2
+      },
+      "retryable": false,
+      "reason": "The exact requested implementation identity is gone; selecting a current pin is a different request.",
+      "cause": "The implementation pinned by this request is no longer available."
     },
     "PREPARATION_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/batch-prepare.mjs": 2
-      }
+      },
+      "reason": "Our preparation execution can succeed on a later explicit attempt.",
+      "cause": "The requested preparation failed."
     },
     "PREREQUISITE_MISSING": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/asset-conversion.ts": 1,
         "apps/service/src/audio-processing.ts": 2,
@@ -1958,7 +2353,12 @@
         "apps/service/src/project-render.ts": 3,
         "apps/service/src/project-service.ts": 5,
         "apps/service/src/source-export.ts": 2,
+        "helpers/mac/Sources/YapAudio/CompositionRetime.swift": 1,
+        "helpers/mac/Sources/YapFrames/CompositionPictureExecutor.swift": 1,
+        "helpers/mac/Sources/YapFrames/LUTColor.swift": 1,
+        "packages/core/src/acoustic-inspection.ts": 2,
         "packages/core/src/acquisitions.ts": 1,
+        "packages/core/src/audio-inspection.ts": 2,
         "packages/core/src/evidence-pages.ts": 1,
         "packages/core/src/evidence.ts": 1,
         "packages/core/src/frame-inspection.ts": 1,
@@ -1966,35 +2366,45 @@
         "packages/core/src/rendered-speech.ts": 1,
         "packages/core/src/scene-source-read.ts": 1,
         "packages/core/src/source-index-materialization.ts": 1
-      }
+      },
+      "reason": "Our runtime, capabilities or retained metadata can be prepared or repaired.",
+      "cause": "A required Yap component or prepared result is missing."
     },
     "PRESET_NAME_UNUSABLE": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "packages/core/src/presets.ts": 1
-      }
+      },
+      "reason": "The supplied name contains no usable characters.",
+      "cause": "The preset name contains no usable characters."
     },
     "PRESET_NOT_FOUND": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "packages/core/src/presets.ts": 1
-      }
+      },
+      "reason": "The referenced preset does not exist.",
+      "cause": "The requested preset does not exist."
     },
     "PRESET_NOT_LOCAL": {
       "category": "conflict",
       "retryable": false,
       "files": {
         "packages/core/src/presets.ts": 1
-      }
+      },
+      "reason": "The referenced preset is not a local item that this delete request can remove.",
+      "cause": "The requested preset is not a local preset."
     },
     "PRESET_REFERENCE_INVALID": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "packages/core/src/presets.ts": 1
-      }
+      },
+      "reason": "The supplied reference is neither an accepted URL nor an existing file reference.",
+      "cause": "The preset reference must be an HTTPS URL or an existing absolute file path."
     },
     "PROCESSING_BUSY": {
       "category": "resource-bound",
@@ -2009,7 +2419,10 @@
         "packages/core/src/screenshot-index.ts": 1,
         "packages/core/src/speaker-evidence.ts": 1,
         "packages/core/src/transcript.ts": 2
-      }
+      },
+      "reason": "Current workers or leases can finish.",
+      "cause": "Media processing is still active.",
+      "retryAfterMs": 15000
     },
     "PUBLICATION_BUSY": {
       "category": "resource-bound",
@@ -2017,15 +2430,20 @@
       "files": {
         "apps/service/src/publication.ts": 3,
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 1
-      }
+      },
+      "reason": "Another publisher can release its owned workspace.",
+      "cause": "Another publication still owns the temporary output.",
+      "retryAfterMs": 15000
     },
     "PUBLICATION_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/publication.ts": 1,
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 8
-      }
+      },
+      "reason": "Our retained staging ownership can be repaired or reacquired.",
+      "cause": "The saved publication workspace changed."
     },
     "PUBLICATION_CONFLICT": {
       "category": "conflict",
@@ -2033,19 +2451,22 @@
       "files": {
         "helpers/mac/Sources/YapCapture/CameraMedia.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 2
-      }
+      },
+      "reason": "Existing output bytes or receipts conflict with pinned publication authority; retrying the same inputs cannot authorize replacement.",
+      "cause": "An output conflicts with its publication proof."
     },
     "PUBLICATION_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureTypes.swift": 1,
+        "helpers/mac/Sources/YapCapture/CaptureFailure.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1,
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1
-      }
+      },
+      "reason": "Our media publication can succeed after repair.",
+      "cause": "Yap could not publish the recorded media."
     },
     "PUBLICATION_IO": {
       "category": "execution-failure",
@@ -2053,7 +2474,9 @@
       "files": {
         "apps/service/src/exports.ts": 1,
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 1
-      }
+      },
+      "reason": "The destination filesystem can recover.",
+      "cause": "Yap could not write or finish publishing the output."
     },
     "RECORDING_BUSY": {
       "category": "resource-bound",
@@ -2062,71 +2485,91 @@
         "apps/service/src/managed-files.ts": 1,
         "helpers/mac/Sources/YapWire/ManagedFiles.swift": 1,
         "packages/core/src/acquisitions.ts": 1
-      }
+      },
+      "reason": "The native worker can release this recording.",
+      "cause": "A native worker still owns this recording.",
+      "retryAfterMs": 15000
     },
     "RECOVERY_BUSY": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "helpers/mac/Sources/YapWire/PackageWorkspace.swift": 2
-      }
+      },
+      "reason": "Another recovery can release its workspace lock.",
+      "cause": "Another recovery still owns this workspace.",
+      "retryAfterMs": 15000
     },
     "RECOVERY_CANCELED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture.ts": 1
-      }
+      },
+      "reason": "Cancellation is explicitly retryable.",
+      "cause": "Recovery was canceled."
     },
     "RECOVERY_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
-        "apps/service/src/capture.ts": 3,
-        "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+        "apps/service/src/capture.ts": 3
+      },
+      "reason": "Our recovery execution can succeed after repair.",
+      "cause": "Yap could not finish recovering the take."
     },
     "RECOVERY_REFUSED": {
       "category": "execution-failure",
-      "retryable": false,
-      "files": {
-        "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      "retryable": true,
+      "files": {},
+      "reason": "Its current false classification derives from the helper denylist, including our own damaged files; permanent causes must project their own codes.",
+      "cause": "Yap could not verify the take during recovery."
     },
     "REFERENCE_INVALID": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/use-case-routing.mjs": 3
-      }
+      },
+      "reason": "This producer validates our bundled use-case documentation, not caller parameters.",
+      "cause": "Yap’s bundled use-case reference is inconsistent."
     },
     "REFERENCE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/use-case-routing.mjs": 1
-      }
+      },
+      "reason": "Our bundled reference document can be restored.",
+      "cause": "Yap’s bundled use-case reference cannot be read."
     },
     "RENDER_WORKSPACE_BUSY": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "apps/service/src/render.ts": 1
-      }
+      },
+      "reason": "The existing render can release its workspace.",
+      "cause": "Another render still owns this workspace.",
+      "retryAfterMs": 15000
     },
     "REPLAY_INCOMPLETE": {
       "category": "issue-code",
       "retryable": false,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 2
-      }
+      },
+      "reason": "The caller’s verification request lacks the required clean and relocated runs.",
+      "cause": "The delivery replay evidence is incomplete."
     },
     "REPLAY_MISMATCH": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 5
-      }
+      },
+      "reason": "Our delivery replay outputs can be corrected; a different caller brief must instead be rejected as INVALID_PARAMS.",
+      "cause": "The clean and relocated delivery results differ."
     },
     "REQUEST_CONFLICT": {
       "category": "conflict",
@@ -2144,50 +2587,66 @@
         "packages/core/src/presets.ts": 1,
         "packages/core/src/projects.ts": 4,
         "packages/core/src/speaker-labels.ts": 1
-      }
+      },
+      "reason": "A durable request identity is already bound to different immutable parameters.",
+      "cause": "This request identity was already used for different input."
     },
     "RETIME_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 4,
         "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 1
-      }
+      },
+      "reason": "Our sample timing conversion can be repaired.",
+      "cause": "Yap could not retime the media samples."
     },
     "REVIEW_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/review-bundle.mjs": 1
-      }
+      },
+      "reason": "Our review execution can succeed after repair.",
+      "cause": "Yap could not assemble the review evidence."
     },
     "SERVICE_ENDED": {
       "category": "issue-code",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "An updater-ended service can restart; show this lifecycle event as status.",
+      "cause": "The service stopped so an update can install.",
+      "retryAfterMs": 15000
     },
     "SERVICE_LOST": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 2
-      }
+      },
+      "reason": "Our service lifetime can recover; capture media remains owned by native.",
+      "cause": "The service connection was lost during the take."
     },
     "SERVICE_MISSING": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceBundle.swift": 1
-      }
+      },
+      "reason": "Our service bundle can be reinstalled or repaired.",
+      "cause": "This Yap installation has no usable service bundle."
     },
     "SERVICE_STARTING": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "The listener can become ready.",
+      "cause": "The service is still starting.",
+      "retryAfterMs": 15000
     },
     "SERVICE_STOPPED": {
       "category": "missing-prerequisite",
@@ -2202,94 +2661,118 @@
         "apps/service/src/library-deletion.ts": 1,
         "apps/service/src/project-service.ts": 5,
         "packages/core/src/jobs.ts": 1
-      }
+      },
+      "reason": "The service can restart.",
+      "cause": "The service stopped before confirming the operation."
     },
     "SERVICE_TIMEOUT": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "Our service startup can succeed after repair or another attempt.",
+      "cause": "The service did not become ready in time."
     },
     "SERVICE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ExportController.swift": 1,
         "apps/macos/Sources/Yap/RecordingControls.swift": 1,
         "apps/macos/Sources/Yap/ServiceHost.swift": 2,
         "apps/service/src/main.ts": 1,
         "apps/service/src/startup.ts": 6
-      }
+      },
+      "reason": "Our service or its installation can be repaired.",
+      "cause": "Yap’s local service is unavailable."
     },
     "SHORTCUTS_WRITE_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/RecordingControls.swift": 2
-      }
+      },
+      "reason": "Our preferences filesystem can recover.",
+      "cause": "Yap could not save its shortcut settings."
     },
     "SMPTE_ST_2084_PQ": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/service/src/hdr-conversion.ts": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "SOCKET_IN_USE": {
       "category": "resource-bound",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/AppSocket.swift": 1,
         "apps/service/src/startup.ts": 3
-      }
+      },
+      "reason": "The other app/service can exit or serve the intended request.",
+      "cause": "Another Yap process already owns the socket.",
+      "retryAfterMs": 15000
     },
     "SOCKET_PATH_OCCUPIED": {
       "category": "conflict",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/AppSocket.swift": 1
-      }
+      },
+      "reason": "Our socket location can be repaired after an unexpected file occupies it.",
+      "cause": "A file is occupying Yap’s socket location."
     },
     "SOCKET_PATH_TOO_LONG": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/AppSocket.swift": 1
-      }
+      },
+      "reason": "The path is our generated app socket path; our layout or machine configuration can be repaired.",
+      "cause": "Yap’s app socket path is too long."
     },
     "SOCKET_UNAVAILABLE": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/AppSocket.swift": 2
-      }
+      },
+      "reason": "Our socket directory, permissions or machine resources can recover.",
+      "cause": "Yap could not create or open its app socket."
     },
     "SOURCE_CHANGED": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture-cleanup.ts": 1,
         "apps/service/src/hdr-conversion.ts": 2,
         "apps/service/src/source-export.ts": 1,
         "packages/core/src/acquisitions.ts": 7,
         "packages/core/src/files.ts": 5
-      }
+      },
+      "reason": "These producers verify our frozen capture/source copies and support; restoring owned bytes can succeed.",
+      "cause": "Stored source media no longer matches its recorded identity."
     },
     "SOURCE_DESTINATION": {
       "category": "malformed",
       "retryable": false,
       "files": {
         "apps/service/src/exports.ts": 1
-      }
+      },
+      "reason": "The request explicitly selects an original source as the output destination.",
+      "cause": "An export cannot replace original source media."
     },
     "SOURCE_LOST": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 3,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 2
-      }
+      },
+      "reason": "A disconnected camera, microphone, window or display can return.",
+      "cause": "The selected capture source disconnected or disappeared."
     },
     "SOURCE_PICTURE_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -2297,32 +2780,40 @@
       "files": {
         "helpers/mac/Sources/YapFrames/SourceFrameRenderer.swift": 1,
         "packages/core/src/frame-inspection.ts": 1
-      }
+      },
+      "reason": "An exact source time in a declared physical gap has no picture; decoder failures must remain retryable under their execution codes.",
+      "cause": "There is no physical source picture at the requested time."
     },
     "SOURCE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/CaptureController.swift": 1,
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 9,
         "helpers/mac/Sources/YapCapture/CaptureInputSession.swift": 4,
         "helpers/mac/Sources/YapCapture/SelectedCaptureRequest.swift": 1,
         "skills/yap/scripts/fresh-delivery-check.mjs": 2
-      }
+      },
+      "reason": "A selected device or our fixture/runtime can become available.",
+      "cause": "The selected capture source is unavailable right now."
     },
     "STALE_REVISION": {
       "category": "conflict",
       "retryable": false,
       "files": {
         "packages/core/src/projects.ts": 1
-      }
+      },
+      "reason": "The request’s expected current revision is no longer current.",
+      "cause": "The project’s current revision changed."
     },
     "STATE_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "skills/yap/scripts/fresh-delivery-check.mjs": 2
-      }
+      },
+      "reason": "This producer checks our delivery fixture root on the machine.",
+      "cause": "The delivery replay folder cannot be opened."
     },
     "STORAGE_BUSY": {
       "category": "resource-bound",
@@ -2330,7 +2821,10 @@
       "files": {
         "packages/core/src/assets.ts": 1,
         "packages/core/src/catalog.ts": 1
-      }
+      },
+      "reason": "Concurrent asset publication can settle.",
+      "cause": "Stored media publication is still changing.",
+      "retryAfterMs": 15000
     },
     "STORAGE_CHANGED": {
       "category": "conflict",
@@ -2338,21 +2832,27 @@
       "files": {
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
         "packages/core/src/storage.ts": 2
-      }
+      },
+      "reason": "Our managed directory identity can be restored or reacquired.",
+      "cause": "A managed storage directory changed while being opened."
     },
     "STORAGE_ERROR": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/files.ts": 1
-      }
+      },
+      "reason": "Our import writer can succeed after filesystem repair.",
+      "cause": "Copying imported media made no progress."
     },
     "STORAGE_IO": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "packages/core/src/storage.ts": 1
-      }
+      },
+      "reason": "Our storage I/O can recover.",
+      "cause": "Yap could not inspect its managed storage."
     },
     "TIMEOUT": {
       "category": "execution-failure",
@@ -2361,7 +2861,9 @@
         "apps/service/src/control.ts": 1,
         "packages/client/src/discovery.ts": 1,
         "packages/client/src/transport.ts": 1
-      }
+      },
+      "reason": "A later execution or connection can answer.",
+      "cause": "The operation did not answer in time."
     },
     "TRANSCRIPTION_FAILED": {
       "category": "execution-failure",
@@ -2370,23 +2872,26 @@
         "helpers/mac/Sources/YapSpeech/ParakeetEngine.swift": 2,
         "helpers/mac/Sources/YapWire/SpeechOperation.swift": 1,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "Our speech engine, model or machine can recover.",
+      "cause": "The speech engine could not transcribe the audio."
     },
     "TRUNCATED_FRAME": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/protocol/src/framing.ts": 3
-      }
+      },
+      "reason": "A new connection can return a complete frame.",
+      "cause": "The connection ended partway through a JSON frame."
     },
     "UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/project-service.ts": 1,
         "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 2,
-        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 9,
-        "helpers/mac/Sources/YapFrames/SourceFrameRenderer.swift": 1,
+        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 8,
         "helpers/mac/Sources/YapFrames/SourceVisualSamples.swift": 1,
         "packages/core/src/capture-source-read.ts": 1,
         "packages/core/src/capture-store.ts": 3,
@@ -2399,27 +2904,35 @@
         "packages/core/src/trails.ts": 1,
         "packages/core/src/transcript-processing.ts": 2,
         "packages/core/src/transcript.ts": 1
-      }
+      },
+      "reason": "The code mixes our repairable capabilities with impossible selections; split permanent input cases below.",
+      "cause": "The required output or component is unavailable right now."
     },
     "UNAVAILABLE_SUPPORT": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
+        "apps/service/src/join-verification.ts": 1,
         "helpers/mac/Sources/YapAudio/SourceChannelPCM.swift": 1,
+        "helpers/mac/Sources/YapFrames/SourceFrameRenderer.swift": 1,
         "packages/core/src/acoustic-inspection.ts": 1,
         "packages/core/src/rendered-speech.ts": 1,
         "packages/core/src/source-selection.ts": 1
-      }
+      },
+      "reason": "The exact selection crosses declared missing physical support; new selection parameters are required.",
+      "cause": "The selected audio includes unavailable source samples."
     },
     "UNCORRELATED_RESPONSE": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/cli/src/mcp-result.ts": 1,
         "apps/cli/src/wait.ts": 1,
         "packages/client/src/transport.ts": 1,
         "skills/yap/scripts/batch-prepare.mjs": 1
-      }
+      },
+      "reason": "Our transport or response identity handling can be repaired.",
+      "cause": "The response did not match the request that was sent."
     },
     "UNKNOWN_CLIP": {
       "category": "malformed",
@@ -2429,7 +2942,9 @@
         "packages/composition/src/errors.ts": 1,
         "packages/composition/src/model.ts": 1,
         "packages/composition/src/source-projection.ts": 1
-      }
+      },
+      "reason": "The requested clip or placement reference does not exist.",
+      "cause": "The requested clip does not exist."
     },
     "UNKNOWN_OPERATION": {
       "category": "malformed",
@@ -2444,7 +2959,9 @@
         "apps/service/src/index.ts": 1,
         "apps/service/src/project-service.ts": 2,
         "helpers/mac/Sources/YapWire/Wire.swift": 1
-      }
+      },
+      "reason": "The caller named an operation outside the public operation contract.",
+      "cause": "The requested operation is unknown."
     },
     "UNKNOWN_SOURCE": {
       "category": "malformed",
@@ -2453,14 +2970,18 @@
         "packages/composition/src/errors.ts": 1,
         "packages/composition/src/model.ts": 1,
         "packages/composition/src/source-projection.ts": 2
-      }
+      },
+      "reason": "The selected asset/stream reference does not exist.",
+      "cause": "The requested source does not exist."
     },
     "UNKNOWN_TAIL": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1
-      }
+      },
+      "reason": "Our sample inspection can be repaired to prove the final frame duration.",
+      "cause": "Yap could not determine the last recorded sample’s duration."
     },
     "UNRESOLVED_START": {
       "category": "issue-code",
@@ -2468,32 +2989,40 @@
       "files": {
         "apps/macos/Sources/YapControls/ControlsState.swift": 1,
         "apps/service/src/capture.ts": 1
-      }
+      },
+      "reason": "The start remains uncertain; replaying the same identity can resolve it.",
+      "cause": "The take’s start has not been confirmed."
     },
     "UNSUPPORTED_CATALOG": {
       "category": "conflict",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/catalog.ts": 1
-      }
+      },
+      "reason": "Our catalog reader or installation can be updated or repaired.",
+      "cause": "This Yap build cannot read the library’s catalog format."
     },
     "UNSUPPORTED_CLOCK": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapFrames/MovieClock.swift": 1
-      }
+      },
+      "reason": "Our movie-clock representation can be corrected.",
+      "cause": "Yap cannot represent the movie’s required timing yet."
     },
     "UNSUPPORTED_DESTINATION": {
       "category": "missing-prerequisite",
       "retryable": false,
       "files": {
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 3
-      }
+      },
+      "reason": "The explicit selected target is a symlink, which publication never replaces.",
+      "cause": "The selected destination is a symlink."
     },
     "UNSUPPORTED_FORMAT": {
       "category": "malformed",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapAudio/AudioPCMStream.swift": 1,
         "helpers/mac/Sources/YapAudio/AudioSource.swift": 5,
@@ -2506,11 +3035,13 @@
         "packages/core/src/acoustic-inspection.ts": 3,
         "packages/core/src/audio-inspection.ts": 1,
         "skills/yap/scripts/timeline-inspection.mjs": 1
-      }
+      },
+      "reason": "Our media readers/processors can gain the needed format support; malformed caller format values belong to INVALID_PARAMS.",
+      "cause": "Yap cannot process the required media format yet."
     },
     "UNSUPPORTED_JOB": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/capture-cleanup.ts": 1,
         "apps/service/src/exports.ts": 1,
@@ -2528,13 +3059,14 @@
         "packages/core/src/speaker-processing.ts": 1,
         "packages/core/src/transcript-processing.ts": 1,
         "packages/core/src/voice-generation.ts": 1
-      }
+      },
+      "reason": "The saved job recipe/dispatcher is ours and can be repaired.",
+      "cause": "Yap cannot execute the saved job recipe."
     },
     "UNSUPPORTED_MEDIA": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
-        "apps/service/src/asset-conversion.ts": 1,
         "apps/service/src/ffmpeg-input.ts": 4,
         "apps/service/src/hdr-conversion.ts": 5,
         "apps/service/src/project-service.ts": 2,
@@ -2550,7 +3082,6 @@
         "helpers/mac/Sources/YapMedia/StillImageSource.swift": 3,
         "packages/core/src/acquisitions.ts": 2,
         "packages/core/src/assets.ts": 3,
-        "packages/core/src/audio-inspection.ts": 1,
         "packages/core/src/files.ts": 1,
         "packages/core/src/frame-inspection.ts": 1,
         "packages/core/src/hdr-conversion-facts.ts": 1,
@@ -2559,44 +3090,57 @@
         "packages/core/src/source-selection.ts": 2,
         "packages/core/src/transcript-processing.ts": 1,
         "skills/yap/scripts/delivered-scenes.mjs": 1
-      }
+      },
+      "reason": "Our media parsers and execution capabilities can be repaired; bad input selections split below.",
+      "cause": "Yap cannot process this media yet."
     },
     "UNSUPPORTED_MODEL": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "packages/core/src/voice-generation.ts": 1
-      }
+      },
+      "reason": "Our registered execution profile can be implemented or repaired.",
+      "cause": "Yap has no usable execution profile for this model yet."
     },
     "UNSUPPORTED_PACKAGE_DEPENDENCY": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/project-packages.ts": 1
-      }
+      },
+      "reason": "The producer explicitly says portable adoption is not implemented in our code.",
+      "cause": "Yap cannot adopt this package dependency yet."
     },
     "UNSUPPORTED_PLATFORM": {
       "category": "missing-prerequisite",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "apps/service/src/archive-input.ts": 1,
         "packages/core/src/files.ts": 1,
         "packages/core/src/storage.ts": 1
-      }
+      },
+      "reason": "Our machine or platform implementation can change.",
+      "cause": "This operation is unavailable on the current platform."
     },
     "UPDATE_BUSY": {
       "category": "resource-bound",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
-      }
+      },
+      "reason": "The in-progress update can finish.",
+      "cause": "An update is already in progress.",
+      "retryAfterMs": 15000
     },
     "UPDATE_DISABLED": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/SparkleDriver.swift": 1
-      }
+      },
+      "reason": "The machine’s updater preference can be enabled.",
+      "cause": "Automatic updates are disabled."
     },
     "UPDATE_FAILED": {
       "category": "execution-failure",
@@ -2604,28 +3148,36 @@
       "files": {
         "apps/macos/Sources/Yap/SparkleDriver.swift": 1,
         "apps/macos/Sources/Yap/UpdateCoordinator.swift": 2
-      }
+      },
+      "reason": "Our update download or installation can succeed later.",
+      "cause": "The update could not be installed."
     },
     "UPDATE_INCOMPATIBLE": {
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/SparkleDriver.swift": 1
-      }
+      },
+      "reason": "The candidate is our release metadata/artifact; a corrected release or implementation can satisfy the same update request.",
+      "cause": "The update candidate is incompatible with this installation."
     },
     "UPDATE_LOCK_INVALID": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/SparkleDriver.swift": 3
-      }
+      },
+      "reason": "Our release lock metadata or machine permissions can be repaired.",
+      "cause": "Yap’s update launch lock could not be verified."
     },
     "UPDATE_PREPARATION_FAILED": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
-      }
+      },
+      "reason": "Our update admission/launch preparation can succeed after repair.",
+      "cause": "Yap could not prepare to install the update."
     },
     "UPDATE_SHUTDOWN_FAILED": {
       "category": "execution-failure",
@@ -2633,14 +3185,18 @@
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/macos/Sources/Yap/UpdateCoordinator.swift": 1
-      }
+      },
+      "reason": "Our service can restart and later shut down cleanly.",
+      "cause": "The service did not exit cleanly for the update."
     },
     "UPDATE_SHUTDOWN_TIMEOUT": {
       "category": "execution-failure",
       "retryable": true,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "Our service can restart and a later explicit update can complete shutdown.",
+      "cause": "The service did not stop for the update in time."
     },
     "UPDATE_UNAVAILABLE": {
       "category": "missing-prerequisite",
@@ -2648,7 +3204,9 @@
       "files": {
         "apps/macos/Sources/Yap/SparkleDriver.swift": 1,
         "apps/macos/Sources/Yap/main.swift": 2
-      }
+      },
+      "reason": "Our updater bundle/configuration can be repaired, including manual-only builds.",
+      "cause": "This Yap installation cannot check for updates right now."
     },
     "UPDATING": {
       "category": "conflict",
@@ -2656,39 +3214,47 @@
       "files": {
         "apps/cli/src/installation-lock.ts": 1,
         "apps/service/src/update-admission.ts": 2
-      }
+      },
+      "reason": "Installation replacement can finish.",
+      "cause": "Yap is being updated.",
+      "retryAfterMs": 15000
     },
     "WRITE_FAILED": {
       "category": "execution-failure",
-      "retryable": false,
+      "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 2,
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 4,
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 6,
         "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 2
-      }
+      },
+      "reason": "Our capture writer, encoder or filesystem can recover.",
+      "cause": "Yap could not write the recorded media."
     },
     "YAP_DEFAULTS": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FFMPEG_DIRECTORY": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FFMPEG_RECEIPT_SHA256": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FIXTURE_CONTROLS": {
       "category": "not-a-refusal",
@@ -2696,35 +3262,40 @@
       "files": {
         "apps/macos/Sources/Yap/ControlsProbe.swift": 1,
         "apps/macos/Sources/Yap/PreviewWindow.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FIXTURE_PERMISSIONS": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/ControlsProbe.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FIXTURE_START_HOLD": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/CaptureFixture.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_FIXTURE_WINDOW": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_HOME": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_NATIVE": {
       "category": "not-a-refusal",
@@ -2732,21 +3303,24 @@
       "files": {
         "apps/macos/Sources/Yap/ServiceHost.swift": 1,
         "apps/service/src/worker.ts": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_NODE": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/NodeRuntime.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     },
     "YAP_SERVICE_LAUNCH": {
       "category": "not-a-refusal",
       "retryable": false,
       "files": {
         "apps/macos/Sources/Yap/main.swift": 1
-      }
+      },
+      "reason": "This is a configuration key or file-format token, not an error; no retry policy applies."
     }
   }
 }

@@ -2,7 +2,7 @@ import CoreMedia
 import Foundation
 import YapCapture
 
-/// Fixed hardware observations; serialization is the capture writer's, including schema-3 thinning.
+/// Fixed hardware observations; serialization belongs to the production journal writer.
 func writeLongStrokeFixture(to output: URL, strokeCount: Int = 1) throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)

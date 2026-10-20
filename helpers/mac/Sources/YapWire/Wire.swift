@@ -78,10 +78,9 @@ public enum NativeWire {
                     return try json(RecoveryReceipt(await MediaRecovery.recover(directory: request.directory, sourceAuthority: request.sourceAuthority)))
                 } catch is CancellationError { throw CancellationError() }
                 catch {
-                    // Recovery classifies its own failures; the wire carries that as one code, so the
-                    // ledger's single answer per code never contradicts a recovery decision.
+                    // Preserve the specific cause; the ledger owns its retry verdict.
                     let failure = CaptureFinalizationError(error)
-                    throw NativeFailure(failure.retryable ? "RECOVERY_FAILED" : "RECOVERY_REFUSED",
+                    throw NativeFailure(failure.code,
                         failure.message, details: ["cause": failure.code])
                 }
             },

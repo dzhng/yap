@@ -58,6 +58,30 @@ test("portable schema 3 receipts retain the acquisition journal contract", () =>
   ).not.toThrow();
 });
 
+test("journal sampling rejects invalid cadence rather than misreading a take", () => {
+  const receipt = {
+    file: "source.jsonl",
+    journal: "capture.journal.jsonl",
+    header: {
+      sessionID: "sampling",
+      schemaVersion: 4,
+      cursorSampling: { intervalUs: 0, holds: false },
+    },
+    cursorSamples: 0,
+    geometryRecords: 0,
+    displaySpaces: 0,
+    pauseEvents: 0,
+    audioIntervals: 0,
+    markEvents: 0,
+    lastSequence: 1,
+    incompleteTail: false,
+    finished: false,
+    publications: {},
+    bytes: 1,
+  };
+  expect(() => validateSourceReceipt(receipt, "sampling")).toThrow(/cursor sampling/i);
+});
+
 test("normalized mark evidence matches the markEvents receipt count", async () => {
   const f = fixture();
   const body = [
@@ -108,7 +132,7 @@ test("normalized mark evidence matches the markEvents receipt count", async () =
         // The stream must reject before exposing a legacy mark.
       }
     })(),
-  ).rejects.toThrow("schema 3");
+  ).rejects.toThrow("carries marks");
 });
 function fixture(times = [0, 10, 10, 20]) {
   const root = mkdtempSync(join(tmpdir(), "evidence-"));
@@ -227,7 +251,7 @@ test("pages equal-time raw samples with explicit range and stable continuation",
 });
 
 // The native writer gives every primary take, a camera-only one included, the packed layout.
-test.each([2, 3])(
+test.each([2, 3, 4])(
   "layout-%i primary camera evidence retains unbound device provenance",
   async (schemaVersion) => {
     const f = fixture();
@@ -246,7 +270,7 @@ test.each([2, 3])(
 
 test("unbound camera evidence refuses missing and unsupported primary layouts", async () => {
   const f = fixture();
-  for (const schemaVersion of [undefined, 1, 4]) {
+  for (const schemaVersion of [undefined, 1, 5]) {
     const receipt = {
       ...f.receipt,
       header: { sessionID: f.identity.sourceId, schemaVersion, source: { kind: "camera" } },
@@ -1067,3 +1091,49 @@ test("malformed terminal provenance refuses evidence publication", async () => {
     ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   }
 });
+
+test.each(["schema4-marks", "schema4-undone"])(
+  "shared %s fixture reads through portable evidence",
+  async (name) => {
+    const records = readFileSync(
+      new URL(`../../../fixtures/journal/${name}.jsonl`, import.meta.url),
+      "utf8",
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const header = records[0].data;
+    const marks = records.filter((record) => record.event === "mark");
+    const f = fixture();
+    const body = marks.map(({ event, data }) => JSON.stringify({ event, data }) + "\n").join("");
+    writeFileSync(f.file, body);
+    const receipt = validateSourceReceipt(
+      {
+        ...f.receipt,
+        header,
+        publications: {},
+        cursorSamples: 0,
+        firstCursorSourceUs: null,
+        lastCursorSourceUs: null,
+        markEvents: marks.length,
+        lastSequence: records.length,
+        bytes: Buffer.byteLength(body),
+      },
+      header.sessionID,
+    );
+    const values = [];
+    for await (const row of sourceEvidenceRecords(f.file, receipt))
+      values.push(JSON.parse(row.content));
+    expect(values).toEqual(marks.map((record) => record.data));
+    expect(values.slice(0, 2).map((mark) => mark.id)).toEqual(["pin", "stroke"]);
+    expect(values.flatMap((mark) => mark.retracts ?? [])).toEqual(
+      name === "schema4-undone" ? ["pin", "stroke"] : [],
+    );
+    expect(() =>
+      validateSourceReceipt(
+        { ...receipt, header: { ...header, schemaVersion: 5 } },
+        header.sessionID,
+      ),
+    ).toThrow("Unsupported evidence journal schema 5");
+  },
+);
