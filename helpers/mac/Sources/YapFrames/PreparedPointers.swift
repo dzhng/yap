@@ -47,7 +47,7 @@ final class PreparedPointers {
     private var count = 0
     init(_ receipt: PreparedPointersReceipt) throws {
         guard receipt.records >= 0 else {
-            throw invalid("Prepared pointer count exceeds its bound.")
+            throw invalid("Prepared pointer count is invalid.")
         }
         self.receipt = receipt
         self.lines = try RetainedJSONLines(

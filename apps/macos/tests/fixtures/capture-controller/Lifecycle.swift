@@ -1,6 +1,7 @@
 import Foundation
 import YapCapture
 import YapMedia
+import YapProtocol
 import Synchronization
 
 func diagnostic(_ message: String) { FileHandle.standardError.write(Data((message + "\n").utf8)) }
@@ -132,6 +133,12 @@ struct ControllerLifecycle {
         }
         await input.stopEntered.wait()
         precondition(first["state"] as? String == "finalizing" && input.stops == 1)
+        if mode == "maximum-cleanup" {
+            let rows = try String(contentsOf: root.appendingPathComponent("source/capture.journal.jsonl"), encoding: .utf8)
+                .split(separator: "\n").map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+            precondition(rows.filter { ($0["data"] as? [String: Any])?["state"] as? String == "finalizing" }.count == 1,
+                "Maximum callback and app stop share one initial finalizing transition")
+        }
         let again = try response(await controller.handle("capture.stop", control))
         precondition(again["sequence"] as? Int == first["sequence"] as? Int && input.stops == 1)
         if mode == "cancel-publication" {
@@ -163,7 +170,14 @@ struct ControllerLifecycle {
                 precondition(terminal["completionReason"] as? String == "maximumDuration",
                     "Cleanup pending must retain the successful maximum-duration ending")
                 let evidence = try CaptureJournal.inspect(directory: root.appendingPathComponent("source").path)
-                precondition(evidence.lastLifecycle?.completionReason == "maximumDuration")
+                precondition(evidence.lastLifecycle?.completionReason == "maximumDuration", "summary: \(evidence.lastLifecycle as Any), invalid: \(evidence.invalidAtSequence as Any), last: \(evidence.lastSequence)")
+                let rows = try String(contentsOf: root.appendingPathComponent("source/capture.journal.jsonl"), encoding: .utf8)
+                    .split(separator: "\n").map { try JSONSerialization.jsonObject(with: Data($0.utf8)) as! [String: Any] }
+                let lifecycle = rows.filter { $0["event"] as? String == "lifecycle" }.compactMap { $0["data"] as? [String: Any] }
+                let finalizing = lifecycle.filter { $0["state"] as? String == "finalizing" }
+                precondition(finalizing.allSatisfy { $0["reason"] == nil },
+                    "Completion is not a finalization failure reason")
+                precondition(lifecycle.filter { $0["completionReason"] as? String == "maximumDuration" }.count == 1)
             }
             precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("source/.capture-publication-narration/retained-diagnostic").path))
         }

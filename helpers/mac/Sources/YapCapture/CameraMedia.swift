@@ -92,7 +92,7 @@ package struct CameraAvailability: Sendable, Equatable {
 
 /// Canonical camera publication/replay owner. Raw files and observations stay retained.
 package enum CameraMedia {
-    // One fixed callback envelope, independent of take length; observations stream as lines.
+    // One callback has bounded IDs and rational clocks (<8 KiB); 8× JSON/envelope margin is 64 KiB.
     private static let observationLineBytes = 64 * 1024
     package static let mappingFile = "camera.mapping.jsonl"
     package enum Presentation: String, Codable { case nativeBounded = "native-bounded" }
@@ -116,14 +116,6 @@ package enum CameraMedia {
         package let originHostUs: Int64?
         package let journal: JournalPrefix?
 
-        func replacingGaps(_ gaps: [ExactRange]?) -> Receipt {
-            Receipt(presentation: presentation, raw: raw, observations: observations, closed: closed,
-                canonical: canonical, candidate: candidate, representedFrames: representedFrames,
-                firstUs: firstUs, endUs: endUs, pictureSHA256: pictureSHA256, diagnostics: diagnostics,
-                support: support, gaps: gaps, pictureTimeScale: pictureTimeScale, binding: binding,
-                originHostUs: originHostUs, journal: journal)
-        }
-
         /// Nil only for historical unbound receipts, which predate support and hold one interval.
         func availability() throws -> CameraAvailability? {
             guard let support else {
@@ -143,21 +135,7 @@ package enum CameraMedia {
     private static func save<T: Encodable>(_ value: T, to url: URL) throws {
         let file = try NewFile(at: url.path, assembledAs: "receipt.json")
         defer { file.discard() }
-        if let receipt = value as? Receipt, let gaps = receipt.gaps {
-            var header = try JSONEncoder().encode(receipt.replacingGaps(nil))
-            header.removeLast()
-            try file.write(header + Data(",\"gaps\":[".utf8))
-            let stream = try FileHandle(forWritingTo: file.url)
-            defer { try? stream.close() }
-            try stream.seekToEnd()
-            for (index, gap) in gaps.enumerated() {
-                try Task.checkCancellation()
-                if index > 0 { try stream.write(contentsOf: Data(",".utf8)) }
-                try stream.write(contentsOf: JSONEncoder().encode(gap))
-            }
-            try stream.write(contentsOf: Data("]}".utf8))
-            try stream.synchronize()
-        } else { try file.write(JSONEncoder().encode(value)) }
+        try file.write(JSONEncoder().encode(value))
         _ = try file.publish()
     }
     package static func recordClosed(raw: URL, marker: URL) throws {
@@ -192,7 +170,7 @@ package enum CameraMedia {
             guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
                 info.st_size >= 0 else {
                 Darwin.close(descriptor)
-                throw invalid("Camera mapping exceeds its regular-file read budget.")
+                throw invalid("Camera mapping must be a regular file.")
             }
             input = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
             openedBytes = info.st_size
@@ -215,7 +193,7 @@ package enum CameraMedia {
                 if let end = pending.firstIndex(of: 10) {
                     let data = Data(pending[..<end]); pending.removeSubrange(...end)
                     lines += 1
-                    guard data.count <= observationLineBytes else { throw invalid("Observation bounds exceeded.") }
+                    guard data.count <= observationLineBytes else { throw invalid("Camera observation row exceeds its envelope budget.") }
                     let row: Row
                     do { row = try JSONDecoder().decode(Row.self, from: data) }
                     catch { throw invalid("Malformed camera observation row.") }
@@ -233,7 +211,7 @@ package enum CameraMedia {
                         return frame
                     } else if row.cameraFrame != nil { throw invalid("Unaccepted picture has a camera mapping.") }
                 } else {
-                    guard pending.count <= observationLineBytes else { throw invalid("Observation line exceeds bounded size.") }
+                    guard pending.count <= observationLineBytes else { throw invalid("Camera observation row exceeds its envelope budget.") }
                     if eof { torn = !pending.isEmpty; return nil }
                     let remaining = openedBytes - readBytes
                     if remaining == 0 {
@@ -493,23 +471,10 @@ package enum CameraMedia {
         let input = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? input.close() }
         let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"))
-        guard let stream = InputStream(url: URL(fileURLWithPath: "/dev/fd/\(descriptor)")) else { throw invalid("Cannot stream camera receipt.") }
-        stream.open()
-        defer { stream.close() }
         do {
-            guard var object = try JSONSerialization.jsonObject(with: stream) as? [String: Any] else { throw invalid("Camera receipt requires an object.") }
-            let gapValues = object.removeValue(forKey: "gaps")
-            let header = try JSONDecoder().decode(Receipt.self, from: JSONSerialization.data(withJSONObject: object))
-            let gaps: [ExactRange]?
-            if let gapValues, !(gapValues is NSNull) {
-                guard let values = gapValues as? [Any] else { throw invalid("Camera gaps require an array.") }
-                gaps = try values.map { value in
-                    try Task.checkCancellation()
-                    return try JSONDecoder().decode(ExactRange.self, from: JSONSerialization.data(withJSONObject: value))
-                }
-            } else { gaps = nil }
+            let receipt = try JSONDecoder().decode(Receipt.self, from: input.readToEnd() ?? Data())
             guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)")) == identity else { throw invalid("Camera publication receipt changed during read.") }
-            return (header.replacingGaps(gaps), identity)
+            return (receipt, identity)
         } catch let failure as CaptureFailure { throw failure }
         catch is CancellationError { throw CancellationError() }
         catch { throw invalid("Malformed retained camera publication.") }

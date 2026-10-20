@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { checkServiceHost } from "./fixtures/swift-service-host.mjs";
 import { operationSchema } from "../../../packages/protocol/dist/index.js";
 
-test("ServiceHost keeps the service refusal's delay and resolving request", (t) => {
+test("ServiceHost derives the service refusal's verdict and delay and resolving request", (t) => {
   const result = checkServiceHost(
     t,
     `
@@ -13,7 +13,7 @@ send({event:'started', pid:process.pid, socketPath:'/scratch/service.sock'});
 createInterface({input:process.stdin}).on('line', (line) => {
   const {request} = JSON.parse(line);
   send({event:'result', response:{id:request.id, ok:false, error:{
-    code:'NOT_READY', message:'Still preparing', retryable:true, retryAfterMs:15000,
+    code:'NOT_READY', message:'Still preparing', retryable:false, retryAfterMs:1,
     details:{retry:{operation:'job.get',params:{jobId:'missing'}}}
   }}});
 }).on('close', () => process.exit(0));
@@ -55,7 +55,7 @@ createInterface({input:process.stdin}).on('line', (line) => {
 `,
     [],
     `
-    answer(.failure(ServiceFailure(code: "NOT_READY", message: "Still preparing", retryAfterMs: 15000,
+    answer(.failure(ServiceFailure(code: "NOT_READY", message: "Still preparing",
         details: Data(#"{"retry":{"operation":"job.get","params":{"jobId":"missing"}}}"#.utf8))))
 `,
   );
@@ -77,7 +77,7 @@ import { createInterface } from 'node:readline';
 const send = (message) => process.stdout.write(JSON.stringify(message) + '\\n');
 send({event:'started', pid:process.pid, socketPath:'/scratch/service.sock'});
 createInterface({input:process.stdin}).on('line', () => {
-  send({event:'failed',error:{code:'NOT_READY',message:'Still preparing',retryable:true,retryAfterMs:15000,
+  send({event:'failed',error:{code:'NOT_READY',message:'Still preparing',retryable:false,retryAfterMs:1,
     details:{retry:{operation:'job.get',params:{jobId:'missing'}}}}});
 }).on('close', () => process.exit(0));
 `,

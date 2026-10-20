@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mediaLinkArguments } from "./swift-media.mjs";
+import { protocolLinkArguments } from "./swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/Yap/", import.meta.url));
 const homeSources = [
@@ -68,7 +68,7 @@ export function compileHomeDriver(scratch) {
       "-swift-version",
       "6",
       "-parse-as-library",
-      ...mediaLinkArguments(),
+      ...protocolLinkArguments(),
       ...homeSources,
       driver,
       "-o",

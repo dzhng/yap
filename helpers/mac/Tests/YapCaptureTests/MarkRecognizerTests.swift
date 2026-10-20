@@ -2,6 +2,7 @@ import CoreGraphics
 import Foundation
 import YapCapture
 import YapMedia
+import YapProtocol
 
 private struct TestWindowSource: WindowUnderPoint {
     let result: JournalMarkWindow?

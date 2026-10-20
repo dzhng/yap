@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "YapCapture", targets: ["YapCapture"]),
-        .library(name: "YapMedia", targets: ["YapMedia"]),
+        .library(name: "YapProtocol", targets: ["YapProtocol"]),
         .executable(name: "yap-native", targets: ["YapNative"]),
     ],
     dependencies: [
@@ -25,7 +25,7 @@ let package = Package(
             ],
             linkerSettings: [.linkedLibrary("archive.2")]),
         .systemLibrary(name: "CLibArchive"),
-        .target(name: "YapCapture", dependencies: ["YapMedia"], exclude: ["README.md"]),
+        .target(name: "YapCapture", dependencies: ["YapMedia", "YapProtocol"], exclude: ["README.md"]),
         .target(name: "YapFrames", dependencies: ["YapMedia"], exclude: ["README.md"]),
         .target(name: "YapAudio", dependencies: ["YapMedia", .product(name: "YapDenoise", package: "denoise"), .product(name: "YapStretch", package: "stretch")], exclude: ["README.md"]),
         .target(
@@ -35,6 +35,7 @@ let package = Package(
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             exclude: ["README.md"]),
+        .target(name: "YapProtocol"),
         .target(name: "YapMedia", exclude: ["README.md"]),
         .executableTarget(name: "CameraReproduction", dependencies: ["YapCapture", "YapMedia", "YapWire", "YapAudio"], path: "Tests/CameraReproduction"),
         .executableTarget(

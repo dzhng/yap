@@ -159,7 +159,7 @@ extension ArchiveOperation {
             if archive_entry_size_is_set(entry) != 0 {
                 let size = archive_entry_size(entry)
                 guard size >= 0, !directory || size == 0 else {
-                    throw error("LIMIT_EXCEEDED", "ZIP declared member size exceeds its limit.")
+                    throw error("INVALID_PACKAGE", "ZIP declared member size is invalid.")
                 }
             }
             let fd = try createMember(content, parts, directory)
@@ -214,9 +214,6 @@ extension ArchiveOperation {
         ]
         // Parse the held manifest stream as semantic JSON. Its original bytes and hash
         // stay pinned in the inventory; a serialized copy is never embedded as a string.
-        guard let manifestIdentity = entries.first(where: { $0["path"] as? String == "manifest.json" }) else {
-            throw error("INVALID_PACKAGE", "Package manifest is missing.")
-        }
         let manifestFile = openat(content, "manifest.json", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
         guard manifestFile >= 0 else { throw error("INVALID_PACKAGE", "Package manifest is missing.") }
         defer { close(manifestFile) }
@@ -228,7 +225,6 @@ extension ArchiveOperation {
         catch { throw ArchiveOperation.error("INVALID_PACKAGE", "Package manifest is malformed JSON.") }
         try streamJSON(result.merging([
             "manifest": manifest,
-            "manifestIdentity": ["bytes": manifestIdentity["bytes"]!, "sha256": manifestIdentity["sha256"]!],
         ], uniquingKeysWith: { _, value in value }), to: receipt)
         guard fsync(receipt) == 0, fstat(receipt, &receiptInfo) == 0 else { throw io("Close archive receipt") }
         return ["receiptBytes": receiptInfo.st_size]

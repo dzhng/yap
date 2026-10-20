@@ -2,9 +2,9 @@ import Foundation
 
 if ProcessInfo.processInfo.environment["YAP_MAXIMUM_TAKE"] != nil {
     try await runMaximumTakeTests()
-} else if let output = ProcessInfo.processInfo.environment["YAP_RECORDING_PROMPT_FIXTURE"] {
+} else if let output = ProcessInfo.processInfo.environment["YAP_CAPTURE_FIXTURE"] {
     try await writeRecordingPromptFixture(directory: output,
-        options: ProcessInfo.processInfo.environment["YAP_RECORDING_PROMPT_OPTIONS"] ?? "{}")
+        options: ProcessInfo.processInfo.environment["YAP_CAPTURE_FIXTURE_OPTIONS"] ?? "{}")
 } else if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] {
     try writeCursorHoldFixtures(to: URL(fileURLWithPath: output))
 } else if ProcessInfo.processInfo.environment["YAP_CHANGE_ONLY_TESTS"] != nil {

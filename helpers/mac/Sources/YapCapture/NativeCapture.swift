@@ -176,7 +176,6 @@ public final class NativeCapture {
             Task { @MainActor in
                 guard let self, self.generations.accepts(generation) else { return }
                 self.completionReason = "maximumDuration"
-                self.note("finalizing", reason: self.completionReason)
                 if let onMaximumDuration = self.onMaximumDuration { onMaximumDuration() }
                 else { _ = try? await self.stop() }
             }
@@ -315,7 +314,7 @@ public final class NativeCapture {
             let result = primary.result.withFailure(companionFailure).withCamera(camera.camera)
             lifecycleSequence = sink.note(result.state,
                 reason: result.failure?.code ?? (result.cleanupFailure == nil ? nil : "CLEANUP_PENDING"),
-                completionReason: completionReason)
+                completionReason: result.failure == nil ? completionReason : nil)
             outputSize = nil
             self.sink = nil
             self.closedResult = nil
@@ -391,7 +390,6 @@ public final class NativeCapture {
                     result = sink.recordPublishedResult(result)
                 }
                 if result.durationUs > 0, let lease = sink.packedJournalLease {
-                    if result.failure == nil, let completionReason { _ = sink.note("complete", reason: nil, completionReason: completionReason) }
                     try await sink.freezePublicationJournal()
                     let evidence = try await CaptureSourcePublication.publish(kind: .primary,
                         durationUs: result.durationUs, originHostUs: result.hostOriginUs,

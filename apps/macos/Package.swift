@@ -11,12 +11,13 @@ let package = Package(
     products: [.executable(name: "Yap", targets: ["Yap"])],
     dependencies: [.package(path: "../../helpers/mac")],
     targets: [
-        .target(name: "YapControls", dependencies: [.product(name: "YapMedia", package: "mac")]),
+        .target(name: "YapControls", dependencies: [.product(name: "YapProtocol", package: "mac")]),
         .executableTarget(
             name: "Yap",
             dependencies: [
                 "YapControls",
                 .product(name: "YapCapture", package: "mac"),
+                .product(name: "YapProtocol", package: "mac"),
             ],
             swiftSettings: [.unsafeFlags(["-F", sparkleDirectory])],
             linkerSettings: [.unsafeFlags(["-F", sparkleDirectory, "-framework", "Sparkle", "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),

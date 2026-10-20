@@ -167,8 +167,7 @@ private func recoveryRefusalControls(root: URL, folder: URL, authority: [String:
     let busy = try CaptureJournalLease(directory: folder.path)
     let response = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": authority], root: root, name: "\(kind)-busy", successful: false)
     let busyError = response["error"] as? [String: Any]
-    precondition(busyError?["code"] as? String == "CAPTURE_BUSY"
-        && (busyError?["details"] as? [String: Any])?["cause"] as? String == "CAPTURE_BUSY")
+    precondition(busyError?["code"] as? String == "CAPTURE_BUSY")
     busy.release()
     let journalPath = folder.appendingPathComponent("capture.journal.jsonl").path
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: journalPath)

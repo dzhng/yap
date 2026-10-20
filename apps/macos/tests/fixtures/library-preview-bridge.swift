@@ -118,7 +118,7 @@ struct CheckFailure: Error, LocalizedError {
 }
 @MainActor func library(_ call: @escaping LibraryController.Call, _ preview: PreviewController) -> LibraryController {
     LibraryController(call: call, confirm: { _ in true }, changed: {}, closePreview: { preview.close(target: $0) }, forgetExports: { _ in },
-        deleted: {}, preview: { preview.open($0) }, export: { _, _ in })
+        deleted: {}, preview: { preview.open($0) }, export: { _, _ in }, failure: { _, _ in })
 }
 /// The player first asks for a bounded draft: the opening ten seconds at its draft long edge.
 func draftPreview(_ projectId: String) -> [String: Any] {

@@ -98,6 +98,7 @@ public enum PresentationEvidence {
         func append(_ record: some Encodable) throws {
             var data = try encoder.encode(record)
             data.append(10)
+            // One 24×14 RGB thumbnail is 1,344 base64 bytes; 64 KiB also covers timing and reset fields.
             guard data.count <= 65_536 else {
                 throw NativeFailure(
                     "LIMIT_EXCEEDED", "Presentation evidence exceeds its byte budget.")

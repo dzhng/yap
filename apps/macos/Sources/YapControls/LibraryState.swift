@@ -62,9 +62,14 @@ public struct LibraryState: Equatable, Sendable {
         public let state: String
         public let reason: String?
         public let errorCode: String?
-        public let retryable: Bool
         public var importFailed: Bool {
-            !["idle", "queued", "running", "ready"].contains(state) && errorCode != nil && errorCode != "OWNER_DELETED"
+            !["idle", "ready"].contains(state) && !isActive && errorCode != nil
+        }
+        public var isActive: Bool { ["queued", "running"].contains(state) }
+        public var retryJobId: String? {
+            guard importFailed, let retry = details?.retry,
+                retry.operation == "job.retry", retry.params.jobId == id else { return nil }
+            return id
         }
         public let details: Details?
         public struct Details: Decodable, Equatable, Sendable {

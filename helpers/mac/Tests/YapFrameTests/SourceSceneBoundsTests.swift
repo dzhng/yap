@@ -5,16 +5,7 @@ import YapMedia
 
 func verifySourceSceneBounds(source: URL) async throws {
     let presentation = try await PresentationSource(source: source, streamId: nil, startUs: 0)
-    _ = try presentation.selection(at: .zero, end: .positiveInfinity, maximumDecodedSamples: 1)
-    do {
-        _ = try presentation.selection(at: time(microseconds: 200_000), end: .positiveInfinity,
-            maximumDecodedSamples: 1)
-        preconditionFailure("Scene decode budget must refuse before another decode")
-    } catch let error as NativeFailure {
-        precondition(error.code == "LIMIT_EXCEEDED", "\(error)")
-        precondition(presentation.decodedCount == 1)
-    }
-    // The same reader still works for callers that did not opt into the inspection budget.
+    _ = try presentation.selection(at: .zero, end: .positiveInfinity)
     let resumed = try presentation.selection(at: time(microseconds: 200_000), end: .positiveInfinity)
     precondition(resumed.sampleTime == time(microseconds: 200_000))
     let body: [String: Any] = [
@@ -31,5 +22,5 @@ func verifySourceSceneBounds(source: URL) async throws {
         _ = try await task.value
         preconditionFailure("Canceled source observation must refuse before reading")
     } catch is CancellationError {}
-    print("PASS selected scene decode budget, unrestricted reuse and pre-read cancellation")
+    print("PASS selected scene unrestricted reuse and pre-read cancellation")
 }

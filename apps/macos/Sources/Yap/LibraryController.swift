@@ -33,7 +33,7 @@ final class LibraryController {
         closePreview: @escaping (MediaTarget) -> Void, forgetExports: @escaping (MediaTarget) -> Void,
         deleted: @escaping () -> Void,
         preview: @escaping (String) -> Void, export: @escaping (String, ExportsState.Kind) -> Void,
-        failure: @escaping (ControlsAction, String?) -> Void = { _, _ in })
+        failure: @escaping (ControlsAction, String?) -> Void)
     {
         self.failure = failure
         self.call = call; self.confirm = confirm; self.changed = changed; self.closePreview = closePreview
@@ -269,8 +269,7 @@ final class LibraryController {
             let take = state.recent.first(where: { $0.sourceAdmissions?.contains { $0.kind == "primary" && $0.job?.id == jobId } == true }),
             state.deletions[.recording(take.id)] == nil,
             let admission = take.sourceAdmissions?.first(where: { $0.kind == "primary" }),
-            let job = admission.job, job.importFailed,
-            job.details?.retry?.operation == "job.retry", job.details?.retry?.params.jobId == jobId else { return }
+            let job = admission.job, job.retryJobId == jobId else { return }
         recordingGeneration = UUID(); jobsReading = false
         state.retryingImports.insert(jobId)
         let service = serviceGeneration
@@ -359,7 +358,7 @@ final class LibraryController {
         !job.id.isEmpty && ["idle", "queued", "running", "ready", "failed", "unavailable", "canceled"].contains(job.state)
     }
     private static func active(_ admission: LibraryState.SourceAdmission) -> Bool {
-        admission.job.map { ["queued", "running"].contains($0.state) } ?? false
+        admission.job.map { $0.isActive } ?? false
     }
     private func replaceJob(_ recordingId: String, _ sourceId: String, _ job: LibraryState.Job) {
         guard let index = state.recent.firstIndex(where: { $0.id == recordingId }),

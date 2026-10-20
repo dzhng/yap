@@ -1,5 +1,5 @@
 import Foundation
-import YapMedia
+import YapProtocol
 
 /// Shared saved-media facts and action applicability; renderers consume these directly.
 public enum LibraryPresentation {
@@ -48,7 +48,7 @@ public enum LibraryPresentation {
                 if let failure = request?.failure { details.append("Delete not confirmed — \(failure)") }
                 let primary = take?.sourceAdmissions?.first { $0.kind == "primary" }?.job
                 let importFailed = primary?.importFailed == true
-                let importing = primary.map { ["queued", "running"].contains($0.state) || library.retryingImports.contains($0.id) } ?? false
+                let importing = primary.map { $0.isActive || library.retryingImports.contains($0.id) } ?? false
                 var message: String?
                 if importFailed, let job = primary {
                     let cause = job.errorCode.flatMap(RefusalLedger.cause) ?? job.reason ?? "The import could not finish."
@@ -65,9 +65,8 @@ public enum LibraryPresentation {
                     .init(.copyRecordingPrompt(id), "Copy prompt", enabled: usable),
                     .init(.deleteRecording(id), deleteTitle, enabled: usable),
                 ]
-                if importFailed, let job = primary, let retry = job.details?.retry,
-                    retry.operation == "job.retry", retry.params.jobId == job.id {
-                    recordingActions.append(.init(.retryImport(job.id), importing ? "Retrying…" : "Retry",
+                if let job = primary, let retryJobId = job.retryJobId {
+                    recordingActions.append(.init(.retryImport(retryJobId), importing ? "Retrying…" : "Retry",
                         enabled: usable && !importing))
                 }
                 return .init(id: id, kind: .recording, title: ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt),

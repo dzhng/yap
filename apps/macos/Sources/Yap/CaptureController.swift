@@ -49,7 +49,7 @@ final class CaptureController {
         capture.onMarkUpdate = { [weak self] update in self?.onMarkUpdate?(update) }
         capture.onMaximumDuration = { [weak self] in
             guard let self else { return }
-            Task { @MainActor in _ = try? await self.finish(reason: "maximumDuration", notify: true) }
+            Task { @MainActor in _ = try? await self.finish(reason: nil, notify: true) }
         }
         capture.onInterruption = { [weak self] reason in
             guard let self, let interrupted = self.take ?? self.pendingStart else { return }
@@ -149,7 +149,7 @@ final class CaptureController {
             guard let on = params["on"] as? Bool else {
                 throw CaptureFailure("INVALID_REQUEST", "capture.setCamera states whether the camera is on.")
             }
-            // Native refusals, such as a missing camera or the toggle limit, pass through as codes.
+            // Native refusals, such as a missing camera, pass through as codes.
             try await capture.setCamera(on: on)
             return status()
         case "capture.stop":

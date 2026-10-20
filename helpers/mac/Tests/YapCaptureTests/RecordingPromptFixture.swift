@@ -12,7 +12,7 @@ func writeRecordingPromptFixture(directory: String, options: String) async throw
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let sourceId = config["sourceId"] as? String ?? "take-2"
     let kind = config["kind"] as? String ?? "display"
-    let version = config["kind"] == nil || config["legacy"] as? Bool == true ? 3 : 4
+    let version = config["schema"] as? Int ?? (config["kind"] == nil ? 3 : 4)
     let mic = config["mic"] as? Bool ?? false
     let system = config["system"] as? Bool ?? false
     let duration: Int64 = 190_000_000

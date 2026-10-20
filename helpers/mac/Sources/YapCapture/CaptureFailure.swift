@@ -1,5 +1,6 @@
 import Foundation
 import YapMedia
+import YapProtocol
 
 public struct CaptureFailure: Error, LocalizedError, Codable, Sendable {
     public var errorDescription: String? { message }

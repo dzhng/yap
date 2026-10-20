@@ -81,7 +81,7 @@ public enum NativeWire {
                     // Preserve the specific cause; the ledger owns its retry verdict.
                     let failure = CaptureFinalizationError(error)
                     throw NativeFailure(failure.code,
-                        failure.message, details: ["cause": failure.code])
+                        failure.message)
                 }
             },
             "media.cleanupCapture": Operation(

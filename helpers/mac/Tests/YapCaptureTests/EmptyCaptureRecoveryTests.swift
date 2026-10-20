@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import YapMedia
+import YapProtocol
 import YapWire
 
 @MainActor

@@ -2,6 +2,7 @@ import CoreMedia
 import Foundation
 import YapCapture
 import YapMedia
+import YapProtocol
 
 func runSchema4HeaderTests() throws {
     let root = RecoveryFixture.directory("schema4-header")
@@ -120,7 +121,7 @@ private func verifyTakeSummary(version: Int, undo: Bool, sourceKind: String = "d
     let bytes = try Data(contentsOf: url)
     let receipt = try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
     if version == 4 {
-        precondition((receipt["take"] as? [String: String])?["kind"] == (sourceKind == "region" ? "area" : sourceKind),
+        precondition((receipt["take"] as? [String: String])?["kind"] == sourceKind,
             "Publication must retain the take kind separately from source authority")
         precondition(receipt["marks"] as? [String: Bool] == ["pins": !undo, "strokes": !undo],
             "Publication must report only live pins and strokes")

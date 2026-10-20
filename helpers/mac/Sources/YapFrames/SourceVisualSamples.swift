@@ -58,7 +58,6 @@ public enum SourceVisualSamples {
         var previous: (at: ExactTime, support: Int)?
         var thumbnail: (buffer: CVPixelBuffer, width: Int, height: Int, rgb: String)?
         var observations: [Observation] = []
-        var traversed = 0
         for requested in times {
             try Task.checkCancellation()
             guard let support = try request.available.firstIndex(where: { try $0.contains(ExactTime(Int128(requested))) }) else {
@@ -78,17 +77,13 @@ public enum SourceVisualSamples {
                 var cursor = prior.at
                 while try cursor.compare(at) == .orderedAscending {
                     try Task.checkCancellation()
-                    traversed += 1
-                    guard traversed <= 100_000 else {
-                        throw NativeFailure("LIMIT_EXCEEDED", "Visual sample traversal exceeds its bounded work budget.")
-                    }
-                    let span = try source.selection(at: cursor, end: .positiveInfinity, maximumDecodedSamples: 100_000)
+                    let span = try source.selection(at: cursor, end: .positiveInfinity)
                     guard try ExactTime(span.end).compare(cursor) == .orderedDescending else { throw NativeFailure("UNAVAILABLE", "Visual sample traversal made no progress.") }
                     if span.buffer == nil { continuous = false }
                     cursor = try ExactTime(span.end)
                 }
             }
-            let selected = try source.selection(at: at, end: .positiveInfinity, maximumDecodedSamples: 100_000)
+            let selected = try source.selection(at: at, end: .positiveInfinity)
             previous = (at, support)
             guard let buffer = selected.buffer, let stamp = selected.sampleTime else {
                 observations.append(Observation(requestedSourceUs: requested, status: "unavailable",

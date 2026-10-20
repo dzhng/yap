@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import YapMedia
+import YapProtocol
 import Synchronization
 @preconcurrency import ScreenCaptureKit
 

@@ -212,9 +212,8 @@ public struct CursorStats: Codable, Sendable, Equatable {
 /// invents a reading for a tick that did not happen, and a paused take records nothing.
 public struct CursorTrack: Sendable {
     public static let defaultFlushIntervalUs: Int64 = 500_000
-    public init(flushIntervalUs: Int64 = Self.defaultFlushIntervalUs, placementLimit: Int = 240) {
-        self.flushIntervalUs = flushIntervalUs
-        self.nextFlushUs = flushIntervalUs
+    public init(placementLimit: Int = 240) {
+        self.nextFlushUs = Self.defaultFlushIntervalUs
         self.placementLimit = max(1, placementLimit)
     }
 
@@ -229,7 +228,6 @@ public struct CursorTrack: Sendable {
         let force: Bool
     }
 
-    private let flushIntervalUs: Int64
     private var nextFlushUs: Int64
     private var forceNext = true
     private var lastWritten: CursorSample?
@@ -301,9 +299,7 @@ public struct CursorTrack: Sendable {
 
     /// The capture clock calls this even when no further readings arrive.
     public mutating func flush(through sourceUs: Int64) -> [CursorSample] {
-        guard sourceUs >= nextFlushUs else { return [] }
-        nextFlushUs = flushIntervalUs > 0
-            ? (sourceUs / flushIntervalUs + 1) * flushIntervalUs : sourceUs
+        nextFlushUs = (sourceUs / Self.defaultFlushIntervalUs + 1) * Self.defaultFlushIntervalUs
         return writePending()
     }
 

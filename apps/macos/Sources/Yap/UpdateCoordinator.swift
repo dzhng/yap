@@ -1,5 +1,5 @@
 import Foundation
-import YapMedia
+import YapProtocol
 
 /// Joins existing native intent to the service's atomic permit. Sparkle owns the
 /// update cycle and launch exclusion. This owner never closes resources to obtain idle;

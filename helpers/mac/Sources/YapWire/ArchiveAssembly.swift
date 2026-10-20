@@ -41,7 +41,7 @@ extension ArchiveOperation {
             var info = stat()
             guard fstat(input, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
                 info.st_size >= 0 else {
-                throw error("INVALID_STORAGE", "Source copy requires a bounded regular file.")
+                throw error("INVALID_STORAGE", "Source copy requires a regular file with a known size.")
             }
             let before = try FileVersion(of: input)
             guard info.st_size == member.bytes, before == member.identity else {
@@ -96,28 +96,18 @@ extension ArchiveOperation {
         }
         guard fstat(5, &planInfo) == 0, planInfo.st_mode & S_IFMT == S_IFREG,
             planInfo.st_size > 0 else {
-            throw error("LIMIT_EXCEEDED", "ZIP member plan must be a bounded regular file.")
+            throw error("INVALID_PACKAGE", "ZIP member plan must be a nonempty regular file.")
         }
         let planIdentity = try FileVersion(of: 5)
         guard request.plan.bytes == planInfo.st_size, request.plan.identity == planIdentity else {
             throw error("ARCHIVE_CHANGED", "ZIP plan differs from admission.")
         }
-        // The descriptor inventory grows with take evidence. Foundation reads it in
-        // chunks; decode each fixed-shape member independently rather than copying the
-        // whole plan into a Data buffer and a second Codable array.
-        guard let stream = InputStream(fileAtPath: "/dev/fd/5") else { throw io("Read ZIP member plan") }
-        stream.open()
-        defer { stream.close() }
-        guard let members = try JSONSerialization.jsonObject(with: stream) as? [[String: Any]], !members.isEmpty else {
-            throw error("INVALID_PACKAGE", "ZIP member plan must be a nonempty inventory.")
-        }
+        let planFile = FileHandle(fileDescriptor: 5, closeOnDealloc: false)
+        let members = try JSONDecoder().decode([WriteMember].self, from: planFile.readToEnd() ?? Data())
+        guard !members.isEmpty else { throw error("INVALID_PACKAGE", "ZIP member plan must be a nonempty inventory.") }
         guard try FileVersion(of: 5) == planIdentity else { throw error("ARCHIVE_CHANGED", "ZIP plan changed during read.") }
-        func member(_ value: [String: Any]) throws -> WriteMember {
-            try JSONDecoder().decode(WriteMember.self, from: JSONSerialization.data(withJSONObject: value))
-        }
         var names = Set<String>(), parents = Set<String>(), expectedTotal = 0
-        for value in members {
-            let member = try member(value)
+        for member in members {
             let folded = member.path.lowercased()
             guard case .safe(let parts) = memberPath(member.path, limits),
                 !parents.contains(folded), names.insert(folded).inserted,
@@ -146,7 +136,7 @@ extension ArchiveOperation {
         defer { withExtendedLifetime(output) { _ = archive_write_free(writer) } }
         func checked(_ status: Int32) throws {
             guard status == ARCHIVE_OK else {
-                if output.failed { throw error("LIMIT_EXCEEDED", "ZIP output limit or write failure.") }
+                if output.failed { throw error("WRITE_FAILED", "ZIP output write failed.") }
                 throw error("INVALID_PACKAGE", archive_error_string(writer).map { String(cString: $0) } ?? "ZIP write failed.")
             }
         }
@@ -169,8 +159,7 @@ extension ArchiveOperation {
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: chunkBytes, alignment: 8)
         defer { buffer.deallocate() }
         var total = 0
-        for value in members {
-            let member = try member(value)
+        for member in members {
             let input = try openWriteInput(member.path)
             defer { close(input) }
             var info = stat()
@@ -192,7 +181,7 @@ extension ArchiveOperation {
                 guard n > 0 else { throw error("ARCHIVE_CHANGED", "ZIP member ended before expected size.") }
                 hash.update(data: Data(bytes: buffer, count: n))
                 guard archive_write_data(writer, buffer, n) == n else {
-                    throw error(output.failed ? "LIMIT_EXCEEDED" : "INVALID_PACKAGE", "ZIP member write failed.")
+                    throw error(output.failed ? "WRITE_FAILED" : "INVALID_PACKAGE", "ZIP member write failed.")
                 }
                 copied += n
                 try charge(n, &total)

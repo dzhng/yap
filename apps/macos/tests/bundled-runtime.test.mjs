@@ -12,7 +12,7 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
-import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
+import { protocolLinkArguments } from "./fixtures/swift-protocol.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 let scratch, probe;
@@ -36,7 +36,7 @@ exit(3)
   execFileSync(
     "swiftc",
     [
-      ...mediaLinkArguments(),
+      ...protocolLinkArguments(),
       join(root, "apps/macos/Sources/Yap/ServiceBundle.swift"),
       join(root, "apps/macos/Sources/Yap/NodeRuntime.swift"),
       source,

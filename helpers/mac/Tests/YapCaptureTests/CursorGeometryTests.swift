@@ -125,10 +125,10 @@ func runCursorGeometryTests() throws {
     precondition(
         unexplained.outputPixel(forGlobalPoint: CGPoint(x: 0, y: 0)) == nil,
         "Geometry no frame has explained cannot place a point")
-    var unlocated = CursorTrack(flushIntervalUs: 0)
+    var unlocated = CursorTrack()
     _ = unlocated.observe(unexplained, hostUs: 0, sourceUs: nil, usable: true)
-    let unlocatedSample = unlocated.accept(
-        reading(hostUs: 1_000, x: 300, y: 455), sourceUs: 1_000)?.first
+    _ = unlocated.accept(reading(hostUs: 1_000, x: 300, y: 455), sourceUs: 1_000)
+    let unlocatedSample = unlocated.flush(through: 1_000).first
     precondition(
         unlocatedSample?.eligibility == "unknownGeometry" && unlocatedSample?.geometryEpoch == 0,
         "A frame with no source placement cannot claim a projected epoch, got \(String(describing: unlocatedSample))"
@@ -149,7 +149,7 @@ func runCursorGeometryTests() throws {
 }
 
 private func runCursorTrackTests() throws {
-    var track = CursorTrack(flushIntervalUs: 32_000)
+    var track = CursorTrack()
     precondition(
         track.epoch == 0
             && track.observe(placed, hostUs: 0, sourceUs: nil, usable: true)?.epoch == 1,
@@ -163,10 +163,8 @@ private func runCursorTrackTests() throws {
     precondition(
         track.accept(reading(hostUs: 17_000, x: 0, y: 0), sourceUs: 16_000) == nil,
         "Readings are retained until the take-time flush")
-    guard
-        let batch = track.accept(
-            reading(hostUs: 33_000, x: 300, y: 455, buttons: 1), sourceUs: 32_000)
-    else { preconditionFailure("The take-time deadline flushes pending readings") }
+    _ = track.accept(reading(hostUs: 33_000, x: 300, y: 455, buttons: 1), sourceUs: 32_000)
+    let batch = track.flush(through: 32_000)
     precondition(
         batch.map(\.sourceUs) == [0, 16_000, 32_000], "A batch keeps sample order, got \(batch)")
     precondition(
@@ -205,7 +203,7 @@ private func runCursorTrackTests() throws {
 
     // A frame reports its placement milliseconds after the moment it describes. Readings taken
     // after a window moved must not be projected onto the position it had just left.
-    var late = CursorTrack(flushIntervalUs: 100_000_000)
+    var late = CursorTrack()
     _ = late.observe(placed, hostUs: 0, sourceUs: nil, usable: true)
     _ = late.accept(reading(hostUs: 40_000, x: 300, y: 455), sourceUs: 40_000)
     _ = late.accept(reading(hostUs: 60_000, x: 300, y: 455), sourceUs: 60_000)
@@ -223,25 +221,24 @@ private func runCursorTrackTests() throws {
 
     // The sampler and frame producer enqueue independently. A reading taken before a move
     // may reach the capture queue just after the new geometry, even with no pending batch.
-    var delayedReading = CursorTrack(flushIntervalUs: 0)
+    var delayedReading = CursorTrack()
     _ = delayedReading.observe(placed, hostUs: 0, sourceUs: nil, usable: true)
     _ = delayedReading.accept(reading(hostUs: 10_000, x: 300, y: 455), sourceUs: 10_000)
+    _ = delayedReading.flush(through: 10_000)
     _ = delayedReading.observe(moved, hostUs: 50_000, sourceUs: nil, usable: true)
-    let delayedBatch = delayedReading.accept(
-        reading(hostUs: 40_000, x: 300, y: 455), sourceUs: 40_000)
+    _ = delayedReading.accept(reading(hostUs: 40_000, x: 300, y: 455), sourceUs: 40_000)
+    let delayedBatch = delayedReading.flush(through: 40_000)
     precondition(
-        delayedBatch?.isEmpty == true,
+        delayedBatch.isEmpty,
         "An unchanged delayed reading must deduplicate under its known pre-move geometry, got \(String(describing: delayedBatch))"
     )
     print("PASS a delayed reading retains geometry across an empty batch")
 
     // A reading no observed geometry covers cannot claim an epoch it was never projected through.
-    var unexplained = CursorTrack(flushIntervalUs: 0)
+    var unexplained = CursorTrack()
     _ = unexplained.observe(placed, hostUs: 50_000, sourceUs: nil, usable: true)
-    guard
-        let orphan = unexplained.accept(
-            reading(hostUs: 10_000, x: 300, y: 455), sourceUs: 10_000)?.first
-    else { preconditionFailure("A zero-interval test flushes on arrival") }
+    _ = unexplained.accept(reading(hostUs: 10_000, x: 300, y: 455), sourceUs: 10_000)
+    guard let orphan = unexplained.flush(through: 10_000).first else { preconditionFailure("Flush must retain the reading") }
     precondition(
         orphan.eligibility == "unknownGeometry" && orphan.geometryEpoch == 0 && orphan.x == nil
             && orphan.globalX == 300,
@@ -251,7 +248,7 @@ private func runCursorTrackTests() throws {
     // Frames keep reporting geometry through a pause while the cadence is suspended, so the
     // delivered-reading watermark stops advancing. Retention is bounded by a count as well, and
     // the placements a resumed take needs are the newest ones.
-    var churn = CursorTrack(flushIntervalUs: 0, placementLimit: 3)
+    var churn = CursorTrack(placementLimit: 3)
     precondition(
         churn.accept(reading(hostUs: 0, x: 300, y: 455), sourceUs: nil) == nil,
         "A reading the paused clock refuses records no sample")
@@ -263,12 +260,10 @@ private func runCursorTrackTests() throws {
     precondition(
         churn.stats.forgottenPlacements == 3 && churn.stats.geometryEpochs == 6,
         "Unclaimed geometry past the bound is forgotten and reported, got \(churn.stats)")
-    guard
-        let beforeBound = churn.accept(reading(hostUs: 15_000, x: 300, y: 455), sourceUs: 15_000)?
-            .first,
-        let withinBound = churn.accept(reading(hostUs: 55_000, x: 300, y: 455), sourceUs: 55_000)?
-            .first
-    else { preconditionFailure("A zero-interval test flushes on arrival") }
+    _ = churn.accept(reading(hostUs: 15_000, x: 300, y: 455), sourceUs: 15_000)
+    let beforeBound = churn.flush(through: 15_000).first!
+    _ = churn.accept(reading(hostUs: 55_000, x: 300, y: 455), sourceUs: 55_000)
+    let withinBound = churn.flush(through: 55_000).first!
     precondition(
         beforeBound.eligibility == "unknownGeometry" && beforeBound.geometryEpoch == 0,
         "A reading older than every retained placement is unplaced, got \(beforeBound)")
@@ -281,19 +276,20 @@ private func runCursorTrackTests() throws {
     // Pauses: the take's own clock refuses readings, and nothing is invented for that time.
     var clock = CaptureClock()
     clock.start(at: 100_000_000)
-    var paused = CursorTrack(flushIntervalUs: 100_000_000)
+    var paused = CursorTrack()
     _ = paused.observe(placed, hostUs: 100_000_000, sourceUs: nil, usable: true)
     let hosts: [Int64] = [
         100_000_000, 101_000_000, 102_500_000, 103_000_000, 104_000_000, 105_500_000, 106_000_000,
     ]
+    var recorded: [CursorSample] = []
     for (index, hostUs) in hosts.enumerated() {
         if hostUs == 102_500_000 { clock.pause(at: 102_000_000) }
         if hostUs == 105_500_000 { clock.resume(at: 105_000_000) }
-        _ = paused.accept(
+        recorded += paused.accept(
             reading(hostUs: hostUs, x: 300 + Double(index), y: 455),
-            sourceUs: clock.sourceTime(for: hostUs))
+            sourceUs: clock.sourceTime(for: hostUs)) ?? []
     }
-    let recorded = paused.seal()
+    recorded += paused.seal()
     precondition(
         recorded.map(\.sourceUs) == [0, 1_000_000, 2_500_000, 3_000_000],
         "Paused readings are omitted and resumed time removes the pause, got \(recorded)")
@@ -314,7 +310,7 @@ private func runCursorTrackTests() throws {
         CursorSampler.skippedTicks(elapsedUs: 33_334, intervalUs: 16_667) == 1
             && CursorSampler.skippedTicks(elapsedUs: 100_000, intervalUs: 16_667) == 5,
         "A late tick reports the readings the cadence owed")
-    var gapped = CursorTrack(flushIntervalUs: 100_000_000)
+    var gapped = CursorTrack()
     _ = gapped.observe(placed, hostUs: 0, sourceUs: nil, usable: true)
     _ = gapped.accept(reading(hostUs: 1_000, x: 300, y: 455, skipped: 4), sourceUs: 0)
     gapped.note(refusedReadings: 7)
@@ -349,14 +345,16 @@ private func runLiveMarkJournalTests() throws {
         scaleFactor: 1, screenRect: GeometryRect(x: 100, y: 100, width: 16, height: 16),
         boundingRect: nil, requestedSourceRect: nil)
     writer.queue.sync { writer.ingest(liveMarkFrame(atHostUs: origin, geometry: geometry), of: .screen) }
-    var expectedTrack = CursorTrack(flushIntervalUs: 0)
+    var expectedTrack = CursorTrack()
     _ = expectedTrack.observe(geometry, hostUs: origin, sourceUs: 0, usable: true)
-    let expectedInside = expectedTrack.accept(
+    _ = expectedTrack.accept(
         CursorReading(hostUs: origin + 10, global: CGPoint(x: 105, y: 105), buttons: 0,
-            zeroOriginHeight: 800), sourceUs: 10)?.first
-    let expectedOutside = expectedTrack.accept(
+            zeroOriginHeight: 800), sourceUs: 10)
+    let expectedInside = expectedTrack.flush(through: 10).first
+    _ = expectedTrack.accept(
         CursorReading(hostUs: origin + 20, global: CGPoint(x: 120, y: 105), buttons: 0,
-            zeroOriginHeight: 800), sourceUs: 20)?.first
+            zeroOriginHeight: 800), sourceUs: 20)
+    let expectedOutside = expectedTrack.flush(through: 20).first
     writer.queue.sync {
         writer.accept(CursorReading(
             hostUs: origin - 1, global: CGPoint(x: 10, y: 10), buttons: 0,
@@ -541,12 +539,11 @@ private func runCursorJournalTests() throws {
     try journal.recordOrigin(hostUs: 1_000_000)
     try journal.recordDisplaySpace(hostUs: 1_000_000, zeroOriginHeight: 982)
     try journal.recordGeometry(epoch: 1, hostUs: 1_000_000, sourceUs: 0, geometry: placed)
-    var track = CursorTrack(flushIntervalUs: 16_000)
+    var track = CursorTrack()
     _ = track.observe(placed, hostUs: 1_000_000, sourceUs: nil, usable: true)
     _ = track.accept(reading(hostUs: 1_000_000, x: 300, y: 455), sourceUs: 0)
-    guard let batch = track.accept(reading(hostUs: 1_016_000, x: 0, y: 0), sourceUs: 16_000) else {
-        preconditionFailure("The take-time deadline flushes pending readings")
-    }
+    _ = track.accept(reading(hostUs: 1_016_000, x: 0, y: 0), sourceUs: 16_000)
+    let batch = track.flush(through: 16_000)
     try journal.recordCursorSamples(batch)
     try journal.recordGeometry(epoch: 2, hostUs: 1_100_000, sourceUs: nil, geometry: letterboxed)
 
@@ -616,7 +613,7 @@ private func runCursorJournalTests() throws {
 
 private func runGeometryPlacementTests() throws {
     var clock = CaptureClock()
-    var track = CursorTrack(flushIntervalUs: 100_000_000)
+    var track = CursorTrack()
     let directory = RecoveryFixture.directory("geometry-placement")
     defer { try? FileManager.default.removeItem(at: directory) }
     let journal = try CaptureJournal(

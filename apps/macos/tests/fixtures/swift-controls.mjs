@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mediaLinkArguments } from "./swift-media.mjs";
+import { protocolLinkArguments } from "./swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/", import.meta.url));
 
@@ -39,7 +39,7 @@ export function compileControlsCheck(scratch, appSources, check, onCompile = () 
     "-swift-version",
     "6",
     "-parse-as-library",
-    ...mediaLinkArguments(build),
+    ...protocolLinkArguments(build),
     "-I",
     join(build, "Modules"),
     ...objects,

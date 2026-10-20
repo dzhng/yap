@@ -162,14 +162,14 @@ public final class PresentationSource {
 
     deinit { reader.cancelReading() }
 
-    public func selection(at: CMTime, end: CMTime, maximumDecodedSamples: Int? = nil) throws
+    public func selection(at: CMTime, end: CMTime) throws
         -> Selection
     {
-        try selection(at: ExactTime(at), end: end, maximumDecodedSamples: maximumDecodedSamples)
+        try selection(at: ExactTime(at), end: end)
     }
 
     /// Requested rationals need not fit a CMTime timescale to select physical support.
-    package func selection(at: ExactTime, end: CMTime, maximumDecodedSamples: Int? = nil) throws
+    package func selection(at: ExactTime, end: CMTime) throws
         -> Selection
     {
         while segmentIndex < segments.count {
@@ -190,10 +190,6 @@ public final class PresentationSource {
         }
         while try held == nil || at.compare(ExactTime(heldEnd)) != .orderedAscending {
             held = nil
-            if let maximumDecodedSamples, decodedCount >= maximumDecodedSamples {
-                throw NativeFailure(
-                    "LIMIT_EXCEEDED", "Presentation decode exceeds its sample budget.")
-            }
             guard let sample = autoreleasepool(invoking: { decoded.copyNextSampleBuffer() }) else {
                 throw NativeFailure("DECODE_FAILED", "Decoder ended before retained sample support.")
             }

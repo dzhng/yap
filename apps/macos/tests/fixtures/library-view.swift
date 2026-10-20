@@ -1,6 +1,6 @@
 import AppKit
 import YapControls
-import YapMedia
+import YapProtocol
 
 @main struct LibraryViewCheck {
     @MainActor static func main() {

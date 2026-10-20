@@ -325,8 +325,6 @@ final class ServiceHost: @unchecked Sendable {
             fail(
                 code: error?["code"] as? String ?? "SERVICE_UNAVAILABLE",
                 message: error?["message"] as? String ?? "Service reported a startup failure",
-                retryable: error?["retryable"] as? Bool,
-                retryAfterMs: error?["retryAfterMs"] as? Int,
                 details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })
         case "call":
             guard let request = message["request"] as? [String: Any],
@@ -385,8 +383,6 @@ final class ServiceHost: @unchecked Sendable {
                         ServiceFailure(
                             code: error?["code"] as? String ?? "INTERNAL_ERROR",
                             message: error?["message"] as? String ?? "Service operation failed",
-                            retryable: error?["retryable"] as? Bool,
-                            retryAfterMs: error?["retryAfterMs"] as? Int,
                             details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })))
             }
         default:
@@ -448,8 +444,8 @@ final class ServiceHost: @unchecked Sendable {
 
     /// One terminal failure per child. Settling every pending call here is what keeps a
     /// dead or unreadable channel from leaving callers waiting forever.
-    private func fail(code: String, message: String, retryable: Bool? = nil, retryAfterMs: Int? = nil, details: Data? = nil) {
-        let failure = ServiceFailure(code: code, message: message, retryable: retryable, retryAfterMs: retryAfterMs, details: details)
+    private func fail(code: String, message: String, details: Data? = nil) {
+        let failure = ServiceFailure(code: code, message: message, details: details)
         let settled = pending
         pending.removeAll()
         if !finished {

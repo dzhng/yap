@@ -2,6 +2,7 @@ import Foundation
 import Synchronization
 import YapCapture
 import YapMedia
+import YapProtocol
 
 @MainActor
 func runMaximumTakeTests() async throws {

@@ -145,7 +145,6 @@ package final class CaptureClockIngress: NSObject, SCStreamOutput, AVCaptureVide
             let relativeRate: Double?
             let cameraFrame: CameraFrameMapping?
         }
-        // Bound pathological callback floods without accumulating a take in memory.
         let rate = clock.map { CMSyncGetRelativeRate($0, relativeTo: CMClockGetHostTimeClock()) }
         let row = Row(role: .camera, clockDomain: "camera-session", generation: generation, rawPTS: CaptureRationalTime(sample.presentationTimeStamp),
             convertedHostPTS: converted.map(CaptureRationalTime.init), arrivalHostUs: arrivalHostUs,

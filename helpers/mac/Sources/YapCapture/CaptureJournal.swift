@@ -2,6 +2,7 @@ import Darwin
 import CryptoKit
 import Foundation
 import YapMedia
+import YapProtocol
 
 public struct CursorSampling: Codable, Sendable, Equatable {
     public static let defaultIntervalUs: Int64 = 16_667
@@ -36,7 +37,7 @@ public enum JournalSchema {
     package static func summarizesTake(_ version: Int) -> Bool { capabilities[version]?.summarizesTake ?? false }
     package static func boundedStrokes(_ version: Int) -> Bool { capabilities[version]?.boundedStrokes ?? false }
     public static func cursorSampling(_ header: CaptureJournalHeader) -> CursorSampling {
-        capabilities[header.schemaVersion]?.holdsCursor == true ? header.cursorSampling ?? CursorSampling() : CursorSampling(intervalUs: header.cursorSampling?.intervalUs ?? CursorSampling.defaultIntervalUs)
+        capabilities[header.schemaVersion]?.holdsCursor == true ? header.cursorSampling ?? CursorSampling() : CursorSampling()
     }
 }
 
@@ -87,7 +88,6 @@ public struct CaptureJournalSummary: Codable, Sendable {
             lastCursorSourceUs,
             geometryEpochs, lastGeometry, zeroOriginHeight
     }
-    package var liveMarks: CapturePublishedSource.Marks?
     public var header: CaptureJournalHeader?
     public var originHostUs: Int64?
     public var pauses: [PauseEvent] = []
@@ -131,10 +131,7 @@ package struct JournalPrefix: Codable, Sendable, Equatable {
 
 // One capture queue owns append order. Media bytes never enter this journal.
 public final class CaptureJournal {
-    // 60 points/s × 103 B/point × maximum stroke seconds × 2× numeric/envelope margin.
-    // Mirrors protocol JOURNAL_RECORD_BYTES; RequirementsTests checks the shared derivation.
-    package static let maximumRecordBytes = Int(ceil(
-        Double(Requirements.strokeBytesPerSecond) * Double(Requirements.maximumStrokeUs) / 1_000_000 * 2))
+    package static let maximumRecordBytes = Requirements.journalRecordBytes
     // Schemas 1–3 were written with a strict < 1 MiB rule. This is format interpretation.
     private static let historicalRecordBytes = 1_048_576
     private let handle: FileHandle
@@ -340,7 +337,7 @@ public final class CaptureJournal {
     }
 
     /// Streams a take's placement evidence without retaining it. A take changes geometry as often
-    /// as it delivers frames and samples the pointer sixty times a second, so the caller decides
+    /// as it delivers frames and writes pointer observations only when the pointer state changes, so the caller decides
     /// what to keep. The returned summary omits pause/audio arrays (those are streamed), so
     /// a consumer learns from that one pass both what the evidence was and where — at
     /// `invalidAtSequence` or an `incompleteTail` — the file stopped being believable. A stream

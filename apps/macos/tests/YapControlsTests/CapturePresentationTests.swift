@@ -1,6 +1,6 @@
 import Foundation
 import YapControls
-import YapMedia
+import YapProtocol
 
 private func action(_ entries: [PresentedControlsAction], _ id: String) -> PresentedControlsAction {
     guard let found = entries.first(where: { $0.action.id == id }) else {
@@ -110,7 +110,11 @@ func runCapturePresentationTests() {
     recovering.take = .init(id: "rec-recovery", state: "finalizing", interruptionReason: nil,
         sourceDurationUs: nil, finalizationError: .init(code: "INVALID_SOURCE", message: "Cannot recover", retryable: false))
     precondition(!CapturePresentation.transport(for: recovering).contains { $0.action == .startOrStop },
-        "Non-retryable finalization offers status rather than Retry")
+        "A live non-retryable finalization cannot be retried")
+    recovering.take = .init(id: "rec-recovery", state: "complete", interruptionReason: nil,
+        sourceDurationUs: 1_000_000, finalizationError: .init(code: "INVALID_SOURCE", message: "Cannot recover", retryable: false))
+    precondition(action(CapturePresentation.transport(for: recovering), "capture.startOrStop").title == "Start Recording",
+        "A non-live take must not hide Start Recording when finalization is non-retryable")
 
     var refused = ready()
     // Refusal is reported by action, since the physical key, not its label, is the identity.
@@ -426,7 +430,7 @@ func runImportVerdictTests() {
         state.library.recent = [try! JSONDecoder().decode(ControlsState.RecentTake.self, from: Data(json.utf8))]
         state.library.media = mediaRows(state.library.recent)
         let row = LibraryPresentation.recordings(for: state).items.first!
-        precondition((row.status == "Import failed") == (code != "OWNER_DELETED"), "Terminal import verdict \(code) must be represented")
+        precondition(row.status == "Import failed", "Terminal import verdict \(code) must be represented")
         precondition(row.actions.contains { $0.action == .retryImport("job") } == retry)
     }
 }

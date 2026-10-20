@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import YapMedia
+import YapProtocol
 
 /// Resolves the window evidence attached to a mark. The caller supplies it so gesture recognition
 /// remains independent of AppKit and ScreenCaptureKit.
@@ -197,7 +198,6 @@ public struct MarkRecognizer {
         defer { stroke.removeAll(keepingCapacity: true) }
         // A duration boundary ends a record, while Shift release ends gesture recognition.
         defer { if !continuing { strokeTravel = 0 } }
-        guard !stroke.isEmpty else { return [] }
         guard let first = stroke.first else { return [] }
         guard strokeTravel >= 8 else { return [] }
         return [

@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { callLocal } from "../../../packages/client/dist/index.js";
 import { operationSchema } from "../../../packages/protocol/dist/index.js";
 
-import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
+import { protocolLinkArguments } from "./fixtures/swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 
@@ -71,7 +71,7 @@ final class Box: @unchecked Sendable { var data: Data; init(_ data: Data) { self
       "-swift-version",
       "6",
       "-parse-as-library",
-      ...mediaLinkArguments(),
+      ...protocolLinkArguments(),
       ...["AppSocket", "ServiceBundle", "NodeRuntime"].map((name) =>
         join(sources, `${name}.swift`),
       ),

@@ -16,7 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
-import { mediaLinkArguments } from "./fixtures/swift-media.mjs";
+import { protocolLinkArguments } from "./fixtures/swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 const defaultFramework = fileURLToPath(
@@ -217,7 +217,7 @@ func diagnostic(_ message: String) {}
         "-swift-version",
         "6",
         "-parse-as-library",
-        ...mediaLinkArguments(),
+        ...protocolLinkArguments(),
         "-F",
         dirname(framework),
         "-framework",

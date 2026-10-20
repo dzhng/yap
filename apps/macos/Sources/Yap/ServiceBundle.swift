@@ -1,5 +1,5 @@
 import Foundation
-import YapMedia
+import YapProtocol
 
 /// A refusal as the service states it: its own code, and a message a person can act on.
 struct ServiceFailure: LocalizedError, Sendable {
@@ -11,11 +11,11 @@ struct ServiceFailure: LocalizedError, Sendable {
     /// `IN_USE` delete names.
     var details: Data? = nil
 
-    init(code: String, message: String, retryable: Bool? = nil, retryAfterMs: Int? = nil, details: Data? = nil) {
+    init(code: String, message: String, details: Data? = nil) {
         self.code = code
         self.message = message
-        self.retryable = retryable ?? RefusalLedger.retryable(code)
-        self.retryAfterMs = retryAfterMs ?? RefusalLedger.retryAfterMs(code)
+        self.retryable = RefusalLedger.retryable(code)
+        self.retryAfterMs = RefusalLedger.retryAfterMs(code)
         self.details = details
     }
 
