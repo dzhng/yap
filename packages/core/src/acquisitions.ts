@@ -49,7 +49,7 @@ import {
 } from "./files.js";
 import {
   cameraProofIntervals,
-  packedSchema,
+  journalCapabilities,
   validateSourceReceipt,
   type CameraPublicationProof,
   type SourceEvidenceMetadata,
@@ -1110,7 +1110,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            packedSchema(receipt.header?.schemaVersion) &&
+            journalCapabilities(receipt.header ?? {})?.isPacked &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )

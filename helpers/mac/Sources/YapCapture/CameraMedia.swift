@@ -341,7 +341,7 @@ package enum CameraMedia {
 
     private static func validateJournal(_ receipt: Receipt, lease: CaptureJournalLease) throws {
         let pinned = try facts(lease, through: receipt.journal)
-        guard let header = pinned.header, header.schemaVersion == 1 else { throw invalid("Camera requires its source journal.") }
+        guard let header = pinned.header, JournalSchema.isCompanion(header.schemaVersion) else { throw invalid("Camera requires its source journal.") }
         let production = header.source.kind == "camera" || header.cameraBinding != nil || receipt.binding != nil
         if production {
             guard let binding = receipt.binding, header.source.kind == "camera", header.cameraBinding == binding,

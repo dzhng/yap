@@ -74,7 +74,7 @@ public enum CaptureMarkUpdate: Equatable, Sendable {
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
     private let journal: CaptureJournal
-    package var packedJournalLease: CaptureJournalLease? { CaptureJournal.isPacked(journal.schemaVersion) ? journal.lease : nil }
+    package var packedJournalLease: CaptureJournalLease? { JournalSchema.isPacked(journal.schemaVersion) ? journal.lease : nil }
     package var journalSchemaVersion: Int { journal.schemaVersion }
     package var requestedAudioRoles: [String] {
         (request.microphone ? ["narration"] : []) + (request.systemAudio ? ["system"] : [])
@@ -136,9 +136,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         journal = try CaptureJournal(
             directory: request.outputDirectory,
             header: CaptureJournalHeader(
-                schemaVersion: 3, sessionID: sessionID, source: request.source, width: width,
+                schemaVersion: JournalSchema.current, sessionID: sessionID, source: request.source, width: width,
                 height: height,
-                microphone: request.microphone, systemAudio: request.systemAudio))
+                microphone: request.microphone, systemAudio: request.systemAudio,
+                cursorSampling: CursorSampling()))
         tracks["video"] = try TrackWriter(
             role: "video", directory: request.outputDirectory,
             settings: [

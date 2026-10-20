@@ -11,13 +11,13 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–04 and 07 are done (audits passed H1 unchanged). Slice 05 is in
+Status 2026-10-20: slices 00–04, 07 and 08 are done (audits passed H1 unchanged). Slice 05 is in
 progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
 You are implementing this spec. Pick up at [slice 05](slices/05-ledger-verdicts.md) → 06 on the
-error track and [slice 08](slices/08-schema-4.md) → 09 on the journal track; [10](slices/10-derived-limits.md)
+error track and [slice 09](slices/09-change-only-cursor.md) on the journal track; [10](slices/10-derived-limits.md)
 can start now that 07 is done. Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
@@ -47,7 +47,7 @@ TODO:
 - [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
 - [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
 - [x] 07 Linear journal readers with a derived record bound ([slice](slices/07-journal-readers.md))
-- [ ] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
+- [x] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
 - [ ] 09 Change-only cursor samples and hold readers ([slice](slices/09-change-only-cursor.md))
 - [ ] 10 Derived limits and the 12-hour stop ([slice](slices/10-derived-limits.md))
 - [ ] 11 Prompt from capture facts; `recording.get --wait` ([slice](slices/11-prompt-and-wait.md))

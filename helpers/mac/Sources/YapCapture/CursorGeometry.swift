@@ -377,7 +377,7 @@ public enum GlobalPointSpace {
 /// it works on this host rather than a guarantee from the platform.
 public final class CursorSampler: Sendable {
     public init(
-        intervalUs: Int64 = 16_667, pendingLimit: Int = 240, target: DispatchQueue,
+        intervalUs: Int64 = CursorSampling.defaultIntervalUs, pendingLimit: Int = 240, target: DispatchQueue,
         deliver: @escaping @Sendable (CursorReading) -> Void
     ) {
         self.intervalUs = intervalUs

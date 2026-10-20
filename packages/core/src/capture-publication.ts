@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CatalogError } from "./catalog.js";
-import { packedSchema } from "./evidence.js";
+import { journalCapabilities } from "./evidence.js";
 
 const identity = z.string().min(1).max(256);
 const diagnostic = z.strictObject({
@@ -17,6 +17,8 @@ const media = z.strictObject({
   sha256: hash,
 });
 const published = z.strictObject({
+  take: z.strictObject({ kind: z.enum(["display", "window", "area", "camera"]) }).optional(),
+  marks: z.strictObject({ pins: z.boolean(), strokes: z.boolean() }).optional(),
   kind: z.enum(["primary", "camera"]),
   sourceId: identity,
   sourceDurationUs: z.int().positive(),
@@ -30,7 +32,9 @@ const published = z.strictObject({
     bytes: z.int().positive().max(268_435_456),
     sha256: hash,
     lastSequence: z.int().positive(),
-    layout: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    layout: z
+      .int()
+      .refine((version) => journalCapabilities({ schemaVersion: version }) !== undefined),
   }),
   members: z.strictObject({
     "video.mov": media,
@@ -188,10 +192,11 @@ export function readCapturePublication(
         "Published source differs from allocated source/device authority",
       );
     const camera = kind === "camera";
+    const packed = journalCapabilities({ schemaVersion: receipt.journal.layout })?.isPacked;
     if (
       receipt.journal.file !== (camera ? "capture.journal.jsonl" : "source.journal.jsonl") ||
       // A companion camera keeps its own schema-1 journal; a primary source's is packed.
-      (camera ? receipt.journal.layout !== 1 : !packedSchema(receipt.journal.layout)) ||
+      (camera ? packed : !packed) ||
       Boolean(receipt.members["camera.publication.json"]) !== camera ||
       Boolean(receipt.members["camera.mapping.jsonl"]) !== camera
     )

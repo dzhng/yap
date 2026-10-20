@@ -17,3 +17,10 @@ The TypeScript native integration cases run with `YAP_NATIVE` explicitly naming
 the built worker. Build the sibling `YapCaptureTests` product too: it generates
 repeated strokes and synthetic movie pictures in scratch space, without an
 external encoder prerequisite.
+
+Schema-4 fixtures come from the native
+[summary tests](../../helpers/mac/Tests/YapCaptureTests/Schema4Tests.swift), using real journal
+and publication writers. Pins and strokes are summary facts only while they survive undo.
+Set `YAP_SCHEMA4_SUMMARY=1` and `YAP_SCHEMA4_FIXTURE_DIRECTORY` to a new scratch directory
+to generate them. Optional take facts stay absent on historical receipts; re-publication never
+adds facts to an existing receipt.

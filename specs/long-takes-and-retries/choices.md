@@ -39,3 +39,15 @@ at close.
 - **Golden pre-change exports are stored gzip-compressed** (364 KB for 6.7 MB). Sound.
 - **The 1 MiB writer guard stays for all writes until slice 08** switches new takes to
   schema 4. Sound: schema 3 must keep its rule.
+
+## Slice 08
+
+- **The take summary's kind is `take.kind`**, not `kind`, because the published source already
+  uses `kind` for its authority (primary vs camera). Sound.
+- **`cursorSampling.intervalUs` is an integer of microseconds** (16,667). Sound: every other
+  journal time is integer µs.
+- **A stroke split at 5 minutes keeps its gesture recognition**: travel accumulates across the
+  split, so a continuation shorter than the 8-point travel threshold isn't dropped. Sound
+  (found in review).
+- **Readers select behaviour by the persisted layout**, so inspection accepts schemas 1–4 and
+  refuses higher with the version in the message. Sound.

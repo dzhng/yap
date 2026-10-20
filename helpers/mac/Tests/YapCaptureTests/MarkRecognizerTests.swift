@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import YapCapture
+import YapMedia
 
 private struct TestWindowSource: WindowUnderPoint {
     let result: JournalMarkWindow?
@@ -120,6 +121,22 @@ func runMarkRecognizerTests() {
             _ = recognizer.feed(sample: sample(10, 100, 100))
             _ = recognizer.feed(press: press(20, 100, 100))
             return recognizer.feed(release: release(30, 100, 100)).isEmpty
+        }),
+        ("a duration split preserves a short continuation of an established stroke", {
+            var recognizer = markRecognizer()
+            _ = recognizer.feed(sample: sample(0, 0, 0))
+            _ = recognizer.feed(sample: sample(10, 8, 0))
+            let limit = Requirements.maximumStrokeUs
+            let first = recognizer.feed(sample: sample(limit, 8, 0))
+            _ = recognizer.feed(sample: sample(limit + 1, 9, 0))
+            _ = recognizer.feed(sample: sample(limit + 2, 12, 0))
+            let continuation = recognizer.feed(sample: sample(limit + 3, 12, 0, shift: false))
+            _ = recognizer.feed(sample: sample(limit + 4, 0, 0))
+            _ = recognizer.feed(sample: sample(limit + 5, 4, 0))
+            let fresh = recognizer.feed(sample: sample(limit + 6, 4, 0, shift: false))
+            return first.first?.points.map(\.hostUs) == [0, 10, limit]
+                && continuation.first?.points.map(\.hostUs) == [limit + 1, limit + 2]
+                && fresh.isEmpty
         }),
         ("a dropped sampler tick does not split a stroke", {
             var recognizer = markRecognizer()
