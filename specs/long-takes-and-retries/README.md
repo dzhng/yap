@@ -11,13 +11,22 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-21: slices 00–12 are implemented and the prior review fixes are committed in `2b664fbce` (H1, H2 and H3 passed). Slice 13 remains open for fresh-agent checks, release and origin-take acceptance.
-The full-run comparison and focused triage are recorded in
+Status 2026-10-21: slices 00–12 are implemented and reviewed, and the work shipped as
+[v0.1.67](https://github.com/dzhng/yap/releases/tag/v0.1.67) from `2ed0d1681` (main). Every
+local release gate passed: signing, release tests, the updater tests, the release build, the
+signed package and both relocated smoke checks. The published checksums and appcast were then
+verified. The full-run comparison and focused triage are recorded in
 [full-run triage](assets/verification/13-full-run-triage.md) and
-[second review round](assets/verification/13r2-review.md); continue the remaining
-fresh-agent checks, release, origin-take acceptance and close-spec in slice 13. Origin take
-`99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
-non-retryable); it is the final acceptance check and must not be touched before then.
+[second review round](assets/verification/13r2-review.md).
+
+Slice 13 still has two open items:
+- **Fresh-agent check.** No Claude or Codex check on an importing take has run yet.
+- **Origin-take acceptance.** Take `99099abb-fb1c-4018-a364-b263dcd58057` is intact (primary and
+  camera published, journal 6,255,256 bytes) and still failed on the installed 0.1.66. Once
+  the user's app updates to 0.1.67, press its Library **Retry** (or run `job.retry`), then
+  check the import, Copy prompt and Play. Never touch its files or rows before then.
+
+After both pass, run close-spec.
 
 You are implementing this spec. Pick up at [slice 13](slices/13-closeout.md).
 
