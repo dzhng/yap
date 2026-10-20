@@ -62,3 +62,11 @@ focus-free tests.
 Implementation and focused checks pass. [Shots, red/green evidence and delegated choices](../assets/app-failures/README.md)
 are ready for the orchestrator's screenshot critique, comparison and H3. No installed app or macOS
 Preview launch, commit, full repository run or origin-take acceptance was performed.
+
+H3 (app shots): two unprimed critiques ran on the after shots; the first round's findings
+(whole line orange, facts and error run together, jargon cause, vague panel message, heavy
+buttons) and the second round's "Yap didn't respond" wording were fixed. Remaining notes kept by
+decision: the message repeats the take's time and says "import" (user-approved copy); a failed
+start shows Retry beside Start recording (every shown error carries Retry, per Q6); no spinner
+on "Importing…" (don't over-engineer). Shown to the user in Preview at 19:24; no response by
+19:29. Decision: accepted as captured.
