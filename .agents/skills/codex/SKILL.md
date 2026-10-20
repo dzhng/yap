@@ -77,7 +77,7 @@ change — before declaring it done or committing. Skip it for trivial edits
    prompt. For custom framing, specify the exact diff to inspect in the prompt;
    don't rely on default scope or traverse all refs/checkpoint history. Never
    state the answer you expect (unprimed, same discipline as
-   [screenshot-critique](../../visual/screenshot-critique/SKILL.md)).
+   [screenshot-critique](../screenshot-critique/SKILL.md)).
 2. Monitor progress in `events.jsonl` and failures in `stderr.log`. An active
    reviewer reading relevant code is not hung merely because five minutes
    elapsed. If it stalls or drifts outside the diff and its dependencies,
