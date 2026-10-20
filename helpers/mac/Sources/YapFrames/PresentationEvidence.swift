@@ -46,23 +46,17 @@ private struct PresentationRecord: Encodable {
 /// One sequential decode, one bounded JSONL record at a time. Only the final receipt
 /// crosses the worker pipe. Consumers can index/read the stream without loading it whole.
 public enum PresentationEvidence {
-    public static let maximumRecords = 1_000_000
-    public static let maximumDecodedSamples = 1_000_000
     public static func write(
-        source: URL, plan: [VideoRenderSpan], output: URL, maxBytes: Int,
-        streamId: String? = nil, clockOffsetUs: Int64 = 0,
-        maxRecords: Int = maximumRecords, maxDecodedSamples: Int = maximumDecodedSamples
+        source: URL, plan: [VideoRenderSpan], output: URL,
+        streamId: String? = nil, clockOffsetUs: Int64 = 0
     ) async throws -> PresentationEvidenceReceipt {
         let duration = try PresentationSource.duration(of: plan)
-        guard maxBytes > 0, maxBytes <= 9_007_199_254_740_991,
-            maxRecords > 0, maxRecords <= maximumRecords,
-            maxDecodedSamples > 0, maxDecodedSamples <= maximumDecodedSamples,
-            clockOffsetUs >= -TimeSpan.maximumMicroseconds,
+        guard clockOffsetUs >= -TimeSpan.maximumMicroseconds,
             clockOffsetUs <= TimeSpan.maximumMicroseconds
         else {
             throw NativeFailure(
                 "INVALID_REQUEST",
-                "Evidence requires bounded positive budgets and a safe clock offset.")
+                "Evidence requires a safe clock offset.")
         }
         let destination = try NewFile(at: output.path, assembledAs: "evidence.jsonl")
         defer { destination.discard() }
@@ -104,7 +98,7 @@ public enum PresentationEvidence {
         func append(_ record: some Encodable) throws {
             var data = try encoder.encode(record)
             data.append(10)
-            guard data.count <= 65_536, data.count <= maxBytes - bytes else {
+            guard data.count <= 65_536 else {
                 throw NativeFailure(
                     "LIMIT_EXCEEDED", "Presentation evidence exceeds its byte budget.")
             }
@@ -118,20 +112,16 @@ public enum PresentationEvidence {
         let context = CIContext(options: [.cacheIntermediates: false])
         var count = 0
         // Cuts can revisit the same held sample. Keep only its rendered thumbnail;
-        // every span still writes its own exact timing and consumes the byte budget.
+        // every span still writes its own exact timing.
         var thumbnail: (buffer: CVPixelBuffer, width: Int, height: Int, rgb: String)?
         for (spanIndex, span) in plan.enumerated() {
             var at = time(microseconds: try container(span.source.startUs))
             let end = time(microseconds: try container(span.source.endUs))
             while at < end {
                 try Task.checkCancellation()
-                guard count < maxRecords else {
-                    throw NativeFailure(
-                        "LIMIT_EXCEEDED", "Presentation evidence exceeds its record budget.")
-                }
                 let next = try autoreleasepool {
                     let selected = try presentation.selection(
-                        at: at, end: end, maximumDecodedSamples: maxDecodedSamples)
+                        at: at, end: end)
                     guard selected.end > at else {
                         throw NativeFailure(
                             "UNAVAILABLE", "Presentation evidence made no progress.")

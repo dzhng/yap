@@ -1,3 +1,4 @@
+import { MAXIMUM_TAKE_US } from "@yap/protocol";
 import { join } from "node:path";
 import { lstat, type FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
@@ -5,8 +6,8 @@ import { openDirectoryLease } from "@yap/core/files";
 import type { CaptureStore } from "@yap/core/capture-store";
 import { isSettled } from "@yap/core/capture-store";
 import type { JobExecution, JobQueue } from "@yap/core/jobs";
-import { nativeResult, MAX_MEDIA_TIMEOUT_MS, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs } from "./publication.js";
+import { nativeResult, renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
+import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
 
 const artifact = "capture-cleanup";
 type RoleResult = {
@@ -76,7 +77,9 @@ export class CaptureCleanup {
       lease = await openDirectoryLease(root, "shared");
       signal.throwIfAborted();
       const directory = join(root, "source");
-      let bytes = 0;
+      const roles = new Set<string>();
+      let bytes = 0,
+        journalBytes = 0;
       for (const name of [
         "capture.journal.jsonl",
         "narration.mov",
@@ -88,7 +91,11 @@ export class CaptureCleanup {
           if (error.code === "ENOENT") return null;
           throw error;
         });
-        if (info?.isFile()) bytes += info.size;
+        if (info?.isFile()) {
+          bytes += info.size;
+          if (name === "capture.journal.jsonl") journalBytes = info.size;
+          else roles.add(name.split(".")[0]!);
+        }
       }
       const value = cleanupResult(
         nativeResult(
@@ -98,7 +105,15 @@ export class CaptureCleanup {
             {
               signal,
               descriptors: [lease.fd],
-              timeoutMs: Math.min(MAX_MEDIA_TIMEOUT_MS, 1_200_000 + publicationDeadlineMs(bytes)),
+              timeoutMs: () =>
+                journalWorkDeadlineMs(journalBytes) +
+                publicationDeadlineMs(bytes) +
+                roles.size *
+                  4 *
+                  renderWindowDeadlineMs({
+                    startUs: 0,
+                    endUs: recording.sourceDurationUs ?? MAXIMUM_TAKE_US,
+                  }),
             },
           ),
         ),

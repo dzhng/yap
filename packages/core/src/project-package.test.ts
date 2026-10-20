@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { archiveLimits, projectJsonBytes } from "./package-archive.js";
+import { archiveLimits } from "./package-archive.js";
 import {
   projectPackageManifest,
-  validateProjectPackage,
+  resolveProjectPackage,
   resourceMetadataMember,
   parseProjectPackageManifest,
 } from "./project-package.js";
+import type { ArchiveLimits } from "./package-archive.js";
+import { readJsonChunks } from "./json-stream.js";
 import type { ProjectSnapshot } from "./projects.js";
 
 import { test, expect } from "vitest";
@@ -17,7 +19,30 @@ import {
   type PortableResource,
 } from "./project-package.js";
 
-test("portable inventory follows generated reference chains and rejects missing dependencies within a bound", () => {
+function validateProjectPackage(
+  body: string,
+  revisions: ReadonlyMap<string, string>,
+  limits: ArchiveLimits,
+  metadata: ReadonlyMap<string, string> = new Map(),
+) {
+  return resolveProjectPackage(
+    parseProjectPackageManifest(body, limits),
+    revisions,
+    limits,
+    new Map(
+      [...metadata].map(([path, body]) => [
+        path,
+        {
+          value: readJsonChunks([Buffer.from(body)]),
+          bytes: Buffer.byteLength(body),
+          sha256: createHash("sha256").update(body).digest("hex"),
+        },
+      ]),
+    ),
+  );
+}
+
+test("portable inventory follows generated reference chains and rejects missing dependencies", () => {
   const records = new Map([
     ["speech", { asset: { id: "speech" }, dependencies: ["reference"] }],
     ["reference", { asset: { id: "reference" }, dependencies: ["original"] }],
@@ -46,7 +71,6 @@ test("portable inventory follows generated reference chains and rejects missing 
       (item) => resourceIdentity(item).id,
     ),
   ).toEqual(["original", "reference", "speech"]);
-  expect(() => collectPortableResources(roots("speech"), read, 2)).toThrow(/limit/);
   records.delete("reference");
   expect(() => collectPortableResources(roots("speech"), read)).toThrow("missing reference");
 });
@@ -143,12 +167,6 @@ test("portable manifest validates complete history bytes, undo targets, paths an
       inventory: [...manifest.inventory, { ...manifest.inventory[0], path: "unreferenced.json" }],
     }),
   ).toThrow(/Unreferenced/);
-  expect(() =>
-    validateProjectPackage(JSON.stringify(manifest), revisions, {
-      ...archiveLimits,
-      expandedBytes: 1,
-    }),
-  ).toThrow(/byte limit/);
 });
 
 test("inventory-bound asset metadata is mandatory, exact and validated before closure", () => {
@@ -205,18 +223,18 @@ test("inventory-bound asset metadata is mandatory, exact and validated before cl
     ],
   );
   const read = (
-    metadata = new Map([[member.reference.metadata.path, member.body]]),
+    metadata = new Map([[member.reference.metadata.path, [...member.chunks()].join("")]]),
     value = manifest,
   ) => validateProjectPackage(JSON.stringify(value), revisions, archiveLimits, metadata);
   expect(read().resources).toEqual([resource]);
   expect(() => read(new Map())).toThrow(/metadata member hash or size/);
-  expect(() => read(new Map([[member.reference.metadata.path, member.body + " "]]))).toThrow(
-    /metadata member hash or size/,
-  );
+  expect(() =>
+    read(new Map([[member.reference.metadata.path, [...member.chunks()].join("") + " "]])),
+  ).toThrow(/metadata member hash or size/);
   expect(() =>
     read(
       new Map([
-        [member.reference.metadata.path, member.body],
+        [member.reference.metadata.path, [...member.chunks()].join("")],
         ["extra", "{}"],
       ]),
     ),
@@ -234,7 +252,10 @@ test("inventory-bound asset metadata is mandatory, exact and validated before cl
     ),
   };
   expect(() =>
-    read(new Map([[member.reference.metadata.path, duplicateMember.body]]), duplicateManifest),
+    read(
+      new Map([[member.reference.metadata.path, [...duplicateMember.chunks()].join("")]]),
+      duplicateManifest,
+    ),
   ).toThrow(/schema/);
   const substituted = JSON.stringify({
     ...resource,
@@ -254,23 +275,6 @@ test("inventory-bound asset metadata is mandatory, exact and validated before cl
       ),
     }),
   ).toThrow(/identity/);
-  const oversized = { ...member.reference.metadata, bytes: projectJsonBytes + 1 };
-  const tooLarge = {
-    ...manifest,
-    resources: [{ ...member.reference, metadata: oversized }],
-    inventory: manifest.inventory.map((entry) =>
-      entry.path === oversized.path ? oversized : entry,
-    ),
-  };
-  expect(() => parseProjectPackageManifest(JSON.stringify(tooLarge), archiveLimits)).toThrow(
-    expect.objectContaining({
-      code: "LIMIT_EXCEEDED",
-      details: {
-        aggregateJsonBytes: projectJsonBytes + 1 + Buffer.byteLength(revision),
-        maximumJsonBytes: projectJsonBytes,
-      },
-    }),
-  );
 });
 
 test("HDR package receipts bind the selected source to the retained original metadata", () => {
@@ -443,7 +447,9 @@ test("HDR package receipts bind the selected source to the retained original met
       JSON.stringify(manifest),
       new Map([["revisions/0.json", revision]]),
       archiveLimits,
-      new Map(members.map((member) => [member.reference.metadata.path, member.body])),
+      new Map(
+        members.map((member) => [member.reference.metadata.path, [...member.chunks()].join("")]),
+      ),
     );
   };
   expect(read().resources.map((resource) => resourceIdentity(resource).id)).toEqual([
@@ -550,7 +556,9 @@ test("an imported package drops a stale transcript no revision pins and keeps on
     JSON.stringify(manifest),
     new Map([["revisions/0.json", revision]]),
     archiveLimits,
-    new Map(members.map((member) => [member.reference.metadata.path, member.body])),
+    new Map(
+      members.map((member) => [member.reference.metadata.path, [...member.chunks()].join("")]),
+    ),
   );
   expect(validated.resources.map((resource) => resourceIdentity(resource).id).sort()).toEqual(
     [assetId, resourceIdentity(pinned).id].sort(),
@@ -567,4 +575,31 @@ test("an imported package drops a stale transcript no revision pins and keeps on
       evidence: { kind: "transcript-generation", id: resourceIdentity(dropped).id },
     },
   ]);
+});
+
+test("portable manifest retains a growing revision dependency inventory", () => {
+  const snapshot = snapshotFixture();
+  snapshot.references = [
+    {
+      revisionId: "r0",
+      resources: Array.from({ length: 25_001 }, (_, i) => ({
+        kind: "asset",
+        id: `source-${i}`,
+      })),
+    },
+  ];
+  const revision = JSON.stringify(snapshot.revisions[0]);
+  const manifest = projectPackageManifest(
+    snapshot,
+    [],
+    [
+      {
+        path: "revisions/0.json",
+        bytes: Buffer.byteLength(revision),
+        sha256: createHash("sha256").update(revision).digest("hex"),
+      },
+    ],
+  );
+  const parsed = parseProjectPackageManifest(JSON.stringify(manifest), archiveLimits);
+  expect(parsed.references[0]!.resources.at(-1)).toEqual({ kind: "asset", id: "source-25000" });
 });

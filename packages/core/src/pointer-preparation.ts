@@ -5,16 +5,11 @@ import type { AcquisitionStore } from "./acquisitions.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
 import { CaptureSourceRead } from "./capture-source-read.js";
 import { selectSource, sourceSelectionSchema, type SourceSelection } from "./source-selection.js";
-import {
-  PresentationEvidence,
-  presentationLimits,
-  type PresentationReceipt,
-} from "./presentation-evidence.js";
+import { PresentationEvidence, type PresentationReceipt } from "./presentation-evidence.js";
 import { JobDependencyLost, type JobAdmission, type JobExecution, type JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
 import { CatalogError, dependencyRefusal } from "./catalog.js";
-import { pointerPreparationLimits } from "./composition-pointer.js";
 
 const recipeSchema = z.strictObject({
   selection: sourceSelectionSchema.extend({ acquisitionId: z.string().min(1) }),
@@ -32,7 +27,6 @@ export type PointerHistoryRenderer = {
       clockOffsetUs: number;
       spans: readonly { startUs: number; endUs: number }[];
       output: string;
-      limits: typeof presentationLimits;
     },
     signal: AbortSignal,
   ): Promise<PresentationReceipt>;
@@ -125,16 +119,6 @@ export class PointerPreparation {
         knownBytes += (JSON.parse(status.published.result) as Artifact).receipt.bytes;
     }
     this.owners.cache.checkCapacity(knownBytes);
-    if (knownBytes > pointerPreparationLimits.maxHistoryBytes)
-      throw new CatalogError(
-        "LIMIT_EXCEEDED",
-        "Pointer histories exceed aggregate admission budget",
-        {
-          limitKind: "maxHistoryBytes",
-          observed: knownBytes,
-          maximum: pointerPreparationLimits.maxHistoryBytes,
-        },
-      );
     for (const selection of selections) {
       const status = this.request(selection);
       if (status.published) continue;
@@ -193,7 +177,7 @@ export class PointerPreparation {
     const output = this.owners.cache.reserve(job.target);
     try {
       const receipt = await this.owners.renderer.render(
-        { ...plan.history, output: output.path, limits: presentationLimits },
+        { ...plan.history, output: output.path },
         signal,
       );
       signal.throwIfAborted();
@@ -230,7 +214,6 @@ export class PointerPreparation {
       plan: ReturnType<PointerPreparation["plan"]>;
       presentation: PresentationEvidence;
     }) => Promise<T>,
-    maxBytes = presentationLimits.maxBytes,
   ) {
     const plan = this.plan(selection);
     const status = this.owners.jobs.status(this.identity(plan.recipe));
@@ -247,7 +230,6 @@ export class PointerPreparation {
           plan.history.spans,
           lease.fd,
           signal,
-          { ...presentationLimits, maxBytes },
         );
         try {
           return await consume({ plan, presentation });

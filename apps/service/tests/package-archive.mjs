@@ -47,6 +47,8 @@ async function fixture(mode = "valid", contents) {
     store.close();
   }
   const { files, snapshot, mediaPath } = generated;
+  if (mode === "manifest-whitespace")
+    files["manifest.json"] = " \n" + files["manifest.json"] + "\t\r\n";
   const directory = join(home, "workspace");
   await mkdir(directory, { mode: 0o700 });
   const workspace = await open(
@@ -91,6 +93,16 @@ async function inspect(f, options = {}, worker = run) {
     assert.deepEqual(await readdir(f.directory), []);
   }
 }
+
+test("streamed manifest preserves JSON whitespace through the native receipt", async () => {
+  const f = await fixture("manifest-whitespace");
+  try {
+    const receipt = await inspect(f);
+    assert.equal(receipt.manifest.project.currentRevisionId, f.snapshot.project.currentRevisionId);
+  } finally {
+    await f.close();
+  }
+});
 
 test("native archive verifies inventory and pinned project revision with admitted history, then empties workspace", async () => {
   const f = await fixture();
@@ -159,16 +171,11 @@ test("safe parser Unicode alias is inventoried by effective ASCII name", async (
   }
 });
 
-test("actual expansion, member, manifest and entry counts enforce exact bounds", async () => {
+test("authored history and member paths enforce exact structural bounds", async () => {
   const f = await fixture("deflate");
   try {
-    const actual = await inspect(f);
+    await inspect(f);
     const constraints = {
-      expandedBytes: actual.expandedBytes,
-      memberBytes: Math.max(...Object.values(f.files).map((v) => Buffer.byteLength(v))),
-      manifestBytes: Buffer.byteLength(f.files["manifest.json"]),
-      entries: Object.keys(f.files).length,
-      compressedBytes: (await stat(f.archive)).size,
       history: 2,
       pathBytes: Math.max(...Object.keys(f.files).map((p) => p.length)),
       componentBytes: Math.max(
@@ -191,30 +198,12 @@ test("actual expansion, member, manifest and entry counts enforce exact bounds",
 });
 
 for (const mode of ["metadata-many", "metadata-large", "metadata-default"])
-  test(`initial parser input budget rejects ${mode} before unbounded metadata intake`, async () => {
+  test(`streamed archive inventory reaches structural validation for ${mode}`, async () => {
     const f = await fixture(mode);
     try {
-      await assert.rejects(
-        inspect(f, {
-          limits: {
-            ...archiveLimits,
-            initialReadBytes: mode === "metadata-default" ? archiveLimits.initialReadBytes : 8192,
-          },
-        }),
-        (error) => {
-          assert.equal(error.code, "LIMIT_EXCEEDED");
-          assert.ok(
-            error.details.peakResidentBytes > 0 &&
-              error.details.peakResidentBytes < 192 * 1024 ** 2,
-          );
-          results.push({
-            case: mode,
-            peakResidentBytes: error.details.peakResidentBytes,
-            error: error.message,
-          });
-          return true;
-        },
-      );
+      // These archives add undeclared members; growth is accepted through native intake,
+      // and inventory equality still refuses the malformed package.
+      await assert.rejects(inspect(f), (error) => error.code === "INVALID_PACKAGE");
     } finally {
       await f.close();
     }
@@ -563,18 +552,6 @@ test("cleanup ownership loss is explicit and original descriptor supports recove
     assert.deepEqual(await readdir(f.directory), []);
   } finally {
     await chmod(f.directory, 0o700);
-    await f.close();
-  }
-});
-
-test("bounded receipt rejects metadata that cannot fit the existing transport", async () => {
-  const f = await fixture();
-  try {
-    await assert.rejects(
-      inspect(f, { limits: { ...archiveLimits, receiptBytes: 1000 } }),
-      (error) => error.code === "LIMIT_EXCEEDED",
-    );
-  } finally {
     await f.close();
   }
 });

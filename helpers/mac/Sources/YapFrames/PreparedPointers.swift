@@ -46,13 +46,13 @@ final class PreparedPointers {
     private let receipt: PreparedPointersReceipt
     private var count = 0
     init(_ receipt: PreparedPointersReceipt) throws {
-        guard receipt.records >= 0, receipt.records <= 1_000_000 else {
+        guard receipt.records >= 0 else {
             throw invalid("Prepared pointer count exceeds its bound.")
         }
         self.receipt = receipt
         self.lines = try RetainedJSONLines(
             path: receipt.file, bytes: receipt.bytes, sha256: receipt.sha256,
-            recordBytes: 256 * 1024, maximumBytes: 128 * 1024 * 1024)
+            recordBytes: 256 * 1024)
         while try row() != nil {}
         try finish()
         try lines.rewind()

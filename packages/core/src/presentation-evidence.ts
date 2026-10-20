@@ -19,20 +19,9 @@ type PresentationRead = {
   close(): Promise<void>;
 };
 const recordBytes = 65_536;
-export type PresentationLimits = {
-  maxBytes: number;
-  maxRecords: number;
-  maxDecodedSamples: number;
-};
-export const presentationLimits: Readonly<PresentationLimits> = Object.freeze({
-  maxBytes: 1024 ** 3,
-  maxRecords: 1_000_000,
-  maxDecodedSamples: 1_000_000,
-});
 const historySchema = z
   .array(z.strictObject({ startUs: z.int().nonnegative(), endUs: z.int().positive() }))
   .min(1)
-  .max(10_000)
   .refine((spans) =>
     spans.every(
       (span, i) => span.startUs < span.endUs && (i === 0 || spans[i - 1]!.endUs < span.startUs),
@@ -61,7 +50,7 @@ const headerSchema = z.strictObject({
   sourceWidth: integer.min(1).max(8192),
   sourceHeight: integer.min(1).max(8192),
   durationUs: integer.positive(),
-  spanCount: integer.min(1).max(10_000),
+  spanCount: integer.min(1),
 });
 const receiptSchema = headerSchema.omit({ spanCount: true }).extend({
   file: z.string().refine(isAbsolute),
@@ -91,13 +80,12 @@ export class PresentationEvidence {
     receipt: PresentationReceipt,
     spans: readonly TimeRange[],
     signal: AbortSignal,
-    limits: Pick<PresentationLimits, "maxBytes" | "maxRecords"> = presentationLimits,
   ) {
     const file = await open(
       parse(receiptSchema, receipt).file,
       constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
     );
-    return this.admit(receipt, spans, signal, limits, {
+    return this.admit(receipt, spans, signal, {
       stat: () => file.stat({ bigint: true }),
       read: async (buffer, position) =>
         (await file.read(buffer, 0, buffer.length, position)).bytesRead,
@@ -110,9 +98,8 @@ export class PresentationEvidence {
     spans: readonly TimeRange[],
     fd: number,
     signal: AbortSignal,
-    limits: Pick<PresentationLimits, "maxBytes" | "maxRecords"> = presentationLimits,
   ) {
-    return this.admit(receipt, spans, signal, limits, {
+    return this.admit(receipt, spans, signal, {
       stat: async () => fstatSync(fd, { bigint: true }),
       read: async (buffer, position) => {
         await setImmediate(undefined, { signal });
@@ -125,24 +112,11 @@ export class PresentationEvidence {
     receipt: PresentationReceipt,
     spans: readonly TimeRange[],
     signal: AbortSignal,
-    limits: Pick<PresentationLimits, "maxBytes" | "maxRecords">,
     file: PresentationRead,
   ) {
     try {
       const metadata = Object.freeze(parse(receiptSchema, receipt));
       signal.throwIfAborted();
-      if (
-        !Number.isSafeInteger(limits.maxBytes) ||
-        limits.maxBytes < 1 ||
-        !Number.isSafeInteger(limits.maxRecords) ||
-        limits.maxRecords < 1 ||
-        metadata.bytes > limits.maxBytes ||
-        metadata.records > limits.maxRecords
-      )
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Presentation evidence exceeds its admission budget",
-        );
       const pinned = Object.freeze(parse(historySchema, spans).map((span) => Object.freeze(span)));
       const duration = renderPlan({ spans: pinned }).at(-1)!.playback.endUs;
       if (!Number.isSafeInteger(duration) || duration !== metadata.durationUs)

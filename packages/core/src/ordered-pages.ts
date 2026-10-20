@@ -1,20 +1,19 @@
+import { readJsonChunks, jsonChunks } from "./json-stream.js";
 import { createHash } from "node:crypto";
 import { fstatSync, readSync } from "node:fs";
 import { fileAccess, type FileAccess } from "./files.js";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile, open } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { z } from "zod";
-import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
+import { derivedBound, MAXIMUM_STROKE_US } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 
 // A portable row double-encodes JSON: 2× the derived record bound, plus array framing.
-const rowBytes = JOURNAL_RECORD_BYTES * 2;
+const rowBytes = derivedBound(103 * 60, MAXIMUM_STROKE_US, 4);
 // Ordinary batching target; a larger valid record advances alone.
-export const EVIDENCE_BATCH_BYTES = 1_048_576;
-const pageBytes = rowBytes + 2,
-  metadataBytes = 4_194_304,
-  maxPages = 8192;
+export const EVIDENCE_BATCH_BYTES = 1024 ** 2;
+const pageBytes = rowBytes + 2;
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export type PageKey = readonly number[];
 export type PageBound = { key: PageKey; inclusive: boolean };
@@ -43,7 +42,7 @@ const descriptorSchema = z.strictObject({
 const manifestSchema = z.strictObject({
   version: z.literal(1),
   metadata: z.unknown(),
-  indexes: z.record(z.string().regex(/^[a-zA-Z]+$/), z.array(descriptorSchema).max(maxPages)),
+  indexes: z.record(z.string().regex(/^[a-zA-Z]+$/), z.array(descriptorSchema)),
 });
 type Descriptor = z.infer<typeof descriptorSchema>;
 const rowsSchema = z.array(z.unknown()).min(1).max(256);
@@ -76,9 +75,45 @@ export function readMember(root: FileAccess, file: string, limit: number): Buffe
     opened.close();
   }
 }
-/** Enumerate only the bounded transport manifest, never arbitrary directory contents. */
+/** Parse a growing metadata inventory through fixed-size reads on the held member. */
+export function readJsonMember(root: FileAccess, name: string): unknown {
+  const file = root.open(name);
+  try {
+    return readJsonDescriptor(file.fd);
+  } finally {
+    file.close();
+  }
+}
+
+/** Borrow a held descriptor; positional reads preserve its caller's offset and lifetime. */
+export function readJsonDescriptor(fd: number): unknown {
+  const before = fstatSync(fd);
+  if (!before.isFile()) invalid("JSON inventory requires a regular member");
+  let bytes = 0;
+  function* chunks() {
+    const buffer = Buffer.alloc(64 * 1024);
+    let count: number;
+    while ((count = readSync(fd, buffer, 0, buffer.length, bytes)) > 0) {
+      bytes += count;
+      yield buffer.subarray(0, count);
+    }
+  }
+  try {
+    const result = readJsonChunks(chunks());
+    if (bytes !== before.size || fstatSync(fd).size !== before.size)
+      invalid("JSON inventory changed during read");
+    return result;
+  } catch {
+    invalid("Malformed JSON inventory");
+  }
+}
+/** Enumerate only the transport manifest, never arbitrary directory contents. */
 export function readOrderedPageManifest(root: string | FileAccess) {
-  return parse(manifestSchema, readMember(fileAccess(root), "pages.json", metadataBytes));
+  try {
+    return manifestSchema.parse(readJsonMember(fileAccess(root), "pages.json"));
+  } catch {
+    return invalid("Malformed source evidence manifest");
+  }
 }
 export type OrderedPageCodec<Row, Metadata> = {
   metadata: z.ZodType<Metadata>;
@@ -107,8 +142,7 @@ export async function writeOrderedPages<Row, Metadata>(
     const flush = async () => {
       if (!rows.length) return;
       signal?.throwIfAborted();
-      if (++count > maxPages)
-        throw new CatalogError("LIMIT_EXCEEDED", "Too many portable evidence pages");
+      ++count;
       const body = Buffer.from(JSON.stringify(rows));
       const file = `${count}.json`;
       await writeFile(join(directory, file), body, { flag: "wx", signal });
@@ -138,10 +172,21 @@ export async function writeOrderedPages<Row, Metadata>(
     await flush();
   }
   signal?.throwIfAborted();
-  const body = Buffer.from(JSON.stringify({ version: 1, metadata, indexes }));
-  if (body.length > metadataBytes)
-    throw new CatalogError("LIMIT_EXCEEDED", "Portable evidence metadata exceeds budget");
-  await writeFile(join(directory, "pages.pending"), body, { flag: "wx", signal });
+  const file = await open(join(directory, "pages.pending"), "wx");
+  try {
+    let buffer = "";
+    for (const part of jsonChunks({ version: 1, metadata, indexes })) {
+      buffer += part;
+      if (buffer.length >= 64 * 1024) {
+        signal?.throwIfAborted();
+        await file.writeFile(buffer);
+        buffer = "";
+      }
+    }
+    if (buffer) await file.writeFile(buffer);
+  } finally {
+    await file.close();
+  }
   signal?.throwIfAborted();
   await rename(join(directory, "pages.pending"), join(directory, "pages.json"));
 }
@@ -160,20 +205,18 @@ export class OrderedPages<Row, Metadata> {
     private readonly codec: OrderedPageCodec<Row, Metadata>,
   ) {
     this.root = fileAccess(root);
-    this.manifest = parse(manifestSchema, readMember(this.root, "pages.json", metadataBytes));
+    this.manifest = readOrderedPageManifest(this.root);
     this.admittedMetadata = codec.metadata.parse(this.manifest.metadata);
     if (
       Object.keys(this.manifest.indexes).sort().join(",") !==
       Object.keys(codec.orders).sort().join(",")
     )
       invalid("Unknown or missing evidence order");
-    let count = 0;
     const files = new Set<string>();
     for (const index of Object.keys(codec.orders)) {
       let previous: number[] | undefined;
       for (const page of this.manifest.indexes[index]!) {
-        if (++count > maxPages || files.has(page.file))
-          invalid("Duplicate or excessive evidence pages");
+        if (files.has(page.file)) invalid("Duplicate evidence pages");
         files.add(page.file);
         const width = codec.orders[index];
         if (

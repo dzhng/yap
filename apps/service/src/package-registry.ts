@@ -28,7 +28,6 @@ import type { MediaWorker } from "./worker.js";
 import type { DerivativeDelivery } from "./delivery.js";
 
 const packageRegistryLimits = Object.freeze({
-  bytes: 64 * 1024 ** 3,
   owners: 4,
   terminal: 32,
 });
@@ -86,7 +85,6 @@ export class PackageRegistry<
   private recovering: Promise<void> | undefined;
   private recoveryError: string | null = null;
   private readonly limits: ArchiveLimits;
-  private readonly bytes: number;
   constructor(
     private readonly options: PackageManifestResolution<T, Parsed> & {
       parent: { directory: string; handle: FileHandle };
@@ -99,21 +97,11 @@ export class PackageRegistry<
       worker: MediaWorker;
       delivery: DerivativeDelivery;
       limits?: ArchiveLimits;
-      bytes?: number;
       inlineRevisions?: boolean;
     },
   ) {
     this.limits = { ...(options.limits ?? archiveLimits) };
     validateArchiveLimits(this.limits);
-    this.bytes = options.bytes ?? packageRegistryLimits.bytes;
-    if (
-      !Number.isSafeInteger(this.bytes) ||
-      this.bytes < 1 ||
-      this.bytes > packageRegistryLimits.bytes
-    )
-      throw new RangeError(
-        "Package pool must be a positive safe byte count within its supported maximum",
-      );
   }
   usage() {
     return {
@@ -167,15 +155,7 @@ export class PackageRegistry<
     if (this.entries.size >= packageRegistryLimits.owners)
       throw new CatalogError("CAPACITY_EXCEEDED", "Too many package resources are owned", {});
     const input = admitArchive(path);
-    if (input.bytes > this.limits.compressedBytes) {
-      input.close();
-      throw new CatalogError("LIMIT_EXCEEDED", "Archive exceeds admission copy limit");
-    }
-    const budget = input.bytes + this.limits.expandedBytes;
-    if (this.usage().budgetBytes + budget > this.bytes) {
-      input.close();
-      throw new CatalogError("CAPACITY_EXCEEDED", "Package pool cannot reserve this admission", {});
-    }
+    const budget = input.bytes;
     let entry!: Entry<T>;
     let context: JobContext;
     try {

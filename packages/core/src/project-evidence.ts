@@ -1,5 +1,6 @@
+import { readJsonChunks, jsonChunks } from "./json-stream.js";
 import { createHash } from "node:crypto";
-import { writeFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
 import { z } from "zod";
 import {
   compare,
@@ -76,8 +77,6 @@ const policy = (domain: Query["domain"]) =>
       : domain === "cursor"
         ? "project-events-v1"
         : "project-transcript-v4";
-// Provisional inspection budgets; scale acceptance owns changes to these limits.
-const maximumBytes = 8 * 1024 * 1024;
 
 const cursorSchema = z.strictObject({
   projectId: z.string(),
@@ -575,29 +574,45 @@ export class ProjectEvidenceInspection {
     const read = this.options.cache.acquire(id);
     if (!read) throw changed();
     leases.push(read);
-    if (read.bytes > maximumBytes)
-      throw new CatalogError("LIMIT_EXCEEDED", "Evidence cache exceeds its bound");
-    const buffer = Buffer.alloc(read.bytes);
-    let at = 0;
-    while (at < buffer.length) {
-      const bytes = read.read(buffer.subarray(at), at);
-      if (!bytes) throw changed();
-      at += bytes;
+    const held = read;
+    function* chunks() {
+      const buffer = Buffer.alloc(64 * 1024);
+      let position = 0;
+      while (position < held.bytes) {
+        const count = held.read(
+          buffer.subarray(0, Math.min(buffer.length, held.bytes - position)),
+          position,
+        );
+        if (!count) throw changed();
+        position += count;
+        yield buffer.subarray(0, count);
+      }
     }
     try {
-      return JSON.parse(buffer.toString("utf8")) as T;
+      return readJsonChunks(chunks()) as T;
     } catch {
       throw changed();
     }
   }
   private async publish(projectId: string, value: unknown, signal?: AbortSignal) {
-    const body = JSON.stringify(value);
-    if (Buffer.byteLength(body) > maximumBytes)
-      throw new CatalogError("LIMIT_EXCEEDED", "Evidence checkpoint exceeds 8MiB");
     signal?.throwIfAborted();
     const reservation = this.options.cache.reserve({ kind: "project", id: projectId });
     try {
-      await writeFile(reservation.path, body, { flag: "wx" });
+      const file = await open(reservation.path, "wx");
+      try {
+        let buffer = "";
+        for (const part of jsonChunks(value)) {
+          buffer += part;
+          if (buffer.length >= 64 * 1024) {
+            signal?.throwIfAborted();
+            await file.writeFile(buffer);
+            buffer = "";
+          }
+        }
+        if (buffer) await file.writeFile(buffer);
+      } finally {
+        await file.close();
+      }
       signal?.throwIfAborted();
       await this.options.cache.publish(reservation.id);
       signal?.throwIfAborted();

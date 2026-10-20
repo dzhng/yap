@@ -17,7 +17,7 @@ import {
 } from "@yap/core/capture-store";
 import { CatalogError } from "@yap/core/catalog";
 import {
-  NATIVE_SEQUENCE_LIMIT,
+  MAXIMUM_TAKE_US,
   captureDeviceSchema,
   captureReportSchema,
   captureSourcesSchema,
@@ -28,8 +28,8 @@ import {
   type OperationResult,
 } from "@yap/protocol";
 import type { ControlChannel } from "./control.js";
-import { MAX_MEDIA_TIMEOUT_MS, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs } from "./publication.js";
+import { renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
+import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
 
 /**
  * The only outcomes this service states on its own behalf: a take it discarded, and a take whose
@@ -725,12 +725,24 @@ export class CaptureService {
           member.name.includes(".publication.") ||
           member.name.startsWith(".capture-publication-")),
     );
-    // Two roles can each materialize and verify repeatedly for publication and cleanup.
-    // Fragmentation dominates measured 100k-run work; byte passes also scale with recording size.
-    return Math.min(
-      MAX_MEDIA_TIMEOUT_MS,
-      (canonicalWork ? 1_200_000 : 0) +
-        publicationDeadlineMs(members.reduce((bytes, member) => bytes + member.bytes, 0)),
+    const journalBytes =
+      members.find((member) => member.name === "capture.journal.jsonl")?.bytes ?? 0;
+    // Closed sources carry their actual duration. An unclosed crash prefix can be any length
+    // up to the take requirement; reserve that duration until recovery proves its endpoint.
+    const durationUs = recording.sourceDurationUs ?? MAXIMUM_TAKE_US;
+    const roles = new Set(
+      members.flatMap((member) => {
+        const role = /^(?:\.capture-publication-)?(narration|system)(?:\.|\/)/.exec(
+          member.name,
+        )?.[1];
+        return member.exists && role ? [role] : [];
+      }),
+    ).size;
+    const traversals = canonicalWork ? roles * 4 + (kind === "camera" ? 3 : 1) : 1;
+    return (
+      journalWorkDeadlineMs(journalBytes) +
+      publicationDeadlineMs(members.reduce((bytes, member) => bytes + member.bytes, 0)) +
+      traversals * renderWindowDeadlineMs({ startUs: 0, endUs: durationUs })
     );
   }
 
@@ -774,17 +786,13 @@ export class CaptureService {
     return report;
   }
 
-  /**
-   * Numbers an event this service authors itself. Native journal sequences stay below
-   * `NATIVE_SEQUENCE_LIMIT`, so a service-authored outcome is always the later word and can never
-   * be mistaken for, or silently overwritten by, a number the journal produced.
-   */
+  /** Service outcomes continue the last observed sequence; terminal state owns finality. */
   private author(recording: Recording, outcome: AuthoredOutcome): Recording {
     return this.observed(
       this.store.ingestLifecycle(recording.id, {
         ...outcome,
         sourceId: recording.sourceId,
-        sequence: Math.max(recording.lifecycleSequence + 1, NATIVE_SEQUENCE_LIMIT + 1),
+        sequence: recording.lifecycleSequence + 1,
       }),
     );
   }
@@ -870,7 +878,12 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
   if (report.state === "complete") {
     if (typeof report.sourceDurationUs !== "number")
       throw new CatalogError("INVALID_STATE", "A finalized take must report its source duration");
-    return { ...identity, state: "complete", sourceDurationUs: report.sourceDurationUs };
+    return {
+      ...identity,
+      state: "complete",
+      sourceDurationUs: report.sourceDurationUs,
+      ...(report.reason == null ? {} : { reason: report.reason }),
+    };
   }
   if (report.state === "interrupted")
     return {

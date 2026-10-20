@@ -79,7 +79,7 @@ export async function verifySourceEvidence(input: {
         return [name, file] as const;
       }),
     ] as const) {
-      await copyImportedFile(file.path, join(sourceDirectory, name), signal, file, 268_435_456);
+      await copyImportedFile(file.path, join(sourceDirectory, name), signal, file);
     }
     const derived = await input.exportSource(
       sourceDirectory,

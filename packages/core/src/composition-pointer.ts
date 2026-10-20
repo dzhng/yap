@@ -17,22 +17,12 @@ import {
 import type { SourceEvidenceReader } from "./evidence-read.js";
 import { sourceSelectionKey, type SourceSelection } from "./source-selection.js";
 import type { PointerPreparation } from "./pointer-preparation.js";
-import {
-  PresentationPointerHistory,
-  pointerHistoryBudget,
-} from "./presentation-pointer-history.js";
+import { PresentationPointerHistory } from "./presentation-pointer-history.js";
 import { CatalogError } from "./catalog.js";
 
 /** Provisional attempt admission, independent of source duration or output pixel allocation. */
 export const pointerPreparationLimits = Object.freeze({
-  maxBytes: 128 * 1024 ** 2,
-  maxRows: 1_000_000,
-  maxEvents: 1_000_000,
   maxSources: 256,
-  maxHistoryBytes: 1024 ** 3,
-  maxFrames: 1_000_000,
-  maxOperations: 10_000_000,
-  maxAdmissionWork: 100_000,
   rowBytes: 256 * 1024,
 });
 export type PreparedPointers = { file: string; bytes: number; records: number; sha256: string };
@@ -44,20 +34,9 @@ export function compositionPointerSources(input: {
   range: { startUs: number; endUs: number };
 }): SourceSelection[] {
   const selected = new Set<string>();
-  let work = 0;
-  const check = () => {
-    if (++work > pointerPreparationLimits.maxAdmissionWork)
-      throw new CatalogError("LIMIT_EXCEEDED", "Pointer admission exceeds metadata work budget", {
-        limitKind: "maxAdmissionWork",
-        maximum: pointerPreparationLimits.maxAdmissionWork,
-        observed: work,
-      });
-  };
   for (const node of input.processing) {
-    check();
     if (node.target.kind !== "clip") continue;
     for (const step of node.steps) {
-      check();
       if (step.enabled && step.processor.type === "pointer") {
         selected.add(node.target.id);
         break;
@@ -73,7 +52,6 @@ export function compositionPointerSources(input: {
     end = fromTime(input.range.endUs);
   const sources = new Map<string, SourceSelection>();
   for (const resolved of input.model.clips) {
-    check();
     const clip = resolved.clip;
     if (!selected.has(clip.id) || !isMediaClip(clip) || resolved.stream?.kind !== "video") continue;
     if (!clip.acquisitionId)
@@ -81,13 +59,11 @@ export function compositionPointerSources(input: {
     let lo = 0,
       hi = resolved.available.length;
     while (lo < hi) {
-      check();
       const mid = Math.floor((lo + hi) / 2);
       if (compare(resolved.available[mid]!.end, start) <= 0) lo = mid + 1;
       else hi = mid;
     }
     for (let index = lo; index < resolved.available.length; index++) {
-      check();
       const span = resolved.available[index]!;
       if (compare(span.start, end) >= 0) break;
       const lower = compare(span.start, start) > 0 ? span.start : start;
@@ -146,32 +122,15 @@ export async function prepareCompositionPointers(
   const clips = new Map(input.model.clips.map(({ clip }) => [clip.id, clip]));
   const selections = new Map<string, SourceSelection>();
   // Compiler windows are replayable; this bounded scan discovers only participating sources.
-  const work = () => {
-    let frames = 0,
-      operations = 0;
-    return {
-      frame() {
-        signal.throwIfAborted();
-        if (++frames > limits.maxFrames)
-          throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds frame budget");
-      },
-      operation() {
-        signal.throwIfAborted();
-        if (++operations > limits.maxOperations)
-          throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds graph work budget");
-      },
-    };
-  };
   const operations = async function* (frames: Iterable<CompiledFrame>) {
     let frameCount = 0,
       operationCount = 0;
-    const budget = work();
     for (const frame of frames) {
-      budget.frame();
+      signal.throwIfAborted();
       if (frameCount++ % 128 === 0) await setImmediate(undefined, { signal });
       for (const node of frame.visual)
         for (const op of node.operations) {
-          budget.operation();
+          signal.throwIfAborted();
           if (operationCount++ % 256 === 0) await setImmediate(undefined, { signal });
           if (op.kind === "pointer") yield { frame, node, op };
         }
@@ -180,8 +139,7 @@ export async function prepareCompositionPointers(
   let rows = 0;
   for await (const { frame, node } of operations(input.frames())) {
     signal.throwIfAborted();
-    if (++rows > limits.maxRows)
-      throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds occurrence budget");
+    ++rows;
     if (node.target.kind !== "clip")
       throw new CatalogError("INVALID_EVIDENCE", "Pointer operation lacks clip source context");
     const clip = clips.get(node.target.id)!;
@@ -200,24 +158,17 @@ export async function prepareCompositionPointers(
   }
   const contexts = new Map<string, Held>();
   const entries = [...selections.entries()];
-  let historyBytes = 0;
   const use = async (index: number): Promise<PreparedPointers> => {
     if (index < entries.length) {
       const [key, selection] = entries[index]!;
-      return input.preparation.withHistory(
-        selection,
-        signal,
-        async (held) => {
-          historyBytes += held.presentation.receipt.bytes;
-          contexts.set(key, held);
-          try {
-            return await use(index + 1);
-          } finally {
-            contexts.delete(key);
-          }
-        },
-        limits.maxHistoryBytes - historyBytes,
-      );
+      return input.preparation.withHistory(selection, signal, async (held) => {
+        contexts.set(key, held);
+        try {
+          return await use(index + 1);
+        } finally {
+          contexts.delete(key);
+        }
+      });
     }
     return write();
   };
@@ -228,16 +179,11 @@ export async function prepareCompositionPointers(
     const hash = createHash("sha256");
     let bytes = 0,
       records = 0;
-    const budget = pointerHistoryBudget({
-      maxEvents: limits.maxEvents,
-      maxSamples: limits.maxRows,
-    });
     const samplers = new Map<string, PresentationPointerHistory>();
     try {
       for await (const { frame, node, op } of operations(input.frames())) {
         signal.throwIfAborted();
-        if (++records > limits.maxRows)
-          throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds occurrence budget");
+        ++records;
         if (node.target.kind !== "clip")
           throw new CatalogError("INVALID_EVIDENCE", "Pointer operation lacks clip context");
         const clip = clips.get(node.target.id)!;
@@ -285,7 +231,6 @@ export async function prepareCompositionPointers(
                   identity: held.plan.history.evidence,
                 },
                 signal,
-                budget,
               );
               samplers.set(key, sampler);
             }
@@ -318,7 +263,7 @@ export async function prepareCompositionPointers(
           }
         }
         const data = Buffer.from(JSON.stringify(row) + "\n");
-        if (data.length > limits.rowBytes || data.length > limits.maxBytes - bytes)
+        if (data.length > limits.rowBytes)
           throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds byte budget");
         await file.writeFile(data);
         hash.update(data);

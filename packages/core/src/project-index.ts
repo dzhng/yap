@@ -58,10 +58,10 @@ export const portableProjectIndexMetadataSchema = projectPictureOptionsSchema
     revisionId: z.string().min(1),
     generation: z.string().min(1).max(256),
     selectionPolicy: z.string().min(1).max(256),
-    scenes: z.array(portableSceneMetadataSchema).max(25000),
+    scenes: z.array(portableSceneMetadataSchema),
     durationUs: portableTime,
-    candidateCount: portableTime.max(25000),
-    coverageCount: portableTime.max(25000),
+    candidateCount: portableTime,
+    coverageCount: portableTime,
     sizeBytes: portableTime,
   })
   .strict();

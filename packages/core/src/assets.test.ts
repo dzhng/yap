@@ -676,11 +676,11 @@ test("verified byte digest is enforced before both fresh and cached asset public
   expect(store.origins(correct.id).origins).toContainEqual({ kind: "capture", source: "verified" });
 });
 
-test("sparse admission preserves leading, inter-run and trailing physical gaps at the occupied-run capacity", async () => {
+test("sparse admission preserves leading, inter-run and trailing physical gaps beyond the retired run cap", async () => {
   const { root, store } = await setup();
   const path = join(root, "sparse.mov");
   await writeFile(path, "sparse metadata fixture");
-  const runs = 100_000;
+  const runs = 100_001;
   const segments = Array.from({ length: 2 * runs + 1 }, (_, index) => ({
     startUs: index * 100,
     endUs: (index + 1) * 100,
@@ -711,16 +711,6 @@ test("sparse admission preserves leading, inter-run and trailing physical gaps a
       .filter((row) => !row.empty)
       .map(({ startUs, endUs }) => ({ startUs, endUs })),
   });
-  const excessive = join(root, "excessive.mov");
-  await writeFile(excessive, "different sparse metadata fixture");
-  await expect(
-    store.import(excessive, { kind: "import" }, async () => ({
-      ...metadata,
-      streams: [
-        { ...metadata.streams[0], segments: [...segments, { startUs: 0, endUs: 1, empty: true }] },
-      ],
-    })),
-  ).rejects.toMatchObject({ code: "INVALID_NATIVE_RESPONSE" });
 });
 
 test("public asset headers and immutable ordinal pages preserve complete physical rows", async () => {

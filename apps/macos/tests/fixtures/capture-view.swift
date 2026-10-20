@@ -292,6 +292,7 @@ import YapControls
             ("camera-only", fixture(cameraOnly: true), CGFloat(0)),
             ("recording", recordingFixture(), CGFloat(0)),
             ("last-recording", fixture(lastRecording: true), CGFloat(0)),
+            ("maximum-duration", maximumDurationFixture(), CGFloat(0)),
             ("paused", recordingFixture(paused: true), CGFloat(0)),
             ("admin-notice", adminNoticeFixture(), CGFloat(0)),
             ("admin-notice-dark", adminNoticeFixture(), CGFloat(0)),
@@ -387,6 +388,15 @@ import YapControls
         precondition(actionGaps.allSatisfy { $0 > 0 && $0 == actionGaps[0] },
                      "Recording actions need equal positive gaps, including beneath Finish")
 
+    }
+
+    @MainActor static func maximumDurationFixture() -> CaptureViewInput {
+        var state = ControlsState()
+        state.take = .init(id: "twelve-hour-take", state: "complete", interruptionReason: nil,
+            sourceDurationUs: 43_200_000_000, completionReason: "maximumDuration")
+        var input = fixture(lastRecording: true)
+        input.notices = CapturePresentation.noticeLines(for: state)
+        return input
     }
 
     @MainActor static func adminNoticeFixture() -> CaptureViewInput {

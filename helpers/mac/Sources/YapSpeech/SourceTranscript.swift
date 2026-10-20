@@ -290,7 +290,6 @@ public enum SourceTranscript {
             do { line = try encoder.encode(segment) + Data([10]) } catch {
                 throw NativeFailure("INVALID_SPEECH_TIMING", "Segment \(segment.ordinal) engine evidence is not representable: \(error.localizedDescription)")
             }
-            guard totalBytes <= 268_435_456 - line.count else { throw NativeFailure("LIMIT_EXCEEDED", "Speech evidence exceeds its output budget.") }
             try handle.write(contentsOf: line)
             hash.update(data: line)
             totalBytes += line.count

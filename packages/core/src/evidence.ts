@@ -41,9 +41,6 @@ export type CameraPublicationProof = SourcePublicationProof &
     gaps?: readonly SelectionRange[];
     representedFrames: number;
   }>;
-// A take turns its camera on at most 500 times (the 501st is refused, CAMERA_TOGGLE_LIMIT); each
-// turn-on starts at most one run, so at most 499 gaps.
-const maxCameraGaps = 499;
 /** The only TypeScript reading of camera availability: support minus gaps, as a fresh list. */
 export function cameraProofIntervals(proof: CameraPublicationProof): SelectionRange[] {
   const intervals: SelectionRange[] = [];
@@ -57,7 +54,7 @@ export function cameraProofIntervals(proof: CameraPublicationProof): SelectionRa
 }
 function validCameraGaps(support: SelectionRange, gaps: unknown): boolean {
   if (gaps === undefined) return true;
-  if (!Array.isArray(gaps) || gaps.length === 0 || gaps.length > maxCameraGaps) return false;
+  if (!Array.isArray(gaps) || gaps.length === 0) return false;
   let previousEnd = support.startUs;
   for (const gap of gaps) {
     const parsed = selectionRangeSchema.safeParse(gap);
@@ -126,7 +123,6 @@ export type RecordRow = {
   sourceUs: number | null;
   content: string;
 };
-const maxBytes = 268_435_456;
 function invalid(message: string): never {
   throw new CatalogError("INVALID_EVIDENCE", message);
 }
@@ -261,7 +257,6 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
     ].every(integer) ||
     !integer(receipt.bytes) ||
     (receipt.normalizationVersion !== undefined && receipt.normalizationVersion !== 2) ||
-    receipt.bytes > maxBytes ||
     typeof receipt.incompleteTail !== "boolean" ||
     typeof receipt.finished !== "boolean" ||
     [
@@ -270,8 +265,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       receipt.firstCursorSourceUs,
       receipt.lastCursorSourceUs,
       receipt.invalidAtSequence,
-    ].some((v) => v != null && !integer(v)) ||
-    Buffer.byteLength(JSON.stringify(receipt)) > 32768
+    ].some((v) => v != null && !integer(v))
   )
     invalid("Invalid evidence receipt");
   if (receipt.lastLifecycle != null) {
@@ -315,10 +309,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
         if (
           typeof file.bytes !== "string" ||
           !/^[1-9][0-9]*$/.test(file.bytes) ||
-          BigInt(file.bytes) >
-            BigInt(
-              kind === "receipt" ? 65536 : kind === "mapping" ? maxBytes : Number.MAX_SAFE_INTEGER,
-            ) ||
+          BigInt(file.bytes) > BigInt(Number.MAX_SAFE_INTEGER) ||
           typeof file.sha256 !== "string" ||
           !/^[a-f0-9]{64}$/.test(file.sha256)
         )
@@ -375,7 +366,7 @@ export async function* sourceEvidenceRecords(
   const lines = new JsonLineStream(JOURNAL_RECORD_BYTES + 1);
   for await (const chunk of createReadStream(file, { highWaterMark: 65536, signal })) {
     bytes += chunk.length;
-    if (bytes > maxBytes || bytes > receipt.bytes) invalid("Evidence exceeds its byte receipt");
+    if (bytes > receipt.bytes) invalid("Evidence exceeds its byte receipt");
     for (const line of lines.push(chunk)) {
       if (!line.ok)
         invalid(

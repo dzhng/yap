@@ -284,7 +284,6 @@ export function projectPointerHistoryRenderer(
                 clockOffsetUs: request.clockOffsetUs,
                 plan: renderPlan({ spans: request.spans }),
                 output,
-                ...request.limits,
               },
               {
                 signal,

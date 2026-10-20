@@ -23,7 +23,6 @@ final class PrerecordedCaptureInput: CaptureInputSession {
     var companionFailure: CaptureFailure?
     var probeDirectory: URL?
     var cameraBinding: CameraCaptureBinding?
-    var probeMaximumRows = 5_000_000
     var probe: CaptureClockIngress?
     var sharedIngress: CaptureClockIngress?
     var fixtureOrigin: Int64?
@@ -67,7 +66,7 @@ final class PrerecordedCaptureInput: CaptureInputSession {
         if let probeDirectory {
             let camera = try CameraWriter(directory: probeDirectory.appendingPathComponent("camera"), framesPerSecond: 30, binding: cameraBinding)
             probe = try CaptureClockIngress(writer: writer, destination: .companion(camera),
-                observations: probeDirectory.appendingPathComponent("timestamps.jsonl"), failure: onFailure, maximumRows: probeMaximumRows)
+                observations: probeDirectory.appendingPathComponent("timestamps.jsonl"), failure: onFailure)
         }
         let asset = AVURLAsset(url: source)
         let track = try await asset.loadTracks(withMediaType: .video).first!

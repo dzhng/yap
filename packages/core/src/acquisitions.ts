@@ -107,7 +107,7 @@ export type Acquisition = {
     supportBasis: "physical" | "captured-audio";
   })[];
 };
-const memberBytes = z.number().int().nonnegative().max(268_435_456);
+const memberBytes = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const portableAcquisitionSchema = z
   .strictObject({
     id: z
@@ -755,8 +755,6 @@ export class AcquisitionImporter {
             endUs: number;
           };
           const intervals = audio.get(interval.role) ?? [];
-          if (intervals.length === 100_000)
-            throw new CatalogError("LIMIT_EXCEEDED", "Capture acquisition interval limit exceeded");
           intervals.push(interval);
           audio.set(interval.role, intervals);
         },
@@ -885,7 +883,7 @@ export class AcquisitionImporter {
         [normalized, files.normalized],
         ...proofMembers.map(([name, member]) => [join(sourceDirectory, name), member] as const),
       ] as const) {
-        const copied = await copyImportedFile(member.path, path, signal, member, 268_435_456);
+        const copied = await copyImportedFile(member.path, path, signal, member);
         if (copied.sha256 !== member.sha256 || copied.bytes !== member.bytes)
           throw new CatalogError(
             "INVALID_PACKAGE",
@@ -1032,7 +1030,6 @@ export class AcquisitionImporter {
           intent.kind === "capture"
             ? { ...journal, sha256: intent.source.journal.sha256 }
             : journal,
-          268_435_456,
         );
         for (const name of publicationMembers) {
           const proof = files[name];
@@ -1044,7 +1041,7 @@ export class AcquisitionImporter {
               intent.kind === "capture"
                 ? { ...proof, sha256: intent.source.members[name]!.sha256 }
                 : proof,
-              name === "camera.mapping.jsonl" ? 268_435_456 : 65_536,
+              undefined,
             );
         }
         const canonical = Object.fromEntries(
@@ -1243,8 +1240,6 @@ export class AcquisitionImporter {
         const clippedStart = compare(start, fromTime(0)) < 0 ? fromTime(0) : start;
         if (compare(clippedStart, end) < 0)
           available.push({ startUs: toTime(clippedStart), endUs: toTime(end) });
-        if (available.length > 100_000)
-          throw new CatalogError("LIMIT_EXCEEDED", "Capture acquisition interval limit exceeded");
       }
     }
     return {

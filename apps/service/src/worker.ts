@@ -3,6 +3,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { isAbsolute } from "node:path";
 import {
   MEDIA_WORKER_TIMEOUT_MS,
+  DEFAULT_CALL_TIMEOUT_MS,
+  derivedBound,
   REQUEST_FRAME_BYTES,
   RESPONSE_FRAME_BYTES,
   JsonLineReader,
@@ -14,7 +16,7 @@ import {
 } from "@yap/protocol";
 import { CatalogError } from "@yap/core/catalog";
 import type { PreparedRuntime } from "@yap/core/models";
-import { subtract, fromTime, rational, divide, ceil, type SelectionRange } from "@yap/composition";
+import { subtract, fromTime, ceil, type SelectionRange } from "@yap/composition";
 
 /**
  * Where the packaged app's native worker executable is. The app is the one owner of that path:
@@ -25,32 +27,28 @@ import { subtract, fromTime, rational, divide, ceil, type SelectionRange } from 
 const NATIVE_EXECUTABLE_VARIABLE = "YAP_NATIVE";
 export const MAX_MEDIA_TIMEOUT_MS = 2_147_483_647;
 
-/** Budget selected output, including silence, without charging for discarded source prefixes. */
+/** Inferred real-time media traversal × selected seconds × 2× margin, excluding pauses. */
 export function renderWindowDeadlineMs(range: SelectionRange): number {
-  return Math.min(
-    MAX_MEDIA_TIMEOUT_MS,
-    30_000 +
-      2 * ceil(divide(subtract(fromTime(range.endUs), fromTime(range.startUs)), rational(1000n))),
-  );
+  const durationUs = ceil(subtract(fromTime(range.endUs), fromTime(range.startUs)));
+  return Math.max(1, derivedBound(1000, durationUs, 2));
 }
 
-/** Ten minutes covers a cold model load and verifying its files; inference gets twice the narration
- * the request plans to read. */
+/** Model preparation owns its wait; inference gets selected available narration at 2× real time. */
 export function transcriptionDeadlineMs(available: readonly SelectionRange[]): number {
-  // Timeout estimates project each run before summing, keeping varied native timescales bounded.
-  const narrationUs = available.reduce(
-    (total, range) =>
-      total + BigInt(ceil(subtract(fromTime(range.endUs), fromTime(range.startUs)))),
-    0n,
+  return Math.max(
+    1,
+    available.reduce((total, range) => total + renderWindowDeadlineMs(range), 0),
   );
-  const budget = 600_000n + (2n * narrationUs + 999n) / 1000n;
-  return Number(budget < BigInt(MAX_MEDIA_TIMEOUT_MS) ? budget : BigInt(MAX_MEDIA_TIMEOUT_MS));
 }
 
 export type MediaWorker = (
   operation: string,
   params: Record<string, unknown>,
-  options?: { signal?: AbortSignal; timeoutMs?: number; descriptors?: readonly number[] },
+  options?: {
+    signal?: AbortSignal;
+    timeoutMs?: number | null | (() => number);
+    descriptors?: readonly number[];
+  },
 ) => Promise<OperationResult>;
 
 /** A refused native call derives retryability from the shared refusal ledger. */
@@ -100,7 +98,7 @@ export function nativeConfirmed(
 
 /**
  * Runs one bounded native worker process per call: one JSON line in, one JSON line out, then the
- * child is gone. Arguments never reach a shell, and no call waits without a deadline. This is the
+ * child is gone. Arguments never reach a shell, with cancellation and parent ownership. This is the
  * service's only way to execute native media work, so later media operations reuse it rather than
  * growing a second child-process owner or a resident daemon.
  */
@@ -121,7 +119,11 @@ type WorkerCommand = {
   args?: readonly string[];
   environment?: NodeJS.ProcessEnv;
 };
-type WorkerOptions = { signal?: AbortSignal; timeoutMs?: number; descriptors?: readonly number[] };
+type WorkerOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number | null | (() => number);
+  descriptors?: readonly number[];
+};
 
 /** Process lifetime is shared; each wire protocol owns its decoding and completion rule. */
 function ownedProcess(
@@ -144,9 +146,9 @@ function ownedProcess(
       return;
     }
     if (
-      !Number.isFinite(timeoutMs) ||
-      timeoutMs <= 0 ||
-      timeoutMs > MAX_MEDIA_TIMEOUT_MS ||
+      (timeoutMs !== null &&
+        typeof timeoutMs !== "function" &&
+        (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) ||
       descriptors.some((fd) => !Number.isSafeInteger(fd) || fd < 0)
     ) {
       settle(operationError("INVALID_REQUEST", "Worker deadline/descriptors are invalid"));
@@ -201,16 +203,40 @@ function ownedProcess(
       stop();
     };
     const abort = () => finish(operationError("CANCELED", operation + " was canceled"));
-    const deadline = setTimeout(
-      () =>
+    // Numeric deadlines can exceed one Node timer. Observed work can grow while the child
+    // streams an archive; fixed IPC acknowledgement time remains separate from that byte work.
+    const started = performance.now();
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      if (timeoutMs === null) return; // Finite cleanup inventory, cancellation/parent ownership only.
+      let allowed: number;
+      try {
+        allowed = typeof timeoutMs === "function" ? timeoutMs() : timeoutMs;
+        if (!Number.isFinite(allowed) || allowed < 0) throw new Error("Invalid observed work");
+        if (typeof timeoutMs === "function") allowed = Math.max(DEFAULT_CALL_TIMEOUT_MS, allowed);
+      } catch {
+        finish(operationError("INVALID_STORAGE", "Cannot observe native work budget"));
+        return;
+      }
+      const remaining = allowed - (performance.now() - started);
+      if (remaining <= 0) {
         finish(
           operationError("MEDIA_WORKER_TIMEOUT", operation + " did not answer in time", {
             operation,
-            timeoutMs,
+            timeoutMs: allowed,
           }),
-        ),
-      timeoutMs,
-    );
+        );
+      } else
+        deadline = setTimeout(
+          arm,
+          Math.min(
+            MAX_MEDIA_TIMEOUT_MS,
+            Math.ceil(remaining),
+            typeof timeoutMs === "function" ? 1000 : MAX_MEDIA_TIMEOUT_MS,
+          ),
+        );
+    };
+    arm();
     child.on("error", (error: NodeJS.ErrnoException) =>
       finish(
         operationError(
@@ -307,7 +333,7 @@ export function jsonWorker(
     return ownedProcess(
       command,
       operation,
-      { ...options, timeoutMs: options.timeoutMs ?? timeoutMs },
+      { ...options, timeoutMs: options.timeoutMs === undefined ? timeoutMs : options.timeoutMs },
       {
         input: frame,
         stdout: (chunk) => {

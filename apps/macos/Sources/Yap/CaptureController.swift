@@ -47,6 +47,10 @@ final class CaptureController {
         self.startHold = FixtureStartHold.inFixture(fixtureWindow)
         capture.onCameraFrame = { [weak self] frame in self?.onCameraFrame?(frame) }
         capture.onMarkUpdate = { [weak self] update in self?.onMarkUpdate?(update) }
+        capture.onMaximumDuration = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in _ = try? await self.finish(reason: "maximumDuration", notify: true) }
+        }
         capture.onInterruption = { [weak self] reason in
             guard let self, let interrupted = self.take ?? self.pendingStart else { return }
             let recordingId = interrupted.recordingId
@@ -409,7 +413,7 @@ final class CaptureController {
                     let interrupted = result.failure != nil
                     outcome = try report(
                         state: interrupted ? "interrupted" : "complete",
-                        reason: interrupted ? result.failure?.code ?? reason : (result.cleanupFailure == nil ? nil : "CLEANUP_PENDING"),
+                        reason: interrupted ? result.failure?.code ?? reason : (result.cleanupFailure == nil ? (self.capture.completionReason ?? reason) : "CLEANUP_PENDING"),
                         message: result.failure?.message,
                 durationUs: interrupted && result.durationUs == 0 ? nil : result.durationUs,
                         take: active)

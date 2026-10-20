@@ -19,7 +19,7 @@ import {
 } from "./evidence-read.js";
 import {
   OrderedPages,
-  readMember,
+  readJsonMember,
   writeOrderedPages,
   type OrderedPageCodec,
 } from "./ordered-pages.js";
@@ -112,15 +112,14 @@ export class FileSourceEvidence extends SourceEvidenceReader {
   }
 }
 
-/** The receipt is bounded independently of the normalized rows, which remain lazy. */
+/** Metadata carries the receipt; normalized records remain independently paged. */
 export function readSourceMetadata(
   root: string | FileAccess,
   identity: EvidenceIdentity,
 ): SourceEvidenceMetadata {
-  const bytes = readMember(fileAccess(root), "metadata.json", 65536);
   let value: unknown;
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    value = readJsonMember(fileAccess(root), "metadata.json");
   } catch {
     throw new CatalogError("INVALID_EVIDENCE", "Invalid portable source metadata");
   }

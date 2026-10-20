@@ -68,9 +68,6 @@ package struct SourceEvidenceExport: Encodable {
         guard (info.st_mode & S_IFMT) == S_IFREG else {
             throw CaptureFailure("INVALID_JOURNAL", "Evidence requires a regular journal file.")
         }
-        guard info.st_size <= 268_435_456 else {
-            throw CaptureFailure("EVIDENCE_LIMIT", "Journal exceeds the evidence read budget.")
-        }
         let layout = try CaptureJournal.layout(directory: source.path)
         if let canonical, !Set(canonical.keys).isSubset(of: ["video", "narration", "system"]) {
             throw CaptureFailure("INVALID_REQUEST", "Unexpected canonical source role.")
@@ -119,14 +116,11 @@ package struct SourceEvidenceExport: Encodable {
         encoder.outputFormatting = [.sortedKeys]
         func emit<T: Encodable>(_ event: String, _ data: T) throws {
             let line = try encoder.encode(EvidenceRecord(event: event, data: data)) + Data([10])
-            guard bytes <= 268_435_456 - line.count else {
-                throw CaptureFailure("EVIDENCE_LIMIT", "Evidence exceeds the output budget.")
-            }
             try handle.write(contentsOf: line)
             bytes += line.count
         }
         let summary = try CaptureJournal.readEvidence(
-            directory: source.path, maximumBytes: 268_435_456, retainTiming: false,
+            directory: source.path, maximumBytes: nil, retainTiming: false,
             geometry: {
                 try emit("geometry", $0)
                 geometryRecords += 1

@@ -190,12 +190,7 @@ export abstract class SourceEvidenceReader {
     return row ? content<T>(row) : null;
   }
   geometryChanges(identity: EvidenceIdentity, range: TimeRange): SourceGeometry[] {
-    return this.boundaries(
-      identity,
-      "geometry",
-      range,
-      "Too many geometry boundaries in this range",
-    );
+    return this.boundaries(identity, "geometry", range);
   }
   /** Null-time placements stay in delivery order; never promote them to source zero. */
   unplacedGeometry(
@@ -206,14 +201,11 @@ export abstract class SourceEvidenceReader {
     if (!integer(range.afterSequence) || !integer(end) || end <= range.afterSequence)
       invalid("Invalid geometry sequence range");
     this.requireComplete(identity);
-    const rows = this.records(identity, {
+    const rows = this.allRecords(identity, {
       index: "unplaced",
       lower: { key: [range.afterSequence], inclusive: false },
       upper: { key: [end], inclusive: false },
-      limit: 1001,
     });
-    if (rows.length > 1000)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many unplaced geometry records in this range");
     return rows.map((row) => content<SourceGeometry>(row));
   }
   /** Both retained boundaries include their markers without adding media duration. */
@@ -221,24 +213,32 @@ export abstract class SourceEvidenceReader {
     identity: EvidenceIdentity,
     range: TimeRange,
   ): { atSourceUs: number; elapsedPauseUs: number; sequence: number }[] {
-    return this.boundaries(identity, "pauses", range, "Too many pause boundaries in this range");
+    return this.boundaries(identity, "pauses", range);
   }
   private boundaries<T>(
     identity: EvidenceIdentity,
     index: "pauses" | "geometry",
     range: TimeRange,
-    message: string,
   ): T[] {
     this.timingRange(range);
     this.requireComplete(identity);
-    const rows = this.records(identity, {
+    const rows = this.allRecords(identity, {
       index,
       lower: { key: [range.startUs, 0], inclusive: true },
       upper: { key: [range.endUs, max], inclusive: true },
-      limit: 1001,
     });
-    if (rows.length > 1000) throw new CatalogError("LIMIT_EXCEEDED", message);
     return rows.map((row) => content<T>(row));
+  }
+  private allRecords(identity: EvidenceIdentity, query: Omit<RecordQuery, "limit">): RecordRow[] {
+    const result: RecordRow[] = [];
+    let lower = query.lower;
+    for (;;) {
+      const rows = this.records(identity, { ...query, ...(lower ? { lower } : {}), limit: 256 });
+      if (!rows.length) return result;
+      result.push(...rows);
+      if (rows.length < 256) return result;
+      lower = { key: recordKey(query.index, rows.at(-1)!), inclusive: false };
+    }
   }
   hasAudio(identity: EvidenceIdentity, role: "narration" | "system"): boolean {
     this.requireComplete(identity);
@@ -251,11 +251,10 @@ export abstract class SourceEvidenceReader {
     if (range.startUs === range.endUs) return [];
     const bound = { key: [range.startUs, max], inclusive: true };
     const prior = this.records(identity, { index: role, upper: bound, reverse: true, limit: 1 });
-    const rows = this.records(identity, {
+    const rows = this.allRecords(identity, {
       index: role,
       lower: { ...bound, inclusive: false },
       upper: { key: [range.endUs, 0], inclusive: false },
-      limit: 1001,
     });
     const intervals = [...prior, ...rows]
       .map((row) => {
@@ -266,11 +265,6 @@ export abstract class SourceEvidenceReader {
         };
       })
       .filter((interval) => interval.startUs < interval.endUs);
-    if (intervals.length > 1000)
-      throw new CatalogError(
-        "LIMIT_EXCEEDED",
-        "Too many audio acquisition intervals in this range",
-      );
     return intervals;
   }
 }

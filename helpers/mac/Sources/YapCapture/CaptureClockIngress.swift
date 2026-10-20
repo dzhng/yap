@@ -32,15 +32,12 @@ package final class CaptureClockIngress: NSObject, SCStreamOutput, AVCaptureVide
     package var previewFrame: (@Sendable (NativeCapture.CameraPreviewFrame) -> Void)?
     private let failure: @Sendable (CaptureFailure) -> Void
     private var stopped = false
-    private let maximumRows: Int
-    private var rows = 0
     private var writtenBytes: Int64 = 0
     private let generation = UUID().uuidString
 
     package init(writer: CaptureWriter, destination: CaptureVideoDestination, observations: URL? = nil,
-        failure: @escaping @Sendable (CaptureFailure) -> Void, maximumRows: Int = 5_000_000) throws {
+        failure: @escaping @Sendable (CaptureFailure) -> Void) throws {
         self.writer = writer; self.destination = destination; self.failure = failure
-        self.maximumRows = maximumRows
         self.observationURL = observations
         if let observations {
             guard FileManager.default.createFile(atPath: observations.path, contents: nil) else {
@@ -149,14 +146,13 @@ package final class CaptureClockIngress: NSObject, SCStreamOutput, AVCaptureVide
             let cameraFrame: CameraFrameMapping?
         }
         // Bound pathological callback floods without accumulating a take in memory.
-        guard rows < maximumRows else { throw CaptureFailure("EVIDENCE_LIMIT", "Clock observation limit reached.") }
         let rate = clock.map { CMSyncGetRelativeRate($0, relativeTo: CMClockGetHostTimeClock()) }
         let row = Row(role: .camera, clockDomain: "camera-session", generation: generation, rawPTS: CaptureRationalTime(sample.presentationTimeStamp),
             convertedHostPTS: converted.map(CaptureRationalTime.init), arrivalHostUs: arrivalHostUs,
             duration: CaptureRationalTime(sample.duration), sourceUs: sourceUs, disposition: disposition,
             relativeRate: rate.flatMap { $0.isFinite ? $0 : nil }, cameraFrame: cameraFrame)
         let data = try JSONEncoder().encode(row) + Data([10])
-        try observations.write(contentsOf: data); rows += 1; writtenBytes += Int64(data.count)
+        try observations.write(contentsOf: data); writtenBytes += Int64(data.count)
     }
     package func close() throws {
         stopped = true

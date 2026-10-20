@@ -73,7 +73,7 @@ async function fixture(t, options = {}, content = "generated source") {
     jobs,
     delivery,
     worker,
-    limits: { ...archiveLimits, expandedBytes: 1024 ** 2 },
+    limits: archiveLimits,
     ...options,
   });
   t.after(async () => {
@@ -143,7 +143,7 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   const bytes = (await stat(f.input)).size;
   const admission = await f.registry.open(f.input);
   assert.equal(admission.packageHandle, null);
-  assert.equal(f.registry.usage().budgetBytes, bytes + 1024 ** 2);
+  assert.equal(f.registry.usage().budgetBytes, bytes);
   const handle = await ready(f, admission.id),
     context = f.registry.lookup(handle);
   const expanded = Object.values(f.files).reduce((sum, value) => sum + Buffer.byteLength(value), 0);
@@ -169,25 +169,22 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   await assert.rejects(f.registry.recover(), { code: "OWNER_CLOSED" });
 });
 
-test("64 GiB admission pool admits two exact-bound sparse reservations, refuses a third and releases canceled work", async (t) => {
-  const f = await fixture(t, { limits: archiveLimits });
+test("large pending admissions have no aggregate byte pool and cancellation releases ownership", async (t) => {
+  const f = await fixture(t);
   await f.registry.recover();
-  f.store.allocate(); // An unsettled generated take keeps the shared heavy lane paused.
-  await truncate(f.input, 16 * 1024 ** 3);
-  const first = await f.registry.open(f.input);
-  assert.equal(f.registry.status(first.id).state, "queued");
-  assert.equal(f.registry.usage().budgetBytes, 32 * 1024 ** 3);
-  const second = await f.registry.open(f.input);
-  assert.equal(f.registry.status(second.id).state, "queued");
-  assert.equal(f.registry.usage().budgetBytes, 64 * 1024 ** 3);
+  f.store.allocate(); // Keep the shared heavy lane paused: no sparse bytes are copied.
+  const bytes = 65 * 1024 ** 3;
+  await truncate(f.input, bytes);
+  const admissions = [];
+  for (let i = 0; i < 4; i++) admissions.push(await f.registry.open(f.input));
+  assert.equal(f.registry.usage().budgetBytes, 4 * bytes);
+  assert.equal(f.registry.usage().owners, 4);
   await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
-  assert.equal(f.registry.usage().owners, 2);
   assert.deepEqual(await readdir(f.directory), []);
-  await f.registry.close(first.id);
-  assert.equal(f.registry.status(first.id).state, "canceled");
-  assert.equal(f.registry.usage().budgetBytes, 32 * 1024 ** 3);
-  await f.registry.close(second.id);
-  assert.equal(f.registry.status(second.id).state, "canceled");
+  for (const admission of admissions) {
+    await f.registry.close(admission.id);
+    assert.equal(f.registry.status(admission.id).state, "canceled");
+  }
   assert.equal(f.registry.usage().budgetBytes, 0);
   const later = await f.registry.open(f.input);
   await f.registry.close(later.id);
@@ -612,13 +609,13 @@ test("correctly hashed malformed project resource metadata fails before readines
   );
 });
 
-test("default peak reservations block a fourth pending open but validated steady bytes allow it", async (t) => {
-  const f = await fixture(t, { limits: archiveLimits });
+test("four pending opens reserve actual input bytes and retain all validated owners", async (t) => {
+  const f = await fixture(t);
   await f.registry.recover();
   const capture = f.store.allocate().recording;
   const admissions = [];
-  for (let i = 0; i < 3; i++) admissions.push(await f.registry.open(f.input));
-  assert.equal(f.registry.usage().budgetBytes, 3 * ((await stat(f.input)).size + 16 * 1024 ** 3));
+  for (let i = 0; i < 4; i++) admissions.push(await f.registry.open(f.input));
+  assert.equal(f.registry.usage().budgetBytes, 4 * (await stat(f.input)).size);
   await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   f.store.ingestLifecycle(capture.id, {
     sourceId: capture.sourceId,
@@ -627,10 +624,9 @@ test("default peak reservations block a fourth pending open but validated steady
   });
   f.jobs.schedule();
   await Promise.all(admissions.map((value) => ready(f, value.id)));
-  const fourth = await f.registry.open(f.input);
-  await ready(f, fourth.id);
   assert.equal(f.registry.usage().owners, 4);
-  assert.ok(f.registry.usage().budgetBytes < 1024 ** 3);
+  const expanded = Object.values(f.files).reduce((sum, value) => sum + Buffer.byteLength(value), 0);
+  assert.equal(f.registry.usage().confirmedBytes, 4 * ((await stat(f.input)).size + expanded));
 });
 
 test("partial copy cancellation drains the actual worker before returning reservation and removing its tree", async (t) => {
@@ -674,7 +670,7 @@ test("partial copy cancellation drains the actual worker before returning reserv
         const copied = (await stat(join(f.directory, admission.id, ".input"))).size;
         assert.ok(copied > 0 && copied < input.length);
         assert.equal(f.registry.status(admission.id).packageHandle, null);
-        assert.equal(f.registry.usage().budgetBytes, input.length + 1024 ** 2);
+        assert.equal(f.registry.usage().budgetBytes, input.length);
         await f.registry.close(admission.id);
         assert.equal(copyClosed, true);
         assert.equal((await completion).state, "canceled");

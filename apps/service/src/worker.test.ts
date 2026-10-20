@@ -27,6 +27,7 @@ process.stdin.on('end', () => {
   if (request.operation === 'inherited') writeFileSync(3, 'owned bytes');
   if (request.params.ready) writeFileSync(request.params.ready, String(process.pid));
   if (request.operation === 'descriptor-map') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid,files:Array.from({length:request.params.count},(_,i)=>readFileSync(3+i,'utf8')),identity:{uid:process.getuid(),euid:process.geteuid(),gid:process.getgid(),egid:process.getegid(),groups:process.getgroups()}}})+'\\n');
+  if (request.operation === 'delayed-answer') setTimeout(() => process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid}})+'\\n'), 50);
   if (request.operation === 'answer') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid}})+'\\n');
   if (request.operation === 'refusal') process.stdout.write(JSON.stringify({ok:false,error:{code:'NOT_READY',message:'Still preparing',retryable:false,retryAfterMs:1,details:{retry:{operation:'job.get',params:{jobId:'missing'}}}}})+'\\n');
   setInterval(() => {}, 1000);
@@ -118,7 +119,7 @@ it("pre-canceled work never starts and spawn failure settles", async () => {
 
 it("rejects invalid per-call deadlines before starting work", async () => {
   const run = mediaWorker({ YAP_NATIVE: "/nonexistent/worker" });
-  for (const timeoutMs of [0, -1, NaN, Infinity, 2_147_483_648]) {
+  for (const timeoutMs of [0, -1, NaN, Infinity]) {
     expect(await run("hold", {}, { timeoutMs })).toMatchObject({
       ok: false,
       error: { code: "INVALID_REQUEST" },
@@ -199,5 +200,27 @@ it("out-of-order inherited descriptors preserve stdin, byte identity and the ord
     }
   } finally {
     await Promise.all(handles.map((handle) => handle.close()));
+  }
+});
+
+it("worker accepts a work deadline beyond the timer representation without clamping it", async () => {
+  const { run } = await fixture();
+  expect((await run("answer", {}, { timeoutMs: 2_147_483_648 })).ok).toBe(true);
+});
+
+it("inventory cleanup can omit a time budget while retaining process ownership", async () => {
+  const run = mediaWorker({ YAP_NATIVE: executable }, 1);
+  const result = await run("delayed-answer", {}, { timeoutMs: null });
+  expect(result.ok).toBe(true);
+  if (result.ok) expectGone((result.data as { pid: number }).pid);
+});
+
+it("rejects invalid observed-work budgets", async () => {
+  const { run } = await fixture();
+  for (const budget of [NaN, Infinity, -1]) {
+    expect(await run("answer", {}, { timeoutMs: () => budget })).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_STORAGE" },
+    });
   }
 });

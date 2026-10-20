@@ -96,7 +96,6 @@ package struct CaptureSourceAuthorityExpectation: Codable, Sendable {
 /// The source receipt adds no publication queue: its caller already owns the capture journal lease.
 package enum CaptureSourcePublication {
     private static let receiptFile = "source.publication.json"
-    private static let journalLimit = 268_435_456
     private static let recoveredDiagnostic = CaptureFailure("CAPTURE_RECOVERED", "Source support recovered without trusted ordinary completion.")
 
     fileprivate struct RecoveryBasis: Codable, Sendable {
@@ -180,7 +179,7 @@ package enum CaptureSourcePublication {
             return try await publish(kind: authority.kind, durationUs: duration, originHostUs: origin,
                 tracks: represented, diagnostic: diagnostic, lease: lease, layout: layout)
         }
-        let original = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)"), maximumBytes: Int64(journalLimit))
+        let original = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)"))
         let journalFile = authority.kind == .primary ? "source.journal.jsonl" : "capture.journal.jsonl"
         if authority.kind == .primary, try !lease.hasMember(journalFile) {
             let sourceDescriptor = lease.descriptor
@@ -242,7 +241,7 @@ package enum CaptureSourcePublication {
         let name = staged ? "capture.journal.jsonl" : source.journal.file
         let descriptor = try lease.openMember(name)
         defer { close(descriptor) }
-        let whole = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"), maximumBytes: Int64(journalLimit))
+        let whole = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"))
         let facts = try summary(lease: lease, descriptor: descriptor, layout: source.journal.layout)
         let allowed: Set<String> = source.kind == .camera
             ? ["video.mov", "camera.publication.json", CameraMedia.mappingFile]
@@ -267,7 +266,7 @@ package enum CaptureSourcePublication {
             guard try memberIdentity(name, lease: lease, canonical: canonical) == expected else { throw invalid("Recovered source member changed: \(name).") }
         }
         if !staged {
-            guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)"), maximumBytes: Int64(journalLimit)) == basis.original else {
+            guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)")) == basis.original else {
                 throw invalid("Original recovery journal changed outside its trusted prefix.")
             }
         }
@@ -276,8 +275,8 @@ package enum CaptureSourcePublication {
         let video = try await support(kind: source.kind, lease: lease, canonical: canonical)
         try Task.checkCancellation()
         guard video.last?.endUs == source.sourceDurationUs, try supportHash(video) == basis.supportSHA256 else { throw invalid("Recovered support differs from publication authority.") }
-        guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"), maximumBytes: Int64(journalLimit)) == whole,
-            try (staged || CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)"), maximumBytes: Int64(journalLimit)) == basis.original) else {
+        guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)")) == whole,
+            try (staged || CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(lease.descriptor)")) == basis.original) else {
             throw invalid("Recovery journal changed during support verification.")
         }
         for (name, expected) in source.members {
@@ -352,7 +351,7 @@ package enum CaptureSourcePublication {
         let descriptor = try lease.openMember(journalFile)
         defer { close(descriptor) }
         let summary = try summary(lease: lease, descriptor: descriptor, layout: layout)
-        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"), maximumBytes: Int64(journalLimit))
+        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"))
         guard let prefix = summary.validatedPrefix, prefix.bytes == identity.bytes, prefix.sha256 == identity.sha256,
             let header = summary.header, let origin = summary.originHostUs,
             let completion = summary.completion, completion.durationUs > 0,
@@ -406,7 +405,7 @@ package enum CaptureSourcePublication {
         }
         let descriptor = try lease.openMember(staged ? "capture.journal.jsonl" : expectedJournal)
         defer { close(descriptor) }
-        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"), maximumBytes: Int64(journalLimit))
+        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"))
         guard identity.bytes == receipt.journal.bytes, identity.sha256 == receipt.journal.sha256 else {
             throw invalid("Immutable source journal changed.")
         }
@@ -422,7 +421,7 @@ package enum CaptureSourcePublication {
             summary.originHostUs == receipt.originHostUs, receipt.sourceDurationUs > 0,
             summary.completion?.durationUs == receipt.sourceDurationUs else { throw invalid("Source receipt differs from its journal.") }
         if receipt.kind == .primary {
-            _ = try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: journalLimit,
+            _ = try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
                 retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
                 through: JournalPrefix(bytes: identity.bytes, sha256: identity.sha256),
                 descriptor: lease.descriptor, layout: receipt.journal.layout)
@@ -451,7 +450,7 @@ package enum CaptureSourcePublication {
     }
 
     private static func summary(lease: CaptureJournalLease, descriptor: Int32, layout: Int) throws -> CaptureJournalSummary {
-        try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: journalLimit,
+        try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             retainPrefix: true, descriptor: descriptor, layout: layout)
     }

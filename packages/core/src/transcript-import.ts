@@ -1,3 +1,4 @@
+import { JsonDocument } from "./json-stream.js";
 import { createHash } from "node:crypto";
 import { CatalogError } from "./catalog.js";
 
@@ -104,47 +105,54 @@ function cue(
   };
 }
 
-function parseTextCues(
-  raw: string,
-  format: "srt" | "vtt",
-): { cues: ImportedCue[]; metadata: Record<string, unknown> } {
-  const normalized = raw.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
-  const lines = normalized.split("\n");
-  let index = 0;
-  if (format === "vtt") {
-    if (!/^WEBVTT(?:\s|$)/.test(lines[0] ?? "")) invalid("VTT input must begin with WEBVTT");
-    index = 1;
-  }
-  const cues: ImportedCue[] = [];
-  while (index < lines.length) {
-    while (index < lines.length && !lines[index]!.trim()) index++;
-    if (index >= lines.length) break;
-    if (format === "vtt" && /^(NOTE|STYLE|REGION)(?:\s|$)/.test(lines[index]!.trim())) {
-      while (index < lines.length && lines[index]!.trim()) index++;
-      continue;
+/** Only the current cue is buffered; the semantic cue inventory is the retained result. */
+class TextCues {
+  readonly cues: ImportedCue[] = [];
+  private block: string[] = [];
+  private header = false;
+  constructor(private readonly format: "srt" | "vtt") {}
+  line(line: string) {
+    if (!this.header) {
+      this.header = true;
+      line = line.replace(/^\uFEFF/, "");
+      if (this.format === "vtt") {
+        if (!/^WEBVTT(?:\s|$)/.test(line)) invalid("VTT input must begin with WEBVTT");
+        return;
+      }
     }
-    const first = lines[index]!.trim();
-    let id = String(cues.length + 1);
-    let timing = first;
+    if (line.trim()) this.block.push(line);
+    else this.flush();
+  }
+  private flush() {
+    const lines = this.block;
+    this.block = [];
+    if (
+      !lines.length ||
+      (this.format === "vtt" && /^(NOTE|STYLE|REGION)(?:\s|$)/.test(lines[0]!.trim()))
+    )
+      return;
+    let first = lines[0]!.trim(),
+      index = 1,
+      id = String(this.cues.length + 1);
     if (!first.includes("-->")) {
       id = first;
-      index++;
-      timing = lines[index]?.trim() ?? "";
+      first = lines[index++]?.trim() ?? "";
     }
-    const timed = parseTiming(timing);
-    index++;
-    const textLines: string[] = [];
-    while (index < lines.length && lines[index]!.trim()) textLines.push(lines[index++]!);
+    const timed = parseTiming(first);
+    const textLines = lines.slice(index);
     if (!textLines.length) invalid("Transcript cue has no text", { id });
     const text = textLines.join("\n");
-    cues.push(
-      format === "vtt"
-        ? cue(id, cues.length, timed.source, text, undefined, timed.settings)
-        : { id, ordinal: cues.length, text, source: timed.source, words: [] },
+    this.cues.push(
+      this.format === "vtt"
+        ? cue(id, this.cues.length, timed.source, text, undefined, timed.settings)
+        : { id, ordinal: this.cues.length, text, source: timed.source, words: [] },
     );
   }
-  if (!cues.length) invalid("Transcript contains no cues");
-  return { cues, metadata: {} };
+  finish() {
+    this.flush();
+    if (!this.cues.length) invalid("Transcript contains no cues");
+    return { cues: this.cues, metadata: {} };
+  }
 }
 
 function objectRange(value: Record<string, unknown>, label: string): ImportedRange {
@@ -157,13 +165,7 @@ function objectRange(value: Record<string, unknown>, label: string): ImportedRan
   );
 }
 
-function parseJson(raw: string): { cues: ImportedCue[]; metadata: Record<string, unknown> } {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    invalid("Transcript JSON is malformed");
-  }
+function parseJson(value: unknown): { cues: ImportedCue[]; metadata: Record<string, unknown> } {
   if (!value || typeof value !== "object" || !Array.isArray((value as { cues?: unknown }).cues))
     invalid("Transcript JSON must contain a cues array");
   const cues = (value as { cues: unknown[] }).cues.map((entry, ordinal) => {
@@ -218,31 +220,97 @@ function parseJson(raw: string): { cues: ImportedCue[]; metadata: Record<string,
   return { cues, metadata };
 }
 
-export function parseImportedTranscript(
-  input: Uint8Array | string,
-  options: { format?: ImportedFormat } = {},
-): ImportedTranscript {
-  const bytes = typeof input === "string" ? Buffer.from(input, "utf8") : Buffer.from(input);
-  let raw: string;
-  try {
-    raw = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    invalid("Transcript input is not valid UTF-8");
+class ImportedTranscriptReader {
+  private readonly hash = createHash("sha256");
+  private readonly decoder = new TextDecoder("utf-8", { fatal: true });
+  private bytes = 0;
+  private prefix = "";
+  private format: ImportedFormat | undefined;
+  private json: JsonDocument | undefined;
+  private text: TextCues | undefined;
+  private pending = "";
+  private afterCR = false;
+  constructor(options: { format?: ImportedFormat }) {
+    this.format = options.format;
   }
-  const format =
-    options.format ??
-    (raw.trimStart().startsWith("WEBVTT")
-      ? "vtt"
-      : raw.trimStart().startsWith("{")
-        ? "json"
-        : "srt");
-  const parsed = format === "json" ? parseJson(raw) : parseTextCues(raw, format);
-  return {
-    format,
-    parser: { name: "yap-transcript-import", version: parserVersion },
-    timingBasis: "supplied",
-    raw: { bytes: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex") },
-    metadata: parsed.metadata,
-    cues: parsed.cues,
-  };
+  write(bytes: Uint8Array) {
+    this.hash.update(bytes);
+    this.bytes += bytes.byteLength;
+    try {
+      this.decoded(this.decoder.decode(bytes, { stream: true }));
+    } catch (error) {
+      if (error instanceof CatalogError) throw error;
+      invalid("Transcript input is not valid UTF-8 or JSON");
+    }
+  }
+  private decoded(value: string, end = false) {
+    if (!this.json && !this.text) {
+      this.prefix += value;
+      const trimmed = this.prefix.trimStart();
+      if (!this.format) {
+        if ((!trimmed && !end) || ("WEBVTT".startsWith(trimmed) && trimmed.length < 6 && !end))
+          return;
+        this.format = trimmed.startsWith("WEBVTT")
+          ? "vtt"
+          : trimmed.startsWith("{")
+            ? "json"
+            : "srt";
+      }
+      if (this.format === "json") this.json = new JsonDocument();
+      else this.text = new TextCues(this.format);
+      value = this.prefix;
+      this.prefix = "";
+    }
+    if (this.json) {
+      this.json.write(Buffer.from(value));
+      return;
+    }
+    for (const character of value) {
+      if (character === "\n" && this.afterCR) {
+        this.afterCR = false;
+        continue;
+      }
+      this.afterCR = character === "\r";
+      if (character === "\r" || character === "\n") {
+        this.text!.line(this.pending);
+        this.pending = "";
+      } else this.pending += character;
+    }
+  }
+  finish(): ImportedTranscript {
+    try {
+      this.decoded(this.decoder.decode(), true);
+    } catch (error) {
+      if (error instanceof CatalogError) throw error;
+      invalid("Transcript input is not valid UTF-8 or JSON");
+    }
+    let parsed;
+    try {
+      if (this.json) parsed = parseJson(this.json.finish());
+      else {
+        if (this.pending) this.text!.line(this.pending);
+        parsed = this.text!.finish();
+      }
+    } catch (error) {
+      if (error instanceof CatalogError) throw error;
+      invalid("Transcript JSON is malformed");
+    }
+    return {
+      format: this.format!,
+      parser: { name: "yap-transcript-import", version: parserVersion },
+      timingBasis: "supplied",
+      raw: { bytes: this.bytes, sha256: this.hash.digest("hex") },
+      ...parsed,
+    };
+  }
+}
+
+/** Original bytes stream into one parser shared by import and portable adoption. */
+export async function readImportedTranscript(
+  chunks: AsyncIterable<Uint8Array>,
+  options: { format?: ImportedFormat } = {},
+): Promise<ImportedTranscript> {
+  const reader = new ImportedTranscriptReader(options);
+  for await (const chunk of chunks) reader.write(chunk);
+  return reader.finish();
 }

@@ -86,8 +86,8 @@ export const portableSourceIndexMetadataSchema = sourceSelectionSchema
     observationRequest: pictureObservationRequestSchema.optional(),
     faceObservationRequest: faceObservationRequestSchema.optional(),
     durationUs: portableTime,
-    candidateCount: portableTime.max(25000),
-    coverageCount: portableTime.max(25000),
+    candidateCount: portableTime,
+    coverageCount: portableTime,
     sizeBytes: portableTime,
   })
   .strict();

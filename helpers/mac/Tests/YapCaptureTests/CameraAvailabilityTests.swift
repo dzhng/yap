@@ -32,15 +32,11 @@ func runCameraAvailabilityTests(output: String? = nil) async throws {
 
 // MARK: Cases
 
-/// A take turns its camera on at most 500 times (`CAMERA_TOGGLE_LIMIT`), so availability holds at
-/// most 500 intervals; the receipt then stays inside its 64 KiB read bound.
+/// Toggle count has no relationship to recorded duration; retain every disjoint interval.
 private func runLimit() throws {
-    let runs = { (count: Int64) in (0..<count).map { ExactRange(startUs: $0 * 10, endUs: $0 * 10 + 5) } }
-    _ = try CameraAvailability(intervals: runs(500))
-    do {
-        _ = try CameraAvailability(intervals: runs(501))
-        preconditionFailure("501 camera runs must be refused")
-    } catch let failure as CaptureFailure where failure.code == "INVALID_CAMERA_MAPPING" {}
+    let runs = (0..<1001).map { ExactRange(startUs: Int64($0) * 10, endUs: Int64($0) * 10 + 5) }
+    let availability = try CameraAvailability(intervals: runs)
+    precondition(availability.gaps.count == 1000 && availability.support.endUs == runs.last!.endUs)
 }
 
 /// Receipt and mapping key sets of a camera take published by release 0.1.33, before cameras
@@ -306,7 +302,7 @@ private func manyGaps(root: URL, pictures: [CMSampleBuffer], output: URL?) async
     var clock = CaptureClock()
     precondition(clock.start(at: 1_000_000))
     let take = try GatedCameraTake(root: root, name: "many-gaps", pictures: pictures, clock: clock)
-    let runs = 500, firstUs: Int64 = 1_000_000_000
+    let runs = 502, firstUs: Int64 = 1_000_000_000
     for run in 0..<runs {
         let at = 1_000_000 + firstUs + Int64(run) * 200_000
         if run > 0 { take.setCamera(true, at: at) }

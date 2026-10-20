@@ -1,5 +1,5 @@
 import { ResourceReferences, resourceKinds, type ResourceReference } from "./references.js";
-import { archiveLimits, checkProjectJsonBytes } from "./package-archive.js";
+import { archiveLimits } from "./package-archive.js";
 import { AcquisitionStore } from "./acquisitions.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -49,13 +49,12 @@ export const projectSnapshotReferencesSchema = z
   .array(
     z.strictObject({
       revisionId: z.string().min(1),
-      resources: z
-        .array(z.strictObject({ kind: z.enum(resourceKinds), id: z.string().min(1).max(2048) }))
-        .max(25000),
+      resources: z.array(
+        z.strictObject({ kind: z.enum(resourceKinds), id: z.string().min(1).max(2048) }),
+      ),
     }),
   )
-  .max(archiveLimits.history)
-  .refine((values) => values.reduce((sum, value) => sum + value.resources.length, 0) <= 25000);
+  .max(archiveLimits.history);
 const projectSnapshotSchema = z.strictObject({
   project: z.strictObject({
     id: z.string().min(1),
@@ -674,7 +673,6 @@ export class ProjectStore {
         "LIMIT_EXCEEDED",
         "Project history exceeds the portable snapshot budget",
       );
-    checkProjectJsonBytes(usage.bytes);
     const history = this.history(
       projectId,
       pageCursor.encode(
@@ -706,15 +704,8 @@ export class ProjectStore {
       }
     if (undo.length > archiveLimits.history)
       throw new CatalogError("LIMIT_EXCEEDED", "Project undo exceeds the portable snapshot limit");
-    let edges = 0;
     const references = history.revisions.map((revision) => {
       const resources = this.references.dependencies({ kind: "revision", id: revision.id });
-      edges += resources.length;
-      if (edges > 25000)
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Project revision dependencies exceed package budget",
-        );
       return { revisionId: revision.id, resources };
     });
     return {

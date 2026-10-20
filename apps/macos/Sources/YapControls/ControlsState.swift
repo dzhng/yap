@@ -116,11 +116,12 @@ public struct ControlsState: Equatable, Sendable {
     public struct TakeStatus: Equatable, Sendable, Decodable {
         public init(
             id: String, state: String, interruptionReason: String?, sourceDurationUs: Int64?,
-            finalizationError: FinalizationError? = nil, interruptionMessage: String? = nil
+            finalizationError: FinalizationError? = nil, interruptionMessage: String? = nil, completionReason: String? = nil
         ) {
             self.id = id
             self.state = state
             self.interruptionReason = interruptionReason
+            self.completionReason = completionReason
             self.interruptionMessage = interruptionMessage
             self.sourceDurationUs = sourceDurationUs
             self.finalizationError = finalizationError
@@ -128,6 +129,7 @@ public struct ControlsState: Equatable, Sendable {
         public let id: String
         public let state: String
         public let interruptionReason: String?
+        public let completionReason: String?
         public let interruptionMessage: String?
         public let sourceDurationUs: Int64?
         public let finalizationError: FinalizationError?

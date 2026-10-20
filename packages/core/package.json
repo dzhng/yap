@@ -407,6 +407,10 @@
     "./presets": {
       "types": "./dist/presets.d.ts",
       "default": "./dist/presets.js"
+    },
+    "./json-stream": {
+      "types": "./dist/json-stream.d.ts",
+      "default": "./dist/json-stream.js"
     }
   },
   "scripts": {
@@ -415,6 +419,7 @@
     "test": "vitest run --maxWorkers=4"
   },
   "dependencies": {
+    "@streamparser/json": "^0.0.26",
     "@yap/composition": "workspace:*",
     "@yap/protocol": "workspace:*",
     "zod": "4.6.5"

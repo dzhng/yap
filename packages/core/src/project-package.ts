@@ -1,3 +1,4 @@
+import { jsonChunks } from "./json-stream.js";
 import { textSeedResources } from "./text-seeds.js";
 import { portablePreparedAudioSchema, preparedAudioResource } from "./prepared-audio.js";
 import { portableProjectIndexMetadataSchema } from "./project-index.js";
@@ -35,7 +36,7 @@ import {
 import { retainedPublicationSchema } from "./jobs.js";
 import { acquisitionContext, portableAcquisitionSchema } from "./acquisitions.js";
 import { resourceKinds, type ResourceReference } from "./references.js";
-import { checkProjectJsonBytes, type ArchiveLimits } from "./package-archive.js";
+import { type ArchiveLimits } from "./package-archive.js";
 import { importedTranscriptGenerationResource } from "./imported-transcript.js";
 
 import {
@@ -61,20 +62,16 @@ const member = z.strictObject({
 });
 const indexMembersSchema = z.strictObject({
   publication: retainedPublicationSchema.nullable(),
-  records: z
-    .array(z.strictObject({ bytes: z.int().nonnegative().max(262144), sha256: digest }))
-    .max(25000),
-  images: z
-    .array(
-      z.strictObject({
-        bytes: z
-          .int()
-          .positive()
-          .max(32 * 1024 * 1024),
-        sha256: digest,
-      }),
-    )
-    .max(25000),
+  records: z.array(z.strictObject({ bytes: z.int().nonnegative().max(262144), sha256: digest })),
+  images: z.array(
+    z.strictObject({
+      bytes: z
+        .int()
+        .positive()
+        .max(32 * 1024 * 1024),
+      sha256: digest,
+    }),
+  ),
 });
 const resourceSchema = z.discriminatedUnion("kind", [
   portableAssetSchema.extend({ kind: z.literal("asset") }),
@@ -112,8 +109,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
           sha256: digest,
         }),
       )
-      .min(1)
-      .max(25000),
+      .min(1),
   }),
   indexMembersSchema.extend({
     kind: z.literal("index-generation"),
@@ -126,13 +122,10 @@ const resourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("transcript-generation"),
     metadata: portableTranscriptSchema,
-    available: z.array(selectionRangeSchema).max(100000),
+    available: z.array(selectionRangeSchema),
     publication: retainedPublicationSchema.nullable(),
     receipt: z.strictObject({
-      bytes: z
-        .int()
-        .nonnegative()
-        .max(8 * 1024 * 1024),
+      bytes: z.int().nonnegative(),
       sha256: digest,
     }),
   }),
@@ -149,10 +142,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
       parser: z.strictObject({ name: z.string(), version: z.string() }),
       timingBasis: z.literal("supplied"),
       raw: z.strictObject({
-        bytes: z
-          .int()
-          .nonnegative()
-          .max(256 * 1024 * 1024),
+        bytes: z.int().nonnegative(),
         sha256: digest,
       }),
       metadata: z.record(z.string(), z.unknown()),
@@ -161,7 +151,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
     alignment: z
       .strictObject({ modelId: z.string().min(1), channel: z.int().nonnegative() })
       .optional(),
-    cues: z.array(z.unknown()).max(100000),
+    cues: z.array(z.unknown()),
   }),
 ]);
 const serializedResourceSchema = z.strictObject({
@@ -172,16 +162,21 @@ export function resourceMetadataPath(identity: ResourceReference): string {
   return `resources/${createHash("sha256").update(key(identity)).digest("hex")}.json`;
 }
 export function resourceMetadataMember(resource: PortableResource) {
-  const body = JSON.stringify(resource),
-    identity = resourceIdentity(resource);
+  const identity = resourceIdentity(resource),
+    hash = createHash("sha256");
+  let bytes = 0;
+  for (const chunk of jsonChunks(resource)) {
+    bytes += Buffer.byteLength(chunk);
+    hash.update(chunk);
+  }
   return {
-    body,
+    chunks: () => jsonChunks(resource),
     reference: {
       identity,
       metadata: {
         path: resourceMetadataPath(identity),
-        bytes: Buffer.byteLength(body),
-        sha256: createHash("sha256").update(body).digest("hex"),
+        bytes,
+        sha256: hash.digest("hex"),
       },
     },
   };
@@ -400,8 +395,8 @@ const manifestSchema = z.strictObject({
   undo: z.array(z.string()).max(1000),
   references: projectSnapshotReferencesSchema,
   revisions: z.array(z.string()).min(1).max(1000),
-  resources: z.array(serializedResourceSchema).max(25_000),
-  inventory: z.array(member).max(25_000),
+  resources: z.array(serializedResourceSchema),
+  inventory: z.array(member),
 });
 export type ProjectPackageManifest = z.infer<typeof manifestSchema>;
 export type ValidatedProjectPackage = Omit<ProjectPackageManifest, "resources"> & {
@@ -418,15 +413,12 @@ function invalid(message: string): never {
 export function collectPortableResources<T extends PortableDependency>(
   roots: readonly ResourceReference[],
   read: (identity: ResourceReference) => T,
-  limit = 25_000,
 ): T[] {
   const found = new Map<string, T>(),
     queued = new Set<string>(),
     pending: ResourceReference[] = [];
   const enqueue = (identity: ResourceReference) => {
     if (queued.has(key(identity))) return;
-    if (queued.size >= limit)
-      throw new CatalogError("LIMIT_EXCEEDED", "Portable dependency inventory exceeds its limit");
     queued.add(key(identity));
     pending.push(identity);
   };
@@ -473,13 +465,12 @@ export function projectPackageManifest(
 }
 /** Compact shape/inventory admission precedes any external metadata reads. */
 export function parseProjectPackageManifest(
-  body: string,
+  body: unknown,
   limits: ArchiveLimits,
 ): ProjectPackageManifest {
-  if (Buffer.byteLength(body) > limits.manifestBytes) invalid("Project manifest exceeds its limit");
   let value: unknown;
   try {
-    value = JSON.parse(body);
+    value = typeof body === "string" ? JSON.parse(body) : body;
   } catch {
     invalid("Invalid project manifest JSON");
   }
@@ -498,8 +489,7 @@ export function parseProjectPackageManifest(
   const parsed = manifestSchema.safeParse(value);
   if (!parsed.success) invalid("Invalid project manifest");
   const manifest = parsed.data;
-  if (manifest.inventory.length > limits.entries - 1 || manifest.revisions.length > limits.history)
-    invalid("Project inventory exceeds its limit");
+  if (manifest.revisions.length > limits.history) invalid("Project inventory exceeds its limit");
   const inventory = new Map<string, z.infer<typeof member>>(),
     folded = new Set<string>();
   let bytes = 0;
@@ -513,17 +503,14 @@ export function parseProjectPackageManifest(
       parts.length > limits.depth ||
       entry.path.length > limits.pathBytes ||
       folded.has(entry.path.toLowerCase()) ||
-      entry.bytes > limits.memberBytes ||
       entry.path === "manifest.json"
     )
       invalid("Invalid project inventory member");
     folded.add(entry.path.toLowerCase());
     inventory.set(entry.path, entry);
     bytes += entry.bytes;
-    if (!Number.isSafeInteger(bytes) || bytes > limits.expandedBytes)
-      invalid("Project inventory exceeds byte limit");
+    if (!Number.isSafeInteger(bytes)) invalid("Project inventory exceeds byte limit");
   }
-  let aggregate = 0;
   const metadata = new Set<string>();
   for (const resource of manifest.resources) {
     const ref = resource.metadata,
@@ -537,24 +524,23 @@ export function parseProjectPackageManifest(
     )
       invalid("Resource metadata reference differs from inventory");
     metadata.add(ref.path);
-    aggregate += ref.bytes;
   }
   for (const [ordinal, path] of manifest.revisions.entries()) {
     const entry = inventory.get(path);
     if (path !== `revisions/${ordinal}.json` || !entry)
       invalid("Project revision inventory is incomplete");
-    aggregate += entry.bytes;
   }
-  checkProjectJsonBytes(aggregate);
   return manifest;
 }
+
+export type ProjectJsonMember = { value: unknown; bytes: number; sha256: string };
 
 /** Complete editable meaning is checked after admitted member hydration, before readiness. */
 export function resolveProjectPackage(
   manifest: ProjectPackageManifest,
   revisions: ReadonlyMap<string, string>,
   limits: ArchiveLimits,
-  metadata: ReadonlyMap<string, string>,
+  metadata: ReadonlyMap<string, ProjectJsonMember>,
 ): ValidatedProjectPackage {
   const inventory = new Map(manifest.inventory.map((entry) => [entry.path, entry]));
   const consumed = new Set<string>();
@@ -591,18 +577,9 @@ export function resolveProjectPackage(
   for (const serialized of manifest.resources) {
     const ref = serialized.metadata,
       body = metadata.get(ref.path);
-    if (
-      body === undefined ||
-      Buffer.byteLength(body) !== ref.bytes ||
-      createHash("sha256").update(body).digest("hex") !== ref.sha256
-    )
+    if (body === undefined || body.bytes !== ref.bytes || body.sha256 !== ref.sha256)
       invalid("Resource metadata member hash or size differs");
-    let value: unknown;
-    try {
-      value = JSON.parse(body);
-    } catch {
-      invalid("Invalid resource metadata JSON");
-    }
+    let value = body.value;
     if (manifest.version === 6) value = packageMemberFromVersion6("metadata", value);
     const parsed = resourceSchema.safeParse(value);
     if (!parsed.success || key(resourceIdentity(parsed.data)) !== key(serialized.identity))
@@ -660,7 +637,6 @@ export function resolveProjectPackage(
   const closure = collectPortableResources(
     roots,
     (identity) => resources.get(key(identity)) ?? invalid("Missing transitive project dependency"),
-    limits.entries,
   );
   if (closure.length !== resources.size || consumed.size !== inventory.size)
     invalid("Unreferenced project inventory member");
@@ -762,19 +738,5 @@ export function staleTranscriptIssues(stale: readonly ResourceReference[]): Issu
       message: "A transcript from an older recipe was left out; the recipient regenerates it",
       evidence: { kind: "transcript-generation" as const, id: resource.id },
     })),
-  );
-}
-
-export function validateProjectPackage(
-  body: string,
-  revisions: ReadonlyMap<string, string>,
-  limits: ArchiveLimits,
-  metadata: ReadonlyMap<string, string> = new Map(),
-): ValidatedProjectPackage {
-  return resolveProjectPackage(
-    parseProjectPackageManifest(body, limits),
-    revisions,
-    limits,
-    metadata,
   );
 }

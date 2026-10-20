@@ -1,3 +1,4 @@
+import { JsonDocument } from "./json-stream.js";
 import {
   signedTimeValueSchema,
   timeValueSchema,
@@ -162,17 +163,17 @@ export const portableTranscriptSchema = z
       })),
     engine: transcriptEngineSchema,
     execution: historicalSpeechExecutionSchema,
-    available: z.array(selectionRangeSchema).max(10000),
+    available: z.array(selectionRangeSchema),
     track: z.strictObject({
       streamId: engineLabel,
       sourceOffsetUs: signedTimeValueSchema,
     }),
-    segmentCount: portableInteger.max(10000),
+    segmentCount: portableInteger,
     wordCount: portableInteger,
     gapCount: portableInteger,
     maxWordUs: portableInteger,
     raw: z.strictObject({
-      bytes: portableInteger.max(268435456),
+      bytes: portableInteger,
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
     }),
   })
@@ -348,15 +349,13 @@ export type TranscriptRecords = {
   gapRecords(identity: TranscriptIdentity, query: TranscriptRecordQuery): TranscriptGapRecord[];
 };
 
-const maxBytes = 268_435_456;
-const lineBytes = 67_108_864;
 const time = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const range = z.object({ startUs: time, endUs: time });
 const label = z.string().min(1).max(128);
 const receiptSchema = z.object({
   output: z.object({
     file: z.string(),
-    bytes: time.max(maxBytes),
+    bytes: time,
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   engine: z.object({
@@ -366,21 +365,19 @@ const receiptSchema = z.object({
     encoderPrecision: label,
     computeUnits: label,
   }),
-  segments: z
-    .array(
-      z.object({
-        ordinal: time,
-        source: selectionRangeSchema,
-        state: z.enum(["transcribed", "skipped"]),
-        reason: z.literal("too_short").optional(),
-        wordCount: time,
-        owned: selectionRangeSchema,
-      }),
-    )
-    .max(10_000),
+  segments: z.array(
+    z.object({
+      ordinal: time,
+      source: selectionRangeSchema,
+      state: z.enum(["transcribed", "skipped"]),
+      reason: z.literal("too_short").optional(),
+      wordCount: time,
+      owned: selectionRangeSchema,
+    }),
+  ),
   wordCount: time,
   execution: historicalSpeechExecutionSchema,
-  available: z.array(selectionRangeSchema).max(10000),
+  available: z.array(selectionRangeSchema),
 });
 const lineSchema = z.object({
   ordinal: time,
@@ -734,7 +731,7 @@ export class TranscriptStore implements TranscriptRecords {
     try {
       const output = await this.reserve(expected);
       owned = true;
-      const copied = await copyImportedFile(raw.path, output, signal, raw, 268435456);
+      const copied = await copyImportedFile(raw.path, output, signal, raw);
       if (copied.bytes !== expected.raw.bytes || copied.sha256 !== expected.raw.sha256)
         throw new CatalogError("INVALID_PACKAGE", "Transcript raw bytes differ from inventory");
       const pins = omit(
@@ -1005,10 +1002,10 @@ export class TranscriptStore implements TranscriptRecords {
       previousStartUs = 0,
       connectedRun = -1;
     let previousSegment: SpeechTranscriptionReceipt["segments"][number] | undefined;
-    const consume = async (bytes: Buffer) => {
+    const consume = async (document: JsonDocument) => {
       let value: unknown;
       try {
-        value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+        value = document.finish();
       } catch {
         invalid("Raw transcript line is not JSON");
       }
@@ -1094,8 +1091,8 @@ export class TranscriptStore implements TranscriptRecords {
     let bytes = 0;
     try {
       if (!(await handle.stat()).isFile()) invalid("Raw transcript is not a regular file");
-      // A decoded window can be a large raw line; collect chunks without re-copying a growing buffer.
-      let parts: Buffer[] = [],
+      // Provider windows decode incrementally; no whole raw line is retained beside its words.
+      let document = new JsonDocument(),
         partBytes = 0;
       for await (const chunk of handle.createReadStream({ highWaterMark: 65_536, signal })) {
         bytes += chunk.length;
@@ -1104,16 +1101,16 @@ export class TranscriptStore implements TranscriptRecords {
         let start = 0,
           newline: number;
         while ((newline = chunk.indexOf(10, start)) >= 0) {
-          await consume(Buffer.concat([...parts, chunk.subarray(start, newline)]));
-          parts = [];
+          document.write(chunk.subarray(start, newline));
+          await consume(document);
+          document = new JsonDocument();
           partBytes = 0;
           start = newline + 1;
         }
         if (start < chunk.length) {
-          parts.push(chunk.subarray(start));
+          document.write(chunk.subarray(start));
           partBytes += chunk.length - start;
         }
-        if (partBytes > lineBytes) invalid("Raw transcript line exceeds its read budget");
       }
       await flush();
       if (

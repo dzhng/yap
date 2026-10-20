@@ -4,32 +4,12 @@ import { CatalogError } from "./catalog.js";
 
 /** Limits apply to observed bytes and names, independently of ZIP header declarations. */
 export const archiveLimits = {
-  compressedBytes: 16 * 1024 ** 3,
-  expandedBytes: 16 * 1024 ** 3,
-  memberBytes: 8 * 1024 ** 3,
-  entries: 25_000,
   pathBytes: 512,
   componentBytes: 128,
   depth: 16,
-  manifestBytes: 2 * 1024 ** 2,
   revisionBytes: 1024 ** 2,
   history: 1_000,
-  initialReadBytes: 8 * 1024 ** 2,
-  receiptBytes: 7 * 1024 ** 2,
 };
-/** Project packages eagerly validate complete selected history and typed resources before readiness. */
-export const projectJsonBytes = 128 * 1024 ** 2;
-export function checkProjectJsonBytes(aggregate: number): void {
-  if (!Number.isSafeInteger(aggregate) || aggregate > projectJsonBytes)
-    throw new CatalogError(
-      "LIMIT_EXCEEDED",
-      "Project JSON exceeds its working-memory admission budget",
-      {
-        aggregateJsonBytes: aggregate,
-        maximumJsonBytes: projectJsonBytes,
-      },
-    );
-}
 export type ArchiveLimits = typeof archiveLimits;
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -47,7 +27,8 @@ const memberSchema = z.strictObject({
   identity: localIdentity.nullable(),
 });
 const receiptSchema = z.strictObject({
-  manifest: z.string(),
+  manifest: z.unknown(),
+  manifestIdentity: z.strictObject({ bytes: integer, sha256: digest }),
   revisions: z.record(z.string(), z.string()),
   members: z.array(memberSchema),
   archiveSha256: digest,
@@ -70,7 +51,7 @@ export type ArchiveManifest = {
   inventory: readonly { path: string; bytes: number; sha256: string }[];
 };
 export type ArchiveManifestValidator<T extends ArchiveManifest> = (
-  body: string,
+  body: unknown,
   limits: ArchiveLimits,
 ) => T;
 
@@ -87,15 +68,7 @@ export function verifyArchiveReceipt<T extends ArchiveManifest>(
   };
   if (!parsed.success) return invalid("Invalid native archive receipt");
   const receipt = parsed.data;
-  if (
-    Buffer.byteLength(JSON.stringify(receipt)) > limits.receiptBytes ||
-    receipt.members.length > limits.entries ||
-    receipt.expandedBytes > limits.expandedBytes ||
-    receipt.copiedBytes < 1 ||
-    receipt.copiedBytes > limits.compressedBytes ||
-    receipt.initialReadBytes > limits.initialReadBytes
-  )
-    return invalid("Archive receipt exceeds its limits");
+  if (receipt.copiedBytes < 1) return invalid("Archive receipt exceeds its limits");
   const manifest = validate(receipt.manifest, limits);
   const expected = new Map(manifest.inventory.map((entry) => [entry.path, entry]));
   const actual = new Map<string, z.infer<typeof memberSchema>>();
@@ -110,7 +83,6 @@ export function verifyArchiveReceipt<T extends ArchiveManifest>(
       parts.length > limits.depth ||
       entry.path.length > limits.pathBytes ||
       folded.has(entry.path.toLowerCase()) ||
-      entry.bytes > limits.memberBytes ||
       (entry.directory && entry.bytes !== 0) ||
       (entry.directory ? entry.identity !== null : entry.identity === null)
     )
@@ -131,7 +103,14 @@ export function verifyArchiveReceipt<T extends ArchiveManifest>(
     )
       return invalid("Archive metadata bytes do not match their inventory");
   };
-  checkText("manifest.json", receipt.manifest);
+  const manifestEntry = actual.get("manifest.json");
+  if (
+    !manifestEntry ||
+    manifestEntry.directory ||
+    manifestEntry.bytes !== receipt.manifestIdentity.bytes ||
+    manifestEntry.sha256 !== receipt.manifestIdentity.sha256
+  )
+    return invalid("Archive manifest identity differs from its parsed member");
   for (const [path, text] of Object.entries(receipt.revisions)) checkText(path, text);
   const requiredDirectories = new Set<string>();
   for (const entry of manifest.inventory) {
@@ -194,12 +173,7 @@ const writeReceiptSchema = z.strictObject({
 export function verifyArchiveWriteReceipt(value: unknown, limits: ArchiveLimits = archiveLimits) {
   validateArchiveLimits(limits);
   const parsed = writeReceiptSchema.safeParse(value);
-  if (
-    !parsed.success ||
-    parsed.data.bytes > limits.compressedBytes ||
-    parsed.data.expandedBytes > limits.expandedBytes ||
-    parsed.data.entries > limits.entries
-  )
+  if (!parsed.success)
     throw new CatalogError("INVALID_NATIVE_RESPONSE", "Invalid ZIP write receipt");
   return parsed.data;
 }

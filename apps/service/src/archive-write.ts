@@ -21,7 +21,7 @@ export async function writeArchive(
 ) {
   const limits = options.limits ?? archiveLimits;
   validateArchiveLimits(limits);
-  if (!Number.isSafeInteger(input.bytes) || input.bytes < 0 || input.bytes > limits.expandedBytes)
+  if (!Number.isSafeInteger(input.bytes) || input.bytes < 0)
     throw new CatalogError("LIMIT_EXCEEDED", "ZIP input byte total exceeds its limit");
   const stage = await workspace.handle.stat({ bigint: true }),
     source = await input.handle.stat({ bigint: true }),
@@ -29,7 +29,6 @@ export async function writeArchive(
   const identity = { dev: String(stage.dev), ino: String(stage.ino) };
   const nativeOptions = {
     descriptors: [workspace.handle.fd],
-    timeoutMs: options.timeoutMs ?? publicationDeadlineMs(input.bytes),
   };
   try {
     nativeConfirmed(
@@ -52,7 +51,7 @@ export async function writeArchive(
     if (closed) return;
     files?.close();
     nativeConfirmed(
-      await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: 30_000 }),
+      await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: null }),
       "removed",
       "ZIP workspace cleanup was not confirmed",
     );
@@ -74,6 +73,7 @@ export async function writeArchive(
           {
             ...nativeOptions,
             descriptors: [workspace.handle.fd, input.handle.fd, input.plan.fd],
+            timeoutMs: options.timeoutMs ?? (() => publicationDeadlineMs(input.bytes)),
             ...(options.signal ? { signal: options.signal } : {}),
           },
         ),

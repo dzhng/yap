@@ -1986,7 +1986,7 @@ test("empty capture observations remain ready and audio occurrences receive only
   expect(historical.page!.rows).toEqual([]);
 });
 
-test("capture replies refuse oversized observations before publishing an unusable continuation", async () => {
+test("capture replies close by bytes and resume without losing observations", async () => {
   const f = await fixture();
   const captured = await f.capture(
     Array.from({ length: 100 }, (_, n) => ({
@@ -1995,7 +1995,19 @@ test("capture replies refuse oversized observations before publishing an unusabl
     })),
   );
   const selection = { assetId: f.asset.id, streamId: "video", acquisitionId: captured.id };
-  expect(() => f.captureRead.cursor({ ...selection, limit: 5000 })).toThrow(/response exceeds/);
+  const sourceRows = [];
+  let sourceCursor: unknown;
+  do {
+    const result = f.captureRead.cursor({
+      ...selection,
+      limit: 5000,
+      ...(sourceCursor ? { cursor: sourceCursor } : {}),
+    });
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(4 * 1024 * 1024);
+    sourceRows.push(...result.page!.rows);
+    sourceCursor = result.page!.nextCursor;
+  } while (sourceCursor);
+  expect(sourceRows.map((row) => row.sourceAtUs)).toEqual(Array.from({ length: 100 }, (_, n) => n));
   expect(
     f.captureRead.cursor({ ...selection, limit: 1 }).page!.rows.map((row) => row.sourceAtUs),
   ).toEqual([0]);
@@ -2007,19 +2019,19 @@ test("capture replies refuse oversized observations before publishing an unusabl
     if ((await f.evidence.cursor({ ...input, limit: 1 })).page) break;
     await f.jobs.idle();
   }
-  let writes = 0;
-  const publish = f.cache.publish.bind(f.cache);
-  f.cache.publish = (id) => {
-    writes++;
-    return publish(id);
-  };
-  await expect(f.evidence.cursor({ ...input, limit: 5000 })).rejects.toMatchObject({
-    code: "LIMIT_EXCEEDED",
-  });
-  expect(writes).toBe(0);
-  expect(
-    (await f.evidence.cursor({ ...input, limit: 1 })).page!.rows.map((row) => row.projectAtUs),
-  ).toEqual([0]);
+  const projected = [];
+  let pageCursor: ProjectEvidenceCursor | undefined;
+  do {
+    const result = await f.evidence.cursor({
+      ...input,
+      limit: 5000,
+      ...(pageCursor ? { cursor: pageCursor } : {}),
+    });
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(4 * 1024 * 1024);
+    projected.push(...result.page!.rows);
+    pageCursor = result.page!.nextCursor ?? undefined;
+  } while (pageCursor);
+  expect(projected.map((row) => row.projectAtUs)).toEqual(Array.from({ length: 100 }, (_, n) => n));
 });
 
 async function eventPages(f: Awaited<ReturnType<typeof fixture>>, input: ProjectEvidenceInput) {

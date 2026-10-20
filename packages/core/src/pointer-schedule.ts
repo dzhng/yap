@@ -6,10 +6,7 @@ import { CatalogError } from "./catalog.js";
 import type { EvidenceIdentity, SourceTrailRead } from "./evidence.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
 import { PresentationEvidence } from "./presentation-evidence.js";
-import {
-  PresentationPointerHistory,
-  pointerHistoryBudget,
-} from "./presentation-pointer-history.js";
+import { PresentationPointerHistory } from "./presentation-pointer-history.js";
 import { scenePolicy } from "./scenes.js";
 import { trailPolicy, type CursorPoint } from "./trails.js";
 import type { PresentationTime } from "./presentation-time.js";
@@ -20,25 +17,14 @@ type ScheduleInput = {
   evidence: SourceTrailRead & Pick<SourceEvidenceReader, "exportRecords">;
   identity: EvidenceIdentity;
   output: string;
-  maxBytes: number;
-  maxEvents: number;
 };
 export type PointerState = { spanIndex: number; at: PresentationTime; pointer: CursorPoint | null };
 
 /** Caller binds the evidence/receipt to one pinned source in its private render attempt.
  * Matching dimensions and spans alone cannot authenticate source identity. */
 export async function writePointerSchedule(input: ScheduleInput, signal: AbortSignal) {
-  if (
-    !isAbsolute(input.output) ||
-    !Number.isSafeInteger(input.maxBytes) ||
-    input.maxBytes < 1 ||
-    !Number.isSafeInteger(input.maxEvents) ||
-    input.maxEvents < 1
-  )
-    throw new CatalogError(
-      "INVALID_RANGE",
-      "Pointer schedule requires an absolute output and positive safe budgets",
-    );
+  if (!isAbsolute(input.output))
+    throw new CatalogError("INVALID_RANGE", "Pointer schedule requires an absolute output");
   signal.throwIfAborted();
   const staging = join(dirname(input.output), `.pointer-schedule-${randomUUID()}`);
   const file = await open(staging, "wx", 0o600);
@@ -49,7 +35,7 @@ export async function writePointerSchedule(input: ScheduleInput, signal: AbortSi
   async function append(value: unknown) {
     signal.throwIfAborted();
     const data = Buffer.from(JSON.stringify(value) + "\n");
-    if (data.length > 65_536 || data.length > input.maxBytes - bytes)
+    if (data.length > 65_536)
       throw new CatalogError("LIMIT_EXCEEDED", "Pointer schedule exceeds its byte budget");
     await file.writeFile(data);
     hash.update(data);
@@ -71,14 +57,7 @@ export async function writePointerSchedule(input: ScheduleInput, signal: AbortSi
       scenePolicy: scenePolicy.id,
     };
     await append(header);
-    const history = new PresentationPointerHistory(
-      input,
-      signal,
-      pointerHistoryBudget({
-        maxEvents: input.maxEvents,
-        maxSamples: 0,
-      }),
-    );
+    const history = new PresentationPointerHistory(input, signal);
     for await (const state of pointerStates(history)) {
       await append(state);
       records++;

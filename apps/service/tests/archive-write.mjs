@@ -28,7 +28,6 @@ import {
 import { join, dirname, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { fileIdentity } from "@yap/core/files";
-import { archiveLimits } from "@yap/core/package-archive";
 import { writeArchive } from "../dist/archive-write.js";
 import { mediaWorker } from "../dist/worker.js";
 import { Publication } from "../dist/publication.js";
@@ -87,7 +86,7 @@ test("streamed ZIP publishes through the existing no-clobber owner and independe
   );
   for (const resource of pinned.resources) {
     const metadata = resourceMetadataMember(resource);
-    contents[metadata.reference.metadata.path] = metadata.body;
+    contents[metadata.reference.metadata.path] = [...metadata.chunks()].join("");
     assert.equal(resource.kind, "asset");
     const [member] = resourceMembers(resource);
     contents[member.path] = await readFile(project.assets.path(resource.asset.id));
@@ -190,16 +189,6 @@ test("a writer refused after opening its ZIP answers without touching freed memo
     code: "PACKAGE_STORAGE_UNAVAILABLE",
     retryable: true,
   });
-  assert.deepEqual(await readdir(f.paths.scratch), []);
-});
-test("observed ZIP output limit refuses a partial archive and drains cleanup", async (t) => {
-  const f = await fixture(t, { "source.bin": Buffer.alloc(1024 * 1024, 17) });
-  await assert.rejects(
-    writeArchive(f.input, f.workspace, worker, {
-      limits: { ...archiveLimits, compressedBytes: 1024 },
-    }),
-    { code: "LIMIT_EXCEEDED" },
-  );
   assert.deepEqual(await readdir(f.paths.scratch), []);
 });
 
@@ -333,11 +322,11 @@ test("replaced scratch locator is rejected and cleanup follows only its retained
   assert.equal(await readFile(join(f.paths.scratch, "payload.zip"), "utf8"), "foreign bytes");
   assert.deepEqual(await readdir(moved), []);
 });
-test("member names and declared counts cannot escape the bounded plan", async (t) => {
+test("member names and declared byte totals must match the admitted plan", async (t) => {
   const f = await fixture(t, { one: "1", two: "2" });
   await assert.rejects(
-    writeArchive(f.input, f.workspace, worker, { limits: { ...archiveLimits, entries: 1 } }),
-    { code: "LIMIT_EXCEEDED" },
+    writeArchive({ ...f.input, bytes: f.input.bytes + 1 }, f.workspace, worker),
+    { code: "ARCHIVE_CHANGED" },
   );
   f.members[0].path = "../outside";
   await writeFile(join(f.root, "plan"), JSON.stringify(f.members));

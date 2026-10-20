@@ -17,6 +17,11 @@ private func recording(elapsedUs: Int64, paused: Bool = false) -> ControlsState 
 }
 
 func runCapturePresentationTests() {
+    var completed = ready()
+    completed.take = .init(id: "maximum", state: "complete", interruptionReason: nil,
+        sourceDurationUs: 43_200_000_000, completionReason: "maximumDuration")
+    precondition(CapturePresentation.noticeLines(for: completed) == ["Take complete — reached 12 hours."])
+    precondition(!completed.isLive && completed.failure == nil)
     let idle = CapturePresentation.transport(for: ready())
     precondition(action(idle, "capture.startOrStop").title == "Start Recording" && action(idle, "capture.startOrStop").enabled)
     for id in ["capture.pauseOrResume", "capture.cancel", "capture.restart"] {

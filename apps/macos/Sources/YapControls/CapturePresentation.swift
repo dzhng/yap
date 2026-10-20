@@ -76,6 +76,9 @@ public enum CapturePresentation {
             let detail = take.interruptionMessage.map { ": \($0)" } ?? ""
             lines.append("Last take interrupted — \(take.interruptionReason ?? "reason unavailable")\(detail)")
         }
+        if state.take?.state == "complete", state.take?.completionReason == "maximumDuration" {
+            lines.append("Take complete — reached 12 hours.")
+        }
         let refused = ShortcutBindings.catalog.filter { state.unavailableShortcuts.contains($0.action.id) }
         if !refused.isEmpty {
             let names = refused.map(\.name).joined(separator: " and ")

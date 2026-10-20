@@ -1,8 +1,11 @@
+import { derivedBound, MAXIMUM_TAKE_US } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 import type { SourceEvidenceMetadata } from "./evidence.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
 import type { TimeRange } from "./presentation-time.js";
 
+// One selected source second per recorded second × required take duration × 1.
+const maximumRangeUs = derivedBound(1_000_000, MAXIMUM_TAKE_US, 1);
 export type CursorTarget =
   | { recordingId: string; packageHandle?: never }
   | { packageHandle: string; recordingId?: never };
@@ -30,9 +33,12 @@ export function readRawCursor<Target extends CursorTarget>(
     !Number.isSafeInteger(endUs) ||
     startUs < 0 ||
     endUs <= startUs ||
-    endUs - startUs > 60_000_000
+    endUs - startUs > maximumRangeUs
   )
-    throw new CatalogError("INVALID_RANGE", "Cursor range must be positive and at most 60 seconds");
+    throw new CatalogError(
+      "INVALID_RANGE",
+      "Cursor range must be positive and at most twelve recorded hours",
+    );
   const { metadata, reader } = source();
   const cursor = input.cursor;
   if (

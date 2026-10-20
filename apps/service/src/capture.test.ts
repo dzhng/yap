@@ -12,7 +12,6 @@ import { callLocal } from "@yap/client";
 import {
   CONTROL_FRAME_BYTES,
   DEFAULT_CALL_TIMEOUT_MS,
-  NATIVE_SEQUENCE_LIMIT,
   JsonLineStream,
   controlMessageSchema,
   captureSelectionSchema,
@@ -509,33 +508,24 @@ it("gives concurrent start requests one capturing take and one honest terminal f
   });
 });
 
-it("stores the transitions native reports and refuses one numbered in the service's range", async () => {
+it("stores exact native transition sequences without a reserved service range", async () => {
   const home = await temporaryHome();
   const service = await startService(home, capturingPeer());
   const started = await service.call("capture.start", { requestId: "r", source: fixtureSource });
   if (!started.ok) throw new Error("start failed");
-  const take = started.data as { id: string; sourceId: string; lifecycleSequence: number };
-  // A report that occupies the service's own numbering would silently outrank a cancel or a
-  // reconciled outcome, so the channel refuses it rather than storing it.
+  const take = started.data as { id: string; sourceId: string };
+  const sequence = 2 ** 40 + 5;
   expect(
     await service.report({
       recordingId: take.id,
       sourceId: take.sourceId,
-      sequence: NATIVE_SEQUENCE_LIMIT + 5,
-      state: "paused",
-    }),
-  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
-  expect(
-    await service.report({
-      recordingId: take.id,
-      sourceId: take.sourceId,
-      sequence: take.lifecycleSequence + 1,
+      sequence,
       state: "paused",
     }),
   ).toMatchObject({ ok: true });
   expect(await service.call("recording.get", { recordingId: take.id })).toMatchObject({
     ok: true,
-    data: { state: "paused", lifecycleSequence: take.lifecycleSequence + 1 },
+    data: { state: "paused", lifecycleSequence: sequence },
   });
 });
 
@@ -562,8 +552,7 @@ it("cancels only the named take, removes its media, and refuses to revive it aft
     data: { id: keptId },
   });
   // A completion that was already in flight when the take was discarded must not resurrect it.
-  // The cancel this service authored outranks every sequence a journal can produce, so a late
-  // report of any age lands under it as a no-op rather than reopening the take.
+  // Terminal cancellation is authoritative even if an in-flight native report has a later number.
   expect(
     await service.report({
       recordingId: take.id,
@@ -577,7 +566,7 @@ it("cancels only the named take, removes its media, and refuses to revive it aft
     await service.report({
       recordingId: take.id,
       sourceId: take.sourceId,
-      sequence: NATIVE_SEQUENCE_LIMIT - 1,
+      sequence: Number.MAX_SAFE_INTEGER,
       state: "complete",
       sourceDurationUs: 9_000_000,
     }),

@@ -27,7 +27,7 @@ const published = z.strictObject({
   diagnostic: diagnostic.optional(),
   journal: z.strictObject({
     file: z.enum(["source.journal.jsonl", "capture.journal.jsonl"]),
-    bytes: z.int().positive().max(268_435_456),
+    bytes: z.int().positive().max(Number.MAX_SAFE_INTEGER),
     sha256: hash,
     lastSequence: z.int().positive(),
     layout: z.union([z.literal(1), z.literal(2), z.literal(3)]),

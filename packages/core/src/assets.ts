@@ -46,11 +46,7 @@ const stream = z.object({
   decodable: z.boolean(),
   startUs: timeValueSchema.optional(),
   endUs: timeValueSchema.optional(),
-  // Up to 100,000 occupied runs plus inter-run, leading and trailing empty segments.
-  segments: z
-    .array(segment)
-    .max(2 * 100_000 + 1)
-    .optional(),
+  segments: z.array(segment).optional(),
   width: positive.optional(),
   height: positive.optional(),
   orientedWidth: z.number().finite().positive().optional(),

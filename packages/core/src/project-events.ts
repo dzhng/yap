@@ -1,3 +1,4 @@
+import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import {
   compare,
   fromTime,
@@ -173,6 +174,7 @@ export function mergeEvents(
     }
   };
   const rows: ProjectEventRow[] = [];
+  let bytes = 0;
   mergeHeads(
     state,
     manifest.tracks,
@@ -180,9 +182,16 @@ export function mergeEvents(
     fill,
     (index) => state.tracks[index]!.head?.key,
     (index) => {
-      rows.push(state.tracks[index]!.head!.row);
+      const row = state.tracks[index]!.head!.row;
+      bytes += Buffer.byteLength(JSON.stringify(row)) + 1;
+      rows.push(row);
       state.tracks[index]!.head = null;
     },
+    // A page targets one derived maximum record, leaving the transport's envelope headroom.
+    (index) =>
+      !rows.length ||
+      bytes + Buffer.byteLength(JSON.stringify(state.tracks[index]!.head!.row)) + 1 <=
+        JOURNAL_RECORD_BYTES,
   );
   return rows;
 }

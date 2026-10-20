@@ -1,10 +1,12 @@
+import { join } from "node:path";
+import { derivedBound, MAXIMUM_TAKE_US } from "@yap/protocol";
 import { constants } from "node:fs";
 import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
 import type { DirectoryIdentity } from "@yap/core/cache";
 import { O_EXLOCK, O_NOFOLLOW_ANY } from "@yap/core/open-flags";
 import { isPrivateDirectory } from "./managed-files.js";
-import { MAX_MEDIA_TIMEOUT_MS, nativeConfirmed, nativeResult, type MediaWorker } from "./worker.js";
+import { nativeConfirmed, nativeResult, type MediaWorker } from "./worker.js";
 
 type PublicationState =
   | "unprepared"
@@ -87,13 +89,20 @@ export class Publication {
   ): Promise<PublicationFile | null> {
     const parent = await open(await realpath(directory), directoryFlags);
     try {
+      const bytes = await lstat(join(directory, leaf)).then(
+        (info) => info.size,
+        (error) => {
+          if (error.code === "ENOENT") return 0;
+          throw error;
+        },
+      );
       const value = this.data(
         await worker(
           "publication.inspect",
           { destination, leaf },
           {
             descriptors: [parent.fd],
-            timeoutMs: MAX_MEDIA_TIMEOUT_MS,
+            timeoutMs: () => publicationDeadlineMs(bytes),
             ...(signal ? { signal } : {}),
           },
         ),
@@ -303,7 +312,7 @@ export class Publication {
       { ...this.identities, ...params },
       {
         ...(options.signal ? { signal: options.signal } : {}),
-        ...(this.timeoutMs !== undefined ? { timeoutMs: this.timeoutMs } : {}),
+        ...(this.timeoutMs !== undefined ? { timeoutMs: () => this.timeoutMs! } : {}),
         descriptors: [
           this.stage.fd,
           this.destination.fd,
@@ -424,18 +433,21 @@ export class Publication {
   }
 }
 
-/** Budget payload validation and pinned-victim hashing at 4 MiB/s plus startup.
- * The existing worker cap remains authoritative; this is not a throughput guarantee. */
+/** Three payload passes and two displaced-destination passes at inferred 4 MiB/s, 2× margin.
+ * Express actual bytes as bytes per required take second; this is work, not a file ceiling. */
 export function publicationDeadlineMs(bytes: number, replacementBytes = 0): number {
-  if (
-    !Number.isSafeInteger(bytes) ||
-    bytes < 0 ||
-    !Number.isSafeInteger(replacementBytes) ||
-    replacementBytes < 0
-  )
+  if (![bytes, replacementBytes].every((value) => Number.isSafeInteger(value) && value >= 0))
     throw new CatalogError("INVALID_STORAGE", "Publication byte count is invalid");
-  return Math.min(
-    MAX_MEDIA_TIMEOUT_MS,
-    30_000 + Math.ceil(((bytes * 3 + replacementBytes * 2) / (4 * 1024 * 1024)) * 1000),
+  const bytesPerSecond = (bytes * 3 + replacementBytes * 2) / (MAXIMUM_TAKE_US / 1_000_000);
+  return Math.max(1, derivedBound((bytesPerSecond / 4_194_304) * 1000, MAXIMUM_TAKE_US, 2));
+}
+
+/** Six stop-time journal passes at the slice-00 measured cost per byte, with 2× margin.
+ * Scale by actual bytes; pauses, extra roles and callbacks can grow the journal independently. */
+export function journalWorkDeadlineMs(bytes: number): number {
+  const rate = bytes / (MAXIMUM_TAKE_US / 1_000_000);
+  return Math.max(
+    1,
+    derivedBound(((6 * 51.863325166) / 1_392_503_313) * rate * 1000, MAXIMUM_TAKE_US, 2),
   );
 }

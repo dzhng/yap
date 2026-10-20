@@ -49,7 +49,7 @@ package final class ClosedCameraSource {
         let raw = try CaptureMediaIdentity.read(directory.appendingPathComponent("camera.raw.mov"))
         guard rawIdentity.map({ $0 == raw }) ?? true else { throw CameraMedia.invalid("Closed camera payload changed.") }
         rawIdentity = raw
-        let evidence = try CaptureMediaIdentity.read(observations, maximumBytes: 268_435_456)
+        let evidence = try CaptureMediaIdentity.read(observations)
         guard observationIdentity.map({ $0 == evidence }) ?? true else { throw CameraMedia.invalid("Closed camera observations changed.") }
         observationIdentity = evidence
         _ = try CameraMedia.retainMapping(observations: observations, directory: directory, identity: evidence)

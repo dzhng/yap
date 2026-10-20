@@ -110,3 +110,68 @@ The supplied aggregate reference (about 2 MB/min) is sufficient for a growth che
 Only this report, machine-readable measurements and reproducible harness are retained. Generated journals, normalized files, catalogs, binaries and scratch logs are removed after inspection.
 
 Focused verification: `YAP_LONG_TAKE_BUILD=$BUILD node --test packages/test-harness/long-take/probe.test.mjs` passed, including deterministic journal/mapping bytes, stored cursor values, the production five-minute-stroke refusal and the deadline stop with peak RSS. The floating-duration regression first failed with 121 cursor samples where 120 were required, then passed after duration normalization. The independent Codex review identified that rounding issue and a compiler-descendant timeout leak; both were fixed. Only the affected 2.2-hour measurements were repeated; integer-hour fixture outputs were unaffected. Focused formatter/linter checks and protocol/composition/core compilation passed; the full repository suite was not run.
+
+
+## Slice 10: derived limits, 12-hour combined profiles
+
+Rerun on the same machine with `node packages/test-harness/long-take/probe.mjs
+--output $OUT --hours 12 --profiles combined-typical,combined-worst`. Exact commands,
+observed bytes, stage results and final cursor values are retained in
+[slice10-results.json](slice10-results.json). This uses schema 3; schema 4 and stroke
+ending belong to slice 08. These are single-run observations, not latency promises.
+
+Same cell convention as above: status · wall seconds / peak RSS MiB. Before is the
+slice-00 measurement; after uses the slice-10 working tree. M remains the expected
+missing-media prerequisite, not a successful source publication.
+
+| Version | h | Profile | G | S | P | E | T | I |
+| --- | ---: | --- | --- | --- | --- | --- | --- | --- |
+| Before | 12 | combined-typical | ✓ · 123.531 / 29.81 | ✓ · 51.863 / 17.84 | L · 9.877 / 17.97 | L · 0.015 / 11.64 | B | B |
+| Before | 12 | combined-worst | ✓ · 81.948 / 27.31 | ✓ · 45.965 / 17.84 | L · 9.444 / 17.94 | L · 0.014 / 11.63 | B | B |
+| After | 12 | combined-typical | ✓ · 63.724 / 27.28 | ✓ · 27.879 / 17.89 | M · 59.830 / 18.23 | ✓ · 46.719 / 24.50 | ✓ · 3.785 / 249.77 | ✓ · 20.033 / 243.42 |
+| After | 12 | combined-worst | ✓ · 66.573 / 27.33 | ✓ · 32.477 / 17.98 | M · 78.477 / 16.41 | ✓ · 56.138 / 22.84 | ✓ · 3.486 / 107.53 | ✓ · 17.199 / 248.83 |
+
+Both journals remain 1,392,503,313 / 1,392,503,241 B. Export now produces
+447,810,829 / 447,810,757 B, each with 2,592,724 normalized records and all
+2,592,000 cursors. The final source cursor time is 43,199,983,333 us. No size bound
+fails. P reaches `INVALID_MEDIA: Source authority member is missing or replaced.`
+because this fixture deliberately has no `video.mov`. Camera mappings remain a
+size model, not a media verification result.
+
+The journal allowance is six full-pass equivalents at the original measured cost
+per byte, with 2× margin: 622.360 s for these journals. The primary source owner
+performs six journal passes: freeze summary, snapshot copy, publication summary,
+publication hash, verification hash and verification summary; it additionally
+checks the original capture prefix when validating the frozen snapshot. This last
+prefix check is another streaming scan, so the six-pass model is an allowance,
+not a literal enumeration of all work. Measured P takes 59.830 / 78.477 s before
+its media prerequisite, below the allowance; E takes 46.719 / 56.138 s. Keep the
+separate authority checks. Admission's held-source copy at `acquisitions.ts` also
+remains a separate identity-checked pass and receives byte work separately.
+
+The successful complete path is verified independently by
+`node --test apps/service/tests/maximum-take.mjs`: production prerecorded ingress,
+writer, publication, source export, media probe, acquisition copy and evidence
+indexing. Only hardware input and host time are substituted. It crosses exactly
+43,200,000,000 recorded us after a 20-hour excluded pause, stops/finalizes once,
+publishes `complete` with lifecycle reason `maximumDuration` and no failure code,
+and imports one real video binding with the same completion duration. This uses a
+sparse synthetic movie, not 12 hours of camera/audio payload. It proves successful
+admission and stop semantics; it does not measure dense-media stop latency.
+
+The ordinary status-line presentation has a historical
+[before](slice10-status-before.png) and a
+[candidate](slice10-status-after.png), reviewed against the required ordinary
+completion notice in [the visual receipt](slice10-visual-review.md). No user media
+or library was opened. Large generated media, journals, catalogs and disposable
+probe builds/logs are removed after verification.
+
+
+The [slice-10 verification record](slice10-verification.md) holds the file-by-file
+reasons, focused commands, architectural choices and independent-review limitation.
+The private archive worker now writes growing inventory receipts through an inherited
+file descriptor, carrying parsed manifest JSON plus its exact original byte/hash
+identity. Project metadata is parsed and hashed per held member, and supplied
+captions decode from streams. No aggregate JSON buffer replaces the deleted cap.
+Semantic descriptor and cue inventories are still retained by their existing owners;
+this is not a constant-memory claim for arbitrary authored complexity.

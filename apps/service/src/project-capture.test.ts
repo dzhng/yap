@@ -1187,7 +1187,10 @@ test("unpublished raw camera recovery receives its byte-scaled materialization b
     const reopened = await fixture(f.home, async (operation, params, options) => {
       if (operation !== "media.recover") return sourceWorker(operation, params, options);
       const camera = (params.sourceAuthority as { kind: string }).kind === "camera";
-      const budget = options?.timeoutMs ?? 30000;
+      const budget =
+        typeof options?.timeoutMs === "function"
+          ? options.timeoutMs()
+          : (options?.timeoutMs ?? 30000);
       if (camera) budgets.push(budget);
       // Simulated materialization needs one minute; the test never waits that long.
       if (camera && budget < 60000)

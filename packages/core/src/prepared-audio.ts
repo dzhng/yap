@@ -1,4 +1,3 @@
-import { projectJsonBytes } from "./package-archive.js";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, open, rm } from "node:fs/promises";
@@ -74,9 +73,7 @@ export const portablePreparedAudioSchema = z.strictObject({
   projectId: z.string().min(1),
   revisionId: z.string().min(1),
   publication: retainedPublicationSchema.extend({
-    input: z.string().refine((value) => Buffer.byteLength(value) <= projectJsonBytes, {
-      message: "Prepared recipe exceeds the project JSON budget",
-    }),
+    input: z.string(),
   }),
   audio: projectAudioReceiptSchema
     .omit({ file: true })

@@ -84,22 +84,11 @@ export const nativeStartSchema = captureSelectionSchema
     }
   });
 
-/**
- * Lifecycle sequences below this belong to the native capture journal, which numbers its own
- * records. The service numbers the events it authors itself — a refused start, a cancel, a
- * reconciled interruption — above this value, so the two producers share one strictly
- * increasing order and a native report can never silently occupy a service-authored number.
- */
-export const NATIVE_SEQUENCE_LIMIT = 2 ** 40;
-
 export const captureReportSchema = z
   .object({
     recordingId: id,
     sourceId: id,
-    sequence: z
-      .int()
-      .min(1)
-      .max(NATIVE_SEQUENCE_LIMIT - 1),
+    sequence: z.int().min(1),
     state: z.enum(["recording", "paused", "finalizing", "complete", "interrupted"]),
     reason: z.string().min(1).nullish(),
     message: z.string().max(4096).nullish(),

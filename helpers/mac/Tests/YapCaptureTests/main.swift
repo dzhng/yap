@@ -1,6 +1,8 @@
 import Foundation
 
-if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
+if ProcessInfo.processInfo.environment["YAP_MAXIMUM_TAKE"] != nil {
+    try await runMaximumTakeTests()
+} else if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
     try writeLongStrokeFixture(to: URL(fileURLWithPath: output),
         strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!)
     if let video = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_VIDEO"] {

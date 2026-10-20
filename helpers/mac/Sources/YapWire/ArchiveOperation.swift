@@ -12,17 +12,11 @@ enum ArchiveOperation {
     static let root: Int32 = 3
     static let chunkBytes = 65_536
     struct Limits: Codable {
-        let compressedBytes, expandedBytes, memberBytes, entries, pathBytes: Int
-        let componentBytes, depth, manifestBytes, revisionBytes, history: Int
-        let initialReadBytes, receiptBytes: Int
+        let pathBytes, componentBytes, depth, revisionBytes, history: Int
 
         func check() throws {
-            let values = [
-                compressedBytes, expandedBytes, memberBytes, entries, pathBytes, componentBytes,
-                depth, manifestBytes, revisionBytes, history, initialReadBytes, receiptBytes,
-            ]
-            guard values.allSatisfy({ (1...Int.max / 2).contains($0) }), depth <= 32,
-                receiptBytes <= 7 * 1024 * 1024
+            let values = [pathBytes, componentBytes, depth, revisionBytes, history]
+            guard values.allSatisfy({ (1...Int.max / 2).contains($0) }), depth <= 32
             else { throw error("INVALID_REQUEST", "Unsupported archive limits.") }
         }
     }
@@ -199,10 +193,33 @@ enum ArchiveOperation {
             throw error
         }
     }
+    /// Serialize growing inventories one member at a time; the worker reply contains only a locator.
+    static func streamJSON(_ value: Any, to fd: Int32) throws {
+        if let array = value as? [Any] {
+            try writeAll(fd, Data("[".utf8))
+            for (index, item) in array.enumerated() {
+                try Task.checkCancellation()
+                if index > 0 { try writeAll(fd, Data(",".utf8)) }
+                try streamJSON(item, to: fd)
+            }
+            try writeAll(fd, Data("]".utf8))
+        } else if let object = value as? [String: Any] {
+            try writeAll(fd, Data("{".utf8))
+            for (index, pair) in object.sorted(by: { $0.key < $1.key }).enumerated() {
+                if index > 0 { try writeAll(fd, Data(",".utf8)) }
+                try streamJSON(pair.key, to: fd)
+                try writeAll(fd, Data(":".utf8))
+                try streamJSON(pair.value, to: fd)
+            }
+            try writeAll(fd, Data("}".utf8))
+        } else {
+            try writeAll(fd, JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]))
+        }
+    }
     static func writeAll(_ fd: Int32, _ bytes: Data) throws {
         guard Descriptors.writeAll(fd, bytes) else { throw io("Write archive member") }
     }
-    static func charge(_ value: Int, _ total: inout Int, _ limit: Int) throws {
+    static func charge(_ value: Int, _ total: inout Int, _ limit: Int = Int.max) throws {
         guard value <= limit - total else {
             throw error("LIMIT_EXCEEDED", "Archive byte limit exceeded.")
         }

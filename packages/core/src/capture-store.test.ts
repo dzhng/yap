@@ -793,3 +793,25 @@ test("a take whose recovery failed stops holding back an update; a take still in
   });
   expect(store.updateBlocked).toBe(false);
 });
+
+test("a maximum-duration completion retains its lifecycle reason across reopen without an interruption", () => {
+  const { store, path, providers } = fixture();
+  const { id, sourceId } = store.allocate().recording;
+  store.ingestLifecycle(id, { sourceId, sequence: 1, state: "recording" });
+  store.ingestLifecycle(id, { sourceId, sequence: 2, state: "finalizing" });
+  store.ingestLifecycle(id, {
+    sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: 43_200_000_000,
+    reason: "maximumDuration",
+  });
+  store.close();
+  const reopened = new CaptureStore(path, providers);
+  stores.push(reopened);
+  expect(reopened.get(id)).toMatchObject({
+    state: "complete",
+    completionReason: "maximumDuration",
+    interruptionReason: null,
+  });
+});

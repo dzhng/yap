@@ -24,6 +24,7 @@ export type Recording = Readonly<{
   createdAt: string;
   state: RecordingState;
   lifecycleSequence: number;
+  completionReason: string | null;
   interruptionReason: string | null;
   interruptionMessage: string | null;
   finalizationError: FinalizationError | null;
@@ -38,7 +39,7 @@ export type LifecycleEvent = Readonly<{
   Readonly<
     | { state: "recording" | "paused" | "canceled" }
     | { state: "finalizing"; finalizationError?: FinalizationError | null }
-    | { state: "complete"; sourceDurationUs: number }
+    | { state: "complete"; sourceDurationUs: number; reason?: string | null }
     | {
         state: "interrupted";
         reason: string;
@@ -56,7 +57,7 @@ const nextStates: Readonly<Record<RecordingState, readonly RecordingState[]>> = 
   canceled: ["canceled"],
 };
 const recordingColumns =
-  "recordingId AS id,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
+  "recordingId AS id,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,(SELECT reason FROM recording_completions WHERE recordingId=recordings.recordingId) AS completionReason,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
 type RecordingRow = Omit<Recording, "finalizationError" | "camera" | "publication"> & {
   finalizationError: string | null;
   publication: string | null;
@@ -112,6 +113,9 @@ export class CaptureStore extends Catalog {
     CHECK ((cameraSourceId IS NULL)=(cameraDeviceId IS NULL))
    ) STRICT;
    CREATE INDEX IF NOT EXISTS recordings_state_sequence ON recordings(state,creationSequence);
+   CREATE TABLE IF NOT EXISTS recording_completions (
+    recordingId TEXT PRIMARY KEY REFERENCES recordings(recordingId) ON DELETE CASCADE,reason TEXT NOT NULL
+   ) STRICT;
    CREATE TABLE IF NOT EXISTS recording_deletions (
     recordingId TEXT PRIMARY KEY REFERENCES recordings(recordingId)
    ) STRICT;
@@ -259,7 +263,7 @@ export class CaptureStore extends Catalog {
     });
   }
   protected removeRecording(recordingId: string): void {
-    for (const table of ["recording_deletions", "recordings"])
+    for (const table of ["recording_completions", "recording_deletions", "recordings"])
       this.catalog.prepare(`DELETE FROM ${table} WHERE recordingId=?`).run(recordingId);
   }
   /** Native closure ends capture priority even if later deletion cleanup fails. */
@@ -453,7 +457,8 @@ export class CaptureStore extends Catalog {
           sourceId: recording.sourceId,
           reportedSourceId: event.sourceId,
         });
-      if (event.sequence <= recording.lifecycleSequence) return recording;
+      if (recording.state === "canceled" || event.sequence <= recording.lifecycleSequence)
+        return recording;
       const stored = this.catalog
         .prepare("SELECT publication FROM recordings WHERE recordingId=?")
         .get(recordingId)!.publication as string | null;
@@ -468,6 +473,12 @@ export class CaptureStore extends Catalog {
           `A ${recording.state} recording cannot become ${event.state}`,
           { state: recording.state, reportedState: event.state },
         );
+      if (event.state === "complete" && event.reason)
+        this.catalog
+          .prepare(
+            "INSERT INTO recording_completions(recordingId,reason) VALUES(?,?) ON CONFLICT(recordingId) DO UPDATE SET reason=excluded.reason",
+          )
+          .run(recordingId, event.reason);
       if (event.state === "complete" || event.state === "interrupted")
         this.attachSource(recording, event.sourceDurationUs);
       this.catalog

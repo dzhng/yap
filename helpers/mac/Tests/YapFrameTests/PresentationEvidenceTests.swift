@@ -20,7 +20,7 @@ func verifyPresentationPublicationRace(source: URL, parent: URL) async throws {
     let output = directory.appendingPathComponent("raced.jsonl")
     let task = Task.detached {
         try await PresentationEvidence.write(
-            source: source, plan: plan, output: output, maxBytes: 256 * 1024 * 1024)
+            source: source, plan: plan, output: output)
     }
     let deadline = ContinuousClock.now.advanced(by: .seconds(10))
     while true {

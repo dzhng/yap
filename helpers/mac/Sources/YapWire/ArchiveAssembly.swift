@@ -40,7 +40,7 @@ extension ArchiveOperation {
             defer { close(input) }
             var info = stat()
             guard fstat(input, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1,
-                info.st_size >= 0, info.st_size <= limits.memberBytes else {
+                info.st_size >= 0 else {
                 throw error("INVALID_STORAGE", "Source copy requires a bounded regular file.")
             }
             let before = try FileVersion(of: input)
@@ -54,7 +54,7 @@ extension ArchiveOperation {
                 let n = pread(input, buffer, min(chunkBytes, Int(info.st_size) - copied), off_t(copied))
                 if n < 0 && errno == EINTR { continue }
                 guard n > 0 else { throw error("ARCHIVE_CHANGED", "Source changed during copy.") }
-                try charge(n, &total, limits.expandedBytes)
+                try charge(n, &total)
                 let bytes = Data(bytes: buffer, count: n)
                 try writeAll(output, bytes)
                 hash.update(data: bytes)
@@ -75,11 +75,10 @@ extension ArchiveOperation {
     }
     final class Output {
         let fd: Int32
-        let limit: Int
         var bytes = 0
         var hash = SHA256()
         var failed = false
-        init(_ fd: Int32, _ limit: Int) { self.fd = fd; self.limit = limit }
+        init(_ fd: Int32) { self.fd = fd }
     }
 
     static func writeArchive(_ request: Write) throws -> [String: Any] {
@@ -96,34 +95,33 @@ extension ArchiveOperation {
             throw error("INVALID_STORAGE", "ZIP input and output must be separate directories.")
         }
         guard fstat(5, &planInfo) == 0, planInfo.st_mode & S_IFMT == S_IFREG,
-            planInfo.st_size > 0, planInfo.st_size <= limits.receiptBytes else {
+            planInfo.st_size > 0 else {
             throw error("LIMIT_EXCEEDED", "ZIP member plan must be a bounded regular file.")
         }
         let planIdentity = try FileVersion(of: 5)
         guard request.plan.bytes == planInfo.st_size, request.plan.identity == planIdentity else {
             throw error("ARCHIVE_CHANGED", "ZIP plan differs from admission.")
         }
-        var plan = Data(count: Int(planInfo.st_size))
-        try plan.withUnsafeMutableBytes { raw in
-            var offset = 0
-            while offset < raw.count {
-                let n = pread(5, raw.baseAddress!.advanced(by: offset), raw.count - offset, off_t(offset))
-                if n < 0 && errno == EINTR { continue }
-                guard n > 0 else { throw io("Read ZIP member plan") }
-                offset += n
-            }
+        // The descriptor inventory grows with take evidence. Foundation reads it in
+        // chunks; decode each fixed-shape member independently rather than copying the
+        // whole plan into a Data buffer and a second Codable array.
+        guard let stream = InputStream(fileAtPath: "/dev/fd/5") else { throw io("Read ZIP member plan") }
+        stream.open()
+        defer { stream.close() }
+        guard let members = try JSONSerialization.jsonObject(with: stream) as? [[String: Any]], !members.isEmpty else {
+            throw error("INVALID_PACKAGE", "ZIP member plan must be a nonempty inventory.")
         }
         guard try FileVersion(of: 5) == planIdentity else { throw error("ARCHIVE_CHANGED", "ZIP plan changed during read.") }
-        let members = try JSONDecoder().decode([WriteMember].self, from: plan)
-        guard !members.isEmpty, members.count <= limits.entries else {
-            throw error("LIMIT_EXCEEDED", "ZIP member count exceeds limit.")
+        func member(_ value: [String: Any]) throws -> WriteMember {
+            try JSONDecoder().decode(WriteMember.self, from: JSONSerialization.data(withJSONObject: value))
         }
         var names = Set<String>(), parents = Set<String>(), expectedTotal = 0
-        for member in members {
+        for value in members {
+            let member = try member(value)
             let folded = member.path.lowercased()
             guard case .safe(let parts) = memberPath(member.path, limits),
                 !parents.contains(folded), names.insert(folded).inserted,
-                member.bytes >= 0, member.bytes <= limits.memberBytes,
+                member.bytes >= 0,
                 member.sha256.count == 64, member.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                 throw error("INVALID_PACKAGE", "Invalid ZIP member plan.")
             }
@@ -132,7 +130,7 @@ extension ArchiveOperation {
                 guard !names.contains(parent) else { throw error("INVALID_PACKAGE", "ZIP file/directory collision.") }
                 parents.insert(parent)
             }
-            try charge(member.bytes, &expectedTotal, limits.expandedBytes)
+            try charge(member.bytes, &expectedTotal)
         }
         guard request.inputBytes == expectedTotal else {
             throw error("ARCHIVE_CHANGED", "ZIP byte total differs from admission.")
@@ -140,7 +138,7 @@ extension ArchiveOperation {
         let fd = openat(root, "payload.zip", O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard fd >= 0 else { throw io("Create ZIP output") }
         defer { close(fd) }
-        let output = Output(fd, limits.compressedBytes)
+        let output = Output(fd)
         guard let writer = archive_write_new() else { throw error("INVALID_PACKAGE", "Cannot create ZIP writer.") }
         // Freeing an unclosed writer flushes through the write callback, which reads `output`
         // through an unretained pointer: without this, a failed write frees `output` first and the
@@ -157,7 +155,6 @@ extension ArchiveOperation {
         try checked(archive_write_set_bytes_per_block(writer, 0))
         try checked(archive_write_open(writer, Unmanaged.passUnretained(output).toOpaque(), nil, { _, raw, buffer, count in
             let state = Unmanaged<Output>.fromOpaque(raw!).takeUnretainedValue()
-            guard count <= state.limit - state.bytes else { state.failed = true; return -1 }
             var offset = 0
             while offset < count {
                 let n = write(state.fd, buffer!.advanced(by: offset), count - offset)
@@ -172,7 +169,8 @@ extension ArchiveOperation {
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: chunkBytes, alignment: 8)
         defer { buffer.deallocate() }
         var total = 0
-        for member in members {
+        for value in members {
+            let member = try member(value)
             let input = try openWriteInput(member.path)
             defer { close(input) }
             var info = stat()
@@ -197,7 +195,7 @@ extension ArchiveOperation {
                     throw error(output.failed ? "LIMIT_EXCEEDED" : "INVALID_PACKAGE", "ZIP member write failed.")
                 }
                 copied += n
-                try charge(n, &total, limits.expandedBytes)
+                try charge(n, &total)
             }
             guard try FileVersion(of: input) == member.identity, hex(hash.finalize()) == member.sha256 else {
                 throw error("ARCHIVE_CHANGED", "ZIP member changed while copying.")

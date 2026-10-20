@@ -1,3 +1,4 @@
+import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
@@ -447,7 +448,11 @@ export class CaptureSourceRead {
     const rows: CaptureRow[] = [];
     const budget = { remaining: 128 };
     let more = true;
+    let rowBytes = 0;
     while (rows.length < limit) {
+      const before = Object.fromEntries(
+        Object.entries(position).map(([kind, head]) => [kind, { ...head }]),
+      ) as CapturePosition;
       const row = this.next(context, range, position, budget);
       if (row === undefined) break;
       if (row === null) {
@@ -455,8 +460,15 @@ export class CaptureSourceRead {
         break;
       }
       const at = fromTime(row.sourceAtUs);
-      if ((row.kind === "interruption" ? available.before(at) : available(at)).length)
+      if ((row.kind === "interruption" ? available.before(at) : available(at)).length) {
+        const bytes = Buffer.byteLength(JSON.stringify(row)) + 1;
+        if (rows.length && rowBytes + bytes > JOURNAL_RECORD_BYTES) {
+          position = before;
+          break;
+        }
+        rowBytes += bytes;
         rows.push(row);
+      }
     }
     const ready = context.coverage.some((c) => c.state === "ready");
     const result = {

@@ -10,15 +10,12 @@ extension ArchiveOperation {
     final class Input {
         let fd: Int32
         let size: Int64
-        let limit: Int
         let buffer = UnsafeMutableRawPointer.allocate(byteCount: chunkBytes, alignment: 8)
         var initial = true
         var bytes = 0
-        var failed = false
-        init(_ fd: Int32, _ size: Int64, _ limit: Int) {
+        init(_ fd: Int32, _ size: Int64) {
             self.fd = fd
             self.size = size
-            self.limit = limit
         }
         deinit { buffer.deallocate() }
     }
@@ -26,9 +23,21 @@ extension ArchiveOperation {
     static func extract(_ request: Extraction) throws -> [String: Any] {
         try request.identity.check(root)
         try ManagedFiles.lockPrivateDirectory(root)
-        let limits = request.limits
-        try limits.check()
+        try request.limits.check()
         try requireEmpty()
+        // The parent retains these anonymous operands through worker termination and admission.
+        let receipt: Int32 = 5, meter: Int32 = 6
+        var receiptInfo = stat(), meterInfo = stat()
+        guard fstat(receipt, &receiptInfo) == 0, receiptInfo.st_mode & S_IFMT == S_IFREG, receiptInfo.st_size == 0,
+            fstat(meter, &meterInfo) == 0, meterInfo.st_mode & S_IFMT == S_IFREG, meterInfo.st_size == 0 else {
+            throw error("INVALID_REQUEST", "Archive inventory operands require empty regular files.")
+        }
+        func work(_ bytes: Int) throws {
+            let data = Data(String(bytes).utf8)
+            let count = data.withUnsafeBytes { pwrite(meter, $0.baseAddress, $0.count, 0) }
+            guard count == data.count, ftruncate(meter, off_t(count)) == 0 else { throw io("Report archive work") }
+        }
+        let limits = request.limits
         let source: Int32 = 4
         defer { close(source) }
         var sourceInfo = stat()
@@ -42,9 +51,6 @@ extension ArchiveOperation {
             admitted.identity.modifiedNs == before.modifiedNs
         else {
             throw error("ARCHIVE_CHANGED", "Admitted archive changed before copying.")
-        }
-        guard sourceInfo.st_size <= limits.compressedBytes else {
-            throw error("LIMIT_EXCEEDED", "Archive exceeds compressed byte limit.")
         }
         let snapshot = openat(
             root, ".input", O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -61,7 +67,8 @@ extension ArchiveOperation {
                 throw io("Read archive")
             }
             if n == 0 { break }
-            try charge(n, &copied, limits.compressedBytes)
+            try charge(n, &copied)
+            try work(copied)
             let bytes = Data(bytes: buffer, count: n)
             archiveHash.update(data: bytes)
             try writeAll(snapshot, bytes)
@@ -76,7 +83,7 @@ extension ArchiveOperation {
         let content = openat(root, "content", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard content >= 0 else { throw io("Open extraction directory") }
         defer { close(content) }
-        let input = Input(snapshot, Int64(copied), limits.initialReadBytes)
+        let input = Input(snapshot, Int64(copied))
         guard let reader = archive_read_new() else {
             throw error("INVALID_PACKAGE", "Cannot create ZIP reader.")
         }
@@ -98,15 +105,7 @@ extension ArchiveOperation {
                 reader, context, nil,
                 { _, raw, output in
                     let state = Unmanaged<Input>.fromOpaque(raw!).takeUnretainedValue()
-                    // Do not expose a byte beyond the metadata budget to the parser's eager allocation.
-                    let allowance =
-                        state.initial
-                        ? min(ArchiveOperation.chunkBytes, state.limit - state.bytes)
-                        : ArchiveOperation.chunkBytes
-                    guard allowance > 0 else {
-                        state.failed = true
-                        return -1
-                    }
+                    let allowance = ArchiveOperation.chunkBytes
                     let n = read(state.fd, state.buffer, allowance)
                     if n > 0 && state.initial { state.bytes += n }
                     output?.pointee = UnsafeRawPointer(state.buffer)
@@ -114,10 +113,8 @@ extension ArchiveOperation {
                 }, nil, nil), reader, input)
         var entries = [[String: Any]]()
         var revisions = [String: String]()
-        var manifest = ""
         var total = 0
         var revisionBytes = 0
-        var receiptEstimate = 256
         var names = Set<String>()
         var nodes = [String: (path: String, directory: Bool)]()
         while true {
@@ -128,9 +125,6 @@ extension ArchiveOperation {
             input.initial = false
             guard let entry, let rawName = archive_entry_pathname(entry) else {
                 throw error("INVALID_PACKAGE", "ZIP member has no pathname.")
-            }
-            guard entries.count < limits.entries else {
-                throw error("LIMIT_EXCEEDED", "Archive entry limit exceeded.")
             }
             let directory = archive_entry_filetype(entry) == S_IFDIR
             guard directory || archive_entry_filetype(entry) == S_IFREG,
@@ -164,7 +158,7 @@ extension ArchiveOperation {
             }
             if archive_entry_size_is_set(entry) != 0 {
                 let size = archive_entry_size(entry)
-                guard size >= 0, size <= limits.memberBytes, !directory || size == 0 else {
+                guard size >= 0, !directory || size == 0 else {
                     throw error("LIMIT_EXCEEDED", "ZIP declared member size exceeds its limit.")
                 }
             }
@@ -173,7 +167,7 @@ extension ArchiveOperation {
             var bytes = 0
             var hash = SHA256()
             var metadata = Data()
-            let text = name == "manifest.json" || request.inlineRevisions != false && name.hasPrefix("revisions/") && !directory
+            let text = request.inlineRevisions != false && name.hasPrefix("revisions/") && !directory
             while true {
                 let n = archive_read_data(reader, buffer, chunkBytes)
                 if n < 0 { try parser(Int32(n), reader, input) }
@@ -181,18 +175,13 @@ extension ArchiveOperation {
                 guard !directory else {
                     throw error("INVALID_PACKAGE", "ZIP directory contains payload.")
                 }
-                try charge(n, &bytes, limits.memberBytes)
-                try charge(n, &total, limits.expandedBytes)
+                try charge(n, &bytes)
+                try charge(n, &total)
+                try work(copied + total)
                 let block = Data(bytes: buffer, count: n)
                 hash.update(data: block)
                 if text {
-                    if name == "manifest.json" {
-                        guard bytes <= limits.manifestBytes else {
-                            throw error("LIMIT_EXCEEDED", "Manifest exceeds byte limit.")
-                        }
-                    } else {
-                        try charge(n, &revisionBytes, limits.revisionBytes)
-                    }
+                    try charge(n, &revisionBytes, limits.revisionBytes)
                     metadata.append(block)
                 }
                 try writeAll(fd, block)
@@ -201,26 +190,16 @@ extension ArchiveOperation {
                 guard let value = String(data: metadata, encoding: .utf8) else {
                     throw error("INVALID_PACKAGE", "Metadata is not UTF-8.")
                 }
-                if name == "manifest.json" {
-                    manifest = value
-                } else {
-                    guard revisions.count < limits.history else {
-                        throw error("LIMIT_EXCEEDED", "Revision count limit exceeded.")
-                    }
-                    revisions[name] = value
+                guard revisions.count < limits.history else {
+                    throw error("LIMIT_EXCEEDED", "Revision count limit exceeded.")
                 }
-                try charge(
-                    try JSONSerialization.data(withJSONObject: [value]).count, &receiptEstimate,
-                    limits.receiptBytes)
+                revisions[name] = value
             }
             let row: [String: Any] = [
                 "path": name, "directory": directory, "bytes": bytes,
                 "sha256": hex(hash.finalize()),
                 "identity": directory ? NSNull() : try FileVersion(of: fd).json,
             ]
-            try charge(
-                try JSONSerialization.data(withJSONObject: row).count + 1, &receiptEstimate,
-                limits.receiptBytes)
             entries.append(row)
         }
         guard archive_read_has_encrypted_entries(reader) == 0 else {
@@ -228,22 +207,36 @@ extension ArchiveOperation {
         }
 
         let result: [String: Any] = [
-            "manifest": manifest, "revisions": revisions, "members": entries,
+            "revisions": revisions, "members": entries,
             "archiveSha256": hex(archiveHash.finalize()), "expandedBytes": total, "copiedBytes": copied,
             "initialReadBytes": input.bytes, "peakResidentBytes": ProcessResources.peakResidentBytes(),
             "parser": String(cString: archive_version_string()),
         ]
-        guard try JSONSerialization.data(withJSONObject: result).count <= limits.receiptBytes else {
-            throw error("LIMIT_EXCEEDED", "Archive receipt exceeds transport budget.")
+        // Parse the held manifest stream as semantic JSON. Its original bytes and hash
+        // stay pinned in the inventory; a serialized copy is never embedded as a string.
+        guard let manifestIdentity = entries.first(where: { $0["path"] as? String == "manifest.json" }) else {
+            throw error("INVALID_PACKAGE", "Package manifest is missing.")
         }
-        return result
+        let manifestFile = openat(content, "manifest.json", O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard manifestFile >= 0 else { throw error("INVALID_PACKAGE", "Package manifest is missing.") }
+        defer { close(manifestFile) }
+        guard let input = InputStream(fileAtPath: "/dev/fd/\(manifestFile)") else { throw io("Read archive manifest") }
+        input.open()
+        defer { input.close() }
+        let manifest: Any
+        do { manifest = try JSONSerialization.jsonObject(with: input, options: [.fragmentsAllowed]) }
+        catch { throw ArchiveOperation.error("INVALID_PACKAGE", "Package manifest is malformed JSON.") }
+        try streamJSON(result.merging([
+            "manifest": manifest,
+            "manifestIdentity": ["bytes": manifestIdentity["bytes"]!, "sha256": manifestIdentity["sha256"]!],
+        ], uniquingKeysWith: { _, value in value }), to: receipt)
+        guard fsync(receipt) == 0, fstat(receipt, &receiptInfo) == 0 else { throw io("Close archive receipt") }
+        return ["receiptBytes": receiptInfo.st_size]
+
     }
 
     static func parser(_ status: Int32, _ reader: OpaquePointer, _ input: Input) throws {
         guard status == ARCHIVE_OK else {
-            if input.failed {
-                throw error("LIMIT_EXCEEDED", "ZIP initial metadata read limit exceeded.")
-            }
             throw error(
                 "INVALID_PACKAGE",
                 archive_error_string(reader).map { String(cString: $0) } ?? "ZIP parser failed.")

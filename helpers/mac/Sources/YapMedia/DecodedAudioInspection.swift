@@ -89,9 +89,6 @@ enum DecodedAudioInspection {
                 runs[runs.count - 1].endUs = end
                 runs[runs.count - 1].frames += Int64(count)
             } else {
-                guard runs.count < 100_000 else {
-                    throw NativeFailure("LIMIT_EXCEEDED", "Decoded audio has too many physical runs.")
-                }
                 runs.append(ProbedDecodedAudioRun(startUs: start, endUs: end, frames: Int64(count)))
             }
             let total = frames.addingReportingOverflow(Int64(count))

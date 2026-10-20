@@ -313,7 +313,7 @@ test("camera proof intervals are support minus gaps; a proof without gaps is one
   ]);
 });
 
-test("a take carries at most 499 camera gaps, one fewer than its 500 runs", async () => {
+test("camera gap inventories preserve every interval beyond five hundred transitions", async () => {
   const f = fixture();
   const gaps = (count: number) =>
     Array.from({ length: count }, (_, i) => ({ startUs: 102 + 2 * i, endUs: 103 + 2 * i }));
@@ -329,7 +329,7 @@ test("a take carries at most 499 camera gaps, one fewer than its 500 runs", asyn
   };
   await expect(
     f.evidence.ingest({ ...f.identity, generation: "beyond", file: f.file, receipt: beyond }),
-  ).rejects.toMatchObject({ code: "INVALID_EVIDENCE", message: "Invalid verified camera gaps" });
+  ).resolves.toMatchObject({ receipt: beyond });
 });
 
 test("malformed camera gaps refuse the whole receipt", async () => {
@@ -830,7 +830,7 @@ test("geometry reads preserve nullable placements, epoch identity and same-time 
   expect(unknown.evidence.timedGeometryAt(unknown.identity, 10000)).toBeNull();
 });
 
-test("bounded geometry and pause reads reject excess rather than truncating resets", async () => {
+test("geometry and pause reads traverse every index batch without truncating resets", async () => {
   for (const kind of ["timed", "unplaced", "pause"] as const) {
     const f = fixture([]);
     const records = Array.from({ length: 1001 }, (_, i) =>
@@ -845,7 +845,7 @@ test("bounded geometry and pause reads reject excess rather than truncating rese
         : kind === "timed"
           ? f.evidence.geometryChanges(f.identity, { startUs: 0, endUs: 1000 })
           : f.evidence.unplacedGeometry(f.identity, { afterSequence: 0 });
-    expect(read).toThrow(expect.objectContaining({ code: "LIMIT_EXCEEDED" }));
+    expect(read()).toEqual(records.map((record, i) => ({ ...record.data, sequence: i + 1 })));
     const bounded =
       kind === "pause"
         ? f.evidence.pauseBoundaries(f.identity, { startUs: 1000, endUs: 1000 })
@@ -1052,7 +1052,6 @@ test("malformed terminal provenance refuses evidence publication", async () => {
     ].map((change) => ({ finished: true, completion: { ...completion, ...change } })),
     { lastLifecycle: { state: 7 } },
     { lastLifecycle: { state: "interrupted", reason: 7 } },
-    { lastLifecycle: { state: "interrupted", reason: "x".repeat(32768) } },
   ];
   for (const [i, change] of cases.entries()) {
     const identity = { ...f.identity, generation: `invalid-${i}` };

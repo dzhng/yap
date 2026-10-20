@@ -79,7 +79,7 @@ export async function projectArchiveContents(store, home, contents = ["generated
   for (const [index, resource] of resources.entries()) {
     const metadata = resourceMetadataMember(resource);
     files[`assets/${resource.asset.fileName}`] = contents[index];
-    files[metadata.reference.metadata.path] = metadata.body;
+    files[metadata.reference.metadata.path] = [...metadata.chunks()].join("");
   }
   for (const [ordinal, revision] of snapshot.revisions.entries())
     files[`revisions/${ordinal}.json`] = JSON.stringify(revision);

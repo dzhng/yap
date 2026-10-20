@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile, rm } from "node:fs/promises";
+import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { statSync } from "node:fs";
+import { createReadStream, statSync } from "node:fs";
 import { fileIdentity, type IdentifiedFile } from "./files.js";
 import { Catalog, CatalogError } from "./catalog.js";
 import {
-  parseImportedTranscript,
+  readImportedTranscript,
   type ImportedCue,
   type ImportedFormat,
 } from "./transcript-import.js";
@@ -139,8 +139,10 @@ export class ImportedTranscriptStore {
         );
       return this.get(source, existing.generation);
     }
-    const raw = await readFile(path);
-    const parsed = parseImportedTranscript(raw, format === undefined ? {} : { format });
+    const parsed = await readImportedTranscript(
+      createReadStream(path, { highWaterMark: 65_536 }),
+      format === undefined ? {} : { format },
+    );
     const generation = randomUUID();
     const output = join(
       this.home,
@@ -322,8 +324,10 @@ export class ImportedTranscriptStore {
         );
       return;
     }
-    const raw = await readFile(sourcePath, { signal });
-    const parsed = parseImportedTranscript(raw, { format: value.origin.format });
+    const parsed = await readImportedTranscript(
+      createReadStream(sourcePath, { highWaterMark: 65_536, signal }),
+      { format: value.origin.format },
+    );
     if (
       parsed.raw.sha256 !== value.origin.raw.sha256 ||
       parsed.raw.bytes !== value.origin.raw.bytes

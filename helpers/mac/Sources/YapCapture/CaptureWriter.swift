@@ -1,6 +1,7 @@
 @preconcurrency import AVFoundation
 import AppKit
 import Foundation
+import YapMedia
 import Synchronization
 @preconcurrency import ScreenCaptureKit
 
@@ -93,6 +94,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var dropped: [String: Int] = [:]
     private var omitted: [String: Int] = [:]
     private var stopHostUs: Int64?
+    private let nowUs: @Sendable () -> Int64
     private let onFailure: @Sendable (CaptureFailure) -> Void
     private var failure: CaptureFailure?
     private var finishing = false
@@ -103,6 +105,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     /// its last seconds. The encoder holds several frames before writing any, so a slower floor
     /// leaves a short take with no index at all. The repeated pixels are the ones already on screen.
     private static let idleRepeatUs: Int64 = 100_000
+    package var onMaximumDuration: (@Sendable () -> Void)?
+    private var maximumDurationReached = false
     private var idleRepeat: DispatchSourceTimer?
     /// Host time the last video frame was written, real or repeated. Stillness is time without a
     /// delivery, not a gap in timestamps: a frame can arrive stamped well before it is delivered.
@@ -122,8 +126,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
 
     package init(
         request: CaptureRequest, width: Int, height: Int, sessionID: String,
-        requestedSourceRect: CGRect?, onFailure: @escaping @Sendable (CaptureFailure) -> Void
+        requestedSourceRect: CGRect?, nowUs: @escaping @Sendable () -> Int64 = CaptureHostTime.nowUs,
+        onFailure: @escaping @Sendable (CaptureFailure) -> Void
     ) throws {
+        self.nowUs = nowUs
         self.onFailure = onFailure
         self.request = request
         self.width = width
@@ -168,7 +174,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     package func pause() {
         queue.sync {
             sampler?.suspend()
-            let hostUs = CaptureHostTime.nowUs()
+            let hostUs = nowUs()
             clock.pause(at: hostUs)
             publishClock()
             markRecognizer?.updateCaptureState(
@@ -178,7 +184,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     }
     package func resume() {
         queue.sync {
-            resumeClock(at: CaptureHostTime.nowUs())
+            resumeClock(at: nowUs())
             if !finishing { sampler?.resume() }
         }
     }
@@ -221,7 +227,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     /// answered from the published copy, so asking what time a take has reached never waits behind
     /// the take's own encoding or finalization.
     func elapsedSourceUs() -> Int64? {
-        publishedClock.withLock { $0.elapsedSourceUs(at: CaptureHostTime.nowUs()) }
+        publishedClock.withLock { $0.elapsedSourceUs(at: nowUs()) }
     }
 
     private func publishClock() {
@@ -235,7 +241,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             sampler?.stop()
             idleRepeat?.cancel()
             if stopHostUs == nil {
-                let endpoint = CaptureHostTime.nowUs()
+                let endpoint = nowUs()
                 stopHostUs = endpoint
                 clock.seal(at: endpoint)
                 publishClock()
@@ -295,7 +301,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             }
             guard let target = recordedMarks.last(where: { !retractedMarkIDs.contains($0.id) })
             else { return }
-            let hostUs = CaptureHostTime.nowUs()
+            let hostUs = nowUs()
             // A paused take has no source time now; its undo lands where the pause began.
             guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs)
             else { return }
@@ -318,7 +324,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 let shift = event.modifierFlags.contains(.shift)
                 let point = GlobalPointSpace.flip(
                     appKit: NSEvent.mouseLocation, zeroOriginHeight: GlobalPointSpace.zeroOriginHeight())
-                let hostUs = CaptureHostTime.nowUs()
+                let hostUs = nowUs()
                 self.queue.async {
                     guard !self.finishing, self.failure == nil, var recognizer = self.markRecognizer else { return }
                     guard self.clock.sourceTime(for: hostUs) != nil else { return }
@@ -478,6 +484,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             }
             guard usable else { return }
         }
+        guard !finishAtMaximumDuration(at: hostUs) else { return }
         guard var sourceUs = clock.sourceTime(for: hostUs, durationUs: role == "video" ? durationUs : 0) else {
             omitted[role, default: 0] += 1
             return
@@ -587,7 +594,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     declaredFirstFrame: placement.firstFrame, rawPTS: pts, removedPauseUs: placement.removedPauseUs)) }) else { return }
             } else {
                 lastVideo = retimed
-                lastVideoWrittenHostUs = CaptureHostTime.nowUs()
+                lastVideoWrittenHostUs = nowUs()
                 if firstAppend {
                     guard record({ try self.journal.recordTrackStarted(
                         role: role, file: track.file, firstSourceUs: sourceUs,
@@ -611,10 +618,26 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         timer.resume()
     }
 
+    /// Source seconds × the take requirement × 1; CaptureClock excludes paused time.
+    /// Pin the endpoint before asking the ordinary asynchronous finish owner to close inputs.
+    private func finishAtMaximumDuration(at hostUs: Int64) -> Bool {
+        if maximumDurationReached { return true }
+        guard !finishing, failure == nil, let elapsed = clock.elapsedSourceUs(at: hostUs),
+            elapsed >= Requirements.maximumTakeUs else { return false }
+        maximumDurationReached = true
+        stopHostUs = hostUs - (elapsed - Requirements.maximumTakeUs)
+        clock.seal(at: stopHostUs!)
+        publishClock()
+        idleRepeat?.cancel()
+        onMaximumDuration?()
+        return true
+    }
+
     /// Repeats the last written frame once the screen has been still for `idleRepeatUs`, that long
     /// after the previous frame's end and never past the take's clock, which excludes pauses.
     private func repeatIdleFrame() {
-        let hostNowUs = CaptureHostTime.nowUs()
+        let hostNowUs = nowUs()
+        if finishAtMaximumDuration(at: hostNowUs) { return }
         guard !finishing, failure == nil, let video = tracks["video"], let last = lastVideo,
             let end = video.end, let writtenUs = lastVideoWrittenHostUs,
             hostNowUs - writtenUs >= Self.idleRepeatUs,
@@ -688,7 +711,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 self.sampler?.stop()
                 self.idleRepeat?.cancel()
                 self.flushCursorSamples()
-                let endHost = self.stopHostUs ?? CaptureHostTime.nowUs()
+                let endHost = self.stopHostUs ?? self.nowUs()
                 self.resumeClock(at: endHost)
                 let duration = max(0, self.clock.sourceTime(for: endHost) ?? 0)
                 self.failure = externalFailure ?? self.failure
