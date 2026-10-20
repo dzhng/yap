@@ -15,10 +15,10 @@ func runSchema4HeaderTests() throws {
     let header = record["data"] as! [String: Any]
     precondition(header["schemaVersion"] as? Int == 4, "New takes must write schema 4")
     let sampling = header["cursorSampling"] as? [String: Any]
-    precondition(sampling?["intervalUs"] as? Int == 16_667 && sampling?["holds"] as? Bool == false,
-        "New takes must declare the sampler cadence and every-tick writing")
+    precondition(sampling?["intervalUs"] as? Int == 16_667 && sampling?["holds"] as? Bool == true,
+        "New takes must declare the sampler cadence and held samples")
     let decoded = try CaptureJournal.streamEvidence(directory: root.path)
-    precondition(JournalSchema.cursorSampling(decoded.header!) == CursorSampling())
+    precondition(JournalSchema.cursorSampling(decoded.header!) == CursorSampling(holds: true))
     // Future-version refusal is malformed-input coverage; the fixture starts with a production header.
     let future = root.appendingPathComponent("future")
     try FileManager.default.createDirectory(at: future, withIntermediateDirectories: false)
@@ -35,7 +35,7 @@ func runSchema4HeaderTests() throws {
                 && failure.message.contains("through 4"), "Future-version refusal must explain the supported range")
         }
     }
-    print("PASS schema4 header declares every-tick cursor sampling")
+    print("PASS schema4 header declares held cursor sampling")
 }
 
 @MainActor

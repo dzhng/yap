@@ -10,6 +10,7 @@ import {
   add,
   compare,
   ceil,
+  floor,
   sourceAvailability,
   type TimeValue,
   type SignedTimeValue,
@@ -18,7 +19,7 @@ import {
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
-import type { SourceEvidenceMetadata } from "./evidence.js";
+import { journalCapabilities, type SourceEvidenceMetadata } from "./evidence.js";
 import { CatalogError } from "./catalog.js";
 import { selectSource, SourceSelectionRead, type SourceSelection } from "./source-selection.js";
 
@@ -457,6 +458,37 @@ export class CaptureSourceRead {
       const at = fromTime(row.sourceAtUs);
       if ((row.kind === "interruption" ? available.before(at) : available(at)).length)
         rows.push(row);
+    }
+    if (
+      domain === "cursor" &&
+      input.cursor === undefined &&
+      context.evidence &&
+      journalCapabilities(context.evidence.receipt.header ?? {})!.cursorSampling.holds &&
+      available(fromTime(range.startUs)).length
+    ) {
+      const captureStart = subtract(
+        fromTime(range.startUs),
+        fromTime(context.sourceToAssetOffsetUs),
+      );
+      if (compare(captureStart, fromTime(0)) >= 0) {
+        const held = this.records.latestCursor(context.evidence, floor(captureStart));
+        if (
+          held &&
+          compare(
+            fromTime(captureToAsset(held.sourceUs, context.sourceToAssetOffsetUs)),
+            fromTime(range.startUs),
+          ) < 0
+        ) {
+          const { sequence, ...observation } = held;
+          rows.unshift({
+            kind: "cursor",
+            sourceAtUs: captureToAsset(held.sourceUs, context.sourceToAssetOffsetUs),
+            captureAtUs: held.sourceUs,
+            sourceSequence: sequence,
+            observation,
+          });
+        }
+      }
     }
     const ready = context.coverage.some((c) => c.state === "ready");
     const result = {

@@ -110,6 +110,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private let requestedSourceRect: CGRect?
     private var cursor = CursorTrack()
     private var sampler: CursorSampler?
+    private var cursorFlush: DispatchSourceTimer?
     private var zeroOriginHeight: Double?
     private var markRecognizer: MarkRecognizer?
     private var markMonitorTokens: [Any] = []
@@ -139,7 +140,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 schemaVersion: JournalSchema.current, sessionID: sessionID, source: request.source, width: width,
                 height: height,
                 microphone: request.microphone, systemAudio: request.systemAudio,
-                cursorSampling: CursorSampling()))
+                cursorSampling: CursorSampling(holds: true)))
         tracks["video"] = try TrackWriter(
             role: "video", directory: request.outputDirectory,
             settings: [
@@ -169,6 +170,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     package func pause() {
         queue.sync {
             sampler?.suspend()
+            cursorFlush?.schedule(deadline: .distantFuture)
             let hostUs = CaptureHostTime.nowUs()
             clock.pause(at: hostUs)
             publishClock()
@@ -191,6 +193,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         markRecognizer?.updateCaptureState(
             paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
         if paused {
+            cursor.resume()
+            scheduleCursorFlush()
             let pause = clock.pauses.count > count ? clock.pauses.last : nil
             _ = record { try self.journal.recordPauseEnded(hostUs: hostUs, pause: pause) }
         }
@@ -234,6 +238,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         removeMarkMonitors()
         queue.sync {
             sampler?.stop()
+            cursorFlush?.cancel()
             idleRepeat?.cancel()
             if stopHostUs == nil {
                 let endpoint = CaptureHostTime.nowUs()
@@ -249,6 +254,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         removeMarkMonitors()
         queue.sync {
             sampler?.stop()
+            cursorFlush?.cancel()
             idleRepeat?.cancel()
             finishing = true
             tracks.values.forEach { $0.writer.cancelWriting() }
@@ -383,6 +389,27 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         onMarkUpdate?(.liveStroke(stroke))
     }
 
+    private func scheduleCursorFlush() {
+        guard !finishing, !clock.isPaused, request.source.kind != "camera",
+            let sourceUs = clock.elapsedSourceUs(at: CaptureHostTime.nowUs()) else { return }
+        let interval = CursorTrack.defaultFlushIntervalUs
+        if cursorFlush == nil {
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.setEventHandler { [weak self] in
+                guard let self, !self.finishing, !self.clock.isPaused,
+                    let at = self.clock.elapsedSourceUs(at: CaptureHostTime.nowUs()) else { return }
+                let samples = self.cursor.flush(through: at)
+                if !samples.isEmpty {
+                    _ = self.record { try self.journal.recordCursorSamples(samples) }
+                }
+            }
+            cursorFlush = timer
+            timer.resume()
+        }
+        cursorFlush?.schedule(deadline: .now() + .microseconds(Int(interval - sourceUs % interval)),
+            repeating: .microseconds(Int(interval)))
+    }
+
     private func flushCursorSamples() {
         let remaining = cursor.seal()
         cursor.note(refusedReadings: sampler?.refusedReadings ?? 0)
@@ -468,6 +495,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             // The first usable primary picture establishes zero before screen geometry is placed.
             if usable, clock.start(at: hostUs, durationUs: durationUs) {
                 publishClock()
+                scheduleCursorFlush()
                 if screenInfo != nil { startIdleRepeat() }
                 guard record({
                     try self.journal.recordPCMOrigin(JournalPCMOrigin(rawPTS: pts, declaredHostUs: hostUs),
@@ -688,6 +716,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 self.finishing = true
                 self.sampler?.stop()
                 self.idleRepeat?.cancel()
+                self.cursorFlush?.cancel()
                 self.flushCursorSamples()
                 let endHost = self.stopHostUs ?? CaptureHostTime.nowUs()
                 self.resumeClock(at: endHost)

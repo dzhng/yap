@@ -29,6 +29,7 @@ export function recordKey(index: EvidenceIndex, row: RecordRow): number[] {
 
 /** One query semantics owner; storage adapters only provide bounded ordered records. */
 export abstract class SourceEvidenceReader {
+  abstract cursorSampling(identity: EvidenceIdentity): { intervalUs: number; holds: boolean };
   protected abstract requireComplete(identity: EvidenceIdentity): void;
   protected abstract records(identity: EvidenceIdentity, query: RecordQuery): RecordRow[];
 

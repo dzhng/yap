@@ -51,3 +51,16 @@ at close.
   (found in review).
 - **Readers select behaviour by the persisted layout**, so inspection accepts schemas 1–4 and
   refuses higher with the version in the message. Sound.
+
+## Slice 09
+
+- **Trail length is bounded only by its duration** (`maximumTrailUs`, 10 s); the 1,200-point and
+  5,000-observation caps are deleted in TS and Swift, and trails stream instead of reading one
+  page. Sound: the limits audit derives point counts from time.
+- **A held sample carries its position across cuts and scene changes** for `holds: true`
+  journals; physical gaps (pauses) still reset it, and trails still reset at cuts. Old journals
+  keep today's rules and outputs. Sound.
+- **The stale-pointer suppression is skipped for held samples**, because a held sample is still
+  where the pointer is. Sound.
+- **`cursor.raw` returns the held sample at a page's start outside the page's forward allowance**,
+  so pagination still advances. Sound.

@@ -1,6 +1,13 @@
 import Foundation
 
-if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
+if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] {
+    try writeCursorHoldFixtures(to: URL(fileURLWithPath: output))
+} else if ProcessInfo.processInfo.environment["YAP_CHANGE_ONLY_TESTS"] != nil {
+    try runChangeOnlyCursorTests()
+} else if ProcessInfo.processInfo.environment["YAP_CURSOR_TESTS"] != nil {
+    try runCursorGeometryTests()
+    try runSchema4HeaderTests()
+} else if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
     try writeLongStrokeFixture(to: URL(fileURLWithPath: output),
         strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!)
     if let video = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_VIDEO"] {

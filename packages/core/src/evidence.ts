@@ -233,10 +233,10 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
 
 // Journal version literals belong only in this capability table.
 const journalSchemas = {
-  1: { isPacked: false, carriesMarks: false },
-  2: { isPacked: true, carriesMarks: false },
-  3: { isPacked: true, carriesMarks: true },
-  4: { isPacked: true, carriesMarks: true },
+  1: { isPacked: false, carriesMarks: false, holdsCursor: false },
+  2: { isPacked: true, carriesMarks: false, holdsCursor: false },
+  3: { isPacked: true, carriesMarks: true, holdsCursor: false },
+  4: { isPacked: true, carriesMarks: true, holdsCursor: true },
 } as const;
 export function journalCapabilities(header: { schemaVersion?: unknown; cursorSampling?: unknown }) {
   const version = header.schemaVersion === undefined ? 1 : header.schemaVersion;
@@ -254,7 +254,9 @@ export function journalCapabilities(header: { schemaVersion?: unknown; cursorSam
       invalid("Invalid journal cursor sampling");
     cursorSampling = { intervalUs, holds };
   }
-  return { ...journalSchemas[version as keyof typeof journalSchemas], cursorSampling };
+  const capabilities = journalSchemas[version as keyof typeof journalSchemas];
+  cursorSampling.holds &&= capabilities.holdsCursor;
+  return { ...capabilities, cursorSampling };
 }
 
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
@@ -585,6 +587,18 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       .run(ownerKind, ownerId, sourceId, generation);
   }
 
+  cursorSampling(identity: EvidenceIdentity) {
+    this.requireComplete(identity);
+    const row = this.store.catalog
+      .prepare(
+        "SELECT receipt FROM source_evidence_generations WHERE ownerKind=? AND ownerId=? AND sourceId=? AND generation=?",
+      )
+      .get(...evidenceOwnerKey(identity.owner), identity.sourceId, identity.generation) as {
+      receipt: string;
+    };
+    return journalCapabilities(JSON.parse(row.receipt).header ?? {})!.cursorSampling;
+  }
+
   protected requireComplete({ owner, sourceId, generation }: EvidenceIdentity): void {
     const [ownerKind, ownerId] = evidenceOwnerKey(owner);
     if (
@@ -683,6 +697,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
 export type SourceTrailRead = Pick<
   SourceEvidenceStore,
   | "page"
+  | "exportRecords"
+  | "cursorSampling"
   | "latestCursor"
   | "timedGeometryAt"
   | "nextTimedGeometry"

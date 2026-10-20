@@ -4,6 +4,7 @@ import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { fileAccess, type FileAccess } from "./files.js";
 import { CatalogError } from "./catalog.js";
 import {
+  journalCapabilities,
   validateRecord,
   validateSourceReceipt,
   type SourceEvidenceMetadata,
@@ -50,6 +51,7 @@ function matches(index: EvidenceIndex, row: RecordRow, data: Record<string, unkn
 const metadataSchema = z.strictObject({
   kind: z.literal("source"),
   identity: evidenceIdentitySchema,
+  cursorSampling: z.strictObject({ intervalUs: integer.min(1), holds: z.boolean() }).optional(),
 });
 const codec: OrderedPageCodec<RecordRow, z.infer<typeof metadataSchema>> = {
   metadata: metadataSchema,
@@ -82,9 +84,14 @@ export function writeSourceEvidencePages(
   signal?: AbortSignal,
 ): Promise<void> {
   const { owner, sourceId, generation } = identity;
+  const cursorSampling = reader.cursorSampling(identity);
   return writeOrderedPages(
     directory,
-    { kind: "source" as const, identity: { owner, sourceId, generation } },
+    {
+      kind: "source" as const,
+      identity: { owner, sourceId, generation },
+      ...(cursorSampling.holds ? { cursorSampling } : {}),
+    },
     codec,
     (index) => reader.exportRecords(identity, index as EvidenceIndex),
     signal,
@@ -96,6 +103,10 @@ export class FileSourceEvidence extends SourceEvidenceReader {
     super();
     this.pages = new OrderedPages(root, codec);
     this.requireComplete(identity);
+  }
+  cursorSampling(identity: EvidenceIdentity) {
+    this.requireComplete(identity);
+    return this.pages.metadata.cursorSampling ?? journalCapabilities({})!.cursorSampling;
   }
   protected requireComplete(identity: EvidenceIdentity): void {
     const expected = this.pages.metadata.identity;

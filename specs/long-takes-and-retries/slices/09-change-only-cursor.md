@@ -68,3 +68,24 @@ Geometry truth, pause handling, marks, live ink.
 
 If the user later wants a lower sampling rate, change the interval constant; the header already
 records it and readers already hold.
+
+## Implementation evidence
+
+The [synthetic conformance evidence](../assets/cursor-holds/README.md) retains native
+dense/change-only still and project frames. The cut regression was red first:
+dense showed the pointer while sparse returned null. It passes after the hold-aware
+reset rule. Portable-page propagation was separately falsified by dropping the
+sampling declaration; that regression returned null, then passed when restored.
+
+The active public source adapters use `CaptureSourceRead`, so its raw-page prefix and
+the service's cursor overlay follow the same sampling declaration as the retained
+trail planner. Old page metadata omits the added declaration; only holding journals
+need it. Prefix context does not consume forward-page progress. Held trail endpoints
+repeat observed coordinates over elapsed time rather than creating intermediate
+positions. Physical gaps remain pointer resets.
+
+Focused verification covers native cursor/header and recognizer selectors, core
+trails/raw/portable evidence, native still/presentation rendering with compiler-driven
+reordered clips, the public raw/render operations, and all historical byte goldens.
+The geometry probe was updated to select the predecessor held sample; live desktop
+capture is outside this synthetic verification.
