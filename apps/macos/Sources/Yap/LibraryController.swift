@@ -7,6 +7,7 @@ final class LibraryController {
     typealias Call = @MainActor (String, [String: Any]) async throws(ServiceFailure) -> Data
     /// Asks the person one delete question and answers whether they confirmed it.
     typealias Confirm = @MainActor (DeleteConfirmation) async -> Bool
+    private let failure: (ControlsAction, String?) -> Void
     private let call: Call
     private let confirm: Confirm
     private let changed: () -> Void
@@ -31,8 +32,10 @@ final class LibraryController {
     init(call: @escaping Call, confirm: @escaping Confirm, changed: @escaping () -> Void,
         closePreview: @escaping (MediaTarget) -> Void, forgetExports: @escaping (MediaTarget) -> Void,
         deleted: @escaping () -> Void,
-        preview: @escaping (String) -> Void, export: @escaping (String, ExportsState.Kind) -> Void)
+        preview: @escaping (String) -> Void, export: @escaping (String, ExportsState.Kind) -> Void,
+        failure: @escaping (ControlsAction, String?) -> Void = { _, _ in })
     {
+        self.failure = failure
         self.call = call; self.confirm = confirm; self.changed = changed; self.closePreview = closePreview
         self.forgetExports = forgetExports; self.deleted = deleted
         self.preview = preview; self.export = export
@@ -44,6 +47,11 @@ final class LibraryController {
         state.recordingsRefreshing = false; jobsReading = false; pendingRecordings = false; pendingProjects = false
         state.projectsRefreshing = false
         state.progressFailure = nil
+        for take in state.recent {
+            for source in take.sourceAdmissions ?? [] {
+                if let job = source.job { failure(.retryImport(job.id), nil) }
+            }
+        }
         state.retryingImports = []
         // An unanswered deletion keeps its identity but must be explicitly retried on the new service.
         for target in state.deletions.keys where state.deletions[target]?.isPending == true {
@@ -126,6 +134,11 @@ final class LibraryController {
                     takes.append(take)
                 }
                 state.media = page.media.filter { state.deletions[$0.target] == nil && !vanished.contains($0.target) }
+                for take in takes {
+                    for source in take.sourceAdmissions ?? [] where source.job?.state == "ready" {
+                        failure(.retryImport(source.job!.id), nil)
+                    }
+                }
                 state.recent = takes.filter { state.deletions[.recording($0.id)] == nil }
                 state.nextRecordingCursor = page.nextCursor
                 recordingPageIndex = index; state.hasPreviousRecordingPage = index > 0
@@ -256,7 +269,7 @@ final class LibraryController {
             let take = state.recent.first(where: { $0.sourceAdmissions?.contains { $0.kind == "primary" && $0.job?.id == jobId } == true }),
             state.deletions[.recording(take.id)] == nil,
             let admission = take.sourceAdmissions?.first(where: { $0.kind == "primary" }),
-            let job = admission.job, job.state == "failed", job.retryable,
+            let job = admission.job, job.importFailed,
             job.details?.retry?.operation == "job.retry", job.details?.retry?.params.jobId == jobId else { return }
         recordingGeneration = UUID(); jobsReading = false
         state.retryingImports.insert(jobId)
@@ -270,10 +283,10 @@ final class LibraryController {
                     throw Self.invalid("Preparation returned a different source job")
                 }
                 replaceJob(take.id, admission.sourceId, answer)
-                state.importFailures[jobId] = nil
+                failure(.retryImport(jobId), nil)
             } catch {
                 guard service == serviceGeneration else { return }
-                state.importFailures[jobId] = error.localizedDescription
+                failure(.retryImport(jobId), error.localizedDescription)
             }
         }
     }
@@ -353,6 +366,7 @@ final class LibraryController {
             var admissions = state.recent[index].sourceAdmissions,
             let source = admissions.firstIndex(where: { $0.sourceId == sourceId && $0.job?.id == job.id }) else { return }
         let take = state.recent[index]
+        if job.state == "ready" { failure(.retryImport(job.id), nil) }
         admissions[source].job = job
         state.recent[index] = .init(id: take.id, createdAt: take.createdAt,
             state: take.state, sourceDurationUs: take.sourceDurationUs, interruptionReason: take.interruptionReason,

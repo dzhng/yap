@@ -165,3 +165,21 @@ at close.
   the action that failed ("Couldn't start recording: …"). Sound (from the same critique; the
   timeout cause names "Yap's background service" after the second critique read "Yap didn't
   respond" as the app talking about itself).
+
+
+## Whole-diff review fix round
+
+- **Process startup gets 30 seconds and speech model load gets 600 seconds per call.** These retain the previous fixed-cost allowances in `ownedProcess`; selected work keeps its own duration/byte budget. No retry changes those costs.
+- **A held cursor opens a cut at the cut's source boundary.** `captureAtUs` and the observation retain its actual recorded time; `sourceAtUs` gives the instant at which it applies in the requested cut. This makes projection and pagination use the same owner without losing provenance.
+- **The source-picture renderer identity advances with the trail policy.** Cached pictures computed with the old overlay rules cannot satisfy new cursor renders.
+- **Visual sampling names its owner, rather than assuming a recording.** The same trail planner now accepts acquisition evidence. Recording-only visual caches still validate their recording owner; the service converts between capture and asset clocks at its native sampling boundary, rounding to the planner's microsecond clock.
+- **Prompt import state is projected by the existing capture-source owner.** Core accepts that read projection instead of reconstructing capture import identity itself.
+- **The only non-null completion reason is `maximumDuration`.** Ordinary caller stops need no extra reason. Cleanup and interruption codes stay diagnostic fields; a successful maximum-duration completion has its own closed protocol field and journal provenance.
+- **Service-authored terminal outcomes fence old native reports for the service lifetime.** A process-owned set preserves finality without reserving sequence numbers; identity validation still runs before the fence. A restarted service has no controller from the former process.
+- **Retry-import failures use the existing action-scoped failure callback.** The job's successful observation or service reset resolves that action, so no second per-job failure map remains.
+- **Interrupted transcript backlog work uses the queue's existing retry transition.** The service projects the job error code into backlog status, preserving the job identity; real failures remain explicit caller retries.
+- **The protocol requirements JSON owns the stroke byte rate.** Swift's named mirror is checked against it, so native and TypeScript record derivations cannot drift independently.
+- **Portable sampling copies are checked when receipt and pages are admitted together.** Standalone receipt metadata may be read before page export; a completed portable source must agree before page sampling is trusted.
+- **The installed consumer helper ships a generated local-code verdict module.** It runs outside the repository and cannot import the source ledger; the generation tool and tools test keep that projection identical to the authoritative ledger while preserving service envelopes.
+- **Transcript inventory equality remains.** It detects incomplete stored evidence after the arbitrary SQL limit is removed; it is not a limit on segments.
+- **A permanently non-retryable job without a recorded cause refuses with `OWNER_DELETED`.** The normal path preserves the job's own code; the missing-code fallback uses an existing non-retryable verdict rather than inventing a new retry loop or a new code.

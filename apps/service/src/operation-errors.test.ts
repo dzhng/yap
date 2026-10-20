@@ -74,7 +74,7 @@ it.each(["NOT_READY", "NOT_FOUND"])(
   (code) => {
     const retry = { operation: "model.status", params: { modelId: "parakeet" } };
     const result = refusedRequest(
-      operationFailure(new CatalogError(code, "Still preparing", { modelId: "parakeet" }, retry)),
+      operationFailure(new CatalogError(code, "Still preparing", { modelId: "parakeet", retry })),
       { id: "fixture", operation: "job.get", params: { jobId: "missing" } },
     );
     expect(result.ok).toBe(false);

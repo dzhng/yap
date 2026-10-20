@@ -19,6 +19,12 @@ func runSchema4HeaderTests() throws {
         "New takes must declare the sampler cadence and held samples")
     let decoded = try CaptureJournal.streamEvidence(directory: root.path)
     precondition(JournalSchema.cursorSampling(decoded.header!) == CursorSampling(holds: true))
+    for version in 1...3 {
+        let historical = CaptureJournalHeader(schemaVersion: version, sessionID: "old", source: CaptureSource(kind: "display"),
+            width: 32, height: 32, microphone: false, systemAudio: false, cursorSampling: CursorSampling(holds: true))
+        precondition(!JournalSchema.cursorSampling(historical).holds,
+            "Historical schema flags cannot enable held cursor semantics")
+    }
     // Future-version refusal is malformed-input coverage; the fixture starts with a production header.
     let future = root.appendingPathComponent("future")
     try FileManager.default.createDirectory(at: future, withIntermediateDirectories: false)
@@ -133,10 +139,31 @@ private func verifyTakeSummary(version: Int, undo: Bool, sourceKind: String = "d
             to: destination.appendingPathComponent(undo ? "schema4-undone.jsonl" : "schema4-marks.jsonl"))
         if !undo { try bytes.write(to: destination.appendingPathComponent("schema4-summary.json")) }
     }
+    if version == 4 {
+        var stripped = receipt
+        stripped.removeValue(forKey: "take"); stripped.removeValue(forKey: "marks")
+        try JSONSerialization.data(withJSONObject: stripped).write(to: url)
+        do {
+            _ = try await CaptureSourcePublication.publish(kind: .primary, durationUs: 200_000,
+                originHostUs: 1000, tracks: [], diagnostic: nil, lease: journal.lease, layout: version)
+            preconditionFailure("Stripped schema4 summary must refuse republish")
+        } catch is CaptureFailure {}
+        try bytes.write(to: url)
+    }
     journal.lease.release()
     let recovered = try await CapturePublishedSource.recover(directory: root.path)
     precondition(recovered.sourceId == "schema4-marks" && recovered.marks?.pins == (version == 4 ? !undo : nil))
     let recoveredBytes = try Data(contentsOf: url)
     precondition(recoveredBytes == bytes, "Read-only recovery must retain publication bytes")
+    if version == 4 {
+        var stripped = receipt
+        stripped.removeValue(forKey: "take"); stripped.removeValue(forKey: "marks")
+        try JSONSerialization.data(withJSONObject: stripped).write(to: url)
+        do {
+            _ = try await CapturePublishedSource.recover(directory: root.path)
+            preconditionFailure("Stripped schema4 summary must refuse recovery")
+        } catch is CaptureFailure {}
+        try bytes.write(to: url)
+    }
     print("PASS schema\(version) summary live marks=\(!undo), optional facts and immutable republish")
 }

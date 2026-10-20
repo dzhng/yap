@@ -30,6 +30,7 @@ test(
         "failed-start",
         "stop-ack",
         "cleanup-pending",
+        "maximum-cleanup",
         "cancel-publication",
         "cancel-before-stop",
       ]) {
@@ -37,7 +38,7 @@ test(
         mkdirSync(evidence);
         const result = spawnSync(join(build, "controller-journey"), [], {
           encoding: "utf8",
-          timeout: 12_000,
+          timeout: 20_000,
           env: {
             ...process.env,
             YAP_CONTROLLER_MODE: mode,

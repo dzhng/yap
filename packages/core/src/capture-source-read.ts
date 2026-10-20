@@ -26,10 +26,10 @@ import { selectSource, SourceSelectionRead, type SourceSelection } from "./sourc
 
 // Leave headroom for transport envelopes beneath the public eight-MiB frame bound.
 export function boundSourceEvidenceResponse(value: unknown): void {
-  if (Buffer.byteLength(JSON.stringify(value)) > 4 * 1024 * 1024)
+  if (Buffer.byteLength(JSON.stringify(value)) > 2 * JOURNAL_RECORD_BYTES)
     throw new CatalogError(
       "LIMIT_EXCEEDED",
-      "Source evidence response exceeds 4MiB; narrow the range, tracks or page limit",
+      "Source evidence response exceeds two journal records; narrow the range, tracks or page limit",
     );
 }
 export type CaptureSourceInput = SourceSelection & {
@@ -282,6 +282,30 @@ export class CaptureSourceRead {
       evidence: context.evidence,
     };
   }
+  /** The observation in force at a cut opens that cut; its recorded clock stays explicit. */
+  private openingCursor(
+    context: CaptureContext,
+    range: { startUs: number; endUs: number },
+  ): CaptureRow | null {
+    if (
+      !context.evidence ||
+      !journalCapabilities(context.evidence.receipt.header ?? {})!.cursorSampling.holds
+    )
+      return null;
+    const start = subtract(fromTime(range.startUs), fromTime(context.sourceToAssetOffsetUs));
+    if (compare(start, fromTime(0)) < 0) return null;
+    const held = this.records.latestCursor(context.evidence, floor(start));
+    if (!held || compare(fromTime(held.sourceUs), start) >= 0) return null;
+    const { sequence, ...observation } = held;
+    return {
+      kind: "cursor",
+      sourceAtUs: range.startUs,
+      captureAtUs: held.sourceUs,
+      sourceSequence: sequence,
+      observation,
+    };
+  }
+
   /** undefined means bounded work exhausted; null means this source window is complete. */
   next(
     context: CaptureContext,
@@ -307,6 +331,13 @@ export class CaptureSourceRead {
       const position = state[kind];
       if (position.row || position.done) continue;
       if (budget.remaining-- <= 0) return undefined;
+      if (kind === "cursor" && position.after === null) {
+        const opening = this.openingCursor(context, range);
+        if (opening) {
+          position.row = opening;
+          continue;
+        }
+      }
       if (kind === "mark") {
         if (!context.marks.length && context.evidence)
           context.marks = this.readMarks(context.evidence);
@@ -469,37 +500,6 @@ export class CaptureSourceRead {
         }
         rowBytes += bytes;
         rows.push(row);
-      }
-    }
-    if (
-      domain === "cursor" &&
-      input.cursor === undefined &&
-      context.evidence &&
-      journalCapabilities(context.evidence.receipt.header ?? {})!.cursorSampling.holds &&
-      available(fromTime(range.startUs)).length
-    ) {
-      const captureStart = subtract(
-        fromTime(range.startUs),
-        fromTime(context.sourceToAssetOffsetUs),
-      );
-      if (compare(captureStart, fromTime(0)) >= 0) {
-        const held = this.records.latestCursor(context.evidence, floor(captureStart));
-        if (
-          held &&
-          compare(
-            fromTime(captureToAsset(held.sourceUs, context.sourceToAssetOffsetUs)),
-            fromTime(range.startUs),
-          ) < 0
-        ) {
-          const { sequence, ...observation } = held;
-          rows.unshift({
-            kind: "cursor",
-            sourceAtUs: captureToAsset(held.sourceUs, context.sourceToAssetOffsetUs),
-            captureAtUs: held.sourceUs,
-            sourceSequence: sequence,
-            observation,
-          });
-        }
       }
     }
     const ready = context.coverage.some((c) => c.state === "ready");

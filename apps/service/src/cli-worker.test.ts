@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, expect, it, vi } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { cliWorker } from "./worker.js";
+import { setTimeout as delay } from "node:timers/promises";
+import { PROCESS_START_ALLOWANCE_MS, cliWorker } from "./worker.js";
+afterEach(() => vi.useRealTimers());
 let directory: string;
 let runner: string;
 beforeAll(async () => {
@@ -29,17 +31,30 @@ it("raw command output remains binary and finishes only after process exit/drain
 
 it("progress-like output is not completion, and timeout retires the process", async () => {
   const hold = join(directory, "hold");
+  const ready = join(directory, "ready");
   await writeFile(
     hold,
-    `#!${process.execPath}\nprocess.on('exit',code=>require('node:fs').writeSync(Number(process.argv[3]),String(code)+'\\n'));process.stdout.write('progress=end\\n');setInterval(()=>{},1000);`,
+    `#!${process.execPath}\nprocess.on('exit',code=>require('node:fs').writeSync(Number(process.argv[3]),String(code)+'\\n'));require('node:fs').writeFileSync(${JSON.stringify(ready)},String(process.pid));process.stdout.write('progress=end\\n');setInterval(()=>{},1000);`,
     { mode: 0o755 },
   );
-  expect(
-    await cliWorker(
-      { executable: "/ignored", ownerExecutable: hold, args: [] },
-      { timeoutMs: 300 },
-    ),
-  ).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const pending = cliWorker(
+    { executable: "/ignored", ownerExecutable: hold, args: [] },
+    { timeoutMs: 300 },
+  );
+  let pid = 0;
+  const end = Date.now() + 5000;
+  while (!pid && Date.now() < end) {
+    try {
+      pid = Number(await readFile(ready, "utf8"));
+    } catch {
+      await delay(5);
+    }
+  }
+  expect(pid).toBeGreaterThan(0);
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 301);
+  expect(await pending).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
+  expect(() => process.kill(pid, 0)).toThrowError(expect.objectContaining({ code: "ESRCH" }));
 });
 it("noisy diagnostics and malformed JSON fail within the output bound", async () => {
   const noisy = join(directory, "noisy");

@@ -11,12 +11,7 @@ import type { CompositionMovie, ProjectMovieRenderer } from "@yap/core/project-p
 import type { ProjectFrameRenderer } from "@yap/core/frame-inspection";
 import type { ProjectAudioRenderer } from "@yap/core/audio-inspection";
 import { withRenderAttempt, withRenderedFile } from "./render.js";
-import {
-  MAX_MEDIA_TIMEOUT_MS,
-  renderWindowDeadlineMs,
-  nativeResult,
-  type MediaWorker,
-} from "./worker.js";
+import { renderWindowDeadlineMs, nativeResult, type MediaWorker } from "./worker.js";
 
 import type { PointerPreparation, PointerHistoryRenderer } from "@yap/core/pointer-preparation";
 import type { SourceEvidenceReader } from "@yap/core/evidence-read";
@@ -257,10 +252,7 @@ export function audioDeadline(window: AudioWindowInput["window"], retained = fal
   }
   // Preparation is measured in frames; only its scheduling budget rounds up to milliseconds.
   const preparationMs = Number((preparationFrames * 1000n + 47999n) / 48000n);
-  return Math.min(
-    MAX_MEDIA_TIMEOUT_MS,
-    renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs,
-  );
+  return Math.min(renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs);
 }
 type PointerOwners = { preparation: PointerPreparation; evidence: SourceEvidenceReader };
 export function projectPointerHistoryRenderer(

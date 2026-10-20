@@ -385,7 +385,7 @@ final class ServiceHost: @unchecked Sendable {
                         ServiceFailure(
                             code: error?["code"] as? String ?? "INTERNAL_ERROR",
                             message: error?["message"] as? String ?? "Service operation failed",
-                            retryable: error?["retryable"] as? Bool ?? false,
+                            retryable: error?["retryable"] as? Bool,
                             retryAfterMs: error?["retryAfterMs"] as? Int,
                             details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })))
             }

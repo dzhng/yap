@@ -202,70 +202,90 @@ it("finished-take reads return a timed NOT_READY while the acquisition is import
   }
 });
 
-it("recording.prompt succeeds during import and after a failed import without retrying it", async () => {
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const native = mediaWorker();
-  const f = await captureFixture(cleanups, undefined, async (operation, params, options) => {
-    if (operation === "media.sourceEvidence") await held;
-    return native(operation, params, options);
-  });
-  cleanups.push(async () => {
-    release();
-  });
-  const started = await f.call("capture.start", {
-    requestId: "prompt-import-fails",
-    source: { kind: "display", id: 1 },
-    microphone: false,
-  });
-  if (!started.ok) throw new Error(JSON.stringify(started));
-  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
-  const directory = join(f.home, "library", "recordings", recordingId, "source");
-  const publication = writeNativeCaptureFixture(directory, {
-    kind: "display",
-    recordingId,
-    sourceId,
-  });
-  await f.call("capture.stop", { recordingId });
-  const reported = await f.report(
-    {
+it.each([false, true])(
+  "recording.prompt succeeds during import and after a failed import without retrying it (mic=%s)",
+  async (microphone) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const native = mediaWorker();
+    const f = await captureFixture(
+      cleanups,
+      undefined,
+      async (operation, params, options) => {
+        if (operation === "media.sourceEvidence") await held;
+        return native(operation, params, options);
+      },
+      undefined,
+      undefined,
+      true,
+    );
+    cleanups.push(async () => {
+      release();
+    });
+    const started = await f.call("capture.start", {
+      requestId: "prompt-import-fails",
+      source: { kind: "display", id: 1 },
+      microphone,
+    });
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+    const directory = join(f.home, "library", "recordings", recordingId, "source");
+    const publication = writeNativeCaptureFixture(directory, {
+      kind: "display",
+      mic: microphone,
       recordingId,
       sourceId,
-      sequence: 3,
-      state: "complete",
-      sourceDurationUs: 190_000_000,
-      publication,
-    },
-    true,
-  );
-  if (!reported.ok) throw new Error(JSON.stringify(reported));
-  const admission = reported.data as { sourceAdmissions: { job: { id: string } }[] };
-  const take = { recordingId, job: { id: admission.sourceAdmissions[0]!.job.id } };
-  const expected = [
-    "I recorded my screen without narration. Watch what happens with Yap.",
-    `Recording: ${take.recordingId} (3:10, screen, no camera, no microphone, no system audio).`,
-    "Use the yap skill to work with this recording (or run `yap --help`).",
-  ].join("\n");
-  expect(await f.call("recording.prompt", { recordingId: take.recordingId })).toMatchObject({
-    ok: true,
-    data: { text: expected },
-  });
-  await appendFile(join(directory, "video.mov"), "changed after publication");
-  release();
-  await expect
-    .poll(async () => {
-      const result = await f.call("job.get", { jobId: take.job.id });
-      return result.ok ? (result.data as { state: string }).state : null;
-    })
-    .toBe("failed");
-  expect(await f.call("recording.prompt")).toMatchObject({ ok: true, data: { text: expected } });
-  expect(await f.call("job.get", { jobId: take.job.id })).toMatchObject({
-    ok: true,
-    data: { state: "failed", attemptGeneration: 1 },
-  });
-});
+    });
+    await f.call("capture.stop", { recordingId });
+    const reported = await f.report(
+      {
+        recordingId,
+        sourceId,
+        sequence: 3,
+        state: "complete",
+        sourceDurationUs: 190_000_000,
+        publication,
+      },
+      true,
+    );
+    if (!reported.ok) throw new Error(JSON.stringify(reported));
+    const admission = reported.data as { sourceAdmissions: { job: { id: string } }[] };
+    const take = { recordingId, job: { id: admission.sourceAdmissions[0]!.job.id } };
+    const expected = [
+      microphone
+        ? "I recorded my screen to show you something. Watch it with Yap and act on what I asked for."
+        : "I recorded my screen without narration. Watch what happens with Yap.",
+      `Recording: ${take.recordingId} (3:10, screen, ${microphone ? "microphone, no camera" : "no camera, no microphone"}, no system audio).`,
+      "Use the yap skill to work with this recording (or run `yap --help`).",
+    ].join("\n");
+    expect(await f.call("recording.prompt", { recordingId: take.recordingId })).toMatchObject({
+      ok: true,
+      data: {
+        text: microphone
+          ? expected.replace(
+              "Use the yap skill",
+              "The transcript is being prepared automatically.\nUse the yap skill",
+            )
+          : expected,
+      },
+    });
+    await appendFile(join(directory, "video.mov"), "changed after publication");
+    release();
+    await expect
+      .poll(async () => {
+        const result = await f.call("job.get", { jobId: take.job.id });
+        return result.ok ? (result.data as { state: string }).state : null;
+      })
+      .toBe("failed");
+    expect(await f.call("recording.prompt")).toMatchObject({ ok: true, data: { text: expected } });
+    expect(await f.call("job.get", { jobId: take.job.id })).toMatchObject({
+      ok: true,
+      data: { state: "failed", attemptGeneration: 1 },
+    });
+  },
+);
 
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
@@ -2738,7 +2758,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v10-cursor",
+      implementationId: "native-source-picture-v11-trail-policy",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {

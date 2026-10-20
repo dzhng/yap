@@ -16,6 +16,7 @@ export async function captureFixture(
   silentOperation?: string,
   /** The control channel's default per-call deadline; production uses the protocol's. */
   controlTimeoutMs?: number,
+  autoTranscribe = false,
 ) {
   if (!home) {
     home = await mkdtemp("/tmp/project-capture-");
@@ -193,6 +194,7 @@ export async function captureFixture(
   });
   const service = await startProjectService({
     home,
+    autoTranscribe,
     control: {
       input,
       output,

@@ -18,7 +18,6 @@ public struct LibraryState: Equatable, Sendable {
     public var progressFailure: String?
     public var projectFailure: String?
     public var retryingImports: Set<String> = []
-    public var importFailures: [String: String] = [:]
     public var deletions: [MediaTarget: DeleteRequest] = [:]
 
     public typealias RecordingCursor = String
@@ -64,6 +63,9 @@ public struct LibraryState: Equatable, Sendable {
         public let reason: String?
         public let errorCode: String?
         public let retryable: Bool
+        public var importFailed: Bool {
+            !["idle", "queued", "running", "ready"].contains(state) && errorCode != nil && errorCode != "OWNER_DELETED"
+        }
         public let details: Details?
         public struct Details: Decodable, Equatable, Sendable {
             public let retry: Retry?

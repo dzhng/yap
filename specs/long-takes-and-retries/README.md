@@ -27,7 +27,7 @@ repository run happens once, in slice 13.
 Warnings:
 - Codes stating a fact about immutable captured bytes are non-retryable: the native helper
   publishes a take without such a source and holds retryable ones pending
-  ([slice 05 review](verification/05-ledger-verdicts.md)).
+  ([slice 05 review](assets/verification/05-ledger-verdicts.md)).
 - Fresh checkouts lack the native helper binary and ffmpeg, so four service tests
   (alignment, join, measurement, speaker) fail there on the unchanged baseline too. Build the
   native helper before treating them as regressions.
@@ -97,7 +97,7 @@ section and retry fields.
 | Journal format | Swift `CaptureJournal` + TS `evidence.ts`, one capability table each | schema 4: cursor sampling fields, change-only samples, bounded strokes |
 | Take summary | `CapturePublishedSource` / `capture-publication.ts` | optional take kind and marks presence, new takes only |
 | `recording.prompt` | `packages/core/src/recording-prompt.ts` | facts from capture only; never refuses an existing take; no data lists |
-| `cursor.raw` | `packages/core/src/raw-cursor.ts` | a page may begin with the sample in force at its start |
+| `cursor.raw` | `packages/core/src/capture-source-read.ts` | a page may begin with the sample in force at its start |
 | `recording.get --wait` | `apps/cli/src/wait.ts` | pending while recording, finalizing or importing |
 
 Data compatibility (the only compatibility carried): existing takes play, prompt and edit;

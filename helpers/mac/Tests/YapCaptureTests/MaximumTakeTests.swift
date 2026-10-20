@@ -42,11 +42,11 @@ func runMaximumTakeTests() async throws {
     precondition(capture.deviceState == "idle", "Twelve hours must run ordinary finish automatically")
     precondition(input.stops == 1 && input.finalizations == 1)
     guard case .published = capture.publication?.primary else { preconditionFailure("Take must publish normally") }
-    let evidence = try CaptureJournal.readEvidence(directory: destination.path, maximumBytes: nil, retainTiming: false,
+    let evidence = try CaptureJournal.readEvidence(directory: destination.path, retainTiming: false,
         geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, layout: try CaptureJournal.layout(directory: destination.path))
     precondition(evidence.finished && evidence.completion?.state == "complete"
         && evidence.completion?.failureCode == nil && evidence.completion?.durationUs == Requirements.maximumTakeUs, "Completion: \(String(describing: evidence.completion)); invalid=\(String(describing: evidence.invalidAtSequence))")
-    precondition(evidence.lastLifecycle?.reason == "maximumDuration", "The stop is lifecycle provenance, never a failure code")
+    precondition(evidence.lastLifecycle?.completionReason == "maximumDuration", "The stop is lifecycle provenance, never a failure code")
     if retained != nil { try JSONEncoder().encode(capture.publication!).write(to: root.appendingPathComponent("publication.json")) }
     print("PASS 12-hour prerecorded take completes and publishes, 20-hour pause excluded, lifecycle maximumDuration")
 }

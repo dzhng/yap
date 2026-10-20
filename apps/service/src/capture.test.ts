@@ -513,6 +513,25 @@ it("gives concurrent start requests one capturing take and one honest terminal f
       interruptionMessage: "Another take is already capturing.",
     },
   });
+  const ended = await service.call("recording.get", { recordingId: failedId });
+  if (!ended.ok) throw new Error("missing refused take");
+  const { sourceId } = ended.data as { sourceId: string };
+  for (const sequence of [1, 2, 100]) {
+    expect(
+      await service.report({ recordingId: failedId, sourceId, sequence, state: "recording" }),
+    ).toMatchObject({
+      ok: true,
+      data: { state: "interrupted", interruptionReason: "INVALID_STATE" },
+    });
+  }
+  expect(
+    await service.report({
+      recordingId: failedId,
+      sourceId: "wrong",
+      sequence: 101,
+      state: "recording",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
   expect(await service.call("project.list")).toMatchObject({
     ok: true,
     data: { projects: [] },

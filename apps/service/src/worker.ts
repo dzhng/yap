@@ -3,7 +3,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { isAbsolute } from "node:path";
 import {
   MEDIA_WORKER_TIMEOUT_MS,
-  DEFAULT_CALL_TIMEOUT_MS,
   derivedBound,
   REQUEST_FRAME_BYTES,
   RESPONSE_FRAME_BYTES,
@@ -26,6 +25,10 @@ import { subtract, fromTime, ceil, type SelectionRange } from "@yap/composition"
  */
 const NATIVE_EXECUTABLE_VARIABLE = "YAP_NATIVE";
 export const MAX_MEDIA_TIMEOUT_MS = 2_147_483_647;
+// Fixed per-call process startup cost, independent of take duration or bytes.
+export const PROCESS_START_ALLOWANCE_MS = 30_000;
+// Fixed per-call speech model loading/verification cost, independent of take duration.
+export const SPEECH_MODEL_LOAD_ALLOWANCE_MS = 600_000;
 
 /** Inferred real-time media traversal × selected seconds × 2× margin, excluding pauses. */
 export function renderWindowDeadlineMs(range: SelectionRange): number {
@@ -213,7 +216,9 @@ function ownedProcess(
       try {
         allowed = typeof timeoutMs === "function" ? timeoutMs() : timeoutMs;
         if (!Number.isFinite(allowed) || allowed < 0) throw new Error("Invalid observed work");
-        if (typeof timeoutMs === "function") allowed = Math.max(DEFAULT_CALL_TIMEOUT_MS, allowed);
+        allowed +=
+          PROCESS_START_ALLOWANCE_MS +
+          (operation === "speech.transcribe" ? SPEECH_MODEL_LOAD_ALLOWANCE_MS : 0);
       } catch {
         finish(operationError("INVALID_STORAGE", "Cannot observe native work budget"));
         return;

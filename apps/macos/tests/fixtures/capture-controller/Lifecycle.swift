@@ -1,5 +1,7 @@
 import Foundation
 import YapCapture
+import YapMedia
+import Synchronization
 
 func diagnostic(_ message: String) { FileHandle.standardError.write(Data((message + "\n").utf8)) }
 
@@ -20,6 +22,8 @@ struct ControllerLifecycle {
     static func main() async throws {
         let env = ProcessInfo.processInfo.environment
         let mode = env["YAP_CONTROLLER_MODE"]!
+        let cleanup = ["cleanup-pending", "maximum-cleanup"].contains(mode)
+        let now = Mutex(CaptureHostTime.nowUs())
         let root = URL(fileURLWithPath: env["YAP_CONTROLLER_REPORT_ROOT"]!)
         let source = URL(fileURLWithPath: env["YAP_CONTROLLER_VIDEO"] ?? root.appendingPathComponent("input.mov").path)
         if env["YAP_CONTROLLER_VIDEO"] == nil {
@@ -27,7 +31,7 @@ struct ControllerLifecycle {
                 timesUs: [0, 100000, 200000, 300000], endUs: 400000)
         }
         let input = PrerecordedCaptureInput(source: source)
-        if mode == "cleanup-pending" { input.audio = URL(fileURLWithPath: env["YAP_CONTROLLER_AUDIO"]!) }
+        if cleanup { input.audio = URL(fileURLWithPath: env["YAP_CONTROLLER_AUDIO"]!) }
         input.videoDeliveryInterval = .milliseconds(10)
         input.holdStop = true
         let prepareEntered = InputGate(), prepareRelease = InputGate()
@@ -35,7 +39,7 @@ struct ControllerLifecycle {
         let pendingStart = mode == "pending-start" || mode == "failed-start"
         if pendingStart { input.holdStop = false }
         if mode == "pending-start" { input.companionFailure = CaptureFailure("SOURCE_LOST", "controlled input closure failure") }
-        let capture = NativeCapture(prepareInput: { _, _ in
+        let capture = NativeCapture(nowUs: { mode == "maximum-cleanup" ? now.withLock { $0 } : CaptureHostTime.nowUs() }, prepareInput: { _, _ in
             preparationCount += 1
             if pendingStart && preparationCount == 1 {
                 prepareEntered.release()
@@ -59,7 +63,7 @@ struct ControllerLifecycle {
         defer { host.shutdown() }
         let fields: [String: Any] = ["recordingId": "recording-stop", "sourceId": "source-stop",
             "outputDirectory": root.appendingPathComponent("source").path,
-            "source": ["kind": "window", "id": 1], "microphone": mode == "cleanup-pending", "systemAudio": false]
+            "source": ["kind": "window", "id": 1], "microphone": cleanup, "systemAudio": false]
         if pendingStart {
             let start = Task { await controller.handle("capture.start", try! JSONSerialization.data(withJSONObject: fields)) }
             await prepareEntered.wait()
@@ -95,10 +99,19 @@ struct ControllerLifecycle {
             return
         }
         _ = try response(await controller.handle("capture.start", JSONSerialization.data(withJSONObject: fields)))
-        if mode == "cleanup-pending" {
+        if cleanup {
             let attempt = root.appendingPathComponent("source/.capture-publication-narration")
             try FileManager.default.createDirectory(at: attempt, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
             try Data("retain unknown working member".utf8).write(to: attempt.appendingPathComponent("retained-diagnostic"))
+        }
+        if mode == "maximum-cleanup" {
+            let origin = input.fixtureOrigin!
+            for step in 1...71 {
+                now.withLock { $0 = origin + Int64(step) * 600_000_000 }
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            now.withLock { $0 = origin + Requirements.maximumTakeUs }
+            await input.stopEntered.wait()
         }
         let control = try JSONSerialization.data(withJSONObject: ["recordingId": "recording-stop"])
         let first = try response(await controller.handle("capture.stop", control))
@@ -144,8 +157,14 @@ struct ControllerLifecycle {
         try Data().write(to: root.appendingPathComponent("terminal-release"))
         let terminal = try response(await cancel.value)
         precondition(terminal["state"] as? String == "complete", "Expected completed winner: \(terminal)")
-        if mode == "cleanup-pending" {
+        if cleanup {
             precondition(terminal["reason"] as? String == "CLEANUP_PENDING")
+            if mode == "maximum-cleanup" {
+                precondition(terminal["completionReason"] as? String == "maximumDuration",
+                    "Cleanup pending must retain the successful maximum-duration ending")
+                let evidence = try CaptureJournal.inspect(directory: root.appendingPathComponent("source").path)
+                precondition(evidence.lastLifecycle?.completionReason == "maximumDuration")
+            }
             precondition(FileManager.default.fileExists(atPath: root.appendingPathComponent("source/.capture-publication-narration/retained-diagnostic").path))
         }
         precondition(input.discards == 0 && input.stops == 1 && input.finalizations == 1)

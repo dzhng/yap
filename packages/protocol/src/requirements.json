@@ -1,1 +1,5 @@
-{ "maximumTakeSeconds": 43200, "maximumStrokeSeconds": 300 }
+{
+  "maximumTakeSeconds": 43200,
+  "maximumStrokeSeconds": 300,
+  "strokeBytesPerSecond": 6180
+}

@@ -195,7 +195,7 @@ func runCameraSourcePublicationTests(output: String? = nil) async throws {
             precondition(bytes == Data("other camera output".utf8))
         }
         if mode != "no-camera" {
-            let journal = try CaptureJournal.readEvidence(directory: camera.directory, maximumBytes: nil,
+            let journal = try CaptureJournal.readEvidence(directory: camera.directory,
                 retainTiming: true, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in })
             if mode.hasPrefix("journal-replaced") {
                 let rawPictures = await RecoveryFixture.decodedPresentationMicroseconds(of: folder.appendingPathComponent("camera/camera.raw.mov"))

@@ -88,10 +88,6 @@
       "types": "./dist/retained-image.d.ts",
       "default": "./dist/retained-image.js"
     },
-    "./raw-cursor": {
-      "types": "./dist/raw-cursor.d.ts",
-      "default": "./dist/raw-cursor.js"
-    },
     "./ordered-pages": {
       "types": "./dist/ordered-pages.d.ts",
       "default": "./dist/ordered-pages.js"

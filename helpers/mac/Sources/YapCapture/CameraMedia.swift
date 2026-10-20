@@ -92,7 +92,6 @@ package struct CameraAvailability: Sendable, Equatable {
 
 /// Canonical camera publication/replay owner. Raw files and observations stay retained.
 package enum CameraMedia {
-    // Fixed callback envelope (no points array); additional callbacks add lines.
     // One fixed callback envelope, independent of take length; observations stream as lines.
     private static let observationLineBytes = 64 * 1024
     package static let mappingFile = "camera.mapping.jsonl"
@@ -325,7 +324,7 @@ package enum CameraMedia {
     /// The original closed observation bytes become a local immutable publication dependency.
     package static func retainMapping(observations: URL, directory: URL, identity: CaptureMediaIdentity? = nil) throws -> URL {
         let expected = try identity ?? CaptureMediaIdentity.read(observations)
-        guard expected.bytes > 0 else { throw invalid("Camera mapping exceeds its read budget.") }
+        guard expected.bytes > 0 else { throw invalid("Camera mapping is empty.") }
         let target = directory.appendingPathComponent(mappingFile)
         if FileManager.default.fileExists(atPath: target.path) {
             guard try CaptureMediaIdentity.read(target) == expected else { throw invalid("Retained camera mapping differs from closed observations.") }
@@ -356,7 +355,7 @@ package enum CameraMedia {
 
     private static func facts(_ lease: CaptureJournalLease, through prefix: JournalPrefix? = nil) throws -> CaptureJournalSummary {
         try lease.check()
-        return try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil, retainTiming: true,
+        return try CaptureJournal.readEvidence(directory: lease.directory, retainTiming: true,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, retainPrefix: true,
             through: prefix, descriptor: lease.descriptor)
     }

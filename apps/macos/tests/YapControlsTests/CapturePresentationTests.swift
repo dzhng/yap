@@ -107,6 +107,11 @@ func runCapturePresentationTests() {
     precondition(action(recovery, "capture.cancel").title == "Cancel Finalization" && !action(recovery, "capture.restart").enabled)
     precondition(CapturePresentation.noticeLines(for: recovering).contains("Finalization failed — \(RefusalLedger.cause("MEDIA_WORKER_TIMEOUT")!)"))
 
+    recovering.take = .init(id: "rec-recovery", state: "finalizing", interruptionReason: nil,
+        sourceDurationUs: nil, finalizationError: .init(code: "INVALID_SOURCE", message: "Cannot recover", retryable: false))
+    precondition(!CapturePresentation.transport(for: recovering).contains { $0.action == .startOrStop },
+        "Non-retryable finalization offers status rather than Retry")
+
     var refused = ready()
     // Refusal is reported by action, since the physical key, not its label, is the identity.
     refused.unavailableShortcuts = [ControlsAction.startOrStop.id, ControlsAction.undoMark.id]
@@ -389,7 +394,7 @@ private func runFailureTests() {
     precondition(retry.requestId == "failed-start" && retry.start == start.start,
                  "Start Retry reuses admission and its original selection despite unrelated toggles")
     _ = state.finishStart(retry, .live)
-    precondition(state.failure?.message == original?.message, "A later recording state cannot relabel the failed start")
+    precondition(state.failure == nil, "A successful start clears the obsolete start failure")
     state.resolveFailure(request: "failed-start")
     precondition(state.failure == nil, "Only that start's success resolves its failure")
 
@@ -404,5 +409,24 @@ private func runFailureTests() {
     let fresh = refusedStart.beginStart(newRequestId: "fresh", retrying: refused)!
     precondition(fresh.requestId == "fresh" && fresh.start == refused.start && !fresh.repeatsUnanswered,
                  "A refused start retries its selection through fresh admission; only unanswered starts replay")
+    refusedStart.failure = .init("Old start failed", request: "refused", action: .start(refused))
+    _ = refusedStart.finishStart(fresh, .live)
+    precondition(refusedStart.failure == nil, "A new successful Start clears a prior capture start failure")
     print("PASS scoped failures retain their request through unrelated toggles and reads; paste offers Copy")
+}
+
+func runImportVerdictTests() {
+    for (code, phase, retry) in [("INVALID_PARAMS", "failed", false), ("UNAVAILABLE", "unavailable", true), ("CANCELED", "canceled", true), ("OWNER_DELETED", "canceled", false)] {
+        let directive = retry ? #", "details":{"retry":{"operation":"job.retry","params":{"jobId":"job"}}}"# : ""
+        let json = """
+        {"id":"take","createdAt":"2026-10-20T00:00:00Z","state":"complete","sourceDurationUs":1000,
+        "sourceAdmissions":[{"kind":"primary","sourceId":"source","job":{"id":"job","state":"\(phase)","errorCode":"\(code)","retryable":\(retry),"target":{"kind":"acquisition","id":"a"}\(directive)}}]}
+        """
+        var state = ready()
+        state.library.recent = [try! JSONDecoder().decode(ControlsState.RecentTake.self, from: Data(json.utf8))]
+        state.library.media = mediaRows(state.library.recent)
+        let row = LibraryPresentation.recordings(for: state).items.first!
+        precondition((row.status == "Import failed") == (code != "OWNER_DELETED"), "Terminal import verdict \(code) must be represented")
+        precondition(row.actions.contains { $0.action == .retryImport("job") } == retry)
+    }
 }

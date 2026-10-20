@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createRequire, stripTypeScriptTypes } from "node:module";
@@ -16,11 +16,17 @@ import {
 } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { mediaWorker, nativeResult, type MediaWorker } from "./worker.js";
+import {
+  PROCESS_START_ALLOWANCE_MS,
+  mediaWorker,
+  nativeResult,
+  type MediaWorker,
+} from "./worker.js";
 import { clearRenderWorkspace, withRenderedFile, withRenderAttempt } from "./render.js";
 
 const homes: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true });
 });
 async function fixture() {
@@ -111,21 +117,30 @@ it("deadline failure reclaims the closed attempt and preserves its reason", asyn
       params,
       operation === "storage.clearRenderWorkspace" ? options : { ...options, timeoutMs: 250 },
     );
-  await expect(
-    withRenderAttempt(
-      worker,
-      parent,
-      new AbortController().signal,
-      async (directory, execute) =>
-        nativeResult(
-          await execute("media.renderCompositionFrame", {
-            source: "hold",
-            output: join(directory, "frame.png"),
-          }),
-        ),
-      async () => null,
-    ),
-  ).rejects.toMatchObject({ code: "MEDIA_WORKER_TIMEOUT", retryable: true });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const pending = withRenderAttempt(
+    worker,
+    parent,
+    new AbortController().signal,
+    async (directory, execute) =>
+      nativeResult(
+        await execute("media.renderCompositionFrame", {
+          source: "hold",
+          output: join(directory, "frame.png"),
+        }),
+      ),
+    async () => null,
+  );
+  const rejected = expect(pending).rejects.toMatchObject({
+    code: "MEDIA_WORKER_TIMEOUT",
+    retryable: true,
+  });
+  const current = await ready(parent);
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 251);
+  await rejected;
+  expect(() => process.kill(current.pid, 0)).toThrowError(
+    expect.objectContaining({ code: "ESRCH" }),
+  );
   expect(await readdir(parent)).toEqual([]);
 });
 it.each(["malformed", "crash"])(

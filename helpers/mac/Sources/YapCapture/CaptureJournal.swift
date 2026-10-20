@@ -21,12 +21,13 @@ public enum JournalSchema {
         let carriesMarks: Bool
         let boundedStrokes: Bool
         let summarizesTake: Bool
+        let holdsCursor: Bool
     }
     private static let capabilities: [Int: Capabilities] = [
-        1: .init(isPacked: false, carriesMarks: false, boundedStrokes: false, summarizesTake: false),
-        2: .init(isPacked: true, carriesMarks: false, boundedStrokes: false, summarizesTake: false),
-        3: .init(isPacked: true, carriesMarks: true, boundedStrokes: false, summarizesTake: false),
-        4: .init(isPacked: true, carriesMarks: true, boundedStrokes: true, summarizesTake: true),
+        1: .init(isPacked: false, carriesMarks: false, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        2: .init(isPacked: true, carriesMarks: false, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        3: .init(isPacked: true, carriesMarks: true, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        4: .init(isPacked: true, carriesMarks: true, boundedStrokes: true, summarizesTake: true, holdsCursor: true),
     ]
     public static func isCompanion(_ version: Int?) -> Bool { version == companion }
     public static func isSupported(_ version: Int) -> Bool { capabilities[version] != nil }
@@ -35,7 +36,7 @@ public enum JournalSchema {
     package static func summarizesTake(_ version: Int) -> Bool { capabilities[version]?.summarizesTake ?? false }
     package static func boundedStrokes(_ version: Int) -> Bool { capabilities[version]?.boundedStrokes ?? false }
     public static func cursorSampling(_ header: CaptureJournalHeader) -> CursorSampling {
-        header.cursorSampling ?? CursorSampling()
+        capabilities[header.schemaVersion]?.holdsCursor == true ? header.cursorSampling ?? CursorSampling() : CursorSampling(intervalUs: header.cursorSampling?.intervalUs ?? CursorSampling.defaultIntervalUs)
     }
 }
 
@@ -133,7 +134,7 @@ public final class CaptureJournal {
     // 60 points/s × 103 B/point × maximum stroke seconds × 2× numeric/envelope margin.
     // Mirrors protocol JOURNAL_RECORD_BYTES; RequirementsTests checks the shared derivation.
     package static let maximumRecordBytes = Int(ceil(
-        60 * 103 * Double(Requirements.maximumStrokeUs) / 1_000_000 * 2))
+        Double(Requirements.strokeBytesPerSecond) * Double(Requirements.maximumStrokeUs) / 1_000_000 * 2))
     // Schemas 1–3 were written with a strict < 1 MiB rule. This is format interpretation.
     private static let historicalRecordBytes = 1_048_576
     private let handle: FileHandle
@@ -247,8 +248,8 @@ public final class CaptureJournal {
     /// Records one device transition this take reports to its service and hands back the journal
     /// sequence that carries it. The journal is the single producer of these numbers, so a live
     /// report and the same take read back from disk cannot disagree about their order.
-    public func recordLifecycle(state: String, reason: String?) throws -> Int {
-        try append("lifecycle", data: JournalLifecycle(state: state, reason: reason), durable: true)
+    public func recordLifecycle(state: String, reason: String?, completionReason: String? = nil) throws -> Int {
+        try append("lifecycle", data: JournalLifecycle(state: state, reason: reason, completionReason: completionReason), durable: true)
         return sequence
     }
     public func recordFinished(_ result: CaptureResult) throws {
@@ -289,7 +290,7 @@ public final class CaptureJournal {
     /// and the evidence stream read through this one loop so they cannot disagree about where a
     /// journal stops being believable.
     private static func readRecords(
-        directory: String, maximumBytes: Int?, descriptor: Int32? = nil,
+        directory: String, descriptor: Int32? = nil,
         throughBytes: Int64? = nil, schema: Int = JournalSchema.companion, _ body: (Data) throws -> Bool
     ) throws -> RecordsEnd {
         let url = URL(fileURLWithPath: directory).appendingPathComponent("capture.journal.jsonl")
@@ -314,9 +315,6 @@ public final class CaptureJournal {
             if count == 0 { break }
             chunk.removeSubrange(count..<chunk.count)
             bytes += Int64(count)
-            if let maximumBytes, bytes > maximumBytes {
-                throw CaptureFailure("EVIDENCE_LIMIT", "Journal exceeds the evidence read budget.")
-            }
             pending.append(chunk)
             var start = pending.startIndex
             var scan = pending.index(start, offsetBy: scanOffset)
@@ -358,7 +356,7 @@ public final class CaptureJournal {
     ) throws -> CaptureJournalSummary {
         let layout = try CaptureJournal.layout(directory: directory)
         return try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: false,
+            directory: directory, retainTiming: false,
             geometry: geometry, samples: samples, displaySpace: displaySpace,
             pause: pause, audioAcquired: audioAcquired, mark: mark, layout: layout)
     }
@@ -373,7 +371,7 @@ public final class CaptureJournal {
     ) throws -> CaptureJournalSummary {
         let layout = try CaptureJournal.layout(directory: directory)
         return try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: false,
+            directory: directory, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted, through: prefix, layout: layout)
     }
@@ -388,7 +386,7 @@ public final class CaptureJournal {
         try lease.check()
         let layout = try CaptureJournal.layout(directory: lease.directory)
         let summary = try readEvidence(
-            directory: lease.directory, maximumBytes: nil, retainTiming: false,
+            directory: lease.directory, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted,
             through: prefix, descriptor: lease.descriptor, layout: layout)
@@ -398,7 +396,7 @@ public final class CaptureJournal {
 
     /// Both layouts retain/verify prefixes through the same decoded-record byte boundary.
     package static func readEvidence(
-        directory: String, maximumBytes: Int?, retainTiming: Bool,
+        directory: String, retainTiming: Bool,
         geometry: (JournalGeometry) throws -> Void,
         samples: ([CursorSample]) throws -> Void,
         displaySpace: (JournalDisplaySpace) throws -> Void,
@@ -434,7 +432,7 @@ public final class CaptureJournal {
             if retainTiming { summary.pauses.append(completed) }
             try pause(completed)
         }
-        let end = try readRecords(directory: directory, maximumBytes: maximumBytes,
+        let end = try readRecords(directory: directory,
                                   descriptor: descriptor, throughBytes: prefix?.bytes, schema: layout) {
             line in
             let record: JournalEntry
@@ -568,7 +566,7 @@ public final class CaptureJournal {
     /// Read only the persisted discriminant through the same bounded record decoder.
     package static func layout(directory: String) throws -> Int {
         var schema: Int?
-        _ = try readRecords(directory: directory, maximumBytes: historicalRecordBytes) { line in
+        _ = try readRecords(directory: directory) { line in
             do {
                 let record = try JSONDecoder().decode(JournalEntry.self, from: line)
                 try record.check(following: 0)
@@ -586,7 +584,7 @@ public final class CaptureJournal {
     /// The same read with nothing streamed, for a consumer that only wants the summary.
     public static func inspect(directory: String) throws -> CaptureJournalSummary {
         try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: true,
+            directory: directory, retainTiming: true,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             layout: try layout(directory: directory))
     }
@@ -713,6 +711,7 @@ private struct JournalEntry: Decodable {
 public struct JournalLifecycle: Codable, Sendable {
     public let state: String
     public let reason: String?
+    public let completionReason: String?
 }
 
 struct JournalHostTime: Codable {

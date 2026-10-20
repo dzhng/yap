@@ -257,8 +257,7 @@ package enum MediaRecovery {
             _ = try await CameraMedia.publish(lease: lease, observationURL: root.appendingPathComponent("camera.mapping.jsonl"))
         }
         let verified = try await CameraMedia.readPublished(lease: lease, canonical: canonical)
-        let journal = try CaptureJournal.readEvidence(directory: directory, maximumBytes: nil,
-            retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
+        let journal = try CaptureJournal.readEvidence(directory: directory,             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             descriptor: lease.descriptor, layout: JournalSchema.companion)
         let intervals = try verified.identity.availability.intervals.map { try $0.roundedSpan() }
         let track = RecoveredTrack(role: "video", file: "video.mov", intervals: intervals,

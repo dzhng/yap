@@ -1,5 +1,6 @@
 import AppKit
 import YapControls
+import YapMedia
 
 @main struct LibraryViewCheck {
     @MainActor static func main() {
@@ -67,6 +68,9 @@ import YapControls
         for (name, facts, deliveries, tab, height) in [
             ("retrying-import", importFixture(jobState: "queued"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("recovered-import", importFixture(jobState: "ready"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
+            ("unavailable-import", importFixture(jobState: "unavailable", code: "UNAVAILABLE"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
+            ("canceled-import", importFixture(jobState: "canceled", code: "CANCELED"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
+            ("nonretryable-import", importFixture(code: "INVALID_PARAMS"), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("failed-import", importFixture(), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("recordings", fixture(), ExportsState(), LibraryView.Tab.recordings, CGFloat(476)),
             ("projects", fixture(), ExportsState(), .projects, CGFloat(476)),
@@ -178,14 +182,15 @@ import YapControls
         state.library.projects = try! JSONDecoder().decode([LibraryState.Project].self, from: Data(projectJSON.utf8))
         return state
     }
-    @MainActor static func importFixture(jobState: String = "failed") -> ControlsState {
+    @MainActor static func importFixture(jobState: String = "failed", code: String = "INVALID_EVIDENCE") -> ControlsState {
         var state = fixture()
-        let failed = jobState == "failed"
-        let errorCode = failed ? "\"INVALID_EVIDENCE\"" : "null"
+        let failed = ["failed", "unavailable", "canceled"].contains(jobState)
+        let retryable = failed && RefusalLedger.retryable(code)
+        let errorCode = failed ? "\"\(code)\"" : "null"
         let reason = failed ? "\"Diagnostic detail for the journal reader\"" : "null"
-        let retry = failed ? #"{"retry":{"operation":"job.retry","params":{"jobId":"fixture-import-job"}}}"# : "{}"
+        let retry = retryable ? #"{"retry":{"operation":"job.retry","params":{"jobId":"fixture-import-job"}}}"# : "{}"
         let admissions = """
-        [{"kind":"primary","sourceId":"fixture-primary","acquisitionId":"fixture-acquisition","job":{"id":"fixture-import-job","state":"\(jobState)","reason":\(reason),"errorCode":\(errorCode),"retryable":\(failed),"details":\(retry),"target":{"kind":"acquisition","id":"fixture-acquisition"}},"publication":{"state":"published","error":null}},
+        [{"kind":"primary","sourceId":"fixture-primary","acquisitionId":"fixture-acquisition","job":{"id":"fixture-import-job","state":"\(jobState)","reason":\(reason),"errorCode":\(errorCode),"retryable":\(retryable),"details":\(retry),"target":{"kind":"acquisition","id":"fixture-acquisition"}},"publication":{"state":"published","error":null}},
         {"kind":"camera","sourceId":"fixture-camera","publication":{"state":"unavailable","error":{"code":"CAMERA_NOT_TURNED_ON","message":"The camera was never on"}}}]
         """
         let sources = try! JSONDecoder().decode([LibraryState.SourceAdmission].self, from: Data(admissions.utf8))

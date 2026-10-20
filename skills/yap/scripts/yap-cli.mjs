@@ -1,6 +1,10 @@
+import { refusalVerdicts } from "./refusal-verdicts.mjs";
 import { spawn } from "node:child_process";
 
-function failure(code, message, details = {}, retryable = false, retryAfterMs) {
+function failure(code, message, details = {}, retryable, retryAfterMs) {
+  const verdict = refusalVerdicts[code];
+  retryable ??= verdict?.retryable ?? false;
+  retryAfterMs ??= verdict?.retryAfterMs;
   return Object.assign(new Error(message), {
     code,
     details,
@@ -54,7 +58,7 @@ export function createCli({
       };
       const abort = () => stop(failure("CANCELED", "CLI call canceled"));
       const timer = setTimeout(
-        () => stop(failure("CLI_TIMEOUT", "CLI call exceeded its deadline", { timeoutMs }, true)),
+        () => stop(failure("CLI_TIMEOUT", "CLI call exceeded its deadline", { timeoutMs })),
         timeoutMs,
       );
       child.on("error", (reason) => stop(failure("CLI_UNAVAILABLE", reason.message)));

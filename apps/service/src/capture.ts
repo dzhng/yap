@@ -78,6 +78,7 @@ export class CaptureService {
   }
   private queue: Promise<unknown> = Promise.resolve();
   private stopping = false;
+  private readonly authoredTerminal = new Set<string>();
   private readonly lifetime = new AbortController();
   private recovery:
     | { recordingId: string; controller: AbortController; work: Promise<void> }
@@ -295,6 +296,9 @@ export class CaptureService {
 
   /** Applies one transition native reported on its own, without this service asking for it. */
   report(report: CaptureReport): Recording {
+    const current = this.store.get(report.recordingId);
+    this.readReport(current, report);
+    if (this.authoredTerminal.has(current.id)) return current;
     return this.observed(this.store.ingestLifecycle(report.recordingId, lifecycleEvent(report)));
   }
 
@@ -746,6 +750,9 @@ export class CaptureService {
         return member.exists && role ? [role] : [];
       }),
     ).size;
+    // Each audio role: raw decode, canonical write, verification decode and support proof.
+    // Primary pictures need one traversal; camera mapping/canonicalization/proof need three.
+    // A noncanonical recovery only probes existing physical support once.
     const traversals = canonicalWork ? roles * 4 + (kind === "camera" ? 3 : 1) : 1;
     return (
       journalWorkDeadlineMs(journalBytes) +
@@ -796,13 +803,17 @@ export class CaptureService {
 
   /** Service outcomes continue the last observed sequence; terminal state owns finality. */
   private author(recording: Recording, outcome: AuthoredOutcome): Recording {
-    return this.observed(
+    const result = this.observed(
       this.store.ingestLifecycle(recording.id, {
         ...outcome,
         sourceId: recording.sourceId,
         sequence: recording.lifecycleSequence + 1,
       }),
     );
+    // Once this service proves a terminal outcome, in-flight reports from its old controller
+    // cannot supersede it. A new service has no old controller, so the fence is process-owned.
+    if (isSettled(outcome.state)) this.authoredTerminal.add(recording.id);
+    return result;
   }
 
   private observed(recording: Recording): Recording {
@@ -890,7 +901,7 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
       ...identity,
       state: "complete",
       sourceDurationUs: report.sourceDurationUs,
-      ...(report.reason == null ? {} : { reason: report.reason }),
+      ...(report.completionReason == null ? {} : { completionReason: report.completionReason }),
     };
   }
   if (report.state === "interrupted")

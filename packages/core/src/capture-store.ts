@@ -1,5 +1,9 @@
 import { Catalog, CatalogError } from "./catalog.js";
-import { refusalRetryable } from "@yap/protocol";
+import {
+  captureCompletionReasonSchema,
+  type CaptureCompletionReason,
+  refusalRetryable,
+} from "@yap/protocol";
 import { pageCursor } from "./page-cursor.js";
 import {
   readCapturePublication,
@@ -26,7 +30,7 @@ export type Recording = Readonly<{
   createdAt: string;
   state: RecordingState;
   lifecycleSequence: number;
-  completionReason: string | null;
+  completionReason: CaptureCompletionReason | null;
   interruptionReason: string | null;
   interruptionMessage: string | null;
   finalizationError: FinalizationError | null;
@@ -41,7 +45,12 @@ export type LifecycleEvent = Readonly<{
   Readonly<
     | { state: "recording" | "paused" | "canceled" }
     | { state: "finalizing"; finalizationError?: FinalizationError | null }
-    | { state: "complete"; sourceDurationUs: number; reason?: string | null }
+    | {
+        state: "complete";
+        sourceDurationUs: number;
+        completionReason?: CaptureCompletionReason | null;
+        reason?: string | null;
+      }
     | {
         state: "interrupted";
         reason: string;
@@ -485,12 +494,12 @@ export class CaptureStore extends Catalog {
           `A ${recording.state} recording cannot become ${event.state}`,
           { state: recording.state, reportedState: event.state },
         );
-      if (event.state === "complete" && event.reason)
+      if (event.state === "complete" && event.completionReason)
         this.catalog
           .prepare(
             "INSERT INTO recording_completions(recordingId,reason) VALUES(?,?) ON CONFLICT(recordingId) DO UPDATE SET reason=excluded.reason",
           )
-          .run(recordingId, event.reason);
+          .run(recordingId, captureCompletionReasonSchema.parse(event.completionReason));
       if (event.state === "complete" || event.state === "interrupted")
         this.attachSource(recording, event.sourceDurationUs);
       this.catalog

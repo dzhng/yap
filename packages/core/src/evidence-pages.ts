@@ -146,7 +146,29 @@ export function readSourceMetadata(
       "Portable source metadata belongs to another generation",
     );
   try {
-    return { ...identity, receipt: validateSourceReceipt(parsed.data.receipt, identity.sourceId) };
+    const receipt = validateSourceReceipt(parsed.data.receipt, identity.sourceId);
+    // Standalone metadata can precede page export. A complete portable source must agree
+    // with the canonical receipt before its page sampling policy is used.
+    let manifest: unknown;
+    try {
+      manifest = readJsonMember(fileAccess(root), "pages.json");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    if (manifest !== undefined) {
+      const pages = new FileSourceEvidence(root, identity);
+      if (
+        !isDeepStrictEqual(
+          pages.cursorSampling(identity),
+          journalCapabilities(receipt.header ?? {})!.cursorSampling,
+        )
+      )
+        throw new CatalogError(
+          "INVALID_INPUT_EVIDENCE",
+          "Portable cursor sampling differs from its receipt",
+        );
+    }
+    return { ...identity, receipt };
   } catch (error) {
     if (error instanceof CatalogError && error.code === "INVALID_EVIDENCE")
       throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, error.details);

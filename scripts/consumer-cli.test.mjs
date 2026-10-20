@@ -3,9 +3,14 @@ import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { consumerVerdictsSource, consumerVerdictsPath } from "./consumer-verdicts.mjs";
 import { createCli } from "../skills/yap/scripts/yap-cli.mjs";
 import { startProjectService } from "../apps/service/dist/project-service.js";
-import { operationSchema } from "../packages/protocol/dist/index.js";
+import {
+  operationSchema,
+  refusalRetryable,
+  refusalRetryAfterMs,
+} from "../packages/protocol/dist/index.js";
 
 test("preserves a non-retryable service refusal without inventing a resolving call", async (t) => {
   const home = await mkdtemp(join(tmpdir(), "yap-retry-cli-"));
@@ -113,5 +118,34 @@ test("a descendant retaining output pipes cannot extend the CLI deadline", async
   } finally {
     const pid = Number(await readFile(executable + ".child", "utf8"));
     process.kill(pid, "SIGKILL");
+  }
+});
+
+test("shipped consumer refusal verdicts match the authoritative ledger", async () => {
+  assert.equal(await readFile(consumerVerdictsPath, "utf8"), consumerVerdictsSource());
+});
+
+test("local consumer refusals use the ledger for cancellation, launch, output and response failures", async (t) => {
+  const executable = await fixture(t, `console.log("not-json");`);
+  const canceled = new AbortController();
+  canceled.abort();
+  for (const [code, call] of [
+    [
+      "CANCELED",
+      () => createCli({ executable })("service.health", {}, { signal: canceled.signal }),
+    ],
+    [
+      "CLI_UNAVAILABLE",
+      () => createCli({ executable: executable + ".missing" })("service.health", {}),
+    ],
+    ["LIMIT_EXCEEDED", () => createCli({ executable, maxBytes: 1 })("service.health", {})],
+    ["INVALID_CLI_RESPONSE", () => createCli({ executable })("service.health", {})],
+  ]) {
+    await assert.rejects(call(), (error) => {
+      assert.equal(error.code, code);
+      assert.equal(error.retryable, refusalRetryable(code));
+      assert.equal(error.retryAfterMs, refusalRetryAfterMs(code));
+      return true;
+    });
   }
 });

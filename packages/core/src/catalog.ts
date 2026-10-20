@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { refusalRetryable, type RetryDirective } from "@yap/protocol";
+import { refusalRetryable } from "@yap/protocol";
 import { migrateToFormat30 } from "./record-identity-migration.js";
 /**
  * The persisted contract shared by catalog owners. Additive tables are created idempotently.
@@ -15,7 +15,6 @@ export class CatalogError extends Error {
     readonly code: string,
     message: string,
     readonly details: Record<string, unknown> = {},
-    readonly retry?: RetryDirective,
   ) {
     super(message);
     this.retryable = refusalRetryable(this.code);

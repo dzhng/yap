@@ -69,3 +69,10 @@ attachment proof. The [delivery owner](src/artifact-delivery.ts) defines consump
 and atomic file publication for single results and batches;
 [installed acceptance](../../specs/done/agent-editing/release-closeout.md) records
 what was actually exercised through the packaged app.
+
+
+A published recording source with no import job and no admission error remains
+pending under `recording.get --wait`. A completed take may carry the closed
+`completionReason: "maximumDuration"`; cleanup diagnostics do not erase it.
+Terminal jobs carry `CANCELED`, `OWNER_DELETED` or `CONTEXT_CLOSED` for their respective
+ending, and expose a resolving `details.retry` only when the ledger permits retry.

@@ -108,6 +108,7 @@ export class CaptureCleanup {
               timeoutMs: () =>
                 journalWorkDeadlineMs(journalBytes) +
                 publicationDeadlineMs(bytes) +
+                // Per audio role: raw decode, canonical write, verification and support proof.
                 roles.size *
                   4 *
                   renderWindowDeadlineMs({

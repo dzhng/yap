@@ -464,6 +464,7 @@ test(
     const socketPath = join(scratch, "service.sock");
     const calls = [];
     let retried = false;
+    let refusedRetry = false;
     const job = (state) => ({
       id: "primary-import-job",
       state,
@@ -531,6 +532,17 @@ test(
               };
               break;
             case "job.retry":
+              if (!refusedRetry) {
+                refusedRetry = true;
+                connection.write(
+                  JSON.stringify({
+                    id: request.id,
+                    ok: false,
+                    error: { code: "UNAVAILABLE", message: "Retry unavailable", retryable: true },
+                  }) + "\n",
+                );
+                continue;
+              }
               assert.deepEqual(params, { jobId: "primary-import-job" });
               retried = true;
               data = job("queued");
@@ -580,8 +592,10 @@ func diagnostic(_ message: String) {}
         let host = ServiceHost(bundle: bundle, onNativeCall: { _, _, _ in preconditionFailure("No hardware") },
             onState: { status in MainActor.assumeIsolated { if case .ready = status { serviceReady = true } } })
         host.start(); await until { serviceReady }
+        var controls = ControlsState()
         let library = LibraryController(call: { op, params throws(ServiceFailure) in try await host.call(op, params) },
-            confirm: { _ in false }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in })
+            confirm: { _ in false }, changed: {}, closePreview: { _ in }, forgetExports: { _ in }, deleted: {}, preview: { _ in }, export: { _, _ in },
+            failure: { action, message in controls.observeAction(action, failure: message, on: .library) })
         library.serviceChanged(ready: true)
         await until { !library.state.recordingsRefreshing && library.state.recent.count == 1 }
         func row() -> SavedItem {
@@ -596,7 +610,12 @@ func diagnostic(_ message: String) {}
         let handoff = failed.actions.filter { [.playRecording("take"), .copyRecordingPrompt("take")].contains($0.action) }
         precondition(Set(handoff.map(\.action)) == Set([.playRecording("take"), .copyRecordingPrompt("take")]) && handoff.allSatisfy(\.enabled))
         precondition(library.perform(retry!.action))
+        await until { !library.state.retryingImports.contains("primary-import-job") }
+        precondition(controls.failure?.scope == .library && controls.failure?.request == retry!.action.id,
+            "A refused retry belongs to the scoped library failure")
+        precondition(library.perform(retry!.action))
         await until { library.state.recent.first?.sourceAdmissions?.first?.job?.state == "queued" }
+        precondition(controls.failure == nil, "A successful retry resolves the same scoped failure")
         precondition(row().status == "Importing…", "A retrying row describes pending work")
         library.tick()
         await until { library.state.recent.first?.sourceAdmissions?.first?.job?.state == "ready" }
@@ -611,7 +630,7 @@ func diagnostic(_ message: String) {}
         timeout: 15_000,
       });
       assert.match(result.stdout, /PASS failed import/);
-      assert.equal(calls.filter((call) => call.operation === "job.retry").length, 1);
+      assert.equal(calls.filter((call) => call.operation === "job.retry").length, 2);
       assert.ok(calls.some((call) => call.operation === "job.get"));
     } finally {
       server.closeAllConnections?.();

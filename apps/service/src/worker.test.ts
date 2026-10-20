@@ -1,12 +1,17 @@
-import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { chmod, mkdtemp, readFile, rm, writeFile, open } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { mediaWorker } from "./worker.js";
+import {
+  mediaWorker,
+  PROCESS_START_ALLOWANCE_MS,
+  SPEECH_MODEL_LOAD_ALLOWANCE_MS,
+} from "./worker.js";
 import { operationError, operationSchema } from "@yap/protocol";
 
 const homes: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true });
 });
 
@@ -46,6 +51,19 @@ async function fixture() {
   homes.push(home);
   return { home, run: mediaWorker({ YAP_NATIVE: executable }, 2000) };
 }
+
+it.each([1, () => 1])(
+  "fixed process start cost is separate from tiny work budgets (%s)",
+  async (timeoutMs) => {
+    const result = await mediaWorker({ YAP_NATIVE: executable })(
+      "delayed-answer",
+      {},
+      { timeoutMs },
+    );
+    expect(result).toMatchObject({ ok: true });
+    if (result.ok) expectGone((result.data as { pid: number }).pid);
+  },
+);
 
 it("native refusal retry metadata comes from the ledger while its resolving request survives", async () => {
   const { run } = await fixture();
@@ -94,8 +112,10 @@ it("cancellation waits for the acknowledged worker to exit", async () => {
 it("a deadline terminates work before reporting failure", async () => {
   const { home, run } = await fixture();
   const ready = join(home, "ready");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   const pending = run("hold", { ready });
   const pid = await readyPid(ready);
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2001);
   expect(await pending).toMatchObject({
     ok: false,
     error: { code: "MEDIA_WORKER_TIMEOUT", retryable: true },
@@ -129,10 +149,14 @@ it("rejects invalid per-call deadlines before starting work", async () => {
 
 it("one short call deadline does not change later calls on the worker", async () => {
   const { run } = await fixture();
-  expect(await run("hold", {}, { timeoutMs: 1 })).toMatchObject({
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const pending = run("hold", {}, { timeoutMs: 1 });
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2);
+  expect(await pending).toMatchObject({
     ok: false,
     error: { code: "MEDIA_WORKER_TIMEOUT" },
   });
+  vi.useRealTimers();
   const result = await run("answer", {});
   expect(result.ok).toBe(true);
   if (result.ok) expectGone((result.data as { pid: number }).pid);
@@ -223,4 +247,22 @@ it("rejects invalid observed-work budgets", async () => {
       error: { code: "INVALID_STORAGE" },
     });
   }
+});
+
+it("speech has a separate cold model load allowance", async () => {
+  const { home, run } = await fixture();
+  const ready = join(home, "speech-ready");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  let settled = false;
+  const pending = run("speech.transcribe", { ready }, { timeoutMs: 1 }).then((result) => {
+    settled = true;
+    return result;
+  });
+  const pid = await readyPid(ready);
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2);
+  await delay(50);
+  expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(SPEECH_MODEL_LOAD_ALLOWANCE_MS);
+  expect(await pending).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
+  expectGone(pid);
 });

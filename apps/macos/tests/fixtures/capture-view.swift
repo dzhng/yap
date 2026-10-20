@@ -303,6 +303,7 @@ import YapMedia
             ("recording", recordingFixture(), CGFloat(0)),
             ("last-recording", fixture(lastRecording: true), CGFloat(0)),
             ("maximum-duration", maximumDurationFixture(), CGFloat(0)),
+            ("finalization-refused", finalizationFixture(), CGFloat(0)),
             ("paused", recordingFixture(paused: true), CGFloat(0)),
             ("admin-notice", adminNoticeFixture(), CGFloat(0)),
             ("admin-notice-dark", adminNoticeFixture(), CGFloat(0)),
@@ -335,7 +336,10 @@ import YapMedia
             shotWindow.orderBack(nil)
             RunLoop.current.run(until: Date().addingTimeInterval(0.15))
             capture.layoutSubtreeIfNeeded()
-            if limit == 0 {
+            if name == "finalization-refused" {
+                precondition(capture.control(identifier: "capture.start") == nil,
+                    "A non-retryable finalization shows status without a retry control")
+            } else if limit == 0 {
                 let start = capture.control(identifier: "capture.start")!
                 let rect = start.convert(start.bounds, to: capture.scrollView.documentView!)
                 precondition(capture.scrollView.contentView.bounds.contains(rect), "The full-height view must show the complete Start button without scrolling")
@@ -350,7 +354,8 @@ import YapMedia
             let doc = scroll.documentView!
             let quit = capture.control(identifier: "app.quit")!
             let anchoredQuit = quit.convert(quit.bounds, to: capture)
-            let ids = ["header.library", "header.settings", "source.display", "source.window", "source.area", "source.cameraOnly", "camera.device", "microphone.device", "microphone.toggle", "systemAudio.toggle", "countdown.toggle", "capture.start", "app.quit"] + (facts.selectedSource == .cameraOnly ? [] : ["source.device", "camera.toggle"])
+            let baseIDs = ["header.library", "header.settings", "source.display", "source.window", "source.area", "source.cameraOnly", "camera.device", "microphone.device", "microphone.toggle", "systemAudio.toggle", "countdown.toggle", "capture.start", "app.quit"] + (facts.selectedSource == .cameraOnly ? [] : ["source.device", "camera.toggle"])
+            let ids = baseIDs.filter { $0 != "capture.start" || facts.startTitle != nil }
             var frames: [String: [Double]] = [:]
             for id in ids {
                 let control = capture.control(identifier: id)!
@@ -398,6 +403,18 @@ import YapMedia
         precondition(actionGaps.allSatisfy { $0 > 0 && $0 == actionGaps[0] },
                      "Recording actions need equal positive gaps, including beneath Finish")
 
+    }
+
+    @MainActor static func finalizationFixture() -> CaptureViewInput {
+        var state = ControlsState(); state.service = .ready
+        state.device = .init(state: .idle, recordingId: nil, elapsedUs: nil)
+        state.take = .init(id: "unrecoverable", state: "finalizing", interruptionReason: nil, sourceDurationUs: nil,
+            finalizationError: .init(code: "INVALID_SOURCE", message: "Cannot finalize", retryable: false))
+        var input = fixture(locked: true, startEnabled: false, status: CapturePresentation.statusTitle(for: state))
+        input.startTitle = nil
+        input.notices = CapturePresentation.noticeLines(for: state)
+        input.transport = CapturePresentation.transport(for: state).filter { $0.action != .startOrStop }
+        return input
     }
 
     @MainActor static func maximumDurationFixture() -> CaptureViewInput {

@@ -520,7 +520,8 @@ export class JobQueue {
       this.runQueued();
       return this.contextJob(context, jobId);
     }
-    if (!current.retryable) throw new CatalogError("UNAVAILABLE", "Package job cannot be retried");
+    if (!current.retryable)
+      throw new CatalogError(current.errorCode ?? "OWNER_DELETED", "Package job cannot be retried");
     this.admit(current.priority);
     state.jobs.set(jobId, {
       ...current,
@@ -687,7 +688,7 @@ export class JobQueue {
       )
         return current.jobId;
       if (!current.retryable)
-        throw new CatalogError("UNAVAILABLE", "This job cannot be retried", {
+        throw new CatalogError(current.errorCode ?? "OWNER_DELETED", "This job cannot be retried", {
           state: current.state,
           reason: current.reason,
           errorCode: current.errorCode,
@@ -864,7 +865,8 @@ export class JobQueue {
       target,
       retryable: refusalRetryable(row.errorCode ?? ""),
       errorDetails: details,
-      ...(state === "failed"
+      ...(!["waiting", "queued", "running", "ready"].includes(state) &&
+      refusalRetryable(row.errorCode ?? "")
         ? {
             details: {
               retry: { operation: "job.retry", params: { jobId: id } },

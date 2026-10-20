@@ -6,11 +6,11 @@ import { mkdir, rename, writeFile, open } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { z } from "zod";
-import { derivedBound, MAXIMUM_STROKE_US } from "@yap/protocol";
+import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 
 // A portable row double-encodes JSON: 2× the derived record bound, plus array framing.
-const rowBytes = derivedBound(103 * 60, MAXIMUM_STROKE_US, 4);
+const rowBytes = 2 * JOURNAL_RECORD_BYTES;
 // Ordinary batching target; a larger valid record advances alone.
 export const EVIDENCE_BATCH_BYTES = 1024 ** 2;
 const pageBytes = rowBytes + 2;

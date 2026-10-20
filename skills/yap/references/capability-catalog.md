@@ -161,3 +161,11 @@ re-enabled, and on an explicit `skill.update`; it does not use a periodic timer.
 If an installed build does not advertise a name above, report the mismatch and
 follow the available schema. Do not invent an operation or silently substitute
 a different mutation.
+
+
+`recording.get` may report `completionReason: "maximumDuration"` on a successful
+take that reached the duration limit. It is separate from cleanup diagnostics;
+ordinary stops omit it. A published source can briefly have no import job: keep
+waiting while `admissionError` is null. Terminal jobs can name `CANCELED`,
+`OWNER_DELETED` or `CONTEXT_CLOSED`. Follow a returned `details.retry` when present;
+a deleted owner cannot be retried.

@@ -32,6 +32,22 @@ async function cursorTake() {
   const overlays: unknown[] = [];
   let failNext = true;
   const f = await captureFixture(cleanups, undefined, async (operation, params, options) => {
+    if (operation === "media.sourceVisualSamples") {
+      return {
+        ok: true,
+        data: {
+          sourceWidth: 16,
+          sourceHeight: 16,
+          samples: (params.atSourceUs as number[]).map((at) => ({
+            requestedSourceUs: at,
+            actualSourceUs: at,
+            width: 8,
+            height: 8,
+            rgbBase64: Buffer.alloc(8 * 8 * 3).toString("base64"),
+          })),
+        },
+      };
+    }
     if (operation === "media.sourceFrame") {
       overlays.push(params.cursorOverlay);
       if (failNext) {
@@ -529,3 +545,17 @@ test("native dense and change-only journals render the same held pointer through
   }
   expect(publicImages[1]).toBe(publicImages[0]);
 }, 30_000);
+
+test("cursor.render with zero trail uses the still pointer policy", async () => {
+  const f = await cursorTake();
+  const [item] = items(await f.call("cursor.render", { ...f.selection, atUs: [40], trailUs: 0 }));
+  await expect
+    .poll(async () => {
+      const result = await f.call("job.get", { jobId: item!.data.jobId });
+      if (result.ok && (result.data as { state: string }).state === "failed" && !f.overlays.length)
+        throw Error(JSON.stringify(result));
+      return f.overlays.length;
+    })
+    .toBe(1);
+  expect(f.overlays[0]).toEqual({ trail: [], trailUs: 0, pointer: { atSourceUs: 40, x: 4, y: 2 } });
+});

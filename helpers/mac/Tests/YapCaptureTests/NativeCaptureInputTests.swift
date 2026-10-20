@@ -193,7 +193,7 @@ func runNativeCapturePublicationProbe(output: String, corpus: String) async thro
             precondition(receipt.acceptedFrames == receipt.representedFrames)
             if mode == "pause" {
                 precondition(input.rejectedAudioBuffers > 0, "The pause must exclude offered audio")
-                let journal = try CaptureJournal.readEvidence(directory: folder.path, maximumBytes: nil, retainTiming: true, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, layout: 3)
+                let journal = try CaptureJournal.readEvidence(directory: folder.path, retainTiming: true, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, layout: 3)
                 precondition(journal.pauses.count == 1 && journal.pauses[0].atSourceUs == 800000
                     && journal.pauses[0].elapsedPauseUs == input.pauseBounds!.end - input.pauseBounds!.start)
                 var support = SHA256()

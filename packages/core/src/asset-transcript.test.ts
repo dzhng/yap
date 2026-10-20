@@ -1191,3 +1191,37 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
   });
   expect(f.requests).toHaveLength(1);
 });
+
+test("portable transcripts retain more than ten thousand physical segments", async () => {
+  const f = await fixture(
+    { originUs: 0, startUs: 0, endUs: 10002 },
+    nativeTranscript((lines, receipt) => {
+      lines.splice(
+        0,
+        lines.length,
+        ...Array.from({ length: 10002 }, (_, ordinal) => ({
+          ordinal,
+          source: { startUs: ordinal, endUs: ordinal + 1 },
+          owned: { startUs: ordinal, endUs: ordinal + 1 },
+          state: "skipped" as const,
+          reason: "too_short" as const,
+          wordCount: 0,
+          words: [],
+        })),
+      );
+      receipt.wordCount = 0;
+      receipt.available = [{ startUs: 0, endUs: 10002 }];
+      receipt.segments = lines.map(({ words, ...segment }) => segment);
+    }),
+  );
+  f.processing.prepareSource(f.selection);
+  await f.jobs.idle();
+  expect(f.processing.sourceStatus(f.selection).state).toBe("ready");
+  const generation = f.transcripts.portableGenerations(f.asset.id).generations[0]!;
+  const receipt = f.transcripts.portableReceipt(generation);
+  expect(receipt.segments.at(-1)).toMatchObject({
+    ordinal: 10001,
+    owned: { startUs: 10001, endUs: 10002 },
+  });
+  expect(receipt.segments).toHaveLength(10002);
+});

@@ -813,7 +813,8 @@ test("a maximum-duration completion retains its lifecycle reason across reopen w
     sequence: 3,
     state: "complete",
     sourceDurationUs: 43_200_000_000,
-    reason: "maximumDuration",
+    completionReason: "maximumDuration",
+    reason: "CLEANUP_PENDING",
   });
   store.close();
   const reopened = new CaptureStore(path, providers);

@@ -182,7 +182,7 @@ test("invalid and inconsistent observation evidence fails explicitly", () => {
 
 test("sampler cancellation and errors propagate, partial/escaped batches never become verified coverage", async () => {
   const request = {
-    recordingId: "fixture-recording",
+    ownerId: "fixture-recording",
     source: "/video",
     kept: { startUs: 0, endUs: 1_000_000 },
     range: { startUs: 0, endUs: 200_000 },
@@ -247,7 +247,7 @@ test("frame scene analysis keeps requested-time coverage and compares a future f
   };
   const result = await analyzeFrameScene(
     {
-      recordingId: "fixture-recording",
+      ownerId: "fixture-recording",
       source: "/fixture.mov",
       kept: { startUs: 0, endUs: 4_000_000 },
       requestedSourceUs: 1_500_000,
@@ -287,7 +287,7 @@ test("a request before the first retained frame after a cut uses that frame as i
   for (const requestedSourceUs of [770_000, 780_000]) {
     const result = await analyzeFrameScene(
       {
-        recordingId: "fixture-recording",
+        ownerId: "fixture-recording",
         source: "/fixture.mov",
         kept: { startUs: 770_000, endUs: 4_000_000 },
         requestedSourceUs,
@@ -322,7 +322,7 @@ test.each([0, 2_000_000, 10_000_000])(
     };
     const result = await analyzeFrameScene(
       {
-        recordingId: "fixture-recording",
+        ownerId: "fixture-recording",
         source: "/sparse.mov",
         kept: { startUs: 0, endUs: 122_000_000 },
         requestedSourceUs: requested,
@@ -348,7 +348,7 @@ test.each([0, 2_000_000, 10_000_000])(
 test("a held frame keeps requested-time coverage and needs no invented past reference", async () => {
   const result = await analyzeFrameScene(
     {
-      recordingId: "fixture-recording",
+      ownerId: "fixture-recording",
       source: "/held.mov",
       kept: { startUs: 0, endUs: 4_000_000 },
       requestedSourceUs: 1_000_000,
@@ -377,7 +377,7 @@ test("missing future-frame reference remains an explicit failure inside the kept
   await expect(
     analyzeFrameScene(
       {
-        recordingId: "fixture-recording",
+        ownerId: "fixture-recording",
         source: "/cut.mov",
         kept: { startUs: 1_100_000, endUs: 4_000_000 },
         requestedSourceUs: 1_500_000,

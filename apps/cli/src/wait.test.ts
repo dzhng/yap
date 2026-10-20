@@ -2224,3 +2224,35 @@ test("the ready marker counts the issues a truncation entry stands for", async (
   );
   expect(output.stderr.split("\n")).toContain("audio.get: ready (42 issues)");
 });
+
+test("recording.get waits for a published source to acquire its import job", async () => {
+  let reads = 0;
+  const f = await fixture((request) => {
+    expect(request.operation).toBe("recording.get");
+    return {
+      ok: true,
+      data: {
+        id: "recording",
+        state: "complete",
+        sourceAdmissions: [
+          {
+            publication: { state: "published" },
+            admissionError: null,
+            job: ++reads === 1 ? null : { state: "ready" },
+          },
+        ],
+      },
+    };
+  });
+  const output = await f.run("recording.get", { recordingId: "recording" }, [
+    "--wait",
+    "--timeout-ms",
+    "1000",
+  ]);
+  expect(output.code).toBe(0);
+  expect(JSON.parse(output.stdout)).toMatchObject({
+    data: { sourceAdmissions: [{ job: { state: "ready" } }] },
+    wait: { state: "settled" },
+  });
+  expect(reads).toBe(2);
+});

@@ -56,7 +56,7 @@ struct CaptureViewInput: Equatable {
     var failureAction: PresentedControlsAction?
     var permissionActions: [PresentedControlsAction] = []
     var transport: [PresentedControlsAction] = []
-    var startTitle: String = "Start Recording"
+    var startTitle: String? = "Start Recording"
     var startShortcut: String? = nil
     var lastRecording: LastRecording? = nil
     /// The running take reserved a camera, so its switch turns that camera on and off while the
@@ -394,8 +394,10 @@ final class CaptureView: NSView {
             }
             y += 8
         }
-        button(input.startTitle == "Start Recording" ? "Start recording" : input.startTitle, id: "capture.start", frame: NSRect(x: 17, y: y, width: 320, height: 36), intent: .controls(.startOrStop), kind: .primary(shortcut: input.startShortcut), enabled: input.startEnabled)
-        y += 36
+        if let title = input.startTitle {
+            button(title == "Start Recording" ? "Start recording" : title, id: "capture.start", frame: NSRect(x: 17, y: y, width: 320, height: 36), intent: .controls(.startOrStop), kind: .primary(shortcut: input.startShortcut), enabled: input.startEnabled)
+            y += 36
+        }
         for action in input.transport {
             y += 8
             button(action.title, id: action.action.id, frame: NSRect(x: 17, y: y, width: 320, height: 28), intent: .controls(action.action), kind: .secondary, enabled: action.enabled)

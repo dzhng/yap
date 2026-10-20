@@ -40,3 +40,7 @@ focused checks and affected-package runs were repeated. See the
 [triage record](../assets/verification/13-full-run-triage.md) for contract corrections, remaining
 baseline/environment failures, commands and evidence. The origin take remains untouched;
 release, agent acceptance and installed acceptance are still outstanding.
+
+The subsequent [whole-diff review fix round](../assets/verification/13-review-fixes.md)
+records all 16 finding dispositions, red/green evidence, affected checks and baseline
+failure comparisons. Its fixes remain in the working tree pending review.

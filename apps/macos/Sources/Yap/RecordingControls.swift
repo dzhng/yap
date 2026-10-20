@@ -86,7 +86,12 @@ final class RecordingControls: NSObject {
         forgetExports: { [weak self] in self?.exports.forget(target: $0) },
         deleted: { [weak self] in self?.readStorage() },
         preview: { [weak self] in self?.preview.open($0) },
-        export: { [weak self] in self?.exports.export($0, kind: $1) })
+        export: { [weak self] in self?.exports.export($0, kind: $1) },
+        failure: { [weak self] action, message in
+            guard let self else { return }
+            state.observeAction(action, failure: message, on: .library)
+            render()
+        })
     private lazy var overlay = RecordingOverlayPanel(
         preferences: preferences, perform: { [weak self] action in self?.perform(action) })
     private lazy var inkOverlay = InkOverlayPanel()
@@ -1183,6 +1188,7 @@ final class RecordingControls: NSObject {
             selectedMic = 0
         }
         let transport = CapturePresentation.transport(for: state)
+        let startAction = transport.first { $0.action == .startOrStop }
         let missingCamera = !state.isLive && !state.counting && state.cameraBlocksStart
         let liveCamera = RecordingOverlay.camera(for: state)
         var input = CaptureViewInput(selectedSource: mode, selectedSourceChoice: selectedSource,
@@ -1194,9 +1200,9 @@ final class RecordingControls: NSObject {
             microphoneAvailable: state.microphoneAvailable, systemAudio: state.selection.systemAudio,
             countdown: preferences.countdownBeforeRecording,
             inputsEnabled: !state.isLive && !state.counting && !updateFenced,
-            startEnabled: transport[0].enabled && !missingCamera && !updateFenced,
+            startEnabled: startAction?.enabled == true && !missingCamera && !updateFenced,
             status: CapturePresentation.statusTitle(for: state))
-        input.startTitle = transport[0].title
+        input.startTitle = startAction?.title
         input.startShortcut = held.contains(ControlsAction.startOrStop.id)
             ? bindings[.startOrStop]?.shortcut.label : nil
         input.notices = CapturePresentation.noticeLines(for: state)
@@ -1226,7 +1232,7 @@ final class RecordingControls: NSObject {
         }
         input.failureMessage = state.failure?.scope == .capture ? state.failure?.message : nil
         input.failureAction = CapturePresentation.failureAction(for: state)
-        input.transport = state.isLive ? Array(transport.dropFirst()) : []
+        input.transport = state.isLive ? transport.filter { $0.action != .startOrStop } : []
         if case .companion = liveCamera { input.liveCamera = !updateFenced }
         if let take = state.library.recent.first {
             let pending = state.library.deletions[.recording(take.id)]?.isPending == true

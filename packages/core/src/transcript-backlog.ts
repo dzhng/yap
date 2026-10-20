@@ -16,6 +16,7 @@ type TranscriptStatus = {
     | "unavailable"
     | "canceled";
   retryable: boolean;
+  errorCode?: string | null;
 };
 
 export type TranscriptBacklogDriver = {
@@ -121,6 +122,9 @@ export class TranscriptBacklog {
       case "not_requested":
         return this.driver.submit(selection, "background");
       case "failed":
+        if (status.errorCode === "JOB_INTERRUPTED")
+          return this.driver.submit(selection, "background");
+        return this.remove(selection);
       case "canceled":
       case "ready":
         return this.remove(selection);

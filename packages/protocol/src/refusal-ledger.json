@@ -146,7 +146,6 @@
         "packages/core/src/project-evidence.ts": 1,
         "packages/core/src/project-index-materialization.ts": 1,
         "packages/core/src/projects.ts": 1,
-        "packages/core/src/raw-cursor.ts": 1,
         "packages/core/src/rendered-speech.ts": 2,
         "packages/core/src/scene-evidence.ts": 1,
         "packages/core/src/scene-processing.ts": 1,
@@ -711,7 +710,6 @@
       "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 1,
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1
       },
       "reason": "Our capture evidence limits and readers can be corrected; this is not proof of bad input.",
@@ -1076,7 +1074,7 @@
       "files": {
         "packages/core/src/acquisitions.ts": 2,
         "packages/core/src/correspondence.ts": 2,
-        "packages/core/src/evidence-pages.ts": 3,
+        "packages/core/src/evidence-pages.ts": 4,
         "packages/core/src/source-admission.ts": 1
       },
       "retryable": false,
@@ -1264,7 +1262,6 @@
         "packages/core/src/project-index.ts": 1,
         "packages/core/src/project-preview.ts": 2,
         "packages/core/src/projects.ts": 4,
-        "packages/core/src/raw-cursor.ts": 1,
         "packages/core/src/rendered-speech.ts": 1,
         "packages/core/src/scene-evidence.ts": 3,
         "packages/core/src/scene-processing.ts": 1,
@@ -1328,7 +1325,6 @@
         "packages/core/src/presentation-evidence.ts": 3,
         "packages/core/src/presentation-pointer-history.ts": 1,
         "packages/core/src/presentation-pointer.ts": 2,
-        "packages/core/src/raw-cursor.ts": 1,
         "packages/core/src/scenes.ts": 3,
         "packages/core/src/visual-cache.ts": 1
       },
@@ -1633,7 +1629,9 @@
     "JOB_INTERRUPTED": {
       "category": "execution-failure",
       "files": {
-        "packages/core/src/jobs.ts": 3
+        "apps/service/src/project-service.ts": 1,
+        "packages/core/src/jobs.ts": 3,
+        "packages/core/src/transcript-backlog.ts": 1
       },
       "retryable": true,
       "reason": "Service restart or lost execution can be explicitly retried; SQL single quotes escape the scanner.",
@@ -1737,7 +1735,6 @@
         "helpers/mac/Sources/YapMedia/ExactTime.swift": 3,
         "helpers/mac/Sources/YapMedia/MediaInput.swift": 2,
         "helpers/mac/Sources/YapMedia/StillImageSource.swift": 1,
-        "helpers/mac/Sources/YapSpeech/SpeechWindows.swift": 1,
         "helpers/mac/Sources/YapWire/AcousticImageOperation.swift": 2,
         "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 3,
         "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 3,
@@ -1938,7 +1935,7 @@
         "apps/service/src/project-service.ts": 1,
         "packages/core/src/models.ts": 1,
         "packages/core/src/rendered-speech.ts": 2,
-        "packages/core/src/transcript-processing.ts": 4
+        "packages/core/src/transcript-processing.ts": 2
       },
       "reason": "Explicit preparation can supply our model/runtime files.",
       "cause": "The required model has not been prepared.",
@@ -2254,8 +2251,9 @@
     "OWNER_DELETED": {
       "category": "missing-prerequisite",
       "files": {
+        "apps/macos/Sources/YapControls/LibraryState.swift": 1,
         "apps/service/src/project-service.ts": 1,
-        "packages/core/src/jobs.ts": 4
+        "packages/core/src/jobs.ts": 6
       },
       "retryable": false,
       "reason": "The deleted or deleting owner cannot be brought back by replaying its work request.",
@@ -2891,14 +2889,14 @@
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
-        "apps/service/src/project-service.ts": 1,
+        "apps/service/src/project-service.ts": 2,
         "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 2,
         "helpers/mac/Sources/YapFrames/PresentationSource.swift": 8,
         "helpers/mac/Sources/YapFrames/SourceVisualSamples.swift": 1,
         "packages/core/src/capture-source-read.ts": 1,
         "packages/core/src/capture-store.ts": 3,
         "packages/core/src/frame-inspection.ts": 2,
-        "packages/core/src/jobs.ts": 3,
+        "packages/core/src/jobs.ts": 1,
         "packages/core/src/pointer-preparation.ts": 1,
         "packages/core/src/presentation-evidence.ts": 2,
         "packages/core/src/project-evidence.ts": 3,

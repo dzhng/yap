@@ -48,7 +48,7 @@ func runSelectedCameraInputTests(output: String? = nil) async throws {
         precondition(cameraTimes.filter { $0 >= 200000 } == [200000, 300000, 400000], "The exact selected fixture must survive independent publication")
         var cursorSamples: [CursorSample] = []
         let screenJournal = try CaptureJournal.readEvidence(directory: folder.appendingPathComponent("screen").path,
-            maximumBytes: nil, retainTiming: true, geometry: { _ in }, samples: { cursorSamples.append(contentsOf: $0) }, displaySpace: { _ in }, layout: JournalSchema.current)
+            retainTiming: true, geometry: { _ in }, samples: { cursorSamples.append(contentsOf: $0) }, displaySpace: { _ in }, layout: JournalSchema.current)
         precondition(screenJournal.finished && cursorSamples.count == 1)
         let cursor = cursorSamples[0]
         precondition(cursor.sourceUs == 150000 && cursor.globalX == 50 && cursor.globalY == 40 && cursor.buttons == 0)

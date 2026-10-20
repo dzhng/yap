@@ -16,7 +16,7 @@ const answer = async (message) => {
   const barrier =
     mode === "cancel-before-stop" && state === "finalizing"
       ? "finalizing"
-      : ["stop-ack", "cleanup-pending"].includes(mode) &&
+      : ["stop-ack", "cleanup-pending", "maximum-cleanup"].includes(mode) &&
           ["complete", "interrupted"].includes(state)
         ? "terminal"
         : null;

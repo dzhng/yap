@@ -34,7 +34,7 @@ export type VisualObservations = {
   samples: VisualSample[];
 };
 export type VisualSampler = (
-  request: { recordingId: string; source: string; kept: TimeRange; atSourceUs: number[] },
+  request: { ownerId: string; source: string; kept: TimeRange; atSourceUs: number[] },
   signal: AbortSignal,
 ) => Promise<VisualObservations>;
 export type VisualComparison = {
@@ -269,7 +269,7 @@ export class SourceSceneAnalysis {
   private recent: { sample: VisualSample; stillnessRunStartUs: number }[] = [];
 
   constructor(
-    private readonly recordingId: string,
+    private readonly ownerId: string,
     private readonly source: string,
     private readonly durationUs: number,
     private readonly sample: VisualSampler,
@@ -281,7 +281,7 @@ export class SourceSceneAnalysis {
     if (range.startUs !== this.throughUs)
       invalid("Canonical scene analysis requires contiguous source chunks");
     const observed = await observeVisualSamples(
-      { recordingId: this.recordingId, source: this.source, kept, atSourceUs },
+      { ownerId: this.ownerId, source: this.source, kept, atSourceUs },
       this.sample,
       signal,
     );
@@ -354,7 +354,7 @@ export class SourceSceneAnalysis {
 /** A future video selection can veto past pointing; it never advances the cursor's clock. */
 export async function analyzeFrameScene(
   request: {
-    recordingId: string;
+    ownerId: string;
     source: string;
     kept: TimeRange;
     requestedSourceUs: number;
@@ -380,7 +380,7 @@ export async function analyzeFrameScene(
   const local = analyzeSceneObservations(
     await observeVisualSamples(
       {
-        recordingId: request.recordingId,
+        ownerId: request.ownerId,
         source: request.source,
         kept: request.kept,
         atSourceUs: range.startUs === at ? [at] : sceneSampleTimes(range, request.kept),
@@ -399,7 +399,7 @@ export async function analyzeFrameScene(
     try {
       past = await observeVisualSamples(
         {
-          recordingId: request.recordingId,
+          ownerId: request.ownerId,
           source: request.source,
           kept: { startUs: request.kept.startUs, endUs: at + 1 },
           atSourceUs: [at],

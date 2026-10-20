@@ -1,4 +1,5 @@
 import Foundation
+import YapMedia
 
 /// Joins existing native intent to the service's atomic permit. Sparkle owns the
 /// update cycle and launch exclusion. This owner never closes resources to obtain idle;
@@ -376,7 +377,7 @@ final class UpdateCoordinator {
     }
     func fail(code: String, message: String) {
         status.state = "failed"
-        status.error = .init(code: code, message: message, retryable: ServiceFailure(code: code, message: message).retryable)
+        status.error = .init(code: code, message: message, retryable: RefusalLedger.retryable(code))
         publish()
     }
     private func stop(state: String) {

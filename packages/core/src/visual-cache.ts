@@ -51,7 +51,7 @@ export class VisualObservationCache {
 
   readonly sample: VisualSampler = async (request, signal) => {
     signal.throwIfAborted();
-    this.store.get(request.recordingId);
+    this.store.get(request.ownerId);
     const { atSourceUs: times, kept } = request;
     if (
       !Number.isSafeInteger(kept.startUs) ||
@@ -75,7 +75,7 @@ export class VisualObservationCache {
       );
     // Finalized source paths name immutable recording media; moving a library merely misses reuse.
     const identity = JSON.stringify([
-      request.recordingId,
+      request.ownerId,
       scenePolicy.id,
       request.source,
       kept.startUs,
@@ -93,7 +93,7 @@ export class VisualObservationCache {
     const assembled = combine(times, [existing, observed]);
     analyzeVisualSamples(assembled.samples);
     signal.throwIfAborted();
-    const output = this.cache.reserve({ kind: "recording", id: request.recordingId });
+    const output = this.cache.reserve({ kind: "recording", id: request.ownerId });
     try {
       await writeFile(output.path, JSON.stringify(observed), { flag: "wx" });
       signal.throwIfAborted();

@@ -200,3 +200,15 @@ The [pure public observation contract](../protocol/src/picture.ts) admits masks,
 coverage and histogram operands; native still owns their computation on the
 inspected raster. Index retention copies the complete evidence with its PNG and
 proves only the sampled picture, never intervening visibility or a quality grade.
+
+
+Terminal jobs use `CANCELED` for explicit cancellation, `OWNER_DELETED` when their
+input owner was removed, and `CONTEXT_CLOSED` when a process-local context closed.
+Only terminal non-ready jobs whose ledger code permits retry expose `details.retry`.
+Retrying a non-retryable job preserves its own refusal code. A backlog resumes
+`JOB_INTERRUPTED` work after restart automatically; ordinary failures still need
+an explicit retry.
+
+A completed recording can report `completionReason: "maximumDuration"`. This
+closed lifecycle fact is independent of cleanup diagnostics and interruption codes;
+ordinary caller stops omit it. It survives catalog reopen.

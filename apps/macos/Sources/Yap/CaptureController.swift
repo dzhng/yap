@@ -413,7 +413,7 @@ final class CaptureController {
                     let interrupted = result.failure != nil
                     outcome = try report(
                         state: interrupted ? "interrupted" : "complete",
-                        reason: interrupted ? result.failure?.code ?? reason : (result.cleanupFailure == nil ? (self.capture.completionReason ?? reason) : "CLEANUP_PENDING"),
+                        reason: interrupted ? result.failure?.code ?? reason : (result.cleanupFailure == nil ? nil : "CLEANUP_PENDING"),
                         message: result.failure?.message,
                 durationUs: interrupted && result.durationUs == 0 ? nil : result.durationUs,
                         take: active)
@@ -467,6 +467,9 @@ final class CaptureController {
             report["publication"] = try publication.wireValue()
         }
         if let reason { report["reason"] = reason }
+        if state == "complete", let completionReason = capture.completionReason {
+            report["completionReason"] = completionReason
+        }
         if let message { report["message"] = String(decoding: message.utf16.prefix(4096), as: UTF16.self) }
         if state == "finalizing" {
             report["finalizationError"] = try finalizationError.map {

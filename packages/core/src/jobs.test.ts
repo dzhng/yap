@@ -3077,6 +3077,10 @@ test("user cancellation retries while owner deletion permanently discards the sa
     errorCode: "CANCELED",
     retryable: true,
   });
+  expect(queue.inspect(job.jobId)).toHaveProperty("details.retry", {
+    operation: "job.retry",
+    params: { jobId: job.jobId },
+  });
   expect(queue.retry(job.jobId)).toMatchObject({ state: "queued", errorCode: null });
   store.markDeleting(recordingId);
   await queue.drainOwner({ kind: "recording", id: recordingId });
@@ -3119,3 +3123,54 @@ test.each([
     ).toEqual({ errorCode: null });
   },
 );
+
+test.each([
+  ["INVALID_PARAMS", false],
+  ["JOB_FAILED", true],
+  ["UNAVAILABLE", true],
+  ["CANCELED", true],
+] as const)(
+  "terminal %s exposes a resolving retry exactly when its ledger permits it",
+  async (code, retryable) => {
+    const f = fixture();
+    const recordingId = finished(f.store);
+    const job = f.queue.submit({
+      target: { kind: "recording", id: recordingId, revisionId: null },
+      artifact: "index",
+      lane: "heavy",
+      input: code,
+    });
+    f.queue.start();
+    (await f.started(job.attemptId)).fail(new CatalogError(code, "fixture failure"));
+    await f.queue.idle();
+    const value = f.queue.inspect(job.jobId);
+    expect(value.retryable).toBe(retryable);
+    if (retryable)
+      expect(value.details).toEqual({
+        retry: { operation: "job.retry", params: { jobId: job.jobId } },
+      });
+    else {
+      expect(value).not.toHaveProperty("details.retry");
+      expect(() => f.queue.retry(job.jobId)).toThrow(
+        expect.objectContaining({ code, retryable: false }),
+      );
+    }
+  },
+);
+
+test("a non-retryable package job preserves its own refusal when retried", async () => {
+  const { queue } = fixture();
+  const context = queue.createContext(async () => {
+    throw new CatalogError("INVALID_PARAMS", "Invalid selection");
+  });
+  const job = queue.submitContext(context, packageRequest("invalid"));
+  await queue.idle();
+  expect(queue.contextJob(context, job.jobId)).toMatchObject({
+    state: "failed",
+    retryable: false,
+    errorCode: "INVALID_PARAMS",
+  });
+  expect(() => queue.retryContext(context, job.jobId)).toThrowError(
+    expect.objectContaining({ code: "INVALID_PARAMS", retryable: false }),
+  );
+});

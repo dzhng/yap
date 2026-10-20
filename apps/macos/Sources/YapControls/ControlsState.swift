@@ -714,6 +714,8 @@ extension ControlsState {
     public mutating func finishStart(_ request: StartRequest, _ answer: StartAnswer) -> Bool {
         guard answer != .unanswered else { return false }
         if unansweredStart?.requestId == request.requestId { unansweredStart = nil }
+        if answer == .live || answer == .ended, failure?.scope == .capture,
+            case .start = failure?.action { failure = nil }
         // The answer's take has just been observed, so it names the take this start made.
         if answer == .live, let recordingId = take?.id { activeStart = ActiveStart(recordingId: recordingId, start: request.start) }
         else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }

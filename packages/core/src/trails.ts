@@ -1,5 +1,4 @@
 import { maximumPointerTrailUs } from "@yap/composition";
-import { evidenceRecordingId } from "./evidence.js";
 import { isDeepStrictEqual } from "node:util";
 import { CatalogError } from "./catalog.js";
 import type { EvidenceIdentity, RawCursorSample, SourceTrailRead } from "./evidence.js";
@@ -92,7 +91,7 @@ export async function planFrameTrail(
   const { evidence, identity, sample } = dependencies;
   const trailUs = request.trailUs ?? trailPolicy.defaultUs;
   const scene = await analyzeFrameScene(
-    { ...request, recordingId: evidenceRecordingId(identity), trailUs },
+    { ...request, ownerId: identity.owner.id, trailUs },
     sample,
     signal,
   );
@@ -106,7 +105,7 @@ export async function planFrameTrail(
         scene: await analyzeFrameScene(
           {
             ...request,
-            recordingId: evidenceRecordingId(identity),
+            ownerId: identity.owner.id,
             requestedSourceUs: at,
             trailUs,
           },

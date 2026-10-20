@@ -2,7 +2,7 @@ import type { captureDeviceSchema } from "@yap/protocol";
 import type { z } from "zod";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { CapturePublishedSource } from "./capture-publication.js";
-import { isSettled, type CaptureStore } from "./capture-store.js";
+import { isSettled, type CaptureStore, type Recording } from "./capture-store.js";
 import type { TranscriptBacklog, TranscriptBacklogSelection } from "./transcript-backlog.js";
 import type { TranscriptProcessing } from "./transcript-processing.js";
 import { CatalogError } from "./catalog.js";
@@ -28,6 +28,7 @@ export type RecordingPromptSources = {
   backlog: Pick<TranscriptBacklog, "pending">;
   transcripts: Pick<TranscriptProcessing, "sourceStatus">;
   autoTranscribe: boolean;
+  captureImport(recording: Recording): { state: string } | null;
 };
 const clock = (microseconds: number) => {
   const seconds = Math.max(0, Math.floor(microseconds / 1_000_000));
@@ -163,7 +164,12 @@ export async function recordingPromptFacts(
         system: device?.selection?.systemAudio,
       };
   let transcript: RecordingPromptFacts["transcript"] = "none";
-  if (captured.mic && sources.autoTranscribe) {
+  const importing = sources.captureImport(recording);
+  const cannotPrepare =
+    recording.finalizationError != null ||
+    (recording.state === "interrupted" && !summary) ||
+    (importing !== null && ["failed", "canceled", "unavailable"].includes(importing.state));
+  if (captured.mic && sources.autoTranscribe && !cannotPrepare) {
     transcript = "pending";
     try {
       const intent = sources.acquisitions.captureIntent(recording.sourceId);

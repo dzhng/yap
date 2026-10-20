@@ -263,8 +263,8 @@ package enum CaptureSourcePublication {
             facts.lastSequence == source.journal.lastSequence, facts.finished == basis.finished,
             facts.incompleteTail == basis.incompleteTail, facts.invalidAtSequence == basis.invalidAtSequence,
             facts.completion == nil || facts.incompleteTail || facts.invalidAtSequence != nil,
-            source.take == nil || source.take == facts.header.flatMap(takeFacts),
-            source.marks == nil || source.marks == facts.liveMarks,
+            source.take == facts.header.flatMap(takeFacts),
+            source.marks == facts.liveMarks,
             facts.header?.sessionID == source.sourceId, facts.header?.cameraBinding == source.binding,
             facts.originHostUs == source.originHostUs, source.sourceDurationUs > 0,
             source.diagnostic?.code == recoveredDiagnostic.code, source.diagnostic?.message == recoveredDiagnostic.message,
@@ -429,14 +429,13 @@ package enum CaptureSourcePublication {
             summary.validatedPrefix == JournalPrefix(bytes: identity.bytes, sha256: identity.sha256),
             !summary.incompleteTail, summary.invalidAtSequence == nil,
             summary.lastSequence == receipt.journal.lastSequence,
-            receipt.take == nil || receipt.take == summary.header.flatMap(takeFacts),
-            receipt.marks == nil || receipt.marks == summary.liveMarks,
+            receipt.take == summary.header.flatMap(takeFacts),
+            receipt.marks == summary.liveMarks,
             summary.header?.sessionID == receipt.sourceId, summary.header?.cameraBinding == receipt.binding,
             summary.originHostUs == receipt.originHostUs, receipt.sourceDurationUs > 0,
             summary.completion?.durationUs == receipt.sourceDurationUs else { throw invalid("Source receipt differs from its journal.") }
         if receipt.kind == .primary {
-            _ = try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
-                retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
+            _ = try CaptureJournal.readEvidence(directory: lease.directory,                 retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
                 through: JournalPrefix(bytes: identity.bytes, sha256: identity.sha256),
                 descriptor: lease.descriptor, layout: receipt.journal.layout)
         }
@@ -470,8 +469,7 @@ package enum CaptureSourcePublication {
     }
     private static func summary(lease: CaptureJournalLease, descriptor: Int32, layout: Int) throws -> CaptureJournalSummary {
         var live: [String: String] = [:]
-        var facts = try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: nil,
-            retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
+        var facts = try CaptureJournal.readEvidence(directory: lease.directory,             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             mark: { mark in
                 guard JournalSchema.summarizesTake(layout) else { return }
                 if let target = mark.retracts { live.removeValue(forKey: target) }

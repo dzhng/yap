@@ -103,6 +103,7 @@ async function fixture({
   async function capture(
     rows: { event: string; data: Record<string, unknown> }[],
     available = [{ startUs: 0, endUs: durationUs }],
+    holds = false,
   ) {
     const id = randomUUID(),
       file = join(home, `${id}.jsonl`),
@@ -119,7 +120,13 @@ async function fixture({
       receipt: {
         file,
         journal: "capture.journal.jsonl",
-        header: { sessionID: "capture" },
+        header: {
+          sessionID: "capture",
+          ...(holds
+            ? { schemaVersion: 4, cursorSampling: { intervalUs: 16667, holds: true } }
+            : {}),
+        },
+        ...(holds ? { publications: {} } : {}),
         cursorSamples: rows.filter((row) => row.event === "cursorSample").length,
         geometryRecords: rows.filter((row) => row.event === "geometry").length,
         displaySpaces: rows.filter((row) => row.event === "displaySpace").length,
@@ -2590,4 +2597,48 @@ test("overlapping phrase search keeps its widest retimed envelope across repeate
   ]);
   const repeated = f.projects.revision(input.projectId, input.revisionId).document.clips[1]!.id;
   expect(second.page!.entries[0]!.words.map((word) => word.clipId)).toEqual([repeated, repeated]);
+});
+
+test("project cursor reads carry the sample in force into each cut opening", async () => {
+  const f = await fixture({ durationUs: 1000, originUs: 0 });
+  const acquisition = await f.capture(
+    [geometry(0), cursorSample(100), cursorSample(700)],
+    undefined,
+    true,
+  );
+  const place = (label: string, start: number) => {
+    const operation = clip(f.asset.id, label, "v", start, start + 400, 200, 600, "video");
+    if (operation.operation !== "place") throw Error("Expected place");
+    return { ...operation, clip: { ...operation.clip, acquisitionId: acquisition.id } };
+  };
+  const input = f.create([
+    { operation: "track.add", label: "v", track: { kind: "video", order: 0 } },
+    place("a", 0),
+    place("b", 400),
+  ]);
+  await f.ready({ ...input, domain: "cursor" });
+  const rows = [];
+  let cursor: unknown;
+  do {
+    const page = await f.evidence.cursor({ ...input, limit: 1, ...(cursor ? { cursor } : {}) });
+    rows.push(...page.page!.rows);
+    cursor = page.page!.nextCursor;
+  } while (cursor);
+  expect(
+    rows.map((row) => {
+      if (row.kind !== "cursor") throw Error("Expected cursor evidence");
+      return [row.projectAtUs, row.captureAtUs, row.observation.sourceUs];
+    }),
+  ).toEqual([
+    [0, 100, 100],
+    [400, 100, 100],
+  ]);
+  const raw = f.captureRead.cursor({
+    assetId: f.asset.id,
+    streamId: "video",
+    acquisitionId: acquisition.id,
+    sourceRange: { startUs: 200, endUs: 600 },
+    limit: 1,
+  });
+  expect(raw.page!.rows.map((row) => [row.sourceAtUs, row.captureAtUs])).toEqual([[200, 100]]);
 });

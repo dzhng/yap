@@ -620,7 +620,7 @@ export class TranscriptStore implements TranscriptRecords {
     );
     const segments = this.store.catalog
       .prepare(
-        `SELECT ordinal,source,owned,state,reason FROM transcript_segments WHERE ${where} ORDER BY ordinal LIMIT 10001`,
+        `SELECT ordinal,source,owned,state,reason FROM transcript_segments WHERE ${where} ORDER BY ordinal`,
       )
       .all(...ownerIdentity(value.owner), value.generation) as {
       ordinal: number;

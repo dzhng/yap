@@ -19,12 +19,22 @@ const unsuccessful = new Set(["failed", "canceled", "unavailable", "idle"]);
 // Work reads answer in WorkState; a take keeps its own capture lifecycle (`captureReportSchema`),
 // and one whose finalization failed stays `finalizing` until a caller retries it.
 const successful = new Set(["ready", "complete"]);
+function pendingAdmission(source: unknown): boolean {
+  const admission = record(source);
+  return (
+    admission.admissionError == null &&
+    admission.job == null &&
+    record(admission.publication).state === "published"
+  );
+}
 function stillPending(value: Record<string, unknown>): boolean {
   return (
     ["queued", "running", "preparing", "recording", "paused"].includes(String(value.state)) ||
     (value.state === "finalizing" && value.finalizationError == null) ||
     (Array.isArray(value.sourceAdmissions) &&
-      value.sourceAdmissions.some((source) => stillPending(record(record(source).job))))
+      value.sourceAdmissions.some(
+        (source) => pendingAdmission(source) || stillPending(record(record(source).job)),
+      ))
   );
 }
 const jobSummary = waitJobSchema.extend({
@@ -88,7 +98,11 @@ export function waitSucceeded(result: OperationResponse): boolean {
     data.sourceAdmissions.some((source) => {
       const admission = record(source);
       const job = record(admission.job);
-      return admission.admissionError != null || (job.state !== undefined && job.state !== "ready");
+      return (
+        pendingAdmission(source) ||
+        admission.admissionError != null ||
+        (job.state !== undefined && job.state !== "ready")
+      );
     })
   )
     return false;

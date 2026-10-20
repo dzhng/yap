@@ -119,6 +119,16 @@ function fixture() {
     home,
     speech,
     autoTranscribe: true,
+    captureImport: (recording: { sourceId: string }) => {
+      const intent = acquisitions.captureIntent(recording.sourceId);
+      return intent
+        ? jobs.status({
+            target: { kind: "acquisition", id: intent.acquisitionId },
+            artifact: "acquisition.import",
+            input: "capture",
+          })
+        : null;
+    },
     status: undefined as RecordingPromptSources["status"],
   };
 }
@@ -323,7 +333,7 @@ test("voice-only golden", () => {
   );
 });
 
-test.each(["recording", "paused"] as const)(
+test.each(["recording", "paused", "finalizing"] as const)(
   "live %s golden uses capture status without a duration",
   async (state) => {
     const sources = fixture();
@@ -335,6 +345,17 @@ test.each(["recording", "paused"] as const)(
     });
     if (state === "paused")
       sources.recordings.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 2, state });
+    if (state === "finalizing")
+      sources.recordings.ingestLifecycle(take.id, {
+        sourceId: take.sourceId,
+        sequence: 2,
+        state,
+        finalizationError: {
+          code: "RECOVERY_FAILED",
+          message: "Could not finalize",
+          retryable: true,
+        },
+      });
     // This is the native capture.status edge; catalog and transcript owners remain real.
     sources.status = async () => ({
       device: {
@@ -351,7 +372,7 @@ test.each(["recording", "paused"] as const)(
       [
         screen,
         "Recording: take-1 (still recording, screen, microphone, no camera, no system audio).",
-        "The transcript is being prepared automatically.",
+        ...(state === "finalizing" ? [] : ["The transcript is being prepared automatically."]),
         pointer,
       ].join("\n"),
     );

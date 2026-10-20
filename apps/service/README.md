@@ -273,3 +273,13 @@ The package test script runs every node test in [`tests/`](tests) against the re
 debug native worker unless `YAP_NATIVE` names another. [`capture-source-lifetime`](tests/capture-source-lifetime.mjs)
 is a lab, not a test: it certifies a pinned native build from `YAP_NATIVE_PINS` and
 writes evidence to `YAP_LIFETIME_OUTPUT`, so it runs only when an evidence run supplies them.
+
+
+`recording.get` exposes `completionReason: "maximumDuration"` when the take reached
+the product duration limit. Cleanup diagnostics cannot replace that completion
+fact. Service-authored terminal outcomes also take precedence over late reports
+from the same native controller, after source identity is checked.
+
+Capture-source import jobs report `CANCELED`, `OWNER_DELETED` or `CONTEXT_CLOSED`
+when cancellation, deleted ownership or context closure ends their work. The shared
+job projection and refusal ledger own retryability and any resolving call.

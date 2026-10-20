@@ -120,7 +120,7 @@ package struct SourceEvidenceExport: Encodable {
             bytes += line.count
         }
         let summary = try CaptureJournal.readEvidence(
-            directory: source.path, maximumBytes: nil, retainTiming: false,
+            directory: source.path, retainTiming: false,
             geometry: {
                 try emit("geometry", $0)
                 geometryRecords += 1

@@ -7,7 +7,6 @@ import { CaptureStore } from "./capture-store.js";
 import { recordingEvidenceOwner, SourceEvidenceStore } from "./evidence.js";
 import type { VisualSampler } from "./scenes.js";
 import { FileSourceEvidence, writeSourceEvidencePages } from "./evidence-pages.js";
-import { readRawCursor } from "./raw-cursor.js";
 import { planFrameTrail } from "./trails.js";
 import { PresentationEvidence } from "./presentation-evidence.js";
 import { PresentationPointerHistory } from "./presentation-pointer-history.js";
@@ -1219,33 +1218,6 @@ test("held pointers match dense journals at scenes, trimmed spans and backward p
   expect(outputs[1]).toEqual(outputs[0]);
   expect(outputs[2]).toEqual([null, null, null, null, null]);
   expect(outputs[3]).toEqual(outputs[2]);
-}, 30_000);
-
-test("raw held cursor pages include the in-force sample without consuming continuation progress", async () => {
-  const f = await fixture([], "sparse");
-  const first = readRawCursor(
-    { recordingId: f.identity.owner.id },
-    { sourceRange: { startUs: 500_000, endUs: 2_000_000 }, limit: 1 },
-    () => ({ metadata: f.metadata, reader: f.evidence }),
-  );
-  expect(first.samples).toMatchObject([{ sourceUs: 0, x: 42, y: 20 }]);
-  expect(first.nextCursor).toBeNull();
-  const dense = await fixture([], "dense");
-  const target = { recordingId: dense.identity.owner.id };
-  const sourceRange = { startUs: 505_000, endUs: 600_000 };
-  const source = () => ({ metadata: dense.metadata, reader: dense.evidence });
-  const page = readRawCursor(target, { sourceRange, limit: 1 }, source);
-  expect(page.samples.map((p) => p.sourceUs)).toEqual([500_000, 516_666]);
-  expect(page.nextCursor?.afterSequence).toBe(page.samples.at(-1)!.sequence);
-  const next = readRawCursor(target, { sourceRange, cursor: page.nextCursor!, limit: 1 }, source);
-  expect(next.samples.map((p) => p.sourceUs)).toEqual([533_333]);
-  const historical = await fixture([], "historical");
-  expect(
-    readRawCursor({ recordingId: historical.identity.owner.id }, { sourceRange }, () => ({
-      metadata: historical.metadata,
-      reader: historical.evidence,
-    })).samples,
-  ).toEqual([]);
 }, 30_000);
 
 test("held trails depend on elapsed time and changes rather than storage density or point caps", async () => {

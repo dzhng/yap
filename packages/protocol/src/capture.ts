@@ -84,6 +84,9 @@ export const nativeStartSchema = captureSelectionSchema
     }
   });
 
+export const captureCompletionReasonSchema = z.enum(["maximumDuration"]);
+export type CaptureCompletionReason = z.infer<typeof captureCompletionReasonSchema>;
+
 export const captureReportSchema = z
   .object({
     recordingId: id,
@@ -91,6 +94,7 @@ export const captureReportSchema = z
     sequence: z.int().min(1),
     state: z.enum(["recording", "paused", "finalizing", "complete", "interrupted"]),
     reason: z.string().min(1).nullish(),
+    completionReason: captureCompletionReasonSchema.nullish(),
     message: z.string().max(4096).nullish(),
     finalizationError: z
       .object({

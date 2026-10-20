@@ -71,7 +71,7 @@ test("exact support accepts held PTS before a cut while still membership stays s
   await expect(
     observeVisualSamples(
       {
-        recordingId: "fixture",
+        ownerId: "fixture",
         source: "/video.mov",
         kept: revision.spans[0]!,
         atSourceUs: [750_000],
