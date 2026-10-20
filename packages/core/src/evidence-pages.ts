@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
+import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { fileAccess, type FileAccess } from "./files.js";
 import { CatalogError } from "./catalog.js";
 import {
@@ -35,7 +36,7 @@ const rowSchema = z.strictObject({
   sequence: integer.min(1),
   event: z.string(),
   sourceUs: integer.nullable(),
-  content: z.string().max(65536),
+  content: z.string().refine((value) => Buffer.byteLength(value, "utf8") <= JOURNAL_RECORD_BYTES),
 });
 function matches(index: EvidenceIndex, row: RecordRow, data: Record<string, unknown>): boolean {
   if (index === "cursor" || index === "cursorSequence") return row.event === "cursorSample";
@@ -107,7 +108,7 @@ export class FileSourceEvidence extends SourceEvidenceReader {
   }
   protected records(identity: EvidenceIdentity, query: RecordQuery): RecordRow[] {
     this.requireComplete(identity);
-    return this.pages.read(query);
+    return this.pages.read(query, (row) => Buffer.byteLength(row.content));
   }
 }
 

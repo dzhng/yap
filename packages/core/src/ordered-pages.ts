@@ -5,9 +5,14 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
 import { z } from "zod";
+import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 
-const pageBytes = 1_048_576,
+// A portable row double-encodes JSON: 2× the derived record bound, plus array framing.
+const rowBytes = JOURNAL_RECORD_BYTES * 2;
+// Ordinary batching target; a larger valid record advances alone.
+export const EVIDENCE_BATCH_BYTES = 1_048_576;
+const pageBytes = rowBytes + 2,
   metadataBytes = 4_194_304,
   maxPages = 8192;
 const integer = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -19,6 +24,8 @@ export type PageQuery = {
   upper?: PageBound;
   reverse?: boolean;
   limit: number;
+  /** Cumulative row bytes; an oversized first row is returned alone. */
+  maxBytes?: number;
 };
 export function comparePageKeys(a: PageKey, b: PageKey): number {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1;
@@ -118,12 +125,13 @@ export async function writeOrderedPages<Row, Metadata>(
     };
     for await (const batch of batches(index)) {
       for (const row of batch) {
-        const size = Buffer.byteLength(JSON.stringify(row)) + 1;
-        if (size + 2 > pageBytes)
+        const size = Buffer.byteLength(JSON.stringify(row));
+        if (size > rowBytes)
           throw new CatalogError("LIMIT_EXCEEDED", "Portable evidence record exceeds page budget");
-        if (rows.length === 256 || bytes + size > pageBytes) await flush();
+        if (rows.length === 256 || bytes + size + (rows.length ? 1 : 0) > EVIDENCE_BATCH_BYTES)
+          await flush();
+        bytes += size + (rows.length ? 1 : 0);
         rows.push(row);
-        bytes += size;
       }
       await setImmediate(undefined, { signal });
     }
@@ -213,7 +221,7 @@ export class OrderedPages<Row, Metadata> {
     if (!pages) invalid("Unknown evidence order");
     return pages.reduce((count, page) => count + page.rows, 0);
   }
-  read(query: PageQuery): Row[] {
+  read(query: PageQuery, sizeOf = (row: Row) => Buffer.byteLength(JSON.stringify(row))): Row[] {
     this.root.check();
     const pages = this.manifest.indexes[query.index];
     if (!pages) invalid("Unknown evidence order");
@@ -228,6 +236,7 @@ export class OrderedPages<Row, Metadata> {
         invalid("Invalid evidence read bound");
     }
     const result: Row[] = [];
+    let bytes = 0;
     const before = (key: readonly number[]) =>
       query.lower &&
       (comparePageKeys(key, query.lower.key) < 0 ||
@@ -256,8 +265,17 @@ export class OrderedPages<Row, Metadata> {
       for (const row of rows) {
         const key = this.codec.key(row, query.index);
         if (before(key) || after(key)) continue;
+        if (query.maxBytes !== undefined) {
+          const size = sizeOf(row);
+          if (result.length && bytes + size > query.maxBytes) return result;
+          bytes += size;
+        }
         result.push(row);
-        if (result.length === query.limit) return result;
+        if (
+          result.length === query.limit ||
+          (query.maxBytes !== undefined && bytes >= query.maxBytes)
+        )
+          return result;
       }
     }
     return result;

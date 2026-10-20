@@ -72,6 +72,9 @@ writer that ignores ownership.
 
 ## Verification
 
+[Journal byte references](Tests/fixtures/journal-goldens/README.md) pin historical
+normalization and receipts independently of reader implementation.
+
 The [primary-camera fixture](Tests/YapCaptureTests/PrimaryCameraPublicationTests.swift)
 substitutes prerecorded pictures at the input boundary and exercises ordinary native
 finish, recovery and held-byte evidence admission. Run the capture test product with

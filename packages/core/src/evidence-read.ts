@@ -1,4 +1,4 @@
-import type { PageBound, PageQuery } from "./ordered-pages.js";
+import { EVIDENCE_BATCH_BYTES, type PageBound, type PageQuery } from "./ordered-pages.js";
 import { CatalogError } from "./catalog.js";
 import type { EvidenceIdentity, RecordRow, RawCursorSample, SourceGeometry } from "./evidence.js";
 import type { TimeRange } from "./presentation-time.js";
@@ -56,6 +56,7 @@ export abstract class SourceEvidenceReader {
         ...(lower ? { lower } : {}),
         ...(upper ? { upper } : {}),
         limit: 256,
+        maxBytes: EVIDENCE_BATCH_BYTES,
       });
       if (!rows.length) return;
       yield rows;

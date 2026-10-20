@@ -225,4 +225,26 @@ func runCaptureJournalTests() async throws {
                 globalX: 10, globalY: 20, x: 10, y: 20, hostUs: 1100),
         "Schema3 fixture mark points must retain global and output coordinates")
     print("PASS schema3 fixture mark points read with cursor-compatible coordinates")
+
+    // A schema-3 crash after a complete stroke retains exactly the writer's prefix.
+    let longStroke = RecoveryFixture.directory("schema3-long-stroke")
+    defer { try? FileManager.default.removeItem(at: longStroke) }
+    let longURL = longStroke.appendingPathComponent("capture.journal.jsonl")
+    try FileManager.default.copyItem(at: fixtureURL.deletingLastPathComponent()
+        .appendingPathComponent("schema3-long-stroke.jsonl"), to: longURL)
+    let original = try Data(contentsOf: longURL)
+    var longMarks: [JournalMark] = []
+    let wholeStroke = try CaptureJournal.streamEvidence(directory: longStroke.path,
+        mark: { longMarks.append($0) })
+    precondition(wholeStroke.finished && wholeStroke.invalidAtSequence == nil
+        && longMarks.count == 1 && longMarks[0].points.count == 660)
+    for (size, invalid) in [(1_048_576, false), (1_048_577, true)] {
+        try (original + Data(repeating: 120, count: size)).write(to: longURL)
+        let tail = try CaptureJournal.streamEvidence(directory: longStroke.path)
+        precondition(tail.lastSequence == 5 && tail.finished
+            && tail.invalidAtSequence == (invalid ? 6 : nil)
+            && tail.incompleteTail == !invalid,
+            "Schema-3 tail at \(size) bytes must keep its historical disposition")
+    }
+    print("PASS schema3 long stroke and exact oversized/torn-tail boundary")
 }

@@ -7,3 +7,7 @@ export const MAXIMUM_STROKE_US = requirements.maximumStrokeSeconds * 1_000_000;
 export function derivedBound(perSecond: number, requirementUs: number, margin: number): number {
   return Math.ceil(perSecond * (requirementUs / 1_000_000) * margin);
 }
+
+// 60 points/s × 103 B/point (probe planning rate) × 5-minute stroke × 2× margin.
+// Covers an unthinned schema-4 stroke, numeric widths and its window/envelope metadata.
+export const JOURNAL_RECORD_BYTES = derivedBound(60 * 103, MAXIMUM_STROKE_US, 2);

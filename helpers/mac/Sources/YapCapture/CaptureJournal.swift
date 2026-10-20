@@ -90,7 +90,12 @@ package struct JournalPrefix: Codable, Sendable, Equatable {
 
 // One capture queue owns append order. Media bytes never enter this journal.
 public final class CaptureJournal {
-    private static let maximumRecordBytes = 1_048_576
+    // 60 points/s × 103 B/point × maximum stroke seconds × 2× numeric/envelope margin.
+    // Mirrors protocol JOURNAL_RECORD_BYTES; RequirementsTests checks the shared derivation.
+    package static let maximumRecordBytes = Int(ceil(
+        60 * 103 * Double(Requirements.maximumStrokeUs) / 1_000_000 * 2))
+    // Schemas 1–3 were written with a strict < 1 MiB rule. This is format interpretation.
+    private static let historicalRecordBytes = 1_048_576
     private let handle: FileHandle
     package let lease: CaptureJournalLease
     private var sequence = 0
@@ -246,7 +251,7 @@ public final class CaptureJournal {
         encoder.outputFormatting = [.sortedKeys]
         let record = try encoder.encode(JournalRecord(sequence: next, event: event, data: data))
         // The reader treats any longer run as corruption, which is only sound if no record is.
-        guard record.count < Self.maximumRecordBytes else {
+        guard record.count < Self.historicalRecordBytes else {
             throw CaptureFailure("JOURNAL_FAILED", "Journal record exceeds its size bound.")
         }
         try handle.write(contentsOf: record + Data([10]))
@@ -269,7 +274,7 @@ public final class CaptureJournal {
     /// journal stops being believable.
     private static func readRecords(
         directory: String, maximumBytes: Int?, descriptor: Int32? = nil,
-        throughBytes: Int64? = nil, _ body: (Data) throws -> Bool
+        throughBytes: Int64? = nil, schema: Int = 1, _ body: (Data) throws -> Bool
     ) throws -> RecordsEnd {
         let url = URL(fileURLWithPath: directory).appendingPathComponent("capture.journal.jsonl")
         let input = descriptor ?? Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
@@ -280,6 +285,8 @@ public final class CaptureJournal {
         }
         defer { if descriptor == nil { close(input) } }
         var pending = Data()
+        var scanOffset = 0
+        let recordBytes = schema >= 4 ? maximumRecordBytes : historicalRecordBytes
         var bytes: Int64 = 0
         while throughBytes.map({ bytes < $0 }) ?? true {
             try Task.checkCancellation()
@@ -295,17 +302,25 @@ public final class CaptureJournal {
                 throw CaptureFailure("EVIDENCE_LIMIT", "Journal exceeds the evidence read budget.")
             }
             pending.append(chunk)
-            while let end = pending.firstIndex(of: 10) {
-                try Task.checkCancellation()
-                let line = Data(pending[..<end])
-                pending.removeSubrange(...end)
-                // Foundation JSON bridging creates autoreleased objects. Drain each record so
-                // a long worker request does not retain the entire parsed journal indirectly.
-                guard try autoreleasepool(invoking: { try body(line) }) else { return .read }
+            var start = pending.startIndex
+            var scan = pending.index(start, offsetBy: scanOffset)
+            while scan < pending.endIndex {
+                if pending[scan] == 10 {
+                    try Task.checkCancellation()
+                    let line = Data(pending[start..<scan])
+                    if schema >= 4 && line.count > recordBytes { return .oversized }
+                    // Drain Foundation's bridged JSON objects after each record.
+                    guard try autoreleasepool(invoking: { try body(line) }) else { return .read }
+                    start = pending.index(after: scan)
+                }
+                scan = pending.index(after: scan)
             }
+            // Compact once per chunk, and never scan an unfinished line's old bytes again.
+            pending.removeSubrange(pending.startIndex..<start)
+            scanOffset = pending.count
             // The writer never produces a record this long, so an unterminated run past the bound
             // is corruption wherever it sits, never a crash that cut a record short.
-            guard pending.count <= maximumRecordBytes else { return .oversized }
+            guard pending.count <= recordBytes else { return .oversized }
         }
         return pending.isEmpty ? .read : .tornTail
     }
@@ -404,7 +419,7 @@ public final class CaptureJournal {
             try pause(completed)
         }
         let end = try readRecords(directory: directory, maximumBytes: maximumBytes,
-                                  descriptor: descriptor, throughBytes: prefix?.bytes) {
+                                  descriptor: descriptor, throughBytes: prefix?.bytes, schema: layout) {
             line in
             let record: JournalEntry
             do {
@@ -537,7 +552,7 @@ public final class CaptureJournal {
     /// Read only the persisted discriminant through the same bounded record decoder.
     package static func layout(directory: String) throws -> Int {
         var schema: Int?
-        _ = try readRecords(directory: directory, maximumBytes: maximumRecordBytes) { line in
+        _ = try readRecords(directory: directory, maximumBytes: historicalRecordBytes) { line in
             do {
                 let record = try JSONDecoder().decode(JournalEntry.self, from: line)
                 try record.check(following: 0)
