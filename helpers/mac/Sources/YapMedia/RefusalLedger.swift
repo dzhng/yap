@@ -3,7 +3,7 @@ import Foundation
 /// The app and native workers share the protocol ledger for retry verdicts and delays.
 public enum RefusalLedger {
     private struct Ledger: Decodable {
-        struct Entry: Decodable, Sendable { let retryable: Bool; let retryAfterMs: Int? }
+        struct Entry: Decodable, Sendable { let retryable: Bool; let retryAfterMs: Int?; let cause: String? }
         let codes: [String: Entry]
     }
     private static let codes: [String: Ledger.Entry] = {
@@ -24,4 +24,6 @@ public enum RefusalLedger {
     }()
     public static func retryable(_ code: String) -> Bool { codes[code]?.retryable ?? false }
     public static func retryAfterMs(_ code: String) -> Int? { codes[code]?.retryAfterMs }
+    /// The plain-language cause people see for a code, when the ledger states one.
+    public static func cause(_ code: String) -> String? { codes[code]?.cause }
 }

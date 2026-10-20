@@ -102,9 +102,6 @@ function fixture() {
     submit: (selection) => {
       transcripts.prepareSource(selection);
     },
-    retry: (selection) => {
-      transcripts.retrySource(selection);
-    },
     report: (error) => {
       throw error;
     },

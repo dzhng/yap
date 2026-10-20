@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS("26.0")],
     products: [
         .library(name: "YapCapture", targets: ["YapCapture"]),
+        .library(name: "YapMedia", targets: ["YapMedia"]),
         .executable(name: "yap-native", targets: ["YapNative"]),
     ],
     dependencies: [
