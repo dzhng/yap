@@ -2,8 +2,35 @@ import { afterEach, expect, it } from "vitest";
 import { createServer, type Server } from "node:net";
 import { mkdtemp, rm } from "node:fs/promises";
 import { callLocal } from "./transport.js";
+import { operationSchema } from "@yap/protocol";
 
 const cleanup: (() => Promise<void>)[] = [];
+it("keeps retry delay and a valid resolving request on both response paths", async () => {
+  const retry = { operation: "job.get", params: { jobId: "missing" } };
+  const envelope = {
+    id: "wanted",
+    ok: false,
+    error: {
+      code: "NOT_READY",
+      message: "Still preparing",
+      retryable: true,
+      retryAfterMs: 15000,
+      details: { retry },
+    },
+  };
+  for (const delivery of [false, true]) {
+    const socketPath = await responder(JSON.stringify(envelope) + "\n");
+    const result = await callLocal(socketPath, {
+      id: "wanted",
+      operation: "job.get",
+      params: { jobId: "missing" },
+      ...(delivery ? { resultDelivery: { inlineBytes: 1024 } } : {}),
+    });
+    expect(result).toEqual(envelope);
+    if (!result.ok && "error" in result)
+      expect(operationSchema.parse(result.error.details.retry)).toEqual(retry);
+  }
+});
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });

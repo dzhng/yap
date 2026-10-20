@@ -4,10 +4,38 @@ import Foundation
 struct ServiceFailure: LocalizedError, Sendable {
     let code: String
     let message: String
-    var retryable: Bool = false
+    let retryable: Bool
+    let retryAfterMs: Int?
     /// The refusal's structured details as the service sent them (JSON), such as the users an
     /// `IN_USE` delete names.
     var details: Data? = nil
+
+    init(code: String, message: String, retryable: Bool? = nil, retryAfterMs: Int? = nil, details: Data? = nil) {
+        self.code = code
+        self.message = message
+        self.retryable = retryable ?? Self.ledger[code]?.retryable ?? false
+        self.retryAfterMs = retryAfterMs ?? Self.ledger[code]?.retryAfterMs
+        self.details = details
+    }
+
+    private struct Ledger: Decodable {
+        struct Entry: Decodable { let retryable: Bool; let retryAfterMs: Int? }
+        let codes: [String: Entry]
+    }
+    private static let ledger: [String: Ledger.Entry] = {
+        guard let url = Bundle.main.url(forResource: "refusal-ledger", withExtension: "json", subdirectory: "service"),
+            let data = try? Data(contentsOf: url),
+            let ledger = try? JSONDecoder().decode(Ledger.self, from: data)
+        else { fatalError("Missing or invalid bundled refusal ledger at service/refusal-ledger.json") }
+        return ledger.codes
+    }()
+
+    var envelope: [String: Any] {
+        var result: [String: Any] = ["code": code, "message": message, "retryable": retryable,
+            "details": details.flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? [String: Any]()]
+        if let retryAfterMs { result["retryAfterMs"] = retryAfterMs }
+        return result
+    }
 
     var errorDescription: String? { "\(code): \(message)" }
 }

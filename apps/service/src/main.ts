@@ -1,5 +1,5 @@
 import { CatalogError } from "@yap/core/catalog";
-import { CONTROL_FRAME_BYTES, encodeJsonLine, personalHome } from "@yap/protocol";
+import { CONTROL_FRAME_BYTES, encodeJsonLine, personalHome, operationError } from "@yap/protocol";
 import { startProjectService } from "./project-service.js";
 import { StartupFailure } from "./startup.js";
 import { readFileSync } from "node:fs";
@@ -53,12 +53,11 @@ try {
     encodeJsonLine(
       {
         event: "failed",
-        error: {
-          code: typed ? error.code : "SERVICE_UNAVAILABLE",
-          message: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
-          retryable: error instanceof CatalogError ? error.retryable : false,
-          details: error instanceof CatalogError ? error.details : {},
-        },
+        error: operationError(
+          typed ? error.code : "SERVICE_UNAVAILABLE",
+          (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
+          error instanceof CatalogError ? error.details : {},
+        ).error,
       },
       CONTROL_FRAME_BYTES,
     ),

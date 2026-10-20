@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import type { DerivativeDelivery } from "./delivery.js";
-import { operationFailure } from "./operation-errors.js";
+import { operationFailure, refusedRequest } from "./operation-errors.js";
 export { DerivativeDelivery } from "./delivery.js";
 import {
   DEFAULT_CALL_TIMEOUT_MS,
@@ -117,7 +117,7 @@ export async function listenLocal(options: {
         let frame: Buffer;
         try {
           frame = encodeJsonLine(
-            { id: request.id, ...resultSchema.parse(result) },
+            { id: request.id, ...resultSchema.parse(refusedRequest(result, operation)) },
             RESPONSE_FRAME_BYTES,
           );
           if (

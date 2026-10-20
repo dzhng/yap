@@ -1,4 +1,4 @@
-import { refusalRetryable } from "./refusal-ledger.js";
+import { refusalRetryable, refusalRetryAfterMs } from "./refusal-ledger.js";
 import { z } from "zod";
 import { RESPONSE_FRAME_BYTES } from "./framing.js";
 import { operationSchema } from "./operations.js";
@@ -25,11 +25,26 @@ export const wireRequestSchema = requestSchema.extend({
 });
 export type OperationWireRequest = z.infer<typeof wireRequestSchema>;
 
+export const retryDirectiveSchema = z
+  .object({
+    operation: z.string().min(1),
+    params: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .refine((request) => operationSchema.safeParse(request).success, {
+    message: "Retry must name an existing operation with valid parameters",
+  });
+export type RetryDirective = z.infer<typeof retryDirectiveSchema>;
+const errorDetailsSchema = z
+  .object({ retry: retryDirectiveSchema.optional() })
+  .catchall(z.unknown());
+
 export const operationErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string(),
   retryable: z.boolean(),
-  details: z.record(z.string(), z.unknown()),
+  retryAfterMs: z.int().positive().optional(),
+  details: errorDetailsSchema,
 });
 export const waitJobSchema = z.object({
   id: z.string().min(1),
@@ -89,7 +104,17 @@ export function operationError(
   message: string,
   details: Record<string, unknown> = {},
 ): OperationFailure {
-  return { ok: false, error: { code, message, retryable: refusalRetryable(code), details } };
+  const retryAfterMs = refusalRetryAfterMs(code);
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      retryable: refusalRetryable(code),
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      details: errorDetailsSchema.parse(details),
+    },
+  };
 }
 
 /**

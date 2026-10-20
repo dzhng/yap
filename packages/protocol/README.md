@@ -45,6 +45,12 @@ request can succeed later. When one code would need two answers, it is two
 conditions with two codes. A refusal that reports a dependency or a recovery keeps
 its specific cause in `details` beside a code whose retryability fits.
 
+Retry delay and plain cause belong to that same ledger. The shared error constructor
+derives retry metadata by code; transports preserve it. A resolving `details.retry`
+must pass its named operation's admission schema. The service may name the refused
+request itself only when its refusal is retryable and the request is a read or a write
+carrying durable request identity.
+
 Every publication envelope carries `issues`, empty when the output is clean, and
 export status carries the issues of its export. An output is bounded to 1000
 issues; past that, a final `issues-truncated` issue counts what was omitted.

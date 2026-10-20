@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import ledger from "./refusal-ledger.json" with { type: "json" };
 import { readFileSync } from "node:fs";
 import { z } from "zod";
 import {
@@ -16,6 +17,9 @@ import {
   parseRequest,
   responseSchema,
   operationWaitMs,
+  operationError,
+  refusalCause,
+  refusalRetryAfterMs,
 } from "./index.js";
 import { workStateSchema } from "./work.js";
 import {
@@ -1088,4 +1092,57 @@ it("admits the read-only review workflow operations", () => {
       },
     }).operation,
   ).toBe("layout.diagnostics");
+});
+
+it("refusal envelopes derive retry metadata from their ledger entry", () => {
+  const codes = ledger.codes as Record<
+    string,
+    { retryable: boolean; retryAfterMs?: number; cause?: string }
+  >;
+  codes.fixture = { retryable: true, retryAfterMs: 15000, cause: "Fixture is preparing" };
+  try {
+    expect(refusalCause("fixture")).toBe("Fixture is preparing");
+    expect(refusalRetryAfterMs("fixture")).toBe(15000);
+    const result = operationError("fixture", "Still preparing", {
+      retry: { operation: "job.get", params: { jobId: "missing" } },
+    });
+    expect(responseSchema.parse({ id: "fixture", ...result })).toEqual({
+      id: "fixture",
+      ok: false,
+      error: {
+        code: "fixture",
+        message: "Still preparing",
+        retryable: true,
+        retryAfterMs: 15000,
+        details: { retry: { operation: "job.get", params: { jobId: "missing" } } },
+      },
+    });
+  } finally {
+    delete codes.fixture;
+  }
+  expect(operationError("unregistered", "Unknown").error).toEqual({
+    code: "unregistered",
+    message: "Unknown",
+    retryable: false,
+    details: {},
+  });
+  expect(refusalCause("unregistered")).toBeUndefined();
+  expect(refusalRetryAfterMs("unregistered")).toBeUndefined();
+});
+
+it("rejects wire retry metadata that cannot describe a valid request or delay", () => {
+  const result = { id: "fixture", ...operationError("NOT_READY", "Still preparing") };
+  for (const retryAfterMs of [0, -1, 1.5])
+    expect(
+      responseSchema.safeParse({ ...result, error: { ...result.error, retryAfterMs } }).success,
+    ).toBe(false);
+  for (const retry of [
+    { operation: "missing", params: {} },
+    { operation: "job.get", params: {} },
+    { operation: "job.get", params: { jobId: "missing", requestId: "not-a-parameter" } },
+  ])
+    expect(
+      responseSchema.safeParse({ ...result, error: { ...result.error, details: { retry } } })
+        .success,
+    ).toBe(false);
 });

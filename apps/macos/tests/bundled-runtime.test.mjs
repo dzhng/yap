@@ -12,11 +12,13 @@ import {
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
+import { stageServiceLedger } from "./fixtures/service-ledger.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 let scratch, probe;
 before(() => {
   scratch = mkdtempSync("/tmp/yap-runtime-");
+  stageServiceLedger(scratch);
   const source = join(scratch, "main.swift");
   writeFileSync(
     source,

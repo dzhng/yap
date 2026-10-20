@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
+import { stageServiceLedger } from "./fixtures/service-ledger.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 const defaultFramework = fileURLToPath(
@@ -69,6 +70,7 @@ server.listen(0,'127.0.0.1',()=>writeFileSync(join(root,'feed-url'),'http://127.
     const contents = join(app, "Contents");
     const executable = join(contents, "MacOS", "SparkleCheck");
     mkdirSync(dirname(executable), { recursive: true });
+    stageServiceLedger(join(contents, "Resources"));
     const metadata = {
       CFBundleIdentifier: identity,
       CFBundleName: "SparkleCheck",

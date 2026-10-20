@@ -3,6 +3,7 @@ import { chmod, mkdtemp, readFile, rm, writeFile, open } from "node:fs/promises"
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { mediaWorker } from "./worker.js";
+import { operationError, operationSchema } from "@yap/protocol";
 
 const homes: string[] = [];
 afterEach(async () => {
@@ -27,6 +28,7 @@ process.stdin.on('end', () => {
   if (request.params.ready) writeFileSync(request.params.ready, String(process.pid));
   if (request.operation === 'descriptor-map') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid,files:Array.from({length:request.params.count},(_,i)=>readFileSync(3+i,'utf8')),identity:{uid:process.getuid(),euid:process.geteuid(),gid:process.getgid(),egid:process.getegid(),groups:process.getgroups()}}})+'\\n');
   if (request.operation === 'answer') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid}})+'\\n');
+  if (request.operation === 'refusal') process.stdout.write(JSON.stringify({ok:false,error:{code:'NOT_READY',message:'Still preparing',retryable:false,retryAfterMs:1,details:{retry:{operation:'job.get',params:{jobId:'missing'}}}}})+'\\n');
   setInterval(() => {}, 1000);
 });
 `,
@@ -43,6 +45,15 @@ async function fixture() {
   homes.push(home);
   return { home, run: mediaWorker({ YAP_NATIVE: executable }, 2000) };
 }
+
+it("native refusal retry metadata comes from the ledger while its resolving request survives", async () => {
+  const { run } = await fixture();
+  const retry = { operation: "job.get", params: { jobId: "missing" } };
+  const result = await run("refusal", {});
+  expect(result).toEqual(operationError("NOT_READY", "Still preparing", { retry }));
+  if (result.ok) throw new Error("Expected refusal");
+  expect(operationSchema.parse(result.error.details.retry)).toEqual(retry);
+});
 
 async function readyPid(path: string) {
   const deadline = Date.now() + 1500;

@@ -131,7 +131,7 @@ final class ExportController {
             defer { changed() }
             do throws(ServiceFailure) {
                 guard let jobId = state.records.first(where: { $0.exportId == exportId })?.jobId else {
-                    throw ServiceFailure(code: "NOT_READY", message: "Export has no retryable job", retryable: true)
+                    throw ServiceFailure(code: "NOT_READY", message: "Export has no retryable job")
                 }
                 // job.retry answers with the job itself; the export is read back as usual.
                 _ = try await call("job.retry", ["jobId": jobId])

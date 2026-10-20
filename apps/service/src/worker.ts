@@ -8,7 +8,7 @@ import {
   JsonLineReader,
   encodeJsonLine,
   operationError,
-  refusalRetryable,
+  operationErrorSchema,
   resultSchema,
   type OperationResult,
 } from "@yap/protocol";
@@ -61,6 +61,7 @@ export function nativeResult(result: OperationResult): unknown {
 }
 
 /** Native replies carry a code; retryability is owned by the shared refusal ledger. */
+const nativeErrorSchema = operationErrorSchema.omit({ retryable: true, retryAfterMs: true });
 function normalizeNativeResult(value: unknown): unknown {
   if (
     !value ||
@@ -72,13 +73,12 @@ function normalizeNativeResult(value: unknown): unknown {
     typeof value.error !== "object"
   )
     return value;
-  const error = value.error as Record<string, unknown>;
+  const parsed = nativeErrorSchema.safeParse(value.error);
+  if (!parsed.success) return value;
+  const error = parsed.data;
   return {
     ...value,
-    error: {
-      ...error,
-      retryable: refusalRetryable(typeof error.code === "string" ? error.code : ""),
-    },
+    ...operationError(error.code, error.message, error.details),
   };
 }
 

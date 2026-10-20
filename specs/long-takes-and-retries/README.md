@@ -11,10 +11,11 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 01 (error verdicts; H1 passed with no changes) and 03 (requirements owner) are
+Status 2026-10-20: slices 01 (error verdicts; H1 passed with no changes), 03 (requirements owner) and 04 (error envelope) are
 done; slice 00 (scale probe) is in progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
+The error/retry chain can continue with slice 05; slice 04 leaves every ledger verdict unchanged.
 
 You are implementing this spec. Start at [slice 00](slices/00-scale-probe.md), then
 [01](slices/01-error-audit.md) and [02](slices/02-limits-audit.md). Slices 01 and 02 produce
@@ -39,7 +40,7 @@ TODO:
 - [x] 01 Error audit verdicts ([slice](slices/01-error-audit.md))
 - [ ] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
-- [ ] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
+- [x] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
 - [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
 - [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
 - [ ] 07 Linear journal readers with a derived record bound ([slice](slices/07-journal-readers.md))
