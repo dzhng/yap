@@ -47,11 +47,14 @@ retires capture-origin copies with the recording. A project-held copy returns
 `IN_USE` with the shared usage details; `cascade: true` also retires those projects.
 Imports made from inside a recording folder are separate acquisitions and survive.
 
-`recording.prompt` returns the handoff text the app's Copy prompt copies,
-with the `facts` it was written from: what a recording captured, its marks or
-clicks, and whether a transcript is being prepared. Omit `recordingId` for the
-latest take; a take that has not finished importing is refused as retryable
-`NOT_READY`. Pass `projectId` or `assetId` for that item's one-line handoff.
+`recording.prompt` returns the handoff text the app's Copy prompt copies, with
+capture facts and transcript readiness. It describes pins and drawings without
+listing individual marks or clicks. Omit `recordingId` for the latest take; live,
+importing and failed-import takes all get a prompt immediately. A discarded take
+is `UNAVAILABLE`; no recordings is `NOT_FOUND`. Use `recording.get --wait` to wait
+through capture and all source imports; a failed import settles with its job's
+`details.retry`, and waiting never retries it. Pass `projectId` or `assetId` for
+that item's one-line handoff.
 
 ## Packages and jobs
 

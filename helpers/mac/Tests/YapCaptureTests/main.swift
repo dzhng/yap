@@ -1,6 +1,9 @@
 import Foundation
 
-if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] {
+if let output = ProcessInfo.processInfo.environment["YAP_RECORDING_PROMPT_FIXTURE"] {
+    try await writeRecordingPromptFixture(directory: output,
+        options: ProcessInfo.processInfo.environment["YAP_RECORDING_PROMPT_OPTIONS"] ?? "{}")
+} else if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] {
     try writeCursorHoldFixtures(to: URL(fileURLWithPath: output))
 } else if ProcessInfo.processInfo.environment["YAP_CHANGE_ONLY_TESTS"] != nil {
     try runChangeOnlyCursorTests()

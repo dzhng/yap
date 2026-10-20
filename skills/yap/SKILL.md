@@ -13,17 +13,23 @@ worth sending to other people, you are the editor.
 
 **A pasted recording prompt.** The user's `⌥⇧V` pastes a short text that starts
 like "I recorded my screen to show you something" and names a `Recording:` ID.
-It says what was captured (screen, camera, microphone, system audio) and lists the
-marks they made while talking: numbered pins and strokes, or clicks, each with a
-time and the window it was on. It names no operations; exploring is yours:
-- Read what they said first. The transcript is usually being prepared in the
-  background, and the prompt says when it is; `transcript.review` returns it, or
-  reports it pending, without starting a second run.
-- Each mark is a moment they point at. `timeline.events` lists the marks for the
-  recording's acquisition (pin numbers match the badges they saw), and `index.get`
-  has a frame at every mark, pin and click when its selection names that
-  `acquisitionId`. Use `cursor.render` around a mark to see exactly where they
-  pointed.
+It describes what was captured (screen, camera, microphone, system audio), whether
+they left pins or drawings, and transcript readiness. It lists no individual
+marks, clicks or windows, and may arrive while the take is still recording or
+importing. It names no operations; exploring is yours:
+- Resolve the `Recording:` ID with `recording.get --wait` before reading its
+  evidence. Waiting observes capture and every source import; it never retries.
+  A failed import exits 1 and carries `details.retry` on its failed job. Inspect
+  that failure and use its resolving call only when you choose to retry.
+- Read what they said first. With microphone capture and automatic transcription
+  enabled, the prompt says whether the transcript is being prepared or ready.
+  `transcript.review` returns it, or reports it pending, without starting a second run.
+- Each mark is a moment they point at. Once imported, `timeline.events` lists the
+  marks for the recording's acquisition (pin numbers match the badges they saw),
+  and `index.get` has a frame at every mark, pin and click when its selection
+  names that `acquisitionId`. Use `cursor.render` around a mark to see where they
+  pointed. A `NOT_READY` refusal carries `retryAfterMs`; follow that delay and its
+  `details.retry` call instead of polling immediately.
 - Act on what they asked. A shown recording is evidence, not footage to edit.
 
 The user does not want to edit video. They record, then hand you a prompt —

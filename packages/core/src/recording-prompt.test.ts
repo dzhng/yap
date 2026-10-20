@@ -1,317 +1,489 @@
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { lstat, mkdir, truncate, writeFile } from "node:fs/promises";
+import { join, dirname } from "node:path";
 import { operationNames } from "@yap/protocol";
-import { expect, test } from "vitest";
-import type { CaptureMark } from "./capture-source-read.js";
+import { afterEach, expect, test } from "vitest";
+import { CaptureStore } from "./capture-store.js";
 import { CatalogError } from "./catalog.js";
+import type { CapturePublishedSource } from "./capture-publication.js";
+import { writeNativeCaptureFixture } from "./capture-native.fixture.js";
+import { AcquisitionStore, AcquisitionImporter } from "./acquisitions.js";
+import { AssetStore } from "./assets.js";
+import { Models, parakeetModel } from "./models.js";
+import { JobQueue } from "./jobs.js";
+import { SourceEvidenceStore } from "./evidence.js";
+import { mediaWorker } from "../../../apps/service/dist/worker.js";
+import { sourceExporter } from "../../../apps/service/dist/source-export.js";
+import { readMediaProbe } from "../../../apps/service/dist/media-probe.js";
+import { TranscriptBacklog } from "./transcript-backlog.js";
+import { TranscriptStore } from "./transcript.js";
+import { TranscriptProcessing, assetTranscriptOwner } from "./transcript-processing.js";
 import {
   recordingPromptFacts,
   renderRecordingPrompt,
-  type RecordingPromptFacts,
   type RecordingPromptSources,
 } from "./recording-prompt.js";
 
-const identityTail = "Use the yap CLI (run `yap --help` or the yap skill if you're unsure).";
-const none = { screen: false, camera: false, mic: false, system: false };
-const facts = (value: Partial<RecordingPromptFacts>): RecordingPromptFacts => ({
-  recordingId: "rec_8f3a21",
-  durationUs: 72_000_000,
-  captured: none,
-  transcript: "none",
-  marks: [],
-  clicks: [],
-  ...value,
-});
-const checkout = { app: "Chrome", title: "Checkout – shop.test" };
-const namesNoOperation = (text: string) => {
-  for (const name of operationNames) expect(text).not.toContain(name);
-};
-
-test("renders the approved screen, microphone and marks handoff exactly", () => {
-  const text = renderRecordingPrompt(
-    facts({
-      display: { displayId: 1, width: 2560, height: 1440 },
-      captured: { ...none, screen: true, mic: true },
-      transcript: "pending",
-      marks: [
-        {
-          pin: 1,
-          timeUs: 15_000_000,
-          kind: "pin",
-          window: { app: "Safari", title: "Deploys – localhost:5173" },
-        },
-      ],
-      clicks: [{ timeUs: 3_000_000, window: checkout }],
-    }),
-  );
-  expect(text).toBe(
-    [
-      "I recorded my screen to show you something. Watch it with Yap and act on what I asked for.",
-      `Recording: rec_8f3a21 (1:12, display 1, 2560×1440). ${identityTail}`,
-      "Captured: screen, microphone (transcript is being prepared automatically). No camera, no system audio.",
-      "I marked things while talking. Each mark is a moment I'm pointing at:",
-      '#1 0:15 pin on Safari, "Deploys – localhost:5173"',
-    ].join("\n"),
-  );
-  namesNoOperation(text);
+const cleanups: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
+  for (const close of cleanups.splice(0).reverse()) await close();
 });
 
-test("renders the approved camera and microphone handoff", () => {
-  expect(
-    renderRecordingPrompt(
-      facts({
-        recordingId: "rec_camera",
-        durationUs: 9_400_000,
-        camera: { width: 1280, height: 720 },
-        captured: { ...none, camera: true, mic: true },
-        transcript: "ready",
-      }),
-    ),
-  ).toBe(
-    [
-      "I recorded myself on camera. Watch it with Yap.",
-      `Recording: rec_camera (0:09, camera, 1280×720). ${identityTail}`,
-      "Captured: camera, microphone (transcript ready). No screen, no system audio.",
-    ].join("\n"),
-  );
-});
-
-test("renders the approved screen-only handoff with its clicks", () => {
-  const text = renderRecordingPrompt(
-    facts({
-      recordingId: "rec_screen",
-      durationUs: 11_000_000,
-      display: { displayId: 2, width: 1920, height: 1080 },
-      captured: { ...none, screen: true },
-      clicks: [3, 7, 8, 9, 10, 11].map((seconds) => ({
-        timeUs: seconds * 1_000_000,
-        window: checkout,
-      })),
-    }),
-  );
-  expect(text).toBe(
-    [
-      "I recorded my screen without narration. Watch what happens with Yap.",
-      `Recording: rec_screen (0:11, display 2, 1920×1080). ${identityTail}`,
-      "Captured: screen only. No voice, so the frames and clicks are the whole story.",
-      'I clicked 6 times: 0:03, 0:07, … (Chrome, "Checkout – shop.test").',
-    ].join("\n"),
-  );
-  namesNoOperation(text);
-});
-
-test("narrated screen takes without marks list their clicks, and system audio is named", () => {
-  expect(
-    renderRecordingPrompt(
-      facts({
-        display: { displayId: 1, width: 2560, height: 1440 },
-        captured: { ...none, screen: true, mic: true, system: true },
-        clicks: [{ timeUs: 3_000_000, window: checkout }],
-      }),
-    ).split("\n"),
-  ).toEqual([
-    "I recorded my screen to show you something. Watch it with Yap and act on what I asked for.",
-    `Recording: rec_8f3a21 (1:12, display 1, 2560×1440). ${identityTail}`,
-    "Captured: screen, microphone, system audio. No camera.",
-    'I clicked 1 time: 0:03 (Chrome, "Checkout – shop.test").',
-  ]);
-  expect(
-    renderRecordingPrompt(
-      facts({
-        captured: { ...none, screen: true, system: true },
-        clicks: [
-          { timeUs: 3_000_000, window: checkout },
-          { timeUs: 4_000_000, window: { app: "Safari", title: "Docs" } },
-        ],
-      }),
-    ).split("\n"),
-  ).toEqual([
-    "I recorded my screen without narration. Watch what happens with Yap.",
-    `Recording: rec_8f3a21 (1:12). ${identityTail}`,
-    "Captured: screen, system audio. No camera, no microphone.",
-    "I clicked 2 times: 0:03, 0:04.",
-  ]);
-});
-
-test("marks without narration are not described as spoken, and strokes carry no pin number", () => {
-  expect(
-    renderRecordingPrompt(
-      facts({
-        captured: { ...none, screen: true },
-        marks: [
-          { timeUs: 2_000_000, kind: "stroke", window: checkout },
-          { pin: 2, timeUs: 5_000_000, kind: "pin" },
-        ],
-      }),
-    ).split("\n"),
-  ).toEqual([
-    "I recorded my screen without narration. Watch what happens with Yap.",
-    `Recording: rec_8f3a21 (1:12). ${identityTail}`,
-    "Captured: screen only. No voice, so the frames and marks are the whole story.",
-    "I marked things on screen. Each mark is a moment I'm pointing at:",
-    '0:02 stroke on Chrome, "Checkout – shop.test"',
-    "#2 0:05 pin",
-  ]);
-});
-
-test("voice-only and empty takes keep the same voice", () => {
-  expect(renderRecordingPrompt(facts({ captured: { ...none, mic: true } })).split("\n")).toEqual([
-    "I recorded my voice. Listen to it with Yap.",
-    `Recording: rec_8f3a21 (1:12). ${identityTail}`,
-    "Captured: microphone. No screen, no camera, no system audio.",
-  ]);
-  expect(renderRecordingPrompt(facts({})).split("\n")[0]).toBe(
-    "I recorded something for you. Watch it with Yap.",
-  );
-});
-
-// One screen take with narration: video, mic and system bindings on one acquisition.
-function sources(
-  options: {
-    marks?: CaptureMark[];
-    backlog?: boolean;
-    status?: { state: string; retryable: boolean } | Error;
-    published?: boolean;
-  } = {},
-): RecordingPromptSources {
-  return {
-    recordings: {
-      latest: () => ({
-        id: "rec_latest",
-        sourceId: "source",
-        sourceDurationUs: 4_000_000,
-        camera: null,
-      }),
-      get: () => {
-        throw new Error("an omitted id resolves the latest recording");
+function fixture() {
+  const home = mkdtempSync("/tmp/recording-prompt-");
+  cleanups.push(() => rmSync(home, { recursive: true, force: true }));
+  let id = 0;
+  const recordings = new CaptureStore(join(home, "catalog.sqlite"), {
+    newId: () => `take-${++id}`,
+    now: () => "2026-10-20T00:00:00.000Z",
+  });
+  cleanups.push(() => recordings.close());
+  const acquisitions = new AcquisitionStore(recordings);
+  const assets = new AssetStore(recordings, home);
+  const models = new Models(home, globalThis.fetch, undefined, recordings);
+  const jobs = new JobQueue({
+    store: recordings,
+    providers: { newId: randomUUID },
+    targets: {
+      pin: (target) => {
+        if (target.kind !== "asset") throw new Error("Expected an asset transcript");
+        assets.get(target.id);
+        return { ...target, revisionId: null };
       },
-      publishedSource: () => ({}),
-    } as never,
-    acquisitions: {
-      captureIntent: () => ({ acquisitionId: "acq" }),
-      ready: () => options.published ?? true,
-      get: () => ({
-        evidence: { receipt: { header: { source: { kind: "display", displayID: 3 } } } },
-        bindings: [
-          {
-            assetId: "asset",
-            streamId: "video",
-            sourceRoles: ["video"],
-            sourceToAssetOffsetUs: 500_000,
-          },
-          {
-            assetId: "asset",
-            streamId: "mic",
-            sourceRoles: ["narration"],
-            sourceToAssetOffsetUs: 0,
-          },
-        ],
-      }),
-    } as never,
-    assets: {
-      get: () => ({
-        streams: [
-          {
-            id: "video",
-            kind: "video",
-            orientedWidth: 800,
-            orientedHeight: 600,
-            endUs: 4_500_000,
-          },
-          { id: "mic", kind: "audio", endUs: 4_500_000 },
-        ],
-      }),
-    } as never,
-    capture: {
-      marks: () => options.marks ?? [],
+      isAvailable: (target) => target.kind === "asset" && !!assets.get(target.id),
+      isDeleting: () => false,
+      isCapturing: () => recordings.isCapturing(),
     },
-    backlog: { pending: () => options.backlog ?? false },
-    transcripts: {
-      sourceStatus: () => {
-        if (options.status instanceof Error) throw options.status;
-        return options.status ?? { state: "not_requested", retryable: false };
-      },
-    } as never,
+    execute: (job) => transcripts.execute(job),
+  });
+  cleanups.push(() => jobs.close());
+  const speech = { fail: false };
+  const transcribeModel = models.transcription("parakeet");
+  const transcripts = new TranscriptProcessing({
+    jobs,
+    models: models.transcription("parakeet"),
+    asset: { assets, acquisitions },
+    transcripts: new TranscriptStore(recordings, home, assetTranscriptOwner(assets, acquisitions)),
+    transcribe: async (request) => {
+      if (speech.fail) throw new Error("Native transcription failed");
+      const lines = request.track.available.map((source, ordinal) => ({
+        ordinal,
+        source,
+        owned: source,
+        state: "transcribed" as const,
+        words: [],
+      }));
+      const body = lines.map((line) => JSON.stringify(line) + "\n").join("");
+      await writeFile(request.output, body);
+      return {
+        output: {
+          file: request.output,
+          bytes: Buffer.byteLength(body),
+          sha256: createHash("sha256").update(body).digest("hex"),
+        },
+        engine: {
+          runtime: transcribeModel.pins.runtime,
+          runtimeVersion: transcribeModel.pins.runtimeVersion,
+          decoder: transcribeModel.pins.decoder,
+          encoderPrecision: "int8",
+          computeUnits: "cpuAndNeuralEngine",
+        },
+        segments: lines.map(({ words, ...line }) => ({ ...line, wordCount: words.length })),
+        wordCount: 0,
+        execution: request.execution,
+        available: request.track.available,
+      };
+    },
+  });
+  const backlog = new TranscriptBacklog(recordings, {
+    readiness: () => models.transcription("parakeet").status().state === "ready",
+    status: (selection) => transcripts.sourceStatus(selection),
+    submit: (selection) => {
+      transcripts.prepareSource(selection);
+    },
+    retry: (selection) => {
+      transcripts.retrySource(selection);
+    },
+    report: (error) => {
+      throw error;
+    },
+  });
+  return {
+    recordings,
+    acquisitions,
+    assets,
+    transcripts,
+    backlog,
+    jobs,
+    models,
+    home,
+    speech,
+    autoTranscribe: true,
+    status: undefined as RecordingPromptSources["status"],
   };
 }
-const mark = (
-  value: Partial<CaptureMark> & Pick<CaptureMark, "kind" | "assetUs">,
-): CaptureMark => ({
-  hostUs: value.assetUs,
-  epoch: 0,
-  id: `${value.kind}-${value.assetUs}`,
-  points: [],
-  ...value,
-});
 
-test("facts read the take's display, the reader's active marks and clicks, all on the asset clock", async () => {
-  const read = await recordingPromptFacts(
-    sources({
-      marks: [
-        mark({ kind: "stroke", assetUs: 1_500_000 }),
-        mark({
-          kind: "pin",
-          pin: 2,
-          assetUs: 2_500_000,
-          window: { app: "Safari", title: "Live", bounds: { x: 0, y: 0, width: 1, height: 1 } },
-        }),
-        mark({ kind: "click", assetUs: 3_500_000, window: { app: "Safari", title: "" } }),
-      ],
-    }),
-  );
-  expect(read).toEqual({
-    recordingId: "rec_latest",
-    // The bound stream's length, the clock its marks use; not the capture clock's 4 s.
-    durationUs: 4_500_000,
-    display: { displayId: 3, width: 800, height: 600 },
-    captured: { screen: true, camera: false, mic: true, system: false },
-    transcript: "none",
-    marks: [
-      { timeUs: 1_500_000, kind: "stroke" },
-      { pin: 2, timeUs: 2_500_000, kind: "pin", window: { app: "Safari", title: "Live" } },
+function publish(
+  sources: ReturnType<typeof fixture>,
+  options: {
+    mic?: boolean;
+    system?: boolean;
+    camera?: boolean;
+    kind?: "display" | "camera";
+    legacy?: boolean;
+    marks?: CapturePublishedSource["marks"];
+  } = {},
+) {
+  const take = sources.recordings.allocate({
+    requestId: "prompt",
+    arguments: "{}",
+    ...(options.camera ? { cameraDeviceId: "camera" } : {}),
+  }).recording;
+  const directory = join(sources.home, "recordings", take.id, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    ...options,
+    recordingId: take.id,
+    sourceId: take.sourceId,
+    ...(take.camera ? { cameraSourceId: take.camera.sourceId } : {}),
+  });
+  sources.recordings.ingestLifecycle(take.id, {
+    sourceId: take.sourceId,
+    sequence: 1,
+    state: "finalizing",
+    publication,
+  });
+  sources.recordings.ingestLifecycle(take.id, {
+    sourceId: take.sourceId,
+    sequence: 2,
+    state: "complete",
+    sourceDurationUs: 190_000_000,
+  });
+  return take;
+}
+const pointer = "Use the yap skill to work with this recording (or run `yap --help`).";
+const screen =
+  "I recorded my screen to show you something. Watch it with Yap and act on what I asked for.";
+const silent = "I recorded my screen without narration. Watch what happens with Yap.";
+
+test.each([
+  {
+    name: "approved screen, camera, microphone and both marks",
+    options: {
+      mic: true,
+      camera: true,
+      kind: "display" as const,
+      marks: { pins: true, strokes: true },
+    },
+    lines: [
+      screen,
+      "Recording: take-1 (3:10, screen, camera, microphone, no system audio).",
+      "I left numbered pins and drew on screen while talking. Each one is a moment I'm pointing at.",
+      "The transcript is being prepared automatically.",
+      pointer,
     ],
-    clicks: [{ timeUs: 3_500_000, window: { app: "Safari" } }],
+  },
+  {
+    name: "pins only",
+    options: { mic: true, kind: "display" as const, marks: { pins: true, strokes: false } },
+    lines: [
+      screen,
+      "Recording: take-1 (3:10, screen, microphone, no camera, no system audio).",
+      "I left numbered pins while talking. Each one is a moment I'm pointing at.",
+      "The transcript is being prepared automatically.",
+      pointer,
+    ],
+  },
+  {
+    name: "pins only without narration",
+    options: { kind: "display" as const, marks: { pins: true, strokes: false } },
+    lines: [
+      silent,
+      "Recording: take-1 (3:10, screen, no camera, no microphone, no system audio).",
+      "I left numbered pins. Each one is a moment I'm pointing at.",
+      pointer,
+    ],
+  },
+  {
+    name: "strokes only with narration",
+    options: { mic: true, kind: "display" as const, marks: { pins: false, strokes: true } },
+    lines: [
+      screen,
+      "Recording: take-1 (3:10, screen, microphone, no camera, no system audio).",
+      "I drew on screen while talking. Each one is a moment I'm pointing at.",
+      "The transcript is being prepared automatically.",
+      pointer,
+    ],
+  },
+  {
+    name: "strokes only without narration",
+    options: { kind: "display" as const, marks: { pins: false, strokes: true } },
+    lines: [
+      silent,
+      "Recording: take-1 (3:10, screen, no camera, no microphone, no system audio).",
+      "I drew on screen. Each one is a moment I'm pointing at.",
+      pointer,
+    ],
+  },
+  {
+    name: "both marks without narration",
+    options: { kind: "display" as const, marks: { pins: true, strokes: true } },
+    lines: [
+      silent,
+      "Recording: take-1 (3:10, screen, no camera, no microphone, no system audio).",
+      "I left numbered pins and drew on screen. Each one is a moment I'm pointing at.",
+      pointer,
+    ],
+  },
+  {
+    name: "no marks and system audio",
+    options: {
+      mic: true,
+      system: true,
+      kind: "display" as const,
+      marks: { pins: false, strokes: false },
+    },
+    lines: [
+      screen,
+      "Recording: take-1 (3:10, screen, microphone, system audio, no camera).",
+      "The transcript is being prepared automatically.",
+      pointer,
+    ],
+  },
+  {
+    name: "old summary omits marks",
+    options: { mic: true },
+    lines: [
+      "I recorded something for you. Watch it with Yap.",
+      "Recording: take-1 (3:10, microphone, no system audio).",
+      "The transcript is being prepared automatically.",
+      pointer,
+    ],
+  },
+  {
+    name: "camera only",
+    options: { kind: "camera" as const },
+    lines: [
+      "I recorded myself on camera. Watch it with Yap.",
+      "Recording: take-1 (3:10, camera, no screen, no microphone, no system audio).",
+      pointer,
+    ],
+  },
+])("golden: $name through capture and transcript stores", async ({ options, lines }) => {
+  const sources = fixture();
+  publish(sources, options);
+  const text = renderRecordingPrompt(await recordingPromptFacts(sources));
+  expect(text).toBe(lines.join("\n"));
+  for (const name of operationNames) expect(text).not.toContain(name);
+});
+
+test("auto-transcribe off suppresses the transcript promise before import", async () => {
+  const sources = fixture();
+  publish(sources, { mic: true, kind: "display" });
+  sources.autoTranscribe = false;
+  expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(
+    [
+      screen,
+      "Recording: take-1 (3:10, screen, microphone, no camera, no system audio).",
+      pointer,
+    ].join("\n"),
+  );
+});
+
+test("only missing and discarded takes refuse a prompt", async () => {
+  const sources = fixture();
+  await expect(recordingPromptFacts(sources)).rejects.toMatchObject({ code: "NOT_FOUND" });
+  const take = sources.recordings.allocate().recording;
+  sources.recordings.ingestLifecycle(take.id, {
+    sourceId: take.sourceId,
+    sequence: 1,
+    state: "canceled",
+  });
+  await expect(recordingPromptFacts(sources, take.id)).rejects.toMatchObject({
+    code: "UNAVAILABLE",
   });
 });
 
-test("the transcript is claimed only while the backlog owes it, a job runs it, or it is ready", async () => {
-  const transcript = async (options: Parameters<typeof sources>[0]) =>
-    (await recordingPromptFacts(sources(options))).transcript;
-  expect(await transcript({ backlog: false })).toBe("none");
-  expect(await transcript({ backlog: true })).toBe("pending");
-  expect(await transcript({ backlog: true, status: { state: "queued", retryable: false } })).toBe(
-    "pending",
-  );
+// There is no voice-only capture source today; preserve its existing pure-renderer variant.
+test("voice-only golden", () => {
   expect(
-    await transcript({ backlog: false, status: { state: "processing", retryable: false } }),
-  ).toBe("pending");
-  expect(await transcript({ backlog: false, status: { state: "ready", retryable: false } })).toBe(
-    "ready",
-  );
-  expect(await transcript({ backlog: true, status: { state: "failed", retryable: false } })).toBe(
-    "none",
-  );
-  expect(
-    await transcript({
-      backlog: true,
-      status: new CatalogError("ASSET_DELETED", "source is gone"),
+    renderRecordingPrompt({
+      recordingId: "voice",
+      live: false,
+      durationUs: 190_000_000,
+      captured: { screen: false, camera: false, mic: true, system: false },
+      transcript: "ready",
     }),
-  ).toBe("none");
+  ).toBe(
+    [
+      "I recorded my voice. Listen to it with Yap.",
+      "Recording: voice (3:10, microphone, no screen, no camera, no system audio).",
+      "The transcript is ready.",
+      pointer,
+    ].join("\n"),
+  );
 });
 
-test("a take whose source has not been imported is refused, not described as empty", async () => {
-  await expect(recordingPromptFacts(sources({ published: false }))).rejects.toMatchObject({
-    code: "NOT_READY",
+test.each(["recording", "paused"] as const)(
+  "live %s golden uses capture status without a duration",
+  async (state) => {
+    const sources = fixture();
+    const take = sources.recordings.allocate().recording;
+    sources.recordings.ingestLifecycle(take.id, {
+      sourceId: take.sourceId,
+      sequence: 1,
+      state: "recording",
+    });
+    if (state === "paused")
+      sources.recordings.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 2, state });
+    // This is the native capture.status edge; catalog and transcript owners remain real.
+    sources.status = async () => ({
+      device: {
+        state,
+        recordingId: take.id,
+        sourceId: take.sourceId,
+        elapsedUs: 1_000_000,
+        selection: { source: { kind: "display", id: 99 }, microphone: true, systemAudio: false },
+        camera: null,
+        permissions: { screen: true, microphone: "authorized", camera: "not_determined" },
+      },
+    });
+    expect(renderRecordingPrompt(await recordingPromptFacts(sources, take.id))).toBe(
+      [
+        screen,
+        "Recording: take-1 (still recording, screen, microphone, no camera, no system audio).",
+        "The transcript is being prepared automatically.",
+        pointer,
+      ].join("\n"),
+    );
+  },
+);
+
+async function importedNarration(sources: ReturnType<typeof fixture>) {
+  const take = publish(sources, { mic: true, kind: "display" });
+  await sources.assets.recover();
+  const evidence = new SourceEvidenceStore(sources.recordings, (identity) => {
+    if (identity.owner.kind !== "acquisition") throw new Error("Expected an acquisition");
+    sources.acquisitions.intent(identity.owner.id);
   });
+  const importer = new AcquisitionImporter(
+    sources.recordings,
+    sources.acquisitions,
+    sources.assets,
+    evidence,
+    sources.home,
+  );
+  await importer.recover(new AbortController().signal);
+  const intent = sources.acquisitions.admitCapture(
+    sources.recordings,
+    take.id,
+    join(sources.home, "recordings", take.id, "source"),
+  );
+  const native = mediaWorker();
+  const acquisition = await importer.executeImport(
+    intent.acquisitionId,
+    "prompt-import",
+    {
+      exportSource: sourceExporter(native),
+      probe: (path, signal, lifetime) =>
+        readMediaProbe(native, sources.home, path, signal, lifetime ? [lifetime.fd] : []),
+    },
+    new AbortController().signal,
+  );
+  const narration = acquisition.bindings.find((binding) =>
+    binding.sourceRoles.includes("narration"),
+  )!;
+  return {
+    assetId: narration.assetId,
+    streamId: narration.streamId,
+    acquisitionId: acquisition.id,
+  };
+}
+
+// Sparse native model inputs exercise real Models readiness without inference or downloads.
+async function readyModel(sources: ReturnType<typeof fixture>) {
+  const root = join(sources.home, "models", "parakeet", parakeetModel.revision);
+  const files: Record<string, { modifiedNs: string; inode: string }> = {};
+  for (const file of parakeetModel.files) {
+    const path = join(root, parakeetModel.folderName, file.path);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, "");
+    await truncate(path, file.bytes);
+    const stat = await lstat(path, { bigint: true });
+    files[file.path] = { modifiedNs: String(stat.mtimeNs), inode: String(stat.ino) };
+  }
+  await writeFile(
+    join(root, "receipt.json"),
+    JSON.stringify({
+      modelDigest: sources.models.transcription("parakeet").modelDigest,
+      files,
+    }),
+  );
+}
+
+test("post-import backlog and transcript state determine the exact transcript line", async () => {
+  const sources = fixture();
+  const selection = await importedNarration(sources);
+  const text = () => recordingPromptFacts(sources).then(renderRecordingPrompt);
+  const identity = "Recording: take-1 (3:10, screen, microphone, no camera, no system audio).";
+  expect(await text()).toBe([screen, identity, pointer].join("\n"));
+  sources.backlog.enqueue(selection);
+  expect(await text()).toBe(
+    [screen, identity, "The transcript is being prepared automatically.", pointer].join("\n"),
+  );
+
+  await readyModel(sources);
+  sources.transcripts.prepareSource(selection);
+  await expect.poll(() => sources.transcripts.sourceStatus(selection).state).toBe("ready");
+  expect(await text()).toBe([screen, identity, "The transcript is ready.", pointer].join("\n"));
+  sources.autoTranscribe = false;
+  expect(await text()).toBe([screen, identity, pointer].join("\n"));
 });
 
-test("a take still recording or never published carries the capture store's own refusal", async () => {
-  for (const refusal of [
-    new CatalogError("NOT_READY", "Capture source has not published"),
-    new CatalogError("UNAVAILABLE", "Capture has no published source"),
-  ]) {
-    const unpublished = sources({ published: false });
-    unpublished.recordings.publishedSource = () => {
-      throw refusal;
-    };
-    await expect(recordingPromptFacts(unpublished)).rejects.toBe(refusal);
-  }
+test("an imported take with a failed transcript makes no promise, even before backlog drain", async () => {
+  const sources = fixture();
+  const selection = await importedNarration(sources);
+  await readyModel(sources);
+  sources.speech.fail = true;
+  sources.backlog.enqueue(selection);
+  sources.transcripts.prepareSource(selection);
+  await expect.poll(() => sources.transcripts.sourceStatus(selection).state).toBe("failed");
+  expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(
+    [
+      screen,
+      "Recording: take-1 (3:10, screen, microphone, no camera, no system audio).",
+      pointer,
+    ].join("\n"),
+  );
 });
+
+test("legacy camera summary keeps unknown picture identity without inventing a screen", async () => {
+  const sources = fixture();
+  publish(sources, { kind: "camera", legacy: true });
+  expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(
+    [
+      "I recorded something for you. Watch it with Yap.",
+      "Recording: take-1 (3:10, no microphone, no system audio).",
+      pointer,
+    ].join("\n"),
+  );
+});
+
+test.each(["missing", "disconnected"] as const)(
+  "an existing take with %s device observations does not invent absent inputs",
+  async (observation) => {
+    const sources = fixture();
+    const take = sources.recordings.allocate().recording;
+    if (observation === "disconnected")
+      sources.status = async () => {
+        throw new CatalogError("CONNECTION_CLOSED", "Capture controller disconnected");
+      };
+    expect(renderRecordingPrompt(await recordingPromptFacts(sources, take.id))).toBe(
+      [
+        "I recorded something for you. Watch it with Yap.",
+        "Recording: take-1 (still recording).",
+        pointer,
+      ].join("\n"),
+    );
+  },
+);

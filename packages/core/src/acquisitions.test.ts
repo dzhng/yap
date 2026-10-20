@@ -270,7 +270,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
     f.importer.executeImport(changed.acquisitionId, "changed", f.native, signal()),
   ).rejects.toMatchObject({ code: "SOURCE_CHANGED" });
   expect(() => f.acquisitions.get(changed.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
+    expect.objectContaining({ code: "NOT_READY" }),
   );
   const fresh = await f.admit("fresh");
   const controller = new AbortController();
@@ -293,7 +293,7 @@ test("changed frozen members refuse publication and canceled adoption releases p
   ).rejects.toThrow("cancel import");
   expect(probes).toBe(2);
   expect(() => f.acquisitions.get(fresh.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
+    expect.objectContaining({ code: "NOT_READY" }),
   );
   for (const asset of f.assets.list().assets) expect(f.assets.references(asset.id)).toEqual([]);
   expect(() =>
@@ -337,7 +337,7 @@ test("identical captured role files share one usable binding only when their sup
     if (conflict) {
       await expect(result).rejects.toMatchObject({ code: "UNSUPPORTED_MEDIA" });
       expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
-        expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
+        expect.objectContaining({ code: "NOT_READY" }),
       );
     } else {
       const value = await result;
@@ -383,7 +383,7 @@ test("unacquired audio remains empty and ambiguous capture streams refuse public
     ),
   ).rejects.toMatchObject({ code: "UNSUPPORTED_MEDIA" });
   expect(() => f.acquisitions.get(fresh.acquisitionId)).toThrow(
-    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
+    expect.objectContaining({ code: "NOT_READY" }),
   );
   await expect(
     f.importer.executeImport(ambiguous.acquisitionId, "changed", f.native, signal()),
@@ -578,7 +578,9 @@ test("portable acquisition adoption preserves source identities, evidence and bo
     signal(),
     native,
   );
-  expect(() => receiver.acquisitions.get(original.id)).toThrow(/not completed/);
+  expect(() => receiver.acquisitions.get(original.id)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
   expect(receiver.assets.list().assets).toEqual([]);
   receiver.catalog.transaction(() => {
     for (const asset of stagedAssets) asset.publish();
@@ -657,7 +659,9 @@ test("unpublished portable acquisitions recover and transactional failures leave
     }),
   ).toThrow("project revision failure");
   expect(receiver.assets.list().assets).toEqual([]);
-  expect(() => receiver.acquisitions.get(original.id)).toThrow(/not completed/);
+  expect(() => receiver.acquisitions.get(original.id)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
   await stage.close();
   for (const asset of assets) await asset.close();
   expect(() => receiver.acquisitions.intent(original.id)).toThrow(/does not exist/);
@@ -677,7 +681,9 @@ test("publication receipt absence is frozen before queued capture admission", as
     f.importer.executeImport(intent.acquisitionId, "changed-proof", f.native, signal()),
   ).rejects.toMatchObject({ code: "SOURCE_CHANGED" });
   expect(f.assets.list().assets).toEqual([]);
-  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(/not completed/);
+  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
 });
 
 test.each(["layout", "duplicate-role", "support"] as const)(
@@ -849,7 +855,9 @@ test.each([
     code: "INVALID_EVIDENCE",
     message: "Camera physical support differs from verified source support",
   });
-  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(/not completed/);
+  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
 });
 
 test("a 0.1.33 camera proof admits unchanged", async () => {

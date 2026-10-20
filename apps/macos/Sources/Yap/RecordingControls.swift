@@ -499,8 +499,8 @@ final class RecordingControls: NSObject {
         case .startOrStop:
             state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
         case .pastePrompt:
-            // The newest recording: the service picks it when no target is named.
-            copyPrompt(nil, paste: true)
+            let recordingId = state.isLive ? (live()?["recordingId"] as? String) : nil
+            copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
         case .undoMark:
             guard state.isLive else { return render() }
             do { try captureController?.undoMark() }

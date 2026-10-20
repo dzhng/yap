@@ -1491,8 +1491,8 @@ export async function startProjectService(options: {
               {
                 recordings: captures,
                 acquisitions,
-                assets,
-                capture,
+                status: () => captureCoordinator.status(),
+                autoTranscribe: options.autoTranscribe ?? false,
                 backlog: transcriptBacklog,
                 transcripts,
               },

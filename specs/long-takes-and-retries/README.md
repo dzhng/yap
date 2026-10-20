@@ -11,14 +11,17 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–05 and 07–09 are done (audits passed H1 unchanged). Slice 10 is in
-progress. Origin take
+Status 2026-10-20: slices 00–05 and 07–09 are done (audits passed H1 unchanged). Slice 11 is
+implemented with production-writer goldens and narrow verification; H2 belongs to the
+orchestrator, and the failed-import
+retry field still needs integration with slice 06. Slice 10 is in progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Pick up at [slice 06](slices/06-job-retryability.md) and
-[slice 11](slices/11-prompt-and-wait.md); [10](slices/10-derived-limits.md) is in progress; 12
-follows 06 and 11. Both audits passed H1; apply them as written.
+You are implementing this spec. Finish [slice 06](slices/06-job-retryability.md) and integrate
+it with [slice 11](slices/11-prompt-and-wait.md); [10](slices/10-derived-limits.md) is in progress.
+H2 reviews the prompt goldens without this slice opening any app. Slice 12 follows 06 and 11.
+Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
@@ -53,7 +56,7 @@ TODO:
 - [x] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
 - [x] 09 Change-only cursor samples and hold readers ([slice](slices/09-change-only-cursor.md))
 - [ ] 10 Derived limits and the 12-hour stop ([slice](slices/10-derived-limits.md))
-- [ ] 11 Prompt from capture facts; `recording.get --wait` ([slice](slices/11-prompt-and-wait.md))
+- [x] 11 Prompt from capture facts; `recording.get --wait` ([slice](slices/11-prompt-and-wait.md))
 - [ ] 12 App failures carry their action; Library import Retry ([slice](slices/12-app-failures.md))
 - [ ] 13 Docs, full run, release, origin-take acceptance ([slice](slices/13-closeout.md))
 

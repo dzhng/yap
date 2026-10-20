@@ -23,6 +23,7 @@ import {
   stat,
   realpath,
   chmod,
+  appendFile,
 } from "node:fs/promises";
 import { fork } from "node:child_process";
 import { once } from "node:events";
@@ -48,8 +49,11 @@ import {
   updatePreparationSchema,
 } from "@yap/protocol";
 import { controlledSpeech, modelMetadata } from "./transcript.fixture.js";
-import { sourceWorker } from "./project-capture.fixture.js";
-import type { MediaWorker } from "./worker.js";
+import { sourceWorker, captureFixture } from "./project-capture.fixture.js";
+import { mediaWorker, type MediaWorker } from "./worker.js";
+const { writeNativeCaptureFixture } = await import(
+  new URL("../../../packages/core/src/capture-native.fixture.ts", import.meta.url).href
+);
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -125,7 +129,7 @@ test("recording.prompt hands off projects and imports by their own ID", async ()
   });
 });
 
-test("recording.prompt refuses the latest take, retryably, until it has published", async () => {
+test("recording.prompt describes the latest unpublished take without waiting", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
   expect(await f.call("recording.prompt", {})).toMatchObject({
     ok: false,
@@ -136,12 +140,130 @@ test("recording.prompt refuses the latest take, retryably, until it has publishe
     requestId: "prompt-latest",
     arguments: "{}",
   }).recording;
-  // An unpublished take has nothing to describe, and an older take is not what was asked for.
   for (const params of [{}, { recordingId: latest.id }])
     expect(await f.call("recording.prompt", params)).toMatchObject({
-      ok: false,
-      error: { code: "NOT_READY", retryable: true },
+      ok: true,
+      data: { facts: { recordingId: latest.id, live: true } },
     });
+});
+
+test("finished-take reads return a timed NOT_READY while the acquisition is importing", async () => {
+  const f = await captureFixture(cleanups, undefined, mediaWorker());
+  const take = f.service.captures.allocate().recording;
+  const directory = join(f.home, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    kind: "display",
+    recordingId: take.id,
+    sourceId: take.sourceId,
+  });
+  f.service.captures.ingestLifecycle(take.id, {
+    sourceId: take.sourceId,
+    state: "finalizing",
+    sequence: 1,
+    publication,
+  });
+  const acquisitions = new AcquisitionStore(f.service.captures);
+  const { acquisitionId } = acquisitions.admitCapture(f.service.captures, take.id, directory);
+  const imported = await f.call("asset.import", {
+    path: join(directory, "video.mov"),
+    requestId: "pending-selector",
+  });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  let assetId: string;
+  await expect
+    .poll(async () => {
+      const result = await f.call("job.get", { jobId: (imported.data as { jobId: string }).jobId });
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      const job = result.data as {
+        state: string;
+        published: { output: { assetId: string } } | null;
+      };
+      if (job.published) assetId = job.published.output.assetId;
+      return job.state;
+    })
+    .toBe("ready");
+  const asset = f.service.assets.get(assetId!);
+  const streamId = asset.streams.find((stream) => stream.kind === "video")!.id;
+  for (const request of [
+    { operation: "acquisition.get", params: { acquisitionId } },
+    { operation: "timeline.events", params: { acquisitionId, assetId: asset.id, streamId } },
+  ]) {
+    expect(await f.call(request.operation, request.params)).toMatchObject({
+      ok: false,
+      error: {
+        code: "NOT_READY",
+        retryable: true,
+        retryAfterMs: 15000,
+        message: expect.stringMatching(/importing.*Retry in 15 seconds\./),
+        details: { retry: request },
+      },
+    });
+  }
+});
+
+test("recording.prompt succeeds during import and after a failed import without retrying it", async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const native = mediaWorker();
+  const f = await captureFixture(cleanups, undefined, async (operation, params, options) => {
+    if (operation === "media.sourceEvidence") await held;
+    return native(operation, params, options);
+  });
+  cleanups.push(async () => {
+    release();
+  });
+  const started = await f.call("capture.start", {
+    requestId: "prompt-import-fails",
+    source: { kind: "display", id: 1 },
+    microphone: false,
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(f.home, "library", "recordings", recordingId, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    kind: "display",
+    recordingId,
+    sourceId,
+  });
+  await f.call("capture.stop", { recordingId });
+  const reported = await f.report(
+    {
+      recordingId,
+      sourceId,
+      sequence: 3,
+      state: "complete",
+      sourceDurationUs: 190_000_000,
+      publication,
+    },
+    true,
+  );
+  if (!reported.ok) throw new Error(JSON.stringify(reported));
+  const admission = reported.data as { sourceAdmissions: { job: { id: string } }[] };
+  const take = { recordingId, job: { id: admission.sourceAdmissions[0]!.job.id } };
+  const expected = [
+    "I recorded my screen without narration. Watch what happens with Yap.",
+    `Recording: ${take.recordingId} (3:10, screen, no camera, no microphone, no system audio).`,
+    "Use the yap skill to work with this recording (or run `yap --help`).",
+  ].join("\n");
+  expect(await f.call("recording.prompt", { recordingId: take.recordingId })).toMatchObject({
+    ok: true,
+    data: { text: expected },
+  });
+  await appendFile(join(directory, "video.mov"), "changed after publication");
+  release();
+  await expect
+    .poll(async () => {
+      const result = await f.call("job.get", { jobId: take.job.id });
+      return result.ok ? (result.data as { state: string }).state : null;
+    })
+    .toBe("failed");
+  expect(await f.call("recording.prompt")).toMatchObject({ ok: true, data: { text: expected } });
+  expect(await f.call("job.get", { jobId: take.job.id })).toMatchObject({
+    ok: true,
+    data: { state: "failed", attemptGeneration: 1 },
+  });
 });
 
 test("project.duplicate copies a revision, replays, and survives source deletion", async () => {

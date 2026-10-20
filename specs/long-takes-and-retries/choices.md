@@ -95,3 +95,13 @@ at close.
 - **The schema-3 long-stroke fixture was regenerated** after slice 09 added `written` to the
   `finished` cursor statistics. Nothing decodes those statistics from old journals (Swift's
   `JournalFinished` reads only state, duration and failure; TS never parses them). Sound.
+
+## Slice 11
+
+- **Facts the capture doesn't know stay unknown**: an old take without a summary gets no marks
+  line, and a live take omits its duration. Sound: the prompt never guesses.
+- **Present sources are listed before absent ones** ("screen, camera, microphone, no system
+  audio"). Sound, matching the approved shape.
+- **A take that hasn't settled uses the live variant** ("still recording"). Sound.
+- **A failed import keeps the complete job projection** in `recording.get --wait`'s result, so
+  the caller sees the failure and its resolving call. Sound.
