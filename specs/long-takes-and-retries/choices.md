@@ -95,3 +95,21 @@ at close.
 - **The schema-3 long-stroke fixture was regenerated** after slice 09 added `written` to the
   `finished` cursor statistics. Nothing decodes those statistics from old journals (Swift's
   `JournalFinished` reads only state, duration and failure; TS never parses them). Sound.
+
+## Slice 10
+
+- **New dependency `@streamparser/json`** parses whole JSON documents (transcripts, package pages,
+  evidence manifests) as streams, behind one core module (`json-stream.ts`). The limits audit
+  deleted their 256 MiB caps because no rate derives them, so reading them whole would leave
+  memory unbounded. Provisional: a structural addition the user owns; the alternative is reading
+  whole documents with no bound.
+- **`archive.cleanup` runs with no deadline**, relying on cancellation and parent ownership. The
+  audit deleted its fixed 30 s and no unlink rate is measured to derive one. Low confidence: a
+  hung cleanup waits until cancelled.
+- **Long work budgets are observed, not fixed**: a deadline may be a function re-read every
+  second as an archive streams, and deadlines longer than one Node timer re-arm. Sound.
+- **The 12-hour stop runs the ordinary finish path** and records `maximumDuration` as lifecycle
+  provenance, not a failure; the app shows "Take complete — reached 12 hours." as status text.
+  Sound.
+- **Stop-time journal passes are not folded**: measured journal work stayed under the derived
+  budget. Sound, per the H1 decision.
