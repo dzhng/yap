@@ -109,7 +109,7 @@ let otherFolder = CommandLine.arguments[3]
 @MainActor func controller(_ script: Script, _ chooser: Chooser, _ failures: Failures) -> ExportController {
     ExportController(call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
         choose: { kind, name in script.revision = "r-after"; return await chooser.choose(kind, name) },
-        reveal: { _ in }, changed: {}, failure: { failures.values.append($0) })
+        reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.values.append(message) } })
 }
 @main struct Check {
     @MainActor static func until(line: Int = #line, _ ready: () -> Bool) async {

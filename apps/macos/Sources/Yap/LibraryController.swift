@@ -44,6 +44,7 @@ final class LibraryController {
         state.recordingsRefreshing = false; jobsReading = false; pendingRecordings = false; pendingProjects = false
         state.projectsRefreshing = false
         state.progressFailure = nil
+        state.retryingImports = []
         // An unanswered deletion keeps its identity but must be explicitly retried on the new service.
         for target in state.deletions.keys where state.deletions[target]?.isPending == true {
             state.finishDelete(target, failure: "Delete was not confirmed.")
@@ -62,6 +63,7 @@ final class LibraryController {
         switch action {
         case .previewProject(let id): if usable(id) { preview(id) }
         case .exportProject(let id, let kind): if usable(id) { export(id, kind) }
+        case .retryImport(let id): retryImport(id)
         case .deleteRecording(let id): requestDelete(.recording(id))
         case .deleteAsset(let id): requestDelete(.asset(id))
         case .deleteProject(let id): requestDelete(.project(id))
@@ -249,6 +251,33 @@ final class LibraryController {
         }
     }
 
+    private func retryImport(_ jobId: String) {
+        guard ready, !state.recordingsRefreshing, !state.retryingImports.contains(jobId),
+            let take = state.recent.first(where: { $0.sourceAdmissions?.contains { $0.kind == "primary" && $0.job?.id == jobId } == true }),
+            state.deletions[.recording(take.id)] == nil,
+            let admission = take.sourceAdmissions?.first(where: { $0.kind == "primary" }),
+            let job = admission.job, job.state == "failed", job.retryable,
+            job.details?.retry?.operation == "job.retry", job.details?.retry?.params.jobId == jobId else { return }
+        recordingGeneration = UUID(); jobsReading = false
+        state.retryingImports.insert(jobId)
+        let service = serviceGeneration
+        Task { @MainActor in
+            defer { if service == serviceGeneration { state.retryingImports.remove(jobId) } }
+            do throws(ServiceFailure) {
+                let answer: LibraryState.Job = try await read("job.retry", ["jobId": jobId])
+                guard service == serviceGeneration else { return }
+                guard answer.id == jobId, answer.target == job.target, Self.valid(answer) else {
+                    throw Self.invalid("Preparation returned a different source job")
+                }
+                replaceJob(take.id, admission.sourceId, answer)
+                state.importFailures[jobId] = nil
+            } catch {
+                guard service == serviceGeneration else { return }
+                state.importFailures[jobId] = error.localizedDescription
+            }
+        }
+    }
+
     /// Uses the existing capture cadence, and only reads occupied jobs on visible source receipts.
     func tick() {
         guard ready, !jobsReading, !state.recordingsRefreshing,
@@ -322,7 +351,7 @@ final class LibraryController {
     private func replaceJob(_ recordingId: String, _ sourceId: String, _ job: LibraryState.Job) {
         guard let index = state.recent.firstIndex(where: { $0.id == recordingId }),
             var admissions = state.recent[index].sourceAdmissions,
-            let source = admissions.firstIndex(where: { $0.sourceId == sourceId }) else { return }
+            let source = admissions.firstIndex(where: { $0.sourceId == sourceId && $0.job?.id == job.id }) else { return }
         let take = state.recent[index]
         admissions[source].job = job
         state.recent[index] = .init(id: take.id, createdAt: take.createdAt,

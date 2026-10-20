@@ -34,7 +34,7 @@ final class PreviewController {
     private let call: Call
     private let presentation: any PreviewPresenting
     private let now: @MainActor () -> Date
-    private let failure: (String) -> Void
+    private let failure: (ControlsAction, String?) -> Void
     private let changed: () -> Void
     private let export: @MainActor (String, String) -> Void
     private let timelineEnabled: Bool
@@ -63,7 +63,7 @@ final class PreviewController {
         now: @escaping @MainActor () -> Date = Date.init, changed: @escaping () -> Void = {},
         export: @escaping @MainActor (String, String) -> Void = { _, _ in },
         timelineEnabled: Bool = false,
-        failure: @escaping (String) -> Void)
+        failure: @escaping (ControlsAction, String?) -> Void)
     {
         self.call = call
         self.presentation = presentation
@@ -232,6 +232,7 @@ final class PreviewController {
                         if partial, let playbackRange = movie.playbackRange ?? answer.range {
                             partialEndUs = playbackRange.endUs
                         }
+                        failure(.previewProject(target.id), nil)
                         playInitial(title: title, movie: movie, partial: partial, generation: current)
                         if partial { beginContinuation(title: title, generation: current, revisionId: answer.revisionId) }
                     } else if delivered != nil {
@@ -392,8 +393,9 @@ final class PreviewController {
     }
 
     private func stop(_ reason: String) {
+        let action = target.map { ControlsAction.previewProject($0.id) }
         close()
-        failure(reason)
+        if let action { failure(action, reason) }
     }
 
     private func release(_ token: String) {

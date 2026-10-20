@@ -56,3 +56,9 @@ Checkpoint H3: row and panel shots, non-blocking.
 
 Retry Delete, Retry Export/Cleanup, Retry Preview, Retry Finalization, selection handling,
 focus-free tests.
+
+## Implementation evidence
+
+Implementation and focused checks pass. [Shots, red/green evidence and delegated choices](../assets/app-failures/README.md)
+are ready for the orchestrator's screenshot critique, comparison and H3. No installed app or macOS
+Preview launch, commit, full repository run or origin-take acceptance was performed.

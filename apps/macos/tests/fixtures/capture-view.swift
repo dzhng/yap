@@ -1,5 +1,6 @@
 import AppKit
 import YapControls
+import YapMedia
 
 @main struct CaptureViewCheck {
     @MainActor static func main() {
@@ -40,6 +41,14 @@ import YapControls
         (recent.control(identifier: "recording.copyPrompt.fixture-recording") as! NSButton).performClick(nil)
         precondition(recorded.last == .controls(.copyRecordingPrompt("fixture-recording")),
                      "The capture menu dispatches the same prompt action as Library")
+        let failed = CaptureView(appIcon: appIcon, input: failureFixture()) { recorded.append($0) }
+        let retry = failed.control(identifier: ControlsAction.retryFailure.id)!
+        let dismiss = failed.control(identifier: ControlsAction.dismissFailure.id)!
+        let start = failed.control(identifier: "capture.start")!
+        precondition(retry.frame.minY == dismiss.frame.minY && retry.frame.maxX < dismiss.frame.minX,
+                     "Retry and Dismiss must share one row, with Retry first")
+        precondition(retry.frame.width < start.frame.width / 2 && retry.frame.height < start.frame.height,
+                     "Failure actions stay compact beside the primary recording action")
         func pixels(_ button: NSButton) -> Data {
             let bitmap = button.bitmapImageRepForCachingDisplay(in: button.bounds)!
             button.cacheDisplay(in: button.bounds, to: bitmap)
@@ -288,6 +297,7 @@ import YapControls
         let labelled = CommandLine.arguments[3] != "omit"
         var observations: [[String: Any]] = []
         for (name, facts, limit) in [
+            ("failure", failureFixture(), CGFloat(0)),
             ("idle", fixture(), CGFloat(0)),
             ("camera-only", fixture(cameraOnly: true), CGFloat(0)),
             ("recording", recordingFixture(), CGFloat(0)),
@@ -425,6 +435,18 @@ import YapControls
         return input
     }
 
+    @MainActor static func failureFixture() -> CaptureViewInput {
+        var input = fixture()
+        var state = ControlsState()
+        state.service = .ready
+        state.selection.source = .display(.init(id: 1, name: "Studio Display", width: 2560, height: 1440))
+        let request = state.beginStart(newRequestId: "fixture-start")!
+        state.failure = .init(RefusalLedger.cause("TIMEOUT")!, request: "fixture-start", action: .start(request), operation: "capture.start")
+        input.failureMessage = state.failure?.message
+        input.notices = CapturePresentation.noticeLines(for: state)
+        input.failureAction = CapturePresentation.failureAction(for: state)
+        return input
+    }
     @MainActor static func fixture(locked: Bool = false, cameraOnly: Bool = false, longNames: Bool = false, duplicateNames: Bool = false, microphoneOn: Bool = true, secondSource: Bool = false, startEnabled: Bool? = nil, status: String = "Ready to record", lastRecording: Bool = false, previews: Bool = true, noDevices: Bool = false) -> CaptureViewInput {
         let preview = !previews ? nil : NSImage(size: NSSize(width: 160, height: 90), flipped: false) { rect in
             NSColor(calibratedWhite: 0.12, alpha: 1).setFill(); rect.fill()

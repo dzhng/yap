@@ -16,6 +16,8 @@ public enum ControlsAction: Hashable, Sendable {
     /// during one. The menu's switch and the floating controls send this same action.
     case setCamera(Bool)
     case startOrStop
+    case dismissFailure
+    case retryFailure
     case pastePrompt
     case undoMark
     case pauseOrResume
@@ -34,6 +36,7 @@ public enum ControlsAction: Hashable, Sendable {
     case previousRecordings
     case refreshLibrary
     case deleteRecording(String)
+    case retryImport(String)
     case playAsset(String)
     case copyAssetPrompt(String)
     case deleteAsset(String)
@@ -65,6 +68,8 @@ public enum ControlsAction: Hashable, Sendable {
         case .showCameraPreview(let shown): shown ? "camera.preview.show" : "camera.preview.hide"
         case .setCamera(let on): on ? "capture.camera.on" : "capture.camera.off"
         case .startOrStop: "capture.startOrStop"
+        case .dismissFailure: "failure.dismiss"
+        case .retryFailure: "failure.retry"
         case .pastePrompt: "capture.pastePrompt"
         case .undoMark: "capture.undoMark"
         case .pauseOrResume: "capture.pauseOrResume"
@@ -85,6 +90,7 @@ public enum ControlsAction: Hashable, Sendable {
         case .nextRecordings: "library.recordings.next"
         case .previousRecordings: "library.recordings.previous"
         case .refreshLibrary: "library.refresh"
+        case .retryImport(let id): "recording.retryImport.\(id)"
         case .deleteRecording(let id): "recording.delete.\(id)"
         case .resendExport(let id): "export.resend.\(id)"
         case .retryExport(let id): "export.jobRetry.\(id)"

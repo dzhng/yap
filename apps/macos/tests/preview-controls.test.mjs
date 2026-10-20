@@ -73,7 +73,7 @@ import YapControls
 }
 struct Refused: LocalizedError { let message: String; var errorDescription: String? { message } }
 @MainActor final class Clock { var date: Date; init(_ date: Date) { self.date = date } }
-@MainActor final class Failures { var values: [String] = [] }
+@MainActor final class Failures { var values: [String] = []; var state = ControlsState() }
 @MainActor final class Script {
     var replies: [String: [Result<Data, Refused>]] = [:]
     var calls: [(String, [String: Any])] = []
@@ -113,7 +113,10 @@ struct Refused: LocalizedError { let message: String; var errorDescription: Stri
     init(_ date: Date) {
         let service = Script(), view = Presentation(), clock = Clock(date), failures = Failures()
         self.service = service; self.view = view; self.clock = clock; self.failures = failures
-        owner = PreviewController(call: service.call, presentation: view, now: { clock.date }, failure: { failures.values.append($0) })
+        owner = PreviewController(call: service.call, presentation: view, now: { clock.date }, failure: { action, message in
+            failures.state.observeAction(action, failure: message, on: .library)
+            if let message { failures.values.append(message) }
+        })
     }
     func ready(_ target: MediaTarget, _ receipt: [String: Any]) async {
         service.answer("preview.get", receipt)
@@ -150,6 +153,17 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         let expiry = delivery["expiresAtMs"] as! Double
         let start = Date(timeIntervalSince1970: expiry / 1000 - 20)
         let originalMovie = (ready["published"] as! [String: Any])["output"] as! [String: Any]
+
+        let recovered = Rig(start)
+        recovered.service.refuse("preview.get", "Preview could not be read.")
+        recovered.owner.open(id)
+        await until { recovered.failures.state.failure != nil }
+        precondition(recovered.failures.state.failure?.request == ControlsAction.previewProject(id).id)
+        recovered.service.answer("preview.get", ready)
+        recovered.owner.open(id)
+        await until { !recovered.view.movies.isEmpty }
+        precondition(recovered.failures.state.failure == nil, "A successful reattempt resolves only its own preview failure")
+        recovered.owner.close()
 
         let pinned = Rig(start)
         pinned.service.answer("preview.get", waiting)
@@ -430,7 +444,7 @@ struct Refused: Error {}
         var owner: PreviewController?
         var observations: [Bool] = []
         let preview = PreviewController(call: { _, _ in throw Refused() }, presentation: Presentation(),
-            changed: { observations.append(owner?.isOpen == true) }, failure: { _ in })
+            changed: { observations.append(owner?.isOpen == true) }, failure: { _, _ in })
         owner = preview
         preview.open("first")
         preview.open("second")

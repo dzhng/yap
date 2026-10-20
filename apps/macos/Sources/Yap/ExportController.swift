@@ -20,7 +20,7 @@ final class ExportController {
     private let choose: Choose
     private let reveal: @MainActor (URL) -> Void
     private let changed: @MainActor () -> Void
-    private let failure: @MainActor (String) -> Void
+    private let failure: @MainActor (ControlsAction, String?) -> Void
     private var observing = false
     private var discovering = false
     private var pendingDiscovery = false
@@ -29,7 +29,7 @@ final class ExportController {
     init(
         call: @escaping Call, choose: @escaping Choose = ExportController.savePanel,
         reveal: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) },
-        changed: @escaping @MainActor () -> Void, failure: @escaping @MainActor (String) -> Void
+        changed: @escaping @MainActor () -> Void, failure: @escaping @MainActor (ControlsAction, String?) -> Void
     ) {
         self.call = call
         self.choose = choose
@@ -56,11 +56,11 @@ final class ExportController {
                 answer = try await call("project.get", target.parameters)
             } catch {
                 guard state.choosing == choice else { return }
-                return failure(error.localizedDescription)
+                return failure(.exportProject(projectId, kind), error.localizedDescription)
             }
             guard state.choosing == choice else { return }
             guard let owner = try? JSONDecoder().decode(Owner.self, from: answer), MediaTarget.project(owner.id) == target else {
-                return failure("The service returned an unreadable or different export owner.")
+                return failure(.exportProject(projectId, kind), "The service returned an unreadable or different export owner.")
             }
             let revisionId = owner.currentRevisionId
             let destination = await choose(kind, Self.suggestedName(owner, revisionId, kind))
@@ -72,7 +72,7 @@ final class ExportController {
                 defer { free(resolved) }
                 return String(cString: resolved)
             }
-            guard let directory else { return failure("The selected export folder could not be resolved.") }
+            guard let directory else { return failure(.exportProject(projectId, kind), "The selected export folder could not be resolved.") }
             let request = ExportsState.Request(
                 exportId: choice.exportId, target: target, kind: kind,
                 revisionId: revisionId, directory: directory,
@@ -111,7 +111,7 @@ final class ExportController {
                 state.send(request)
                 changed()
                 await send(request)
-            } catch { failure(error.localizedDescription) }
+            } catch { failure(.exportProject(projectId, kind), error.localizedDescription) }
         }
     }
 
@@ -125,14 +125,12 @@ final class ExportController {
     }
 
     func retry(_ exportId: String) {
-        guard state.begin(.retry, exportId) else { return }
+        guard let jobId = state.records.first(where: { $0.exportId == exportId })?.jobId,
+            state.begin(.retry, exportId) else { return }
         changed()
         Task { @MainActor in
             defer { changed() }
             do throws(ServiceFailure) {
-                guard let jobId = state.records.first(where: { $0.exportId == exportId })?.jobId else {
-                    throw ServiceFailure(code: "NOT_READY", message: "Export has no retryable job")
-                }
                 // job.retry answers with the job itself; the export is read back as usual.
                 _ = try await call("job.retry", ["jobId": jobId])
                 guard known(exportId) else { return }
@@ -300,13 +298,14 @@ final class ExportController {
             let answer = try await call("export.create", params)
             guard known(request.exportId) else { return }
             state.admit(try record(answer, exportId: request.exportId))
+            failure(.exportProject(request.target.id, request.kind), nil)
         } catch where Self.unanswered.contains(error.code) {
             guard known(request.exportId) else { return }
             state.unanswered(request.exportId, reason: error.localizedDescription)
         } catch {
             guard known(request.exportId) else { return }
             state.refuse(request.exportId)
-            failure(error.localizedDescription)
+            failure(.exportProject(request.target.id, request.kind), error.localizedDescription)
         }
     }
 

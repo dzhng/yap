@@ -142,3 +142,20 @@ at close.
   the caller sees the failure and its resolving call. Sound.
 - **Unknown sources are absent from the prompt facts, never `undefined`**, because the service's
   response encoder accepts only strict JSON. Sound (found when slice 11 met slice 10's encoder).
+
+## Slice 12
+
+- **A failure belongs to its surface and its request**; only that request's success clears it,
+  and background reads no longer overwrite it. Sound.
+- **Errors with no retryable request show status text with Dismiss**, and errors with one show
+  Retry and Dismiss on one compact row. Provisional: Q12 chose prevention or plain status text;
+  Dismiss is the lightest way to let a person clear text that otherwise stays until its request
+  succeeds.
+- **The failed-import row says "Import failed" in the warning colour**, keeps duration and audio
+  in the normal colour, and puts the user-approved sentence on its own line, with Retry aligned to
+  the text. Sound (corrected after the first unprimed critique: the whole line was orange and ran
+  facts and error together).
+- **158 user-visible ledger causes were rewritten in plain words**, and the capture panel names
+  the action that failed ("Couldn't start recording: …"). Sound (from the same critique; the
+  timeout cause names "Yap's background service" after the second critique read "Yap didn't
+  respond" as the app talking about itself).

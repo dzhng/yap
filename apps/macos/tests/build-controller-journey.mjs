@@ -44,7 +44,7 @@ for (const name of Object.keys(moduleSources)) {
       output,
       "-L",
       output,
-      ...(name === "YapCapture" ? ["-lYapMedia"] : []),
+      ...(["YapCapture", "YapControls"].includes(name) ? ["-lYapMedia"] : []),
       "-o",
       join(output, `lib${name}.dylib`),
     ],

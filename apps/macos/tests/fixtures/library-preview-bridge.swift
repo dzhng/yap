@@ -158,7 +158,7 @@ func draftPreview(_ projectId: String) -> [String: Any] {
                 live.preparing = false
                 let presentation = Presentation(evidence)
                 var failures: [String] = []
-                let preview = PreviewController(call: live.call, presentation: presentation, failure: { failures.append($0) })
+                let preview = PreviewController(call: live.call, presentation: presentation, failure: { _, message in if let message { failures.append(message) } })
                 let owner = library(live.call, preview)
                 owner.serviceChanged(ready: true)
                 try await until { !owner.state.projectsRefreshing && !owner.state.recent.isEmpty || !owner.state.projectsRefreshing && !owner.state.projects.isEmpty }
@@ -183,7 +183,7 @@ func draftPreview(_ projectId: String) -> [String: Any] {
                 owner.perform(.previewProject(selected["id"]!))
                 try await until { !failures.isEmpty }
                 try require(live.refused.count == 1 && live.refused[0]["operation"] as? String == "preview.get" && (live.refused[0]["params"] as! NSDictionary).isEqual(to: draftPreview(selected["id"]!)), "Actual library action must dispatch exactly the selected project owner")
-                try require(presentation.movies.isEmpty && failures.last!.contains("FIXTURE_METADATA_ONLY"), "Metadata action must stop before live preview submission")
+                try require(presentation.movies.isEmpty && failures.last == "Preview dispatch observed before service submission", "Metadata action must stop before live preview submission")
                 preview.close(); live.host.shutdown(); try await until { live.exited }
                 live.watcher?.cancel(); evidence.record(["check": "actual-metadata-pages-get-and-composed-dispatch", "passed": true])
                 source = nil
@@ -197,7 +197,7 @@ func draftPreview(_ projectId: String) -> [String: Any] {
             let clock = Date(timeIntervalSince1970: expiry / 1000 - 20)
             evidence.record(["scope": "historical-replay", "clockUnixMs": clock.timeIntervalSince1970 * 1000])
             var failures: [String] = []
-            let preview = PreviewController(call: historical.call, presentation: presentation, now: { clock }, failure: { failures.append($0) })
+            let preview = PreviewController(call: historical.call, presentation: presentation, now: { clock }, failure: { _, message in if let message { failures.append(message) } })
             let owner = library(historical.call, preview)
             // As the app does: the preview is titled by the name the Library holds for the project.
             preview.projectTitle = { id in owner.state.projects.first { $0.id == id }?.title }

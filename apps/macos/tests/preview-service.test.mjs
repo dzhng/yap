@@ -118,7 +118,7 @@ import CryptoKit
             FileHandle.standardOutput.write(Data("SERVICE_PID=\\(pid)\\n".utf8))
         }
         var failures: [String] = []
-        let owner = PreviewController(call: { try await host.call($0, $1) }, timelineEnabled: true, failure: { failures.append($0) })
+        let owner = PreviewController(call: { try await host.call($0, $1) }, timelineEnabled: true, failure: { _, message in if let message { failures.append(message) } })
         defer { owner.close() }
         let id = CommandLine.arguments[2]
         owner.open(id)
@@ -164,7 +164,7 @@ import CryptoKit
         for _ in 0..<30 { owner.tick(); await pause(); if visible() == nil { break } }
         precondition(visible() == nil && view.player == nil)
         precondition(!FileManager.default.fileExists(atPath: asset.url.path))
-        precondition(failures.last?.contains("NOT_FOUND") == true)
+        precondition(failures.last?.contains("The requested item does not exist.") == true)
         print("PASS real deletion stops player and removes cached media")
     }
 }

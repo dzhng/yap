@@ -21,7 +21,7 @@ final class RecordingControls: NSObject {
     private let home: String
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private lazy var capturePopover = CapturePopover(perform: { [weak self] in self?.perform($0) })
-    private lazy var libraryWindow = LibraryWindow(perform: { [weak self] in self?.perform($0) })
+    private lazy var libraryWindow = LibraryWindow(perform: { [weak self] in self?.perform($0, surface: .library) })
     private var emptySourceMode = CaptureViewInput.Source.display
     private let shortcuts = GlobalShortcuts()
     private lazy var region = RegionSelection(changed: { [weak self] in self?.render() })
@@ -56,9 +56,10 @@ final class RecordingControls: NSObject {
             self?.exports.exportToDownloads(projectId, revisionId: revisionId)
         },
         timelineEnabled: true,
-        failure: { [weak self] message in
-            self?.state.libraryFailure = message
-            self?.render()
+        failure: { [weak self] action, message in
+            guard let self else { return }
+            state.observeAction(action, failure: message, on: .library)
+            render()
         }).titled { [weak self] id in self?.state.library.projects.first { $0.id == id }?.title }
     private lazy var exports = ExportController(
         call: { [weak self] operation, params throws(ServiceFailure) in
@@ -66,9 +67,10 @@ final class RecordingControls: NSObject {
             return try await self.service().call(operation, params)
         },
         changed: { [weak self] in self?.render() },
-        failure: { [weak self] message in
-            self?.state.libraryFailure = message
-            self?.render()
+        failure: { [weak self] action, message in
+            guard let self else { return }
+            state.observeAction(action, failure: message, on: .library)
+            render()
         })
     private lazy var library: LibraryController = LibraryController(
         call: { [weak self] operation, params throws(ServiceFailure) in
@@ -138,14 +140,14 @@ final class RecordingControls: NSObject {
             bindings = try ShortcutBindings.decode(
                 FileManager.default.contents(atPath: GlobalShortcuts.overridePath(home: home)))
         } catch {
-            state.failure = "Shortcuts file refused, using the defaults: \(error.message)"
+            state.failure = .init("Shortcuts file refused, using the defaults: \(error.message)")
         }
         do {
             try applyShortcuts(bindings, recording: false)
         } catch {
             // A hand-edited file can bind one key twice; the defaults never do, so they hold
             // instead and Settings shows what is actually registered.
-            state.failure = "Duplicate shortcuts: \(error)"
+            state.failure = .init("Duplicate shortcuts: \(error)")
             try? applyShortcuts(ShortcutBindings.defaults, recording: false)
         }
         statusItem.button?.target = self
@@ -277,7 +279,7 @@ final class RecordingControls: NSObject {
         do {
             try applyShortcuts(bindings, recording: state.isLive || state.counting)
         } catch {
-            state.failure = "Duplicate shortcuts: \(error)"
+            state.failure = .init("Duplicate shortcuts: \(error)")
         }
         render()
     }
@@ -312,7 +314,7 @@ final class RecordingControls: NSObject {
             let data = try JSONSerialization.data(withJSONObject: params)
             _ = try updateOperation(operation, data).get()
         } catch {
-            state.failure = error.localizedDescription
+            state.failure = .init(error.localizedDescription)
             render()
         }
     }
@@ -389,7 +391,7 @@ final class RecordingControls: NSObject {
         case .chooseSource(let source):
             guard !state.isLive, !state.counting, !updateFenced else { return }
             guard source == .cameraOnly || state.screenSelectionAuthorized else {
-                state.failure = CapturePresentation.screenSelectionPermissionNotice
+                state.failure = .init(CapturePresentation.screenSelectionPermissionNotice)
                 render()
                 return
             }
@@ -421,7 +423,7 @@ final class RecordingControls: NSObject {
         perform(action, origin: origin)
     }
 
-    func perform(_ action: ControlsAction, origin: ControlsState.StartOrigin? = nil) {
+    func perform(_ action: ControlsAction, origin: ControlsState.StartOrigin? = nil, surface: ControlsState.Failure.Scope = .capture) {
         // A second press within 0.4 s of a hotkey start is the same press bouncing, not a request
         // to finish: ignoring it means a double tap never leaves an empty take behind.
         if action == .startOrStop, case .hotkey = origin,
@@ -431,16 +433,14 @@ final class RecordingControls: NSObject {
             switch action {
             case .quit, .openSettings, .openLibrary: break
             default:
-                state.failure = "An update is installing. Try again after the app reopens."
+                state.failure = .init("An update is installing. Try again after the app reopens.")
                 render(); return
             }
         }
-        state.failure = nil
-        state.libraryFailure = nil
         switch action {
         case .selectDisplay, .selectWindow, .selectRegion:
             guard state.screenSelectionAuthorized else {
-                state.failure = CapturePresentation.screenSelectionPermissionNotice
+                state.failure = .init(CapturePresentation.screenSelectionPermissionNotice)
                 render()
                 return
             }
@@ -464,7 +464,7 @@ final class RecordingControls: NSObject {
             }
         case .selectRegion:
             guard !state.sources.displays.isEmpty else {
-                state.failure = "Allow screen recording access before choosing an area."
+                state.failure = .init("Allow screen recording access before choosing an area.")
                 render()
                 return
             }
@@ -498,13 +498,21 @@ final class RecordingControls: NSObject {
             if let request = state.setCamera(on) { setCamera(request) }
         case .startOrStop:
             state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
+        case .dismissFailure:
+            state.failure = nil
+        case .retryFailure:
+            switch state.failure?.action {
+            case .start(let request): start(origin: request.origin, retrying: request)
+            case .copyPrompt(let target): copyPrompt(target, surface: state.failure?.scope ?? .capture)
+            case nil: break
+            }
         case .pastePrompt:
             let recordingId = state.isLive ? (live()?["recordingId"] as? String) : nil
             copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
         case .undoMark:
             guard state.isLive else { return render() }
             do { try captureController?.undoMark() }
-            catch { state.failure = error.localizedDescription }
+            catch { state.failure = .init(error.localizedDescription) }
         case .pauseOrResume:
             guard state.isLive else { return render() }
             send(state.device?.state == .paused ? "capture.resume" : "capture.pause", live())
@@ -514,16 +522,16 @@ final class RecordingControls: NSObject {
         case .restart:
             restart()
         case .playRecording(let recordingId):
-            playRecording(recordingId)
+            playRecording(recordingId, surface: surface)
         case .copyRecordingPrompt(let recordingId):
-            copyPrompt(.recording(recordingId))
+            copyPrompt(.recording(recordingId), surface: surface)
         case .copyProjectPrompt(let projectId):
-            copyPrompt(.project(projectId))
+            copyPrompt(.project(projectId), surface: surface)
         case .playAsset(let assetId):
-            playAsset(assetId)
+            playAsset(assetId, surface: surface)
         case .copyAssetPrompt(let assetId):
-            copyPrompt(.asset(assetId))
-        case .deleteRecording, .deleteAsset,
+            copyPrompt(.asset(assetId), surface: surface)
+        case .retryImport, .deleteRecording, .deleteAsset,
             .previewProject, .exportProject, .deleteProject, .nextProjects, .previousProjects, .nextRecordings, .previousRecordings, .refreshLibrary:
             break // LibraryController handles these before capture selections.
         case .resendExport(let exportId):
@@ -582,7 +590,7 @@ final class RecordingControls: NSObject {
         // the only way to abandon a count for somebody whose Escape key this app could not hold.
         if countdown.isCounting { return countdown.abandon() }
         guard !state.cameraBlocksStart else {
-            state.failure = "Choose a camera before recording."
+            state.failure = .init("Choose a camera before recording.")
             showCaptureIfClosed()
             return
         }
@@ -604,11 +612,11 @@ final class RecordingControls: NSObject {
         }
     }
 
-    private func start(origin: ControlsState.StartOrigin) {
-        guard let request = state.beginStart(newRequestId: UUID().uuidString, origin: origin) else { return }
+    private func start(origin: ControlsState.StartOrigin, retrying: ControlsState.StartRequest? = nil) {
+        guard let request = state.beginStart(newRequestId: UUID().uuidString, origin: origin, retrying: retrying) else { return }
         capturePopover.close()
         render()
-        send("capture.start", parameters(of: request.start, requestId: request.requestId)) {
+        send("capture.start", parameters(of: request.start, requestId: request.requestId), failureRequest: retrying?.requestId ?? request.requestId) {
             [weak self] result in
             guard let self else { return }
             let answer: ControlsState.StartAnswer
@@ -625,7 +633,11 @@ final class RecordingControls: NSObject {
             if state.finishStart(request, answer) { return start(origin: request.origin) }
             if case .failure(let failure) = result,
                 PermissionKind.missing(fromStartFailure: failure.code) != nil { readPermissions() }
-            if case .failure = result { showCaptureIfClosed() }
+            if case .failure(let failure) = result {
+                state.failure = .init(failure.localizedDescription, request: request.requestId,
+                    action: failure.retryable ? .start(request) : nil, operation: "capture.start")
+                showCaptureIfClosed()
+            }
         }
     }
 
@@ -645,7 +657,7 @@ final class RecordingControls: NSObject {
     private func restart() {
         guard let recordingId = state.device?.recordingId else { return }
         guard let start = state.restartStart else {
-            state.failure = "Choose a source before recording."
+            state.failure = .init("Choose a source before recording.")
             return
         }
         var params = parameters(of: start, requestId: UUID().uuidString)
@@ -683,23 +695,24 @@ final class RecordingControls: NSObject {
         return params
     }
 
-    /// Sends one service operation and shows what came back. A refusal is stated in the menu with
-    /// the service's own code, so a person sees what was refused rather than a silent no-op.
+    /// Sends one operation; only its own success resolves the failure it produced.
     private func send(
-        _ operation: String, _ params: [String: Any]?,
+        _ operation: String, _ params: [String: Any]?, failureRequest: String? = nil,
         then settle: (@MainActor (Result<Data, ServiceFailure>) -> Void)? = nil
     ) {
         guard let params else {
-            state.failure = "No take is recording."
+            state.failure = .init("No take is recording.")
             return render()
         }
+        let request = failureRequest ?? "\(operation).\(params["recordingId"] as? String ?? "")"
         Task { @MainActor in
             let result: Result<Data, ServiceFailure>
             do throws(ServiceFailure) {
                 result = .success(try await service().call(operation, params))
+                state.resolveFailure(request: request)
             } catch {
                 result = .failure(error)
-                state.failure = error.localizedDescription
+                state.failure = .init(error.localizedDescription, request: request, operation: operation)
             }
             settle?(result)
             refresh()
@@ -760,14 +773,13 @@ final class RecordingControls: NSObject {
                 let granted = try await NativeCapture.requestPermission(
                     kind.rawValue)
                 if granted, kind == .screen, !NativeCapture.screenPermission {
-                    state.failure = "Screen recording was allowed. Quit and reopen Yap to record."
+                    state.failure = .init("Screen recording was allowed. Quit and reopen Yap to record.")
                 } else if !granted {
                     if kind == .screen { screenRequestRefused = true }
-                    state.failure =
-                        "\(kind.missingLine) Allow it in System Settings > Privacy & Security."
+                    state.failure = .init("\(kind.missingLine) Allow it in System Settings > Privacy & Security.")
                 }
             } catch {
-                state.failure = error.localizedDescription
+                state.failure = .init(error.localizedDescription)
             }
             refresh()
             render()
@@ -936,7 +948,7 @@ final class RecordingControls: NSObject {
         do {
             try applyShortcuts(bindings, recording: recording)
         } catch {
-            state.failure = "Duplicate shortcuts: \(error)"
+            state.failure = .init("Duplicate shortcuts: \(error)")
         }
     }
 
@@ -962,7 +974,7 @@ final class RecordingControls: NSObject {
     func openCapture() { if !capturePopover.isShown { toggleCapture() } }
     func closeCapture() { capturePopover.close() }
 
-    private func playRecording(_ recordingId: String) {
+    private func playRecording(_ recordingId: String, surface: ControlsState.Failure.Scope) {
         let source = URL(fileURLWithPath: home)
             .appendingPathComponent("library/recordings")
             .appendingPathComponent(recordingId)
@@ -970,10 +982,11 @@ final class RecordingControls: NSObject {
         let video = source.appendingPathComponent("video.mov")
         let narration = source.appendingPathComponent("narration.mov")
         guard FileManager.default.fileExists(atPath: video.path) else {
-            state.failure = "Recording media is unavailable."
+            state.failure = .init("Couldn't play recording: Its video is unavailable.", scope: surface, request: ControlsAction.playRecording(recordingId).id)
             render()
             return
         }
+        state.resolveFailure(request: ControlsAction.playRecording(recordingId).id)
         if FileManager.default.fileExists(atPath: narration.path) {
             recordingPreview.playLocalRecording(title: "Recording — \(recordingId)",
                 video: video.path, narration: narration.path)
@@ -984,7 +997,7 @@ final class RecordingControls: NSObject {
     }
 
     /// An import plays from the library's own copy, named by the asset's immutable file name.
-    private func playAsset(_ assetId: String) {
+    private func playAsset(_ assetId: String, surface: ControlsState.Failure.Scope) {
         Task { @MainActor in
             do throws(ServiceFailure) {
                 let asset = try await service().call("asset.get", ["assetId": assetId], as: AssetFile.self)
@@ -992,14 +1005,15 @@ final class RecordingControls: NSObject {
                     .appendingPathComponent(asset.fileName)
                 guard asset.id == assetId, !asset.fileName.contains("/"),
                     FileManager.default.fileExists(atPath: file.path) else {
-                    state.failure = "Imported media is unavailable."
+                    state.failure = .init("Couldn't play video: Its file is unavailable.", scope: surface, request: ControlsAction.playAsset(assetId).id)
                     render()
                     return
                 }
+                state.resolveFailure(request: ControlsAction.playAsset(assetId).id)
                 let type = UTType(filenameExtension: file.pathExtension)?.preferredMIMEType ?? "video/quicktime"
                 recordingPreview.playLocalFile(title: asset.fileName, file: file.path, mediaType: type)
             } catch {
-                state.failure = error.localizedDescription
+                state.failure = .init("Couldn't play video: \(error.localizedDescription)", scope: surface, request: ControlsAction.playAsset(assetId).id)
                 render()
             }
         }
@@ -1008,18 +1022,21 @@ final class RecordingControls: NSObject {
 
     /// The service owns the handoff text; the app only copies what `recording.prompt` returns, or
     /// pastes it into the front app for the paste shortcut. No target means the newest recording.
-    private func copyPrompt(_ target: MediaTarget?, paste: Bool = false) {
+    private func copyPrompt(_ target: MediaTarget?, paste: Bool = false, surface: ControlsState.Failure.Scope = .capture) {
+        let request = "recording.prompt.\(String(describing: target))"
         Task { @MainActor in
             do throws(ServiceFailure) {
                 let answer = try await service().call(
                     "recording.prompt", target?.parameters ?? [:], as: PromptAnswer.self)
+                state.resolveFailure(request: request)
                 if !paste {
                     paster.copy(answer.text)
                 } else if paster.paste(answer.text) == .copied {
                     pasteNotice.show()
                 }
             } catch {
-                state.failure = error.localizedDescription
+                state.failure = .init("Couldn't \(paste ? "paste" : "copy") prompt: \(error.localizedDescription)", scope: surface,
+                    request: request, action: paste ? .copyPrompt(target) : nil)
                 render()
             }
         }
@@ -1207,7 +1224,8 @@ final class RecordingControls: NSObject {
             guard let access = state.permissions?.access(to: kind), access != .granted else { return nil }
             return .init(kind.action, kind.allowTitle(for: access), enabled: !state.isLive && !updateFenced)
         }
-        if state.failure != nil && !state.isLive { input.permissionActions.append(.init(.startOrStop, "Retry", enabled: input.startEnabled)) }
+        input.failureMessage = state.failure?.scope == .capture ? state.failure?.message : nil
+        input.failureAction = CapturePresentation.failureAction(for: state)
         input.transport = state.isLive ? Array(transport.dropFirst()) : []
         if case .companion = liveCamera { input.liveCamera = !updateFenced }
         if let take = state.library.recent.first {
