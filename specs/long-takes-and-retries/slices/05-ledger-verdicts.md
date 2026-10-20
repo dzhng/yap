@@ -41,3 +41,14 @@ Names of split codes (as recorded in 01).
 
 Every test that asserts a specific code's retryability, updated to the new verdicts in the same
 change (list them in the commit message).
+
+## Immutable-input review verification
+
+Captured bytes and journals are immutable retry inputs. Their absent content or conflicting
+authority settles unavailable, while reader/verifier bugs and operational access failures
+remain retryable. The ledger and [audit](../error-verdicts.md) carry the corrected decisions;
+Swift continues to derive the publication split from that one owner.
+
+The rebuilt recovery gate and default suite pass. [Per-selector and per-file results](../assets/verification/05-ledger-verdicts.md)
+record the red/green evidence and the one historical-donor performance probe that could not
+be verified within the task's media restriction.

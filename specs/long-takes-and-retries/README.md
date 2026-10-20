@@ -25,7 +25,10 @@ production path, faking only hardware. Run the narrowest check that proves the s
 repository run happens once, in slice 13.
 
 Warnings:
-- Slice 05's native helper and capture/frame test products are built. Targeted native,
+- Slice 05's [immutable-input review](assets/verification/05-ledger-verdicts.md) corrects permanent
+  captured-media/journal verdicts; the rebuilt recovery gate and default suite pass. One
+  historical-donor performance probe remains unverified under the media restriction.
+  Slice 05's native helper and capture/frame test products are built. Targeted native,
   recovery, export integration and native-backed service/core checks pass. Swift app failures
   and native publication share one ledger reader; packaged-app missing-ledger refusal and
   source-built checkout resolution pass. The packaged-app lifetime test was not run here

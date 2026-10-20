@@ -42,3 +42,9 @@ at close.
 - **A test fixture hard-links verified immutable tool files** instead of cloning them, because the
   clone missed an existing 2-second probe deadline under the pinned Node. Sound: test
   infrastructure only, production deadlines unchanged.
+- **Codes that state a fact about immutable captured bytes are non-retryable** (13 codes, e.g.
+  `AUDIO_UNAVAILABLE`, `INVALID_JOURNAL_PREFIX`, `PUBLICATION_CONFLICT`), because the native
+  helper publishes a take without a source whose failure is non-retryable and holds it pending
+  otherwise. Sound (corrected after the recovery tests failed: making them retryable would have
+  held such takes pending forever). Codes where our reader wrongly rejected valid bytes, such as
+  `INVALID_EVIDENCE`, stay retryable.

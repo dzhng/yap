@@ -107,14 +107,14 @@ test("a screen take journaled with marks (layout 3) publishes like one without",
     expect(() => readCapturePublication(screenPublication(layout), allocation, null)).toThrow();
 });
 
-test("native pending publication projects its code's verdict without a wire retry bit", () => {
+test("pending diagnostics project the ledger verdict without a wire retry bit", () => {
   expect(
     readCaptureSourceOutcome({
       state: "pending",
-      error: { code: "INVALID_JOURNAL", message: "Retained journal needs repair" },
+      error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed" },
     }),
   ).toEqual({
     state: "pending",
-    error: { code: "INVALID_JOURNAL", message: "Retained journal needs repair", retryable: true },
+    error: { code: "INVALID_JOURNAL", message: "Retained journal is malformed", retryable: false },
   });
 });

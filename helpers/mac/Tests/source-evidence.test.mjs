@@ -529,7 +529,7 @@ test("source evidence retries actual journal access failures without changing so
   assert.deepEqual(readFileSync(f.journal), before);
 });
 
-test("a linked retained journal stays retryable after repairing the journal", (t) => {
+test("a linked retained journal cannot establish immutable source authority", (t) => {
   const f = fixture(t, []);
   const original = join(f.root, "original.jsonl");
   writeFileSync(original, f.text);
@@ -538,7 +538,7 @@ test("a linked retained journal stays retryable after repairing the journal", (t
   const refused = request(f.directory, f.output);
   assert.equal(refused.ok, false);
   assert.equal(refused.error.code, "INVALID_JOURNAL");
-  assert.equal(retryable(refused.error), true);
+  assert.equal(retryable(refused.error), false);
   assert.equal(readFileSync(original, "utf8"), f.text);
   assert.equal(existsSync(f.output), false);
 });

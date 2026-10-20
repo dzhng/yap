@@ -628,6 +628,8 @@ test("startup drains each recovery before continuing past a retained failure", a
 test.each([
   ["INVALID_EVIDENCE", true],
   ["INVALID_INPUT_EVIDENCE", false],
+  ["INVALID_JOURNAL_PREFIX", false],
+  ["AUDIO_UNAVAILABLE", false],
 ])(
   "native finalization derives %s retryability and retains the failure",
   async (code, retryable) => {
@@ -648,7 +650,7 @@ test.each([
     const identity = { recordingId: take.id, sourceId: take.sourceId };
     const error = {
       code,
-      message: "Publication permission denied",
+      message: "Native publication diagnostic",
     };
     try {
       service.report({ ...identity, sequence: 1, state: "recording" });

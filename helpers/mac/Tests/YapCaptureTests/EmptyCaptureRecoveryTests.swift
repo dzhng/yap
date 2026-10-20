@@ -115,7 +115,7 @@ private func emptyRecoveryRefusals(root: URL, source: URL, params: [String: Any]
     ]
     for (index, authority) in invalidAuthorities.enumerated() {
         var invalid = params; invalid["sourceAuthority"] = authority
-        try await refused(invalid, "invalid-authority-\(index)", retryable: true)
+        try await refused(invalid, "invalid-authority-\(index)", retryable: false)
     }
     let canceled = Task {
         let response = try await emptyRecoveryWire(params, root: root, name: "canceled-empty")

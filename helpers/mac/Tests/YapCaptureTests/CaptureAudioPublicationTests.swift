@@ -240,7 +240,7 @@ func runCaptureAudioPublicationTests(output: String? = nil) async throws {
     preconditionFailure("Linked publication proof must refuse cleanup")
   } catch let failure as CaptureFailure {
     precondition(failure.code == "PUBLICATION_CONFLICT")
-    precondition(CaptureFinalizationError(failure).retryable)
+    precondition(!CaptureFinalizationError(failure).retryable)
   }
   precondition(FileManager.default.fileExists(atPath: linked.appendingPathComponent("narration.packed.mov").path))
 

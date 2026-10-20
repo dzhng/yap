@@ -237,13 +237,13 @@
     },
     "AUDIO_UNAVAILABLE": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2
       },
-      "reason": "Our capture media and verification code can be repaired or recovered.",
-      "cause": "The recorded audio has no verified playable frames yet."
+      "reason": "The immutable take has no retained or verified playable frames for the requested audio; retry cannot create them.",
+      "cause": "The recorded audio has no playable frames."
     },
     "CACHE_BUSY": {
       "category": "resource-bound",
@@ -943,14 +943,14 @@
     },
     "INVALID_CAMERA_MAPPING": {
       "category": "malformed",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraMedia.swift": 4,
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 1,
         "packages/core/src/source-admission.ts": 1
       },
-      "reason": "Our camera mapping files and publication receipts can be repaired.",
-      "cause": "The take’s camera mapping could not be verified."
+      "reason": "Retained camera bytes, mapping or receipt disagree; the same immutable inputs cannot establish matching picture authority.",
+      "cause": "The recorded camera mapping or publication proof is invalid."
     },
     "INVALID_CATALOG": {
       "category": "malformed",
@@ -1097,7 +1097,7 @@
     },
     "INVALID_JOURNAL": {
       "category": "malformed",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 18,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1,
@@ -1106,23 +1106,23 @@
         "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": 3,
         "packages/core/src/source-admission.ts": 1
       },
-      "reason": "Our capture journal format, writer and reader are repairable.",
-      "cause": "Yap could not read the capture journal."
+      "reason": "The retained journal is malformed or has invalid ownership or mapping records; replaying those same bytes cannot make them valid.",
+      "cause": "The capture journal is invalid."
     },
     "INVALID_JOURNAL_PREFIX": {
       "category": "malformed",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureJournal.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": 1,
         "packages/core/src/source-admission.ts": 1
       },
-      "reason": "Our journal prefix and recovery proof can be repaired.",
-      "cause": "The capture journal does not match its recovery prefix."
+      "reason": "The immutable journal prefix or source/device allocation disagrees with recovery authority; retry cannot change that identity or invent provenance.",
+      "cause": "The capture journal does not match its recovery authority."
     },
     "INVALID_MEDIA": {
       "category": "malformed",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 8,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 2,
@@ -1131,8 +1131,8 @@
         "helpers/mac/Sources/YapMedia/MediaInput.swift": 1,
         "packages/core/src/source-admission.ts": 1
       },
-      "reason": "These are our capture files and publication metadata.",
-      "cause": "Yap could not verify its recorded media."
+      "reason": "The captured member is absent, invalid or inconsistent with its recorded format or authority; the same immutable input cannot satisfy publication.",
+      "cause": "The recorded media is absent or invalid."
     },
     "INVALID_MODEL": {
       "category": "malformed",
@@ -1640,23 +1640,23 @@
     },
     "JOURNAL_CHANGED": {
       "category": "conflict",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 2,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 2
       },
-      "reason": "Our journal file can be restored or reacquired after an identity race.",
+      "reason": "The journal or directory no longer matches pinned immutable authority; retry cannot make replaced bytes the same input.",
       "cause": "The capture journal changed while Yap was opening it."
     },
     "JOURNAL_CLOSED": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureJournalLease.swift": 1
       },
-      "reason": "A fresh request can acquire new journal ownership.",
+      "reason": "The publication journal lease has ended; the same closed authority cannot publish or be revived.",
       "cause": "The current capture journal lease has ended."
     },
     "JOURNAL_FAILED": {
@@ -1894,12 +1894,12 @@
     },
     "MISSING_MEDIA": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1
       },
-      "reason": "Our recorded source file can be recovered or restored.",
-      "cause": "A recorded source file is missing."
+      "reason": "The requested source file is absent from the immutable take; retry cannot supply the missing captured bytes.",
+      "cause": "The take is missing its source media."
     },
     "MODEL_DOWNLOAD_FAILED": {
       "category": "execution-failure",
@@ -2159,14 +2159,14 @@
     },
     "NO_CAMERA": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
         "helpers/mac/Sources/YapCapture/NativeCapture.swift": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
       },
-      "reason": "Our camera capture or publication implementation can recover.",
-      "cause": "The selected camera has no verified recorded pictures."
+      "reason": "The ended take contains no accepted camera pictures; retry cannot record historical frames.",
+      "cause": "The take contains no camera pictures."
     },
     "NO_NARRATION": {
       "category": "missing-prerequisite",
@@ -2188,13 +2188,13 @@
     },
     "NO_SOURCE_MEDIA": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "apps/service/src/capture.ts": 1,
         "helpers/mac/Sources/YapWire/MediaRecovery.swift": 1
       },
-      "reason": "Our capture files and source recovery can be repaired.",
-      "cause": "Yap has not found usable source media for this take."
+      "reason": "The ended allocation contains no retained source media; retry cannot create historical content.",
+      "cause": "The take contains no source media."
     },
     "NO_SYSTEM_AUDIO": {
       "category": "missing-prerequisite",
@@ -2207,12 +2207,12 @@
     },
     "NO_TRACK": {
       "category": "missing-prerequisite",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureMediaInspection.swift": 1
       },
-      "reason": "Our capture file or track inspection can be repaired.",
-      "cause": "Yap could not find the requested track in its recording."
+      "reason": "The captured file contains no requested track; replaying it cannot add that track.",
+      "cause": "The recorded media contains no requested track."
     },
     "NO_VIDEO": {
       "category": "missing-prerequisite",
@@ -2281,13 +2281,13 @@
     },
     "PACKED_MEDIA_INVALID": {
       "category": "malformed",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CaptureAudioMaterializer.swift": 2,
         "packages/core/src/source-admission.ts": 1
       },
-      "reason": "Our packed capture PCM and mappings can be repaired or decoded with corrected code.",
-      "cause": "The packed capture media could not be verified."
+      "reason": "The pinned packed bytes cannot be parsed as the required single audio track; replaying those bytes cannot satisfy the capture format.",
+      "cause": "The packed capture media is invalid."
     },
     "PARITY_UNSUPPORTED": {
       "category": "missing-prerequisite",
@@ -2456,14 +2456,14 @@
     },
     "PUBLICATION_CONFLICT": {
       "category": "conflict",
-      "retryable": true,
+      "retryable": false,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraMedia.swift": 2,
         "helpers/mac/Sources/YapCapture/CaptureAudioPublication.swift": 1,
         "helpers/mac/Sources/YapWire/PublicationOperation.swift": 2
       },
-      "reason": "Our capture outputs and receipts can be repaired without changing the caller’s request.",
-      "cause": "A capture output exists without matching publication proof."
+      "reason": "Existing output bytes or receipts conflict with pinned publication authority; retrying the same inputs cannot authorize replacement.",
+      "cause": "An output conflicts with its publication proof."
     },
     "PUBLICATION_FAILED": {
       "category": "execution-failure",

@@ -186,7 +186,7 @@ func runCaptureAudioMaterializerTests() async throws {
       let failure = CaptureFinalizationError(error)
       precondition(failure.code == "INVALID_MEDIA",
         "Invalid \(mode) input must retain its proven media refusal: \(error)")
-      precondition(failure.retryable, "Our retained \(mode) media can be repaired: \(error)")
+      precondition(!failure.retryable, "Retry cannot change immutable \(mode) media: \(error)")
       precondition(
         !FileManager.default.fileExists(atPath: folder.appendingPathComponent("candidate.mov").path)
       )
