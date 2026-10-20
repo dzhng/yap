@@ -145,6 +145,7 @@ export * from "./capture.js";
 export * from "./framing.js";
 export * from "./layout.js";
 export * from "./refusal-ledger.js";
+export * from "./requirements.js";
 export * from "./operations.js";
 export * from "./tools.js";
 export * from "./update.js";

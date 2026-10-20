@@ -1,6 +1,8 @@
 import Foundation
 
-if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
+if ProcessInfo.processInfo.environment["YAP_REQUIREMENTS"] != nil {
+    try runRequirementsTests()
+} else if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
     runCaptureClockTests()
 } else if ProcessInfo.processInfo.environment["YAP_LIVE_PCM_TIMING"] != nil {
     try await runLivePCMTimingTests()
@@ -102,6 +104,7 @@ if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
 {
   try await runCaptureAudioGapProbe(output: output, corpus: corpus)
 } else {
+  try runRequirementsTests()
   runMarkRecognizerTests()
   try await runLivePCMTimingTests()
   try await runCaptureInputAuthorityTests()

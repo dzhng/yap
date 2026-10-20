@@ -11,7 +11,8 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: planned, nothing implemented. Origin take
+Status 2026-10-20: slice 03 implemented and checked; requirements have no runtime consumers yet.
+The remaining slices are planned. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
@@ -37,7 +38,7 @@ TODO:
 - [ ] 00 Scale probe: what 12 hours of each journal stream costs ([slice](slices/00-scale-probe.md))
 - [ ] 01 Error audit verdicts ([slice](slices/01-error-audit.md))
 - [ ] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
-- [ ] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
+- [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [ ] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
 - [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
 - [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))

@@ -10,7 +10,7 @@ The two stated requirements have one owner in code and one explanation in the do
 
 - `packages/protocol/src/requirements.json`: `{ "maximumTakeSeconds": 43200, "maximumStrokeSeconds": 300 }`.
 - `packages/protocol/src/requirements.ts`: re-exports them as microseconds
-  (`MAXIMUM_TAKE_US`, `MAXIMUM_STROKE_US`) and one helper, `derivedBound(perUnit, requirementUs, margin)`,
+  (`MAXIMUM_TAKE_US`, `MAXIMUM_STROKE_US`) and one helper, `derivedBound(perSecond, requirementUs, margin)`,
   that later slices use beside each derived constant. Import the JSON the way
   `refusal-ledger.ts` imports its JSON.
 - Swift: `Requirements.swift` in the lowest helper module both `YapCapture` and `YapWire` see

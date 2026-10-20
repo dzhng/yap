@@ -37,6 +37,9 @@ rules and stays free of AppKit; the writer feeds it modifier state and pointer r
 keys, and projects each point through the same placement cursor samples use. Undo appends a
 retraction instead of rewriting the journal, so a published take still proves its prefix.
 
+Take and stroke endings follow the shared
+[requirements and derived-bound rule](../../../../DEVELOPMENT.md#limits-come-from-requirements).
+
 A healthy ending can hold proven last-picture support through stop. Interrupted
 capture stops at available support instead of fabricating a tail. Hidden windows
 may deliver blank frames; pixel color cannot distinguish that from source loss.

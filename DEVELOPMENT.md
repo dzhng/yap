@@ -55,6 +55,15 @@ Source media remains byte-for-byte intact. Derived media, transcript alignment,
 voice generation and processing retain their source and implementation identity
 so an agent can explain what happened and choose another revision.
 
+## Limits come from requirements
+
+A take can run for 12 hours, and a ⇧ stroke for 5 minutes. Those are the only limits the
+product sets. Every other bound (bytes per line or file, rows, samples, pages, deadlines) is
+derived from them: what that data grows at, times the requirement, times a stated margin.
+Write the derivation next to the constant. A bound you can't derive is made up; delete it.
+Readers stream, so a bound tells corrupt input from valid input; it never caps what a valid
+take can hold, and corrupt input fails with a clear error, never a hang.
+
 ## Documentation ownership
 
 The root README explains Yap to humans: what it is, why it exists and how to get
