@@ -11,13 +11,12 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–10 are done (audits passed H1 unchanged). Slice 11 is in
-progress. Origin take
+Status 2026-10-20: slices 00–11 are done (audits passed H1 unchanged; H2 prompt goldens next). Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Finish [slice 11](slices/11-prompt-and-wait.md), then
-[12](slices/12-app-failures.md) and [13](slices/13-closeout.md).
+You are implementing this spec. Run H2 (prompt goldens), then [slice 12](slices/12-app-failures.md)
+and [13](slices/13-closeout.md).
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
@@ -52,7 +51,7 @@ TODO:
 - [x] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
 - [x] 09 Change-only cursor samples and hold readers ([slice](slices/09-change-only-cursor.md))
 - [x] 10 Derived limits and the 12-hour stop ([slice](slices/10-derived-limits.md))
-- [ ] 11 Prompt from capture facts; `recording.get --wait` ([slice](slices/11-prompt-and-wait.md))
+- [x] 11 Prompt from capture facts; `recording.get --wait` ([slice](slices/11-prompt-and-wait.md))
 - [ ] 12 App failures carry their action; Library import Retry ([slice](slices/12-app-failures.md))
 - [ ] 13 Docs, full run, release, origin-take acceptance ([slice](slices/13-closeout.md))
 

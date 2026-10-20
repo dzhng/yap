@@ -1,7 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { writeSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test } from "vitest";
@@ -9,10 +9,20 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { callLocal } from "@yap/client";
 import { Catalog } from "@yap/core/catalog";
+import { mediaWorker, type MediaWorker } from "../../service/dist/worker.js";
 import { writeOutputIssues } from "@yap/core/issues";
 import { listenLocal } from "@yap/service";
 import { responseSchema, type OperationRequest, type OperationResult } from "@yap/protocol";
 import { startProjectService } from "../../service/dist/project-service.js";
+
+// Load the native-edge fixture at runtime; package type checks keep service source in its own root.
+const { captureFixture } = await import(
+  new URL("../../service/src/project-capture.fixture.ts", import.meta.url).href
+);
+
+const { writeNativeCaptureFixture } = await import(
+  new URL("../../../packages/core/src/capture-native.fixture.ts", import.meta.url).href
+);
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -1750,6 +1760,170 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
     "export.status",
     "job.get",
   ]);
+});
+
+test("recording.get --wait follows a live take through pause, finalization and import without retries", async () => {
+  let releaseImport!: () => void;
+  const importing = new Promise<void>((resolve) => {
+    releaseImport = resolve;
+  });
+  let releaseProbe!: () => void;
+  const probeHeld = new Promise<void>((resolve) => {
+    releaseProbe = resolve;
+  });
+  const worker = mediaWorker();
+  const native: MediaWorker = async (operation, params, options) => {
+    if (operation === "media.sourceEvidence") await importing;
+    if (operation === "media.probe") await probeHeld;
+    return worker(operation, params, options);
+  };
+  const capture = await captureFixture(cleanups, undefined, native);
+  cleanups.push(async () => {
+    releaseProbe();
+    releaseImport();
+  });
+  const started = await capture.call("capture.start", {
+    requestId: "wait-live",
+    source: { kind: "display", id: 1 },
+    microphone: false,
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(capture.home, "library", "recordings", recordingId, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    kind: "display",
+    recordingId,
+    sourceId,
+  });
+  let reads = 0;
+  const states: string[] = [];
+  const f = await fixture(async (request) => {
+    expect(request.operation).toBe("recording.get");
+    expect(request.params).toEqual(reads === 0 ? {} : { recordingId });
+    if (reads === 1) await capture.call("capture.pause", { recordingId });
+    if (reads === 2) {
+      await capture.call("capture.stop", { recordingId });
+      await capture.call("asset.import", {
+        path: join(directory, "video.mov"),
+        requestId: "lane-blocker",
+      });
+    }
+    if (reads === 3)
+      await capture.report(
+        {
+          recordingId,
+          sourceId,
+          sequence: 4,
+          state: "complete",
+          sourceDurationUs: 190_000_000,
+          publication,
+        },
+        true,
+      );
+    if (reads === 4) {
+      releaseProbe();
+      await expect
+        .poll(async () => {
+          const result = await capture.call("recording.get", { recordingId });
+          return result.ok ? result.data.sourceAdmissions[0].job?.state : null;
+        })
+        .toBe("running");
+    }
+    if (reads === 5) releaseImport();
+    reads++;
+    const result = await callLocal(capture.service.socketPath, request);
+    if (result.ok) {
+      const data = result.data as {
+        state: string;
+        sourceAdmissions: { job: { state: string } | null }[];
+      };
+      states.push(
+        [data.state, ...data.sourceAdmissions.map((source) => source.job?.state)].join("/"),
+      );
+    }
+    return result;
+  });
+  const output = await f.run("recording.get", {}, ["--wait", "--timeout-ms", "3000"]);
+  expect(output.code, output.stdout + output.stderr).toBe(0);
+  expect(states.slice(0, 5)).toEqual([
+    "recording",
+    "paused",
+    "finalizing",
+    "complete/queued",
+    "complete/running",
+  ]);
+  expect(states.at(-1)).toBe("complete/ready");
+  expect(JSON.parse(output.stdout)).toMatchObject({
+    ok: true,
+    data: {
+      id: recordingId,
+      state: "complete",
+      sourceAdmissions: [{ job: { state: "ready", attemptGeneration: 1 } }],
+    },
+    wait: { state: "settled" },
+  });
+  expect(output.stderr).toContain("recording.get: paused");
+});
+
+test("recording.get --wait settles a failed import with its complete job projection and never retries", async () => {
+  const capture = await captureFixture(cleanups, undefined, mediaWorker());
+  const started = await capture.call("capture.start", {
+    requestId: "failed-wait-import",
+    source: { kind: "display", id: 1 },
+    microphone: false,
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(capture.home, "library", "recordings", recordingId, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    kind: "display",
+    recordingId,
+    sourceId,
+  });
+  await appendFile(join(directory, "video.mov"), "changed after publication");
+  await capture.call("capture.stop", { recordingId });
+  const reported = await capture.report(
+    {
+      recordingId,
+      sourceId,
+      sequence: 3,
+      state: "complete",
+      sourceDurationUs: 190_000_000,
+      publication,
+    },
+    true,
+  );
+  if (!reported.ok) throw new Error(JSON.stringify(reported));
+  const jobId = reported.data.sourceAdmissions[0].job.id;
+  const take = { recordingId, job: { id: jobId } };
+  await expect
+    .poll(async () => {
+      const result = await capture.call("job.get", { jobId: take.job.id });
+      return result.ok ? (result.data as { state: string }).state : null;
+    })
+    .toBe("failed");
+  const before = await capture.call("recording.get", { recordingId: take.recordingId });
+  const f = await fixture((request) => callLocal(capture.service.socketPath, request));
+  const output = await f.run("recording.get", { recordingId: take.recordingId }, [
+    "--wait",
+    "--timeout-ms",
+    "1000",
+  ]);
+  expect(output.code, output.stdout + output.stderr).toBe(1);
+  expect(JSON.parse(output.stdout)).toEqual({
+    ...before,
+    id: "wait-case",
+    wait: { state: "settled", timeoutMs: 1000 },
+  });
+  expect(f.calls.map((request) => request.operation)).toEqual(["recording.get"]);
+  expect(await capture.call("recording.get", { recordingId: take.recordingId })).toMatchObject({
+    ok: true,
+    data: {
+      sourceAdmissions: [
+        { job: { state: "failed", errorCode: "SOURCE_CHANGED", attemptGeneration: 1 } },
+      ],
+    },
+  });
 });
 
 // A take keeps its own capture lifecycle (`captureReportSchema`): finalizing, then complete or

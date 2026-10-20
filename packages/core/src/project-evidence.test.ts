@@ -1528,7 +1528,7 @@ test.each(["asset", "missing", "pending", "malformed"] as const)(
       else
         expect(() => f.captureRead.resolveMany([next], "cursor")).toThrow(
           failure === "pending"
-            ? "Acquisition import has not completed"
+            ? "The acquisition is still importing. Retry in 15 seconds."
             : "Acquisition does not exist",
         );
     }

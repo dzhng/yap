@@ -229,8 +229,9 @@ export async function captureFixture(
     },
     call: (operation: string, params: Record<string, unknown> = {}) =>
       callLocal(service.socketPath, { id: randomUUID(), operation, params }),
-    report: async (params: Record<string, unknown>) => {
-      params = (await publicationReport(params)) as Record<string, unknown>;
+    report: async (params: Record<string, unknown>, publicationFilesWritten = false) => {
+      if (!publicationFilesWritten)
+        params = (await publicationReport(params)) as Record<string, unknown>;
       return new Promise<OperationResult>((resolve) => {
         if (
           ["complete", "interrupted"].includes(String(params.state)) &&

@@ -531,9 +531,13 @@ export class AcquisitionStore {
     if (metadata === undefined)
       throw new CatalogError("NOT_FOUND", "Acquisition does not exist", { acquisitionId });
     if (metadata === null)
-      throw new CatalogError("PREREQUISITE_MISSING", "Acquisition import has not completed", {
-        acquisitionId,
-      });
+      throw new CatalogError(
+        "NOT_READY",
+        "The acquisition is still importing. Retry in 15 seconds.",
+        {
+          acquisitionId,
+        },
+      );
     return JSON.parse(metadata);
   }
   get(acquisitionId: string): Acquisition {

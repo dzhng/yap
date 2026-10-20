@@ -130,3 +130,15 @@ at close.
   Sound.
 - **Existing `errorDetails` diagnostics stay; the resolving call is added as `details.retry`.**
   Sound.
+
+## Slice 11
+
+- **Facts the capture doesn't know stay unknown**: an old take without a summary gets no marks
+  line, and a live take omits its duration. Sound: the prompt never guesses.
+- **Present sources are listed before absent ones** ("screen, camera, microphone, no system
+  audio"). Sound, matching the approved shape.
+- **A take that hasn't settled uses the live variant** ("still recording"). Sound.
+- **A failed import keeps the complete job projection** in `recording.get --wait`'s result, so
+  the caller sees the failure and its resolving call. Sound.
+- **Unknown sources are absent from the prompt facts, never `undefined`**, because the service's
+  response encoder accepts only strict JSON. Sound (found when slice 11 met slice 10's encoder).

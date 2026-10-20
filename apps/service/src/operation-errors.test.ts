@@ -31,8 +31,10 @@ it("does not advertise a non-retryable refusal's own request as a resolving call
 it("advertises only valid, safe refused requests through socket and control adapters", async () => {
   const f = await projectServiceControlFixture(cleanup, async () => ({ ok: true, data: {} }));
   const recording = f.service.captures.allocate().recording;
+  const { AcquisitionStore } = await import("@yap/core/acquisitions");
+  new AcquisitionStore(f.service.captures).admitPortable(recording.id, "pending-import");
   const requests = [
-    { operation: "recording.prompt", params: { recordingId: recording.id }, safe: true },
+    { operation: "acquisition.get", params: { acquisitionId: recording.id }, safe: true },
     { operation: "job.get", params: { jobId: "missing" }, safe: true },
     {
       operation: "project.duplicate",

@@ -21,8 +21,10 @@ const unsuccessful = new Set(["failed", "canceled", "unavailable", "idle"]);
 const successful = new Set(["ready", "complete"]);
 function stillPending(value: Record<string, unknown>): boolean {
   return (
-    ["queued", "running"].includes(String(value.state)) ||
-    (value.state === "finalizing" && value.finalizationError == null)
+    ["queued", "running", "preparing", "recording", "paused"].includes(String(value.state)) ||
+    (value.state === "finalizing" && value.finalizationError == null) ||
+    (Array.isArray(value.sourceAdmissions) &&
+      value.sourceAdmissions.some((source) => stillPending(record(record(source).job))))
   );
 }
 const jobSummary = waitJobSchema.extend({
@@ -50,6 +52,7 @@ const reads = new Map([
   ["export.create", "export.status"],
   ["export.recover", "export.status"],
   ["capture.stop", "recording.get"],
+  ["recording.get", "recording.get"],
   ["package.open", "package.status"],
   ["speaker.get", "speaker.get"],
   ["alignment.observe", "alignment.observe"],
@@ -80,6 +83,15 @@ export function waitSucceeded(result: OperationResponse): boolean {
     return false;
   if (Array.isArray(data.items))
     return data.items.every((item) => waitSucceeded({ id: result.id, ...item }));
+  if (
+    Array.isArray(data.sourceAdmissions) &&
+    data.sourceAdmissions.some((source) => {
+      const admission = record(source);
+      const job = record(admission.job);
+      return admission.admissionError != null || (job.state !== undefined && job.state !== "ready");
+    })
+  )
+    return false;
   return (
     data.state === undefined ||
     (successful.has(String(data.state)) && data.finalizationError == null)

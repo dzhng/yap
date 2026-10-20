@@ -1628,7 +1628,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Return the text a person pastes to hand media to an agent, with the facts it was written from. For a recording (omit recordingId for the latest take) the text describes what was captured: sources, duration, display or camera, marks or clicks, and whether a transcript is being prepared; it never waits for transcription. A projectId or assetId returns that item's one-line ID handoff.",
+      "Return the text a person pastes to hand media to an agent, with the facts it was written from. For a recording (omit recordingId for the latest take) the text describes capture sources, duration or live status, pins/drawings presence and transcript readiness without listing individual evidence. Live, importing and failed-import takes receive a prompt without waiting for completion. A projectId or assetId returns that item's one-line ID handoff.",
     ),
   z
     .object({
