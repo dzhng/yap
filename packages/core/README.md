@@ -201,7 +201,6 @@ coverage and histogram operands; native still owns their computation on the
 inspected raster. Index retention copies the complete evidence with its PNG and
 proves only the sampled picture, never intervening visibility or a quality grade.
 
-
 Terminal jobs use `CANCELED` for explicit cancellation, `OWNER_DELETED` when their
 input owner was removed, and `CONTEXT_CLOSED` when a process-local context closed.
 Only terminal non-ready jobs whose ledger code permits retry expose `details.retry`.

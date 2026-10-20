@@ -70,7 +70,6 @@ and atomic file publication for single results and batches;
 [installed acceptance](../../specs/done/agent-editing/release-closeout.md) records
 what was actually exercised through the packaged app.
 
-
 A published recording source with no import job and no admission error remains
 pending under `recording.get --wait`. A completed take may carry the closed
 `completionReason: "maximumDuration"`; cleanup diagnostics do not erase it.

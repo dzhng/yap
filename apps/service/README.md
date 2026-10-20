@@ -274,7 +274,6 @@ debug native worker unless `YAP_NATIVE` names another. [`capture-source-lifetime
 is a lab, not a test: it certifies a pinned native build from `YAP_NATIVE_PINS` and
 writes evidence to `YAP_LIFETIME_OUTPUT`, so it runs only when an evidence run supplies them.
 
-
 `recording.get` exposes `completionReason: "maximumDuration"` when the take reached
 the product duration limit. Cleanup diagnostics cannot replace that completion
 fact. Service-authored terminal outcomes also take precedence over late reports

@@ -154,7 +154,6 @@ into screen frames for playback. Bounded sampling reports missing observations i
 unlimited backlog. Physical projection findings and remaining unmeasured source
 modes belong to the [recording evidence](../../../../specs/done/recording-for-ai/README.md).
 
-
 Lifecycle records keep `completionReason: "maximumDuration"` separately from
 cleanup and interruption diagnostics. The app forwards that closed completion
 fact to `recording.get`, so deferred cleanup cannot hide why a healthy take ended.
