@@ -58,3 +58,8 @@ Margins (state each; 2× is the default unless measured variance says otherwise)
 ## Review
 
 Checkpoint H1, non-blocking.
+
+H1 (limits): opened for the user at 14:35 with a summary, including the ~5-minute stop for a
+12-hour take; no response by 14:40. Decision: the verdicts stand as written. Slices 07 and 10
+apply them; slice 10 folds the stop passes only if its measured end-to-end stop exceeds the
+derived budget.
