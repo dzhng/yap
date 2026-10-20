@@ -53,8 +53,11 @@ listing individual marks or clicks. Omit `recordingId` for the latest take; live
 importing and failed-import takes all get a prompt immediately. A discarded take
 is `UNAVAILABLE`; no recordings is `NOT_FOUND`. Use `recording.get --wait` to wait
 through capture and all source imports; a failed import settles with its job's
-`details.retry`, and waiting never retries it. Pass `projectId` or `assetId` for
-that item's one-line handoff.
+`details.retry`, and waiting never retries it. Once the import is ready, call
+`timeline.events` to read marks. On a retryable refusal, wait for
+`retryAfterMs` when present, then follow the named `{operation, params}` in
+`details.retry` when present; retry only by that explicit call. Pass `projectId`
+or `assetId` for that item's one-line handoff.
 
 ## Packages and jobs
 

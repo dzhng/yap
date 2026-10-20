@@ -5,6 +5,10 @@ framing. App, socket, CLI and MCP consumers agree on one operation meaning. The
 [operation declarations](src/operations.ts) are the canonical schema catalog;
 adapters derive validation and help instead of maintaining another list.
 
+Operation replies use one envelope: `id`, `ok`, and either `data` or `error`, with
+optional wait metadata. Adapters preserve that contract; they do not translate a
+service refusal into a second error shape.
+
 Composition schemas come from their [pure owner](../composition/README.md).
 Serializable admission is not execution readiness: supported native capabilities,
 prepared dependencies and actual media availability are separate evidence.
@@ -38,18 +42,17 @@ codes, so they never collide with UPPER_SNAKE refusal codes, each with typed
 evidence that names what was requested and what was produced. Issues are not
 ranked; ordering problems is an editorial call left to the caller.
 
-Each refusal code has one category and one retryability, both in the
-[refusal ledger](src/refusal-ledger.json); every builder of a refusal, in any
-language, reads it there and nothing else states it. Retryable means an identical
-request can succeed later. When one code would need two answers, it is two
-conditions with two codes. A refusal that reports a dependency or a recovery keeps
-its specific cause in `details` beside a code whose retryability fits.
+Each refusal code has one category, retryability, optional retry delay and plain
+cause in the [refusal ledger](src/refusal-ledger.json); every builder of a refusal,
+in any language, reads it there and nothing else states it. Retryable means an
+identical request can succeed later. The shared error constructor derives the
+ledger's retry metadata by code, and transports preserve it. Request-specific
+diagnostics remain in `details` beside the ledger cause. When one code would need
+two answers, it is two conditions with two codes.
 
-Retry delay and plain cause belong to that same ledger. The shared error constructor
-derives retry metadata by code; transports preserve it. A resolving `details.retry`
-must pass its named operation's admission schema. The service may name the refused
-request itself only when its refusal is retryable and the request is a read or a write
-carrying durable request identity.
+A resolving `details.retry` must pass its named operation's admission schema. The
+service may name the refused request itself only when its refusal is retryable and
+the request is a read or a write carrying durable request identity.
 
 Every publication envelope carries `issues`, empty when the output is clean, and
 export status carries the issues of its export. An output is bounded to 1000
