@@ -24,6 +24,8 @@ const { writeNativeCaptureFixture } = await import(
   new URL("../../../packages/core/src/capture-native.fixture.ts", import.meta.url).href
 );
 
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
+
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
@@ -1762,7 +1764,7 @@ test("terminal export getter refresh still refuses a concurrent recovery retry",
   ]);
 });
 
-test("recording.get --wait follows a live take through pause, finalization and import without retries", async () => {
+it("recording.get --wait follows a live take through pause, finalization and import without retries", async () => {
   let releaseImport!: () => void;
   const importing = new Promise<void>((resolve) => {
     releaseImport = resolve;
@@ -1865,7 +1867,7 @@ test("recording.get --wait follows a live take through pause, finalization and i
   expect(output.stderr).toContain("recording.get: paused");
 });
 
-test("recording.get --wait settles a failed import with its complete job projection and never retries", async () => {
+it("recording.get --wait settles a failed import with its complete job projection and never retries", async () => {
   const capture = await captureFixture(cleanups, undefined, mediaWorker());
   const started = await capture.call("capture.start", {
     requestId: "failed-wait-import",

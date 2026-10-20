@@ -74,7 +74,7 @@ test("ordinary launch owns one service child and answers health without starting
       message: "There are no recordings yet",
       retryable: true,
       retryAfterMs: 15000,
-      details: {},
+      details: { retry: { operation: "recording.get", params: {} } },
     },
   });
   assert.doesNotMatch(instance.diagnostics, /capture|permission/i);

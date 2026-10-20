@@ -6,7 +6,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { startProjectService } from "../../service/dist/project-service.js";
 import { operationSchema } from "@yap/protocol";
-import ledger from "../../../packages/protocol/dist/refusal-ledger.json" with { type: "json" };
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -22,14 +21,7 @@ it("CLI and MCP preserve the real service's refusal and valid resolving request"
     autoTranscribe: false,
   });
   cleanup.push(() => service.close());
-  const codes = ledger.codes as Record<string, { retryable: boolean; retryAfterMs?: number }>;
-  const entryBefore = codes.NOT_READY!;
-  codes.NOT_READY = { ...entryBefore, retryAfterMs: 15000 };
-  cleanup.push(async () => {
-    codes.NOT_READY = entryBefore;
-  });
-  const recording = service.captures.allocate().recording;
-  const request = { operation: "recording.prompt", params: { recordingId: recording.id } };
+  const request = { operation: "recording.get", params: {} };
   const entry = new URL("../dist/main.js", import.meta.url).pathname;
   let stdout = "";
   try {

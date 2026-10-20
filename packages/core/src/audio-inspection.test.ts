@@ -411,7 +411,7 @@ test("a failed dependency retain rolls back the job and earlier asset retain tog
     f.catalog.catalog.prepare("UPDATE acquisitions SET metadata=NULL WHERE id=?").run("mask");
   });
   await expect(f.inspection.request({ ...f.selection, acquisitionId: "mask" })).rejects.toThrow(
-    expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
+    expect.objectContaining({ code: "NOT_READY", retryable: true }),
   );
   expect(f.assets.references(f.asset.id)).toEqual([]);
   expect(f.acquisitions.references("mask")).toEqual([]);

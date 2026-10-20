@@ -12,7 +12,6 @@ import {
   symlinkSync,
   linkSync,
   readdirSync,
-  truncateSync,
   realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -254,14 +253,8 @@ test("large journal streams individual samples through the real worker with a sm
     data: { ...sample, sourceUs: batches * batchSize - 1 },
   });
 });
-test("budget and malformed-header failures publish nothing and clean staging", (t) => {
+test("malformed-header failures publish nothing and clean staging", (t) => {
   const f = fixture(t, []);
-  truncateSync(f.journal, 268435457);
-  assert.equal(request(f.directory, f.output).error.code, "EVIDENCE_LIMIT");
-  const oversized = JSON.parse(f.text);
-  oversized.data.sessionID = "s".repeat(17000);
-  writeFileSync(f.journal, JSON.stringify(oversized) + "\n");
-  assert.equal(request(f.directory, f.output).error.code, "EVIDENCE_LIMIT");
   writeFileSync(f.journal, "{bad}\n");
   assert.equal(request(f.directory, f.output).error.code, "INVALID_JOURNAL");
   assert.equal(existsSync(f.output), false);

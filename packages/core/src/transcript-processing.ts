@@ -12,7 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource, sourceSelectionSchema, type SourceSelection } from "./source-selection.js";
-import { CatalogError, dependencyRefusal } from "./catalog.js";
+import { CatalogError } from "./catalog.js";
 import {
   retainedPublicationSchema,
   type JobExecution,
@@ -348,28 +348,6 @@ export class TranscriptProcessing {
           this.asset.acquisitions.retain(owner, [selection.acquisitionId]);
       },
     );
-  }
-
-  retrySource(selection: TranscriptPreparation) {
-    const status = this.sourceStatus(selection);
-    if (!status.jobId && status.state === "ready") return status;
-    if (!status.jobId)
-      throw dependencyRefusal(
-        status.reason === "model_not_prepared" ? "MODEL_NOT_PREPARED" : "UNAVAILABLE",
-        status.reason ?? "Source transcript has not been requested; use transcript.transcribe",
-        status.reason === "model_not_prepared" ? (this.models.notPrepared?.().details ?? {}) : {},
-        status.retryable,
-      );
-    if (
-      ["failed", "unavailable", "canceled"].includes(this.jobs.job(status.jobId).state) &&
-      this.models.status().state !== "ready"
-    )
-      throw (
-        this.models.notPrepared?.() ??
-        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {})
-      );
-    this.jobs.retry(status.jobId);
-    return this.sourceStatus(selection);
   }
 
   /** A stale publication is forgotten with its job, so its generation is reclaimed unless a revision pins it. */

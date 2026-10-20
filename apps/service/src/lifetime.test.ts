@@ -806,6 +806,7 @@ it("reports an orphan-held render workspace as retryable before announcing readi
       code: "RENDER_WORKSPACE_BUSY",
       message: "Another render still owns this workspace",
       retryable: true,
+      retryAfterMs: 15000,
       details: {},
     },
   });

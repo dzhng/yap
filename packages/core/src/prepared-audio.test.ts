@@ -365,7 +365,7 @@ test("renaming the normalization implementation re-keys a failed preparation ins
   await f.current.prepared.request(input);
   await f.current.jobs.idle();
   const failed = await f.current.prepared.request(input);
-  expect(failed).toMatchObject({ state: "failed", retryable: false, published: null });
+  expect(failed).toMatchObject({ state: "failed", retryable: true, published: null });
   await f.reopen("native-window", { normalization: "normalization-v1" });
   expect(await f.current.prepared.request(input)).toMatchObject({
     jobId: failed.jobId,

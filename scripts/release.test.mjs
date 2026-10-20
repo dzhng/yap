@@ -16,12 +16,24 @@ function fixture() {
     "helpers/denoise",
     "dist/release-inputs",
     "scripts/sparkle",
+    "scripts/launcher",
+    "packages/protocol/src",
     "packages/core/dist",
   ])
     mkdirSync(join(scratch, folder), { recursive: true });
   copyFileSync(script, join(scratch, "scripts/release.mjs"));
-  for (const file of ["release-signing.mjs", "release-info.mjs", "sparkle/framework.mjs"])
+  for (const file of [
+    "release-signing.mjs",
+    "release-info.mjs",
+    "sparkle/framework.mjs",
+    "launcher/verdicts.mjs",
+    "launcher/main.c",
+  ])
     copyFileSync(new URL(file, import.meta.url), join(scratch, "scripts", file));
+  copyFileSync(
+    new URL("../packages/protocol/src/refusal-ledger.json", import.meta.url),
+    join(scratch, "packages/protocol/src/refusal-ledger.json"),
+  );
   writeFileSync(join(scratch, ".node-version"), "24.0.0\n");
   writeFileSync(join(scratch, "apps/macos/package.json"), JSON.stringify({ version: "0.0.0" }));
   writeFileSync(

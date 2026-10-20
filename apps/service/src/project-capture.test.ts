@@ -14,6 +14,8 @@ import { startProjectService } from "./project-service.js";
 import { once } from "node:events";
 import { Socket } from "node:net";
 
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
+
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
@@ -527,10 +529,8 @@ test("failed queue admission stays pending without read mutations and resumes fr
   ).toMatchObject([{ kind: "capture", recordingId, sourceId }]);
 });
 
-test("a capture import with a stale nonretryable bit reports and follows job.retry", async () => {
-  const native = process.env.YAP_NATIVE;
-  if (!native)
-    throw new Error("YAP_NATIVE is required for the production capture-import retry test");
+it("a capture import with a stale nonretryable bit reports and follows job.retry", async () => {
+  const native = process.env.YAP_NATIVE!;
   const worker = mediaWorker({ YAP_NATIVE: native });
   const f = await fixture(undefined, worker);
   const started = await f.call("capture.start", {

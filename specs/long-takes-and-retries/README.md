@@ -11,8 +11,10 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–12 are done (H1, H2 and H3 passed). Slice 13 (docs, full run,
-release, origin-take acceptance) is next. Origin take
+Status 2026-10-20: slices 00–12 are done (H1, H2 and H3 passed). Slice 13 is in progress.
+The full-run comparison and focused triage are recorded in
+[full-run triage](assets/verification/13-full-run-triage.md); continue the remaining
+docs, fresh-agent checks, release and origin-take acceptance in slice 13. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 

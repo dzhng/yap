@@ -311,8 +311,8 @@ test("fractional frame-duration preparation receives a conservative bounded dead
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
   });
   // Query + state + retime output each cost six seconds; input is 246478 / 48000 seconds.
-  expect(audioDeadline(window)).toBe(30000 + 2 * Math.ceil(18000 + 246478 / 48));
-  expect(audioDeadline(window, true)).toBe(42000);
+  expect(audioDeadline(window)).toBe(2 * Math.ceil(18000 + 246478 / 48));
+  expect(audioDeadline(window, true)).toBe(12000);
 });
 
 test("successive bulk domain requests retire their control files in the same attempt", async () => {

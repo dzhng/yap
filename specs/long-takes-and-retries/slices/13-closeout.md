@@ -32,3 +32,11 @@ The shipped app recovers the origin take with one Retry, and the docs describe w
 ## Never
 
 Touch the origin take's files or catalog rows before step 6.
+
+## Full-run triage
+
+The prepared-input full runs and baseline comparison were supplied to the triage pass; only
+focused checks and affected-package runs were repeated. See the
+[triage record](../assets/verification/13-full-run-triage.md) for contract corrections, remaining
+baseline/environment failures, commands and evidence. The origin take remains untouched;
+release, agent acceptance and installed acceptance are still outstanding.

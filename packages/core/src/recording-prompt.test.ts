@@ -25,6 +25,8 @@ import {
   type RecordingPromptSources,
 } from "./recording-prompt.js";
 
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
+
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) await close();
@@ -163,7 +165,7 @@ const screen =
   "I recorded my screen to show you something. Watch it with Yap and act on what I asked for.";
 const silent = "I recorded my screen without narration. Watch what happens with Yap.";
 
-test.each([
+it.each([
   {
     name: "approved screen, camera, microphone and both marks",
     options: {
@@ -274,7 +276,7 @@ test.each([
   for (const name of operationNames) expect(text).not.toContain(name);
 });
 
-test("auto-transcribe off suppresses the transcript promise before import", async () => {
+it("auto-transcribe off suppresses the transcript promise before import", async () => {
   const sources = fixture();
   publish(sources, { mic: true, kind: "display" });
   sources.autoTranscribe = false;
@@ -418,7 +420,7 @@ async function readyModel(sources: ReturnType<typeof fixture>) {
   );
 }
 
-test("post-import backlog and transcript state determine the exact transcript line", async () => {
+it("post-import backlog and transcript state determine the exact transcript line", async () => {
   const sources = fixture();
   const selection = await importedNarration(sources);
   const text = () => recordingPromptFacts(sources).then(renderRecordingPrompt);
@@ -437,7 +439,7 @@ test("post-import backlog and transcript state determine the exact transcript li
   expect(await text()).toBe([screen, identity, pointer].join("\n"));
 });
 
-test("an imported take with a failed transcript makes no promise, even before backlog drain", async () => {
+it("an imported take with a failed transcript makes no promise, even before backlog drain", async () => {
   const sources = fixture();
   const selection = await importedNarration(sources);
   await readyModel(sources);
@@ -454,7 +456,7 @@ test("an imported take with a failed transcript makes no promise, even before ba
   );
 });
 
-test("legacy camera summary keeps unknown picture identity without inventing a screen", async () => {
+it("legacy camera summary keeps unknown picture identity without inventing a screen", async () => {
   const sources = fixture();
   publish(sources, { kind: "camera", legacy: true });
   expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(

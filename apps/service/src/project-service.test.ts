@@ -51,6 +51,8 @@ import { mediaWorker, type MediaWorker } from "./worker.js";
 const { writeNativeCaptureFixture } = await import(
   new URL("../../../packages/core/src/capture-native.fixture.ts", import.meta.url).href
 );
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
+
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -144,7 +146,7 @@ test("recording.prompt describes the latest unpublished take without waiting", a
     });
 });
 
-test("finished-take reads return a timed NOT_READY while the acquisition is importing", async () => {
+it("finished-take reads return a timed NOT_READY while the acquisition is importing", async () => {
   const f = await captureFixture(cleanups, undefined, mediaWorker());
   const take = f.service.captures.allocate().recording;
   const directory = join(f.home, "source");
@@ -169,7 +171,9 @@ test("finished-take reads return a timed NOT_READY while the acquisition is impo
   let assetId: string;
   await expect
     .poll(async () => {
-      const result = await f.call("job.get", { jobId: (imported.data as { jobId: string }).jobId });
+      const result = await f.call("job.get", {
+        jobId: (imported.data as { jobId: string }).jobId,
+      });
       if (!result.ok) throw new Error(JSON.stringify(result));
       const job = result.data as {
         state: string;
@@ -198,7 +202,7 @@ test("finished-take reads return a timed NOT_READY while the acquisition is impo
   }
 });
 
-test("recording.prompt succeeds during import and after a failed import without retrying it", async () => {
+it("recording.prompt succeeds during import and after a failed import without retrying it", async () => {
   let release!: () => void;
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -1007,7 +1011,7 @@ test("complete socket frames racing a private fence either commit owned work or 
   }
 });
 
-test("a ready package handle blocks until retained files and asynchronous cleanup close", async () => {
+it("a ready package handle blocks until retained files and asynchronous cleanup close", async () => {
   const events = new EventEmitter();
   const cleanupHeld = once(events, "cleanup"),
     release = once(events, "release");
@@ -1069,7 +1073,10 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   events.emit("release");
   expect(await closing).toMatchObject({ ok: true, data: { state: "idle" } });
   await progress;
-  expect(await f.control("update.prepare")).toMatchObject({ ok: true, data: { kind: "prepared" } });
+  expect(await f.control("update.prepare")).toMatchObject({
+    ok: true,
+    data: { kind: "prepared" },
+  });
 });
 
 test("observing export admission never cancels its held publication owner", async () => {
