@@ -11,15 +11,14 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–05 and 07–10 are integrated (audits passed H1 unchanged). Origin take
+Status 2026-10-20: slices 00–05 and 07–10 are done (audits passed H1 unchanged). Slices 06 and
+11 are in progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Pick up at [slice 06](slices/06-job-retryability.md) and
-[slice 11](slices/11-prompt-and-wait.md); 12 follows 06 and 11. Slice
-[10](slices/10-derived-limits.md) is integrated with 05, 08 and 09; its
-[verification record](assets/probes/slice10-verification.md) holds the focused proofs
-and review limitation. Both audits passed H1; apply them as written.
+You are implementing this spec. Finish [slice 06](slices/06-job-retryability.md) and
+[slice 11](slices/11-prompt-and-wait.md), then [12](slices/12-app-failures.md) and
+[13](slices/13-closeout.md). Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
