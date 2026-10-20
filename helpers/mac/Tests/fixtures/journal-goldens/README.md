@@ -1,7 +1,7 @@
 # Normalized journal byte references
 
-These are production `media.sourceEvidence` outputs captured from revision
-`9784cb3aab3885e86c7cedf7179daf45389a6c84` before slice 07 changed either reader.
+These production `media.sourceEvidence` outputs predate the linear journal readers
+and remain byte-for-byte fixtures for them.
 The [case registry](../journal-goldens.mjs) owns the input paths. Each input was
 copied alone into a scratch source directory; no source media or user library was
 opened. The launch journals are the repository's LFS fixtures.

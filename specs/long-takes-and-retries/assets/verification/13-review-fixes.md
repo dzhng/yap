@@ -1,7 +1,7 @@
 # Whole-diff review fixes
 
 This round addresses `/tmp/lt-codex/review-findings.md` against the committed triage.
-Changes remain uncommitted. Fixtures use scratch libraries and production writers;
+Those fixes were committed in `2b664fbce`. Fixtures use scratch libraries and production writers;
 the origin take, user recordings and user library were not accessed.
 
 ## Findings and proof
@@ -143,7 +143,7 @@ review round.
 
 ## Changed files
 
-The inventory below describes this uncommitted round relative to HEAD. The
+The inventory below describes the review round committed in `2b664fbce`. The
 pre-existing untracked `.husky/` directory is excluded and untouched.
 
 - `apps/cli/README.md` — Document job ending codes and separate completion provenance.

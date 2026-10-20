@@ -62,6 +62,10 @@ Camera-primary capture without system audio reaches no screen or cursor boundary
 
 ## Closure is separate from publication
 
+Native lifecycle records originate the
+[completion fact](../../../../packages/core/README.md#transactions-replay-and-lifetime)
+forwarded by the app and service.
+
 Closed source descriptors retain physical media and journal authority after inputs
 and encoders stop. Primary and camera publication can succeed independently; final
 stop joins both before releasing authority. A ready sibling does not inherit the
@@ -153,7 +157,3 @@ Pointer eligibility states captured-content support, while ScreenCaptureKit rend
 into screen frames for playback. Bounded sampling reports missing observations instead of retaining an
 unlimited backlog. Physical projection findings and remaining unmeasured source
 modes belong to the [recording evidence](../../../../specs/done/recording-for-ai/README.md).
-
-Lifecycle records keep `completionReason: "maximumDuration"` separately from
-cleanup and interruption diagnostics. The app forwards that closed completion
-fact to `recording.get`, so deferred cleanup cannot hide why a healthy take ended.

@@ -13,6 +13,11 @@ Composition schemas come from their [pure owner](../composition/README.md).
 Serializable admission is not execution readiness: supported native capabilities,
 prepared dependencies and actual media availability are separate evidence.
 
+The [requirements JSON](src/requirements.json) owns take and stroke durations and
+record-growth inputs. TypeScript imports it and Swift loads the same checkout or
+bundled resource; the [development rule](../../DEVELOPMENT.md#limits-come-from-requirements)
+explains how other bounds derive from it.
+
 ## Published work
 
 Transport success acknowledges a handled request; it does not certify background

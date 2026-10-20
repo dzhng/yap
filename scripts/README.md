@@ -9,6 +9,8 @@ portable distribution. One does not imply the others.
 The installed C launcher must answer failures even when the app cannot be opened. Its
 [build projection](launcher/verdicts.mjs) compiles the emitted codes' retry metadata from the
 shared protocol ledger, so startup needs no second policy table or runtime file read.
+The [consumer projection](consumer-verdicts.mjs) uses the same
+[ledger projection](ledger-verdicts.mjs) for source-built launcher failures.
 
 ## Native prerequisites
 

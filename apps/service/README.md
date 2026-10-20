@@ -106,6 +106,10 @@ An idle device report proves closure only when it carries no take or source
 identity. Contradictory or pending native evidence keeps deletion fenced and
 source bytes retained rather than interpreting a shutdown request as completion.
 
+Service-authored terminal outcomes take precedence over late reports from the same
+native controller after source identity is checked; cleanup diagnostics cannot
+replace the [completion fact](../../packages/core/README.md#transactions-replay-and-lifetime).
+
 [Export coordination](src/exports.ts) executes a pinned durable intent. Video,
 standalone audio, plain caption sidecars and portable packages use the same
 publication lifetime. Caption bytes are frozen at admission and need neither a
@@ -273,12 +277,3 @@ The package test script runs every node test in [`tests/`](tests) against the re
 debug native worker unless `YAP_NATIVE` names another. [`capture-source-lifetime`](tests/capture-source-lifetime.mjs)
 is a lab, not a test: it certifies a pinned native build from `YAP_NATIVE_PINS` and
 writes evidence to `YAP_LIFETIME_OUTPUT`, so it runs only when an evidence run supplies them.
-
-`recording.get` exposes `completionReason: "maximumDuration"` when the take reached
-the product duration limit. Cleanup diagnostics cannot replace that completion
-fact. Service-authored terminal outcomes also take precedence over late reports
-from the same native controller, after source identity is checked.
-
-Capture-source import jobs report `CANCELED`, `OWNER_DELETED` or `CONTEXT_CLOSED`
-when cancellation, deleted ownership or context closure ends their work. The shared
-job projection and refusal ledger own retryability and any resolving call.

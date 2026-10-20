@@ -52,20 +52,21 @@ capture facts and transcript readiness. It describes pins and drawings without
 listing individual marks or clicks. Omit `recordingId` for the latest take; live,
 importing and failed-import takes all get a prompt immediately. A discarded take
 is `UNAVAILABLE`; no recordings is `NOT_FOUND`. Use `recording.get --wait` to wait
-through capture and all source imports; a failed import settles with its job's
-`details.retry`, and waiting never retries it. Once the import is ready, call
-`timeline.events` to read marks. On a retryable refusal, wait for
-`retryAfterMs` when present, then follow the named `{operation, params}` in
-`details.retry` when present; retry only by that explicit call. Pass `projectId`
-or `assetId` for that item's one-line handoff.
+through capture and all source imports. Once the import is ready, call
+`timeline.events` to read marks. A successful 12-hour take can report
+`completionReason: "maximumDuration"`; ordinary stops return null. Pass `projectId`
+or `assetId` for that item's one-line handoff. The skill owns retry guidance.
+
 
 ## Packages and jobs
 
 `package.open`, `package.status`, `package.adopt`, `package.close` manage
 editable package lifetimes. Close a package when you're done with it, after
 adopting or inspecting, to free its staged copy. `job.get`, `job.retry`, and `job.cancel` observe or
-explicitly recover/cancel admitted background work. A read never retries a
-failed job implicitly.
+explicitly recover/cancel admitted background work. A retryable failed import
+exposes the exact resolving
+`{operation, params}` in its job's `details.retry`, with `retryAfterMs` when present.
+A published source without an import job stays pending while `admissionError` is null.
 
 ## Export and delivery
 
@@ -84,6 +85,11 @@ video, audio, captions, and editable packages. `artifact.read`,
 `join.verify`, `timeline.events`, and `cursor.raw` expose measured visual,
 audio, timing, face, speaker, alignment and join evidence. Evidence is
 information; it never authorizes an edit.
+
+`cursor.raw` holds each observation until the next change, pause or support boundary
+when the receipt's sampling policy says `holds`. A page includes the sample already
+in force at its start. `timeline.events` represents a drawing held past five minutes
+as consecutive strokes; it does not imply the user released the modifier.
 
 ## Transcript, audio and visual processing
 
@@ -161,11 +167,3 @@ re-enabled, and on an explicit `skill.update`; it does not use a periodic timer.
 If an installed build does not advertise a name above, report the mismatch and
 follow the available schema. Do not invent an operation or silently substitute
 a different mutation.
-
-
-`recording.get` may report `completionReason: "maximumDuration"` on a successful
-take that reached the duration limit. It is separate from cleanup diagnostics;
-ordinary stops omit it. A published source can briefly have no import job: keep
-waiting while `admissionError` is null. Terminal jobs can name `CANCELED`,
-`OWNER_DELETED` or `CONTEXT_CLOSED`. Follow a returned `details.retry` when present;
-a deleted owner cannot be retried.

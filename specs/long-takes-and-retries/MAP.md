@@ -2,7 +2,7 @@
 
 Status: discovery record, 2026-10-20. The build plan is [README.md](README.md); where this map
 and the README differ, the README wins. Later decisions recorded only in the README: cursor
-stays 60 Hz (Q11, replacing Q3), retry is explicit (Q4 revised), a stroke ends at 5 minutes
+stays 60 Hz (Q3 revised; Q11 was withdrawn), retry is explicit (Q4 revised), a stroke ends at 5 minutes
 (Q14), data compatibility only with journal schema 4 for new takes.
 
 Origin: a 3:10 take (`99099abb-fb1c-4018-a364-b263dcd58057`) recorded fine but showed
@@ -11,11 +11,10 @@ recording. One 11-second ⇧ stroke wrote a 68,916-byte journal line; the import
 lines over 64 KiB; the failure was filed as non-retryable; nothing retries a capture import.
 The media and marks are intact on disk.
 
-## The one requirement
+## Requirements (superseded)
 
-**A take can run for 12 hours.** That is the only limit the product sets. Every other bound
-is derived from it (growth rate × 12 h × a stated margin, written next to the constant) or
-deleted. Capture ends a take cleanly at 12 hours.
+The [current requirements](README.md#requirements) set a 12-hour take and a
+5-minute stroke. This discovery record's single-requirement framing is superseded.
 
 ## 1. Known knowns
 
@@ -200,7 +199,7 @@ Mechanical (trust the builder):
 
 ## Implementation request (superseded)
 
-Use the README's Next Agent Prompt instead.
+Use the [Next Agent Prompt](README.md#next-agent-prompt) instead.
 
 
 ```

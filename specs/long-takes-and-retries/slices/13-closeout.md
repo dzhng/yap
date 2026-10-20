@@ -4,7 +4,7 @@ Depends on: all.
 
 ## Contract
 
-The shipped app recovers the origin take with one Retry, and the docs describe what shipped.
+The release candidate recovers the origin take with one Retry, and the docs describe the implemented contracts.
 
 ## Steps
 
@@ -42,5 +42,8 @@ baseline/environment failures, commands and evidence. The origin take remains un
 release, agent acceptance and installed acceptance are still outstanding.
 
 The subsequent [whole-diff review fix round](../assets/verification/13-review-fixes.md)
-records all 16 finding dispositions, red/green evidence, affected checks and baseline
-failure comparisons. Its fixes remain in the working tree pending review.
+records the prior review dispositions and evidence, committed in `2b664fbce`.
+
+
+The [second review round](../assets/verification/13r2-review.md) records every finding,
+regression proof and final check, including baseline and live-session limits.

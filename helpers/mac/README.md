@@ -6,6 +6,8 @@ placement is the platform responsibility, not a second interpretation of edits:
 
 - [Capture](Sources/YapCapture/README.md) owns selected inputs, the
   acquisition clock, source writers, journals and cursor geometry.
+- [Protocol policy](Sources/YapProtocol) reads shared requirements and refusal rules
+  without depending on platform media frameworks.
 - [Media primitives](Sources/YapMedia/README.md) own physical support,
   descriptor containment and new-output publication shared by native consumers.
 - [Pictures](Sources/YapFrames/README.md) and

@@ -15,7 +15,7 @@ journal-only fixture: a missing-media refusal is recorded as a prerequisite, and
 remain failures. Export and downstream reads run independently of publication. A failed export
 blocks downstream stages; the lab never fabricates receipts to get past a product bound.
 
-Schema 3 writes all cursor ticks. Typical motion changes coordinates on 26% of transitions;
+Schema 3 writes all cursor ticks. The typical fixture changes coordinates at the change ratio measured on a real take;
 worst-case motion changes every tick. The camera mapping is a **size model** of accepted
 callbacks using production frame/rational encoders and a fixed callback envelope. It does not
 exercise `CaptureClockIngress`, camera verification or movie encoding. The journal stages do

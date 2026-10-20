@@ -8,7 +8,9 @@ A take can now run for up to 12 hours (long takes used to fail after about two),
 drawing no longer breaks its import. A recording whose import failed says why in the Library
 and offers **Retry**; your recording stays safe either way. **Copy prompt** works right after a
 take, even while it imports. An error in the capture panel now names what failed, and its
-**Retry** repeats that action instead of starting a new recording.
+**Retry** repeats that action instead of starting a new recording. The pasted prompt
+describes pins and drawings without listing individual marks, times or windows;
+your agent reads that evidence when it needs it.
 
 ## 0.1.66
 

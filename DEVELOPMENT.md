@@ -61,6 +61,7 @@ A take can run for 12 hours, and a ⇧ stroke for 5 minutes. Those are the only 
 product sets. Every other bound (bytes per line or file, rows, samples, pages, deadlines) is
 derived from them: what that data grows at, times the requirement, times a stated margin.
 Write the derivation next to the constant. A bound you can't derive is made up; delete it.
+The authoritative values live in [`packages/protocol/src/requirements.json`](packages/protocol/src/requirements.json) and are loaded by Swift at runtime; the app builder copies them into the app bundle.
 Readers stream, so a bound tells corrupt input from valid input; it never caps what a valid
 take can hold, and corrupt input fails with a clear error, never a hang.
 

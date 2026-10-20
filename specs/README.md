@@ -94,7 +94,7 @@ choices ledger holds every call made without the user.
 [Long takes and honest retries](long-takes-and-retries/README.md) makes a take that recorded
 fine always importable: limits derive from two stated requirements (a 12-hour take, a 5-minute
 stroke), every failure says whether and how to retry, and the app never shows an error without
-a way forward. Planned; start at its Next Agent Prompt.
+a way forward. The implementation is built; release and installed acceptance remain.
 
 ## Future proposals
 

@@ -11,10 +11,11 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–12 are done (H1, H2 and H3 passed). Slice 13 is in progress.
+Status 2026-10-21: slices 00–12 are implemented and the prior review fixes are committed in `2b664fbce` (H1, H2 and H3 passed). Slice 13 remains open for fresh-agent checks, release and origin-take acceptance.
 The full-run comparison and focused triage are recorded in
-[full-run triage](assets/verification/13-full-run-triage.md); continue the remaining
-docs, fresh-agent checks, release and origin-take acceptance in slice 13. Origin take
+[full-run triage](assets/verification/13-full-run-triage.md) and
+[second review round](assets/verification/13r2-review.md); continue the remaining
+fresh-agent checks, release, origin-take acceptance and close-spec in slice 13. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
@@ -76,8 +77,8 @@ can hold.
 Product outcomes:
 - A 12-hour take records, publishes, imports, plays, gets a prompt and can be edited.
 - Copy prompt and ⌥⇧V never wait and never refuse for a take that exists.
-- Every failure says whether it can be retried, when, and with which call.
-- Nothing retries a failure on its own; a person or agent asks.
+- Every failure says whether it can be retried, when, and with a safe resolving call when one exists.
+- Nothing retries a failure on its own; the `JOB_INTERRUPTED` transcript restart case is resumed once by the automatic backlog.
 - Every error the app shows carries its action, or the situation is prevented or shown as
   status text instead.
 
@@ -90,7 +91,7 @@ section and retry fields.
 
 | Contract | Owner | Change |
 |---|---|---|
-| Take and stroke requirements | `packages/protocol` (new `requirements` module + JSON) | new; Swift mirrors checked by test |
+| Take and stroke requirements | `packages/protocol` (new `requirements` module + JSON) | one JSON resource imported by TS and loaded by Swift |
 | Error envelope | `operationErrorSchema`, `packages/protocol/src/index.ts` | optional `retryAfterMs`; `details.retry: {operation, params}` |
 | Retryability, retry delay, plain cause | `packages/protocol/src/refusal-ledger.json` | per-code `retryable`, optional `retryAfterMs`, `cause` |
 | Job retryability | `packages/core/src/jobs.ts` | read from the error code; stored bit unread |
@@ -165,4 +166,4 @@ check, and `compare-screenshots` against the before shot.
 - Development never edits a user's recordings or library. Synthetic and fixture takes only.
 - No editorial behaviour: nothing decides what content means; marks, prompts and errors describe.
 - The prompt names no operations except the closing pointer to the yap skill (D2/D3′).
-- Retry is explicit. No read, poll, wait or startup path re-runs a failed job.
+- Retry is explicit. No read, poll or wait path re-runs a failed job; startup may resume `JOB_INTERRUPTED` transcript work once through the automatic backlog.

@@ -234,7 +234,7 @@ starts capture or activates the app.
 
 Action failures retain their originating surface and request until that action succeeds or
 its notice is dismissed. Background observations and unrelated controls cannot clear them.
-An import Retry acts on the primary source's admitted job; playback and prompt handoff remain
+An import Retry acts on the primary source's admitted job and is shown only when that failed job carries `details.retry`; playback and prompt handoff remain
 available while import needs repair. The ledger owns plain-language causes. Existing permission
 controls supply fixes; errors without a simple supported action remain status text.
 

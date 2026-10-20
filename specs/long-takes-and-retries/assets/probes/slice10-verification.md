@@ -282,14 +282,14 @@ content is excluded and left untouched.
 - [packages/core/src/composition-pointer.ts](../../../../packages/core/src/composition-pointer.ts) — Remove aggregate rows/bytes/operations limits and retain cancellation/yields.
 - [packages/core/src/derived-limits.test.ts](../../../../packages/core/src/derived-limits.test.ts) — Scan production source for retired literals with the historical format exception.
 - [packages/core/src/evidence-merge.ts](../../../../packages/core/src/evidence-merge.ts) — Support byte-driven event-page continuation.
-- [packages/core/src/evidence-pages.ts](../../../../packages/core/src/evidence-pages.ts) — Derive portable row allowance and remove growing metadata caps.
+- `packages/core/src/evidence-pages.ts` (removed) — Derive portable row allowance and remove growing metadata caps.
 - [packages/core/src/evidence-read.ts](../../../../packages/core/src/evidence-read.ts) — Iterate existing boundary/audio batches instead of refusing whole selections.
 - [packages/core/src/evidence.test.ts](../../../../packages/core/src/evidence.test.ts) — Keep evidence identity validation under uncapped aggregate reads.
 - [packages/core/src/evidence.ts](../../../../packages/core/src/evidence.ts) — Delete total evidence/mapping/receipt/gap ceilings without changing journal schema interpretation.
 - [packages/core/src/imported-transcript.ts](../../../../packages/core/src/imported-transcript.ts) — Stream supplied transcript parsing from its retained file.
 - [packages/core/src/json-stream.test.ts](../../../../packages/core/src/json-stream.test.ts) — Exercise incremental UTF-8/JSON parsing and malformed input.
 - [packages/core/src/json-stream.ts](../../../../packages/core/src/json-stream.ts) — Own shared incremental JSON decoding and batched serialization.
-- [packages/core/src/ordered-pages.ts](../../../../packages/core/src/ordered-pages.ts) — Stream descriptor inventories, derive single-row capacity and retain ordinary page batching; remove stale ceiling diagnostics.
+- `packages/core/src/ordered-pages.ts` (removed) — Stream descriptor inventories, derive single-row capacity and retain ordinary page batching; remove stale ceiling diagnostics.
 - [packages/core/src/package-archive.ts](../../../../packages/core/src/package-archive.ts) — Delete aggregate archive/manifest/receipt limits and validate streamed receipt identities.
 - [packages/core/src/pointer-preparation.ts](../../../../packages/core/src/pointer-preparation.ts) — Delete whole-history byte/work budgets from pointer preparation.
 - [packages/core/src/pointer-schedule.ts](../../../../packages/core/src/pointer-schedule.ts) — Stream pointer schedules without aggregate byte/event ceilings.
@@ -304,7 +304,7 @@ content is excluded and left untouched.
 - [packages/core/src/project-package.test.ts](../../../../packages/core/src/project-package.test.ts) — Prove growing metadata/dependencies through the real parser/resolver.
 - [packages/core/src/project-package.ts](../../../../packages/core/src/project-package.ts) — Resolve independently parsed typed members and compute chunked metadata identities without total JSON/inventory caps.
 - [packages/core/src/projects.ts](../../../../packages/core/src/projects.ts) — Remove duplicate package member/count caps and stream retained metadata reads.
-- [packages/core/src/raw-cursor.ts](../../../../packages/core/src/raw-cursor.ts) — Derive selection duration from the take requirement and allow large holds.
+- `packages/core/src/raw-cursor.ts` (removed) — Derive selection duration from the take requirement and allow large holds.
 - [packages/core/src/source-admission.ts](../../../../packages/core/src/source-admission.ts) — Copy held journal/mapping identities without the deleted aggregate cap.
 - [packages/core/src/source-index.ts](../../../../packages/core/src/source-index.ts) — Remove duplicate package index inventory ceilings.
 - [packages/core/src/trails.test.ts](../../../../packages/core/src/trails.test.ts) — Remove obsolete aggregate pointer-work refusal expectations.

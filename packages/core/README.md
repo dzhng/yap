@@ -125,8 +125,11 @@ media share these owners rather than introducing separate queues or stores.
 
 Job retryability is read from the refusal ledger for the job's error code when the
 job is projected; the catalog's legacy retryable columns remain storage details and
-are not a second authority. A failed job stays failed until an explicit `job.retry`
-call, and reads, polling, waiting and startup reconciliation never retry it. A
+are not a second authority. Terminal jobs use `CANCELED` for explicit cancellation
+and `OWNER_DELETED` when their input owner was removed. Retrying a non-retryable
+job preserves that refusal code. A failed job stays failed until an explicit `job.retry`
+call, and reads, polling and waiting never retry it. Startup reconciliation resumes only a
+`JOB_INTERRUPTED` transcript attempt owed by the automatic backlog. A
 retryable job projection carries the exact resolving call in `details.retry`, so an
 agent can wait for any returned delay and then choose that call deliberately.
 
@@ -138,6 +141,10 @@ carry issues, and a publication without rows, including one from an older catalo
 Where evidence holds the facts, the issues are derived from it alone: a picture's or
 movie's font fallbacks become [text fallback issues](src/text-fallback.ts), and a
 project index publishes the issues of the frames it retained.
+
+A completed recording can report `completionReason: "maximumDuration"`. This
+closed lifecycle fact is independent of cleanup diagnostics and interruption codes;
+ordinary caller stops return `completionReason: null`. It survives catalog reopen.
 
 Capture recovery receipts cross this boundary once through
 [capture-publication.ts](src/capture-publication.ts): the bounded native receipt is
@@ -200,14 +207,3 @@ The [pure public observation contract](../protocol/src/picture.ts) admits masks,
 coverage and histogram operands; native still owns their computation on the
 inspected raster. Index retention copies the complete evidence with its PNG and
 proves only the sampled picture, never intervening visibility or a quality grade.
-
-Terminal jobs use `CANCELED` for explicit cancellation, `OWNER_DELETED` when their
-input owner was removed, and `CONTEXT_CLOSED` when a process-local context closed.
-Only terminal non-ready jobs whose ledger code permits retry expose `details.retry`.
-Retrying a non-retryable job preserves its own refusal code. A backlog resumes
-`JOB_INTERRUPTED` work after restart automatically; ordinary failures still need
-an explicit retry.
-
-A completed recording can report `completionReason: "maximumDuration"`. This
-closed lifecycle fact is independent of cleanup diagnostics and interruption codes;
-ordinary caller stops omit it. It survives catalog reopen.

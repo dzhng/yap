@@ -305,7 +305,7 @@ README artwork lives in [.github/readme](.github/readme).
 ### Development and evidence
 
 Follow the [development principles](DEVELOPMENT.md) and the repository routing in
-[AGENTS.md]. The [root manifest](package.json)
+[AGENTS.md](AGENTS.md). The [root manifest](package.json)
 owns build and check commands; package manifests own narrower checks and dependencies.
 The [build guide](scripts/README.md) explains native prerequisites and why building,
 installing and packaging are separate actions.

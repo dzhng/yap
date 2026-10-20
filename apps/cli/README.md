@@ -35,18 +35,16 @@ messages and diagnostics belong on stderr. Before parsing establishes a mode,
 usage failures cannot safely be written as a CLI response. Structured operation
 failures retain their code and retry meaning across both adapters.
 
-The operation envelope has `id`, `ok` and either `data` or `error`, with optional
-`wait` metadata. An error carries `code`, human `message`, `retryable`, optional
-`retryAfterMs`, and `details`; when recovery is available, `details.retry` names
-the exact operation and parameters to call. The [protocol contract](../../packages/protocol/README.md)
-owns these fields and their meanings.
+The [protocol contract](../../packages/protocol/README.md) owns the response envelope
+and error fields; the CLI preserves them.
 
 Explicit waiting observes admitted work within one caller budget. The
 [wait observer](src/wait.ts) freezes selection and current attempt identity,
 continues from dependencies to the requested getter, and never resubmits a write
 or retries a failed job. For `recording.get --wait`, that means staying pending
 through recording/finalization and every source import, then returning the settled
-recording response. Its top-level outcome describes observation separately from
+recording response. A published source with no import job remains pending while
+`admissionError` is null. Its top-level outcome describes observation separately from
 the service's acknowledgement; terminal work can still fail. Help owns flags,
 polling cadence and exit behavior. Cancellation stops observation and bounded
 lease cleanup continues independently; it does not roll back admission.
@@ -69,9 +67,3 @@ attachment proof. The [delivery owner](src/artifact-delivery.ts) defines consump
 and atomic file publication for single results and batches;
 [installed acceptance](../../specs/done/agent-editing/release-closeout.md) records
 what was actually exercised through the packaged app.
-
-A published recording source with no import job and no admission error remains
-pending under `recording.get --wait`. A completed take may carry the closed
-`completionReason: "maximumDuration"`; cleanup diagnostics do not erase it.
-Terminal jobs carry `CANCELED`, `OWNER_DELETED` or `CONTEXT_CLOSED` for their respective
-ending, and expose a resolving `details.retry` only when the ledger permits retry.

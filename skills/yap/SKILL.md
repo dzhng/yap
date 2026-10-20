@@ -19,7 +19,7 @@ marks, clicks or windows, and may arrive while the take is still recording or
 importing. It names no operations; exploring is yours:
 - Resolve the `Recording:` ID with `recording.get --wait` before reading its
   evidence. Waiting observes capture and every source import; it never retries.
-  A failed import exits 1 and carries `details.retry` on its failed job. Inspect
+  A retryable failed import exits 1 and carries `details.retry` on its failed job. Inspect
   that failure and use its named resolving call only when you choose to retry.
 - Read what they said first. With microphone capture and automatic transcription
   enabled, the prompt says whether the transcript is being prepared or ready.
@@ -29,11 +29,11 @@ importing. It names no operations; exploring is yours:
   and `index.get` has a frame at every mark, pin and click when its selection
   names that `acquisitionId`. Use `cursor.render` around a mark to see where they
   pointed.
-- Retry is always explicit. A retryable refusal identifies itself with
+- Retry is always explicit, except that a `JOB_INTERRUPTED` transcript attempt is resumed once
+  when the automatic transcription backlog is restored after a restart. A retryable refusal identifies itself with
   `error.retryable`; when it carries `retryAfterMs`, wait that long before trying
-  again. Follow the exact `{operation, params}` in `details.retry` (for a
-  retryable `NOT_READY`, wait first); reads, waits and startup never retry a
-  failure on their own.
+  again. Follow the exact `{operation, params}` in `details.retry`; reads and waits
+  never retry a failure on their own.
 - Act on what they asked. A shown recording is evidence, not footage to edit.
 
 The user does not want to edit video. They record, then hand you a prompt —

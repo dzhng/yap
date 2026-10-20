@@ -65,12 +65,12 @@ failure directives and stored retry bits.
 
 The constructor remains `operationError`. Retry directives are checked against the existing
 operation schema and keep the supplied parameters for exact replay. Socket and inherited
-control adapters share `refusedRequest`, using `readOnlyOperations` for the read verdict;
+control adapters share `withResolvingCall`, using `readOnlyOperations` for the read verdict;
 an explicit owner-supplied directive takes precedence over the refused request.
 
-Swift reads the ledger JSON only from its bundle's service resources. Source-compiled test
-fixtures stage that resource beside the executable; a missing or unreadable bundled ledger
-is a packaging failure, never a source-checkout lookup or an empty policy. `ServiceFailure`
+Superseded by review fix 13: installed Swift executables read the bundled ledger;
+source-built tools and fixtures read the authoritative checkout JSON. Missing or
+unreadable policy is a packaging failure, never an empty policy. `ServiceFailure`
 owns serialization for both native transports. The source guard concerns refusal literals; work-status projections
 and job retry bits remain with their later slices.
 
