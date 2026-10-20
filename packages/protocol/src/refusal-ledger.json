@@ -2108,7 +2108,7 @@
         "apps/service/src/loudness.ts": 1,
         "apps/service/src/project-packages.ts": 1,
         "apps/service/src/project-render.ts": 1,
-        "apps/service/src/project-service.ts": 6,
+        "apps/service/src/project-service.ts": 7,
         "helpers/mac/Sources/YapAudio/CompositionState.swift": 2,
         "helpers/mac/Sources/YapFrames/CompositionVideoRenderer.swift": 1,
         "helpers/mac/Sources/YapFrames/VideoColorPolicy.swift": 1,
@@ -2255,6 +2255,7 @@
     "OWNER_DELETED": {
       "category": "missing-prerequisite",
       "files": {
+        "apps/service/src/project-service.ts": 1,
         "packages/core/src/jobs.ts": 4
       },
       "retryable": false,

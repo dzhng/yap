@@ -3424,8 +3424,25 @@ export async function startProjectService(options: {
             });
             return { ok: true, data: queue.work(job.jobId) };
           }
-          case "acquisition.get":
-            return { ok: true, data: acquisitions.get(operation.params.acquisitionId) };
+          case "acquisition.get": {
+            const { acquisitionId } = operation.params;
+            try {
+              return { ok: true, data: acquisitions.get(acquisitionId) };
+            } catch (error) {
+              // "Still importing" would ask a caller to wait for an import that can never finish.
+              if (
+                error instanceof CatalogError &&
+                error.code === "NOT_READY" &&
+                captureSources.orphaned(acquisitionId)
+              )
+                throw new CatalogError(
+                  "OWNER_DELETED",
+                  "The recording this import belonged to was deleted.",
+                  { acquisitionId },
+                );
+              throw error;
+            }
+          }
           case "asset.import": {
             const prepared = await assets.prepareImport(
               operation.params.requestId,

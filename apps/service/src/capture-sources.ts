@@ -62,6 +62,13 @@ export class CaptureSources {
     if (failed) throw failure;
   }
 
+  /** An unfinished import whose donor recording was discarded or deleted can never finish. */
+  orphaned(acquisitionId: string): boolean {
+    return this.acquisitions
+      .recordingDonors(acquisitionId, this.recordings)
+      .some((recordingId) => !this.captures.isAvailable(recordingId));
+  }
+
   /** Ready acquisitions own their originals; every unfinished managed donor must remain available. */
   available(acquisitionId: string): boolean {
     const donors = this.acquisitions.recordingDonors(acquisitionId, this.recordings);

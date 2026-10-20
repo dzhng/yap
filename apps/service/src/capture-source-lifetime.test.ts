@@ -668,7 +668,7 @@ test("public discard fences and drains queued managed imports before native canc
   });
   expect(await f.call("acquisition.get", { acquisitionId: imported.target.id })).toMatchObject({
     ok: false,
-    error: { code: "PREREQUISITE_MISSING" },
+    error: { code: "OWNER_DELETED" },
   });
   expect(await f.call("capture.cancel", { recordingId })).toMatchObject({
     ok: true,

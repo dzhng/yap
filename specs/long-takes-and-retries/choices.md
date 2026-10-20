@@ -142,3 +142,8 @@ at close.
   the caller sees the failure and its resolving call. Sound.
 - **Unknown sources are absent from the prompt facts, never `undefined`**, because the service's
   response encoder accepts only strict JSON. Sound (found when slice 11 met slice 10's encoder).
+- **An unfinished import whose donor recording was discarded or deleted answers
+  `OWNER_DELETED`, not `NOT_READY`**, decided in the service by `CaptureSources.orphaned`
+  (the donor owner) rather than in `AcquisitionStore`, which doesn't know where recordings live.
+  Sound (found when slice 11's "still importing" answer met slice 10's discard test: an agent
+  would have retried an import that can never finish).
