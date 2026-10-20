@@ -425,12 +425,10 @@ async function main() {
                   state: "interrupted",
                   timeoutMs: timeoutMs!,
                   ...(result.wait?.job ? { job: result.wait.job } : {}),
-                  error: {
-                    code: "ABORTED",
-                    message: "Waiting was interrupted; admitted work is not rolled back",
-                    retryable: false,
-                    details: {},
-                  },
+                  error: operationError(
+                    "ABORTED",
+                    "Waiting was interrupted; admitted work is not rolled back",
+                  ).error,
                 },
         };
       }

@@ -90,6 +90,10 @@ await stageFFmpeg({
   },
 });
 bundleNodeEntry(join(root, "apps/service/dist/main.js"), join(service, "main.mjs"));
+copyFileSync(
+  join(root, "packages/protocol/dist/refusal-ledger.json"),
+  join(service, "refusal-ledger.json"),
+);
 bundleNodeEntry(join(root, "apps/cli/dist/main.js"), join(app, "Contents/Resources/cli/main.mjs"));
 
 // The app reads its control-channel limits from here rather than restating them in

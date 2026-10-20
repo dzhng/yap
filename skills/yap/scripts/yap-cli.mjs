@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 
-function failure(code, message, details = {}, retryable = false) {
-  return Object.assign(new Error(message), { code, details, retryable });
+function failure(code, message, details = {}, retryable = false, retryAfterMs) {
+  return Object.assign(new Error(message), {
+    code,
+    details,
+    retryable,
+    ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+  });
 }
 
 /** Consumer helpers share this bounded, single-call CLI boundary. Never retries. */
@@ -84,6 +89,7 @@ export function createCli({
               envelope.error.message,
               envelope.error.details,
               envelope.error.retryable,
+              envelope.error.retryAfterMs,
             ),
           );
         } else if (exitCode === 0 && envelope?.ok === true && "data" in envelope) {

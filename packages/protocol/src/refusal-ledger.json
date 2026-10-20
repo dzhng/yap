@@ -14,6 +14,8 @@
       "retryable": false,
       "files": {
         "apps/cli/src/artifact-delivery.ts": 1,
+        "apps/cli/src/main.ts": 1,
+        "apps/cli/src/wait.ts": 1,
         "packages/client/src/discovery.ts": 1,
         "packages/client/src/transport.ts": 2
       }

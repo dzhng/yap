@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stageServiceLedger } from "./service-ledger.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/", import.meta.url));
 
@@ -34,6 +35,7 @@ export function compileControlsCheck(scratch, appSources, check, onCompile = () 
   const main = join(scratch, "Check.swift");
   writeFileSync(main, check);
   const executable = join(scratch, "check");
+  if (appSources.includes("ServiceBundle")) stageServiceLedger(scratch);
   compile([
     "-swift-version",
     "6",

@@ -254,13 +254,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if operation.hasPrefix("login.") { return handleLogin(operation, params) }
         if operation.hasPrefix("shortcuts.") {
             guard let controls else {
-                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))
+                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting."))
             }
             return controls.handleShortcuts(operation, params)
         }
         if operation.hasPrefix("skill.") || operation.hasPrefix("cli.") {
             guard let controls else {
-                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting.", retryable: true))
+                return .failure(ServiceFailure(code: "APP_STARTING", message: "The app is still starting."))
             }
             return controls.handleHome(operation)
         }

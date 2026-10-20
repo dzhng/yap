@@ -80,7 +80,7 @@ final class UpdateCoordinator {
             && ["idle", "disabled", "failed"].contains(status.state)
     }
     var checkFailure: ServiceFailure {
-        ServiceFailure(code: "UPDATE_BUSY", message: "An update is already in progress.", retryable: true)
+        ServiceFailure(code: "UPDATE_BUSY", message: "An update is already in progress.")
     }
     func beginManualCheck() throws(ServiceFailure) {
         guard canStartManualCheck else { throw checkFailure }

@@ -1,3 +1,4 @@
+import { refusedRequest } from "./operation-errors.js";
 import type { Readable, Writable } from "node:stream";
 import {
   CONTROL_FRAME_BYTES,
@@ -100,13 +101,17 @@ export function openControl(options: {
     const refusal =
       product && request.operation !== "capture.report" ? options.admission?.refusal() : undefined;
     if (refusal) {
-      reply({ id: request.id, ...refusal });
+      reply({ id: request.id, ...refusedRequest(refusal, request) });
       return;
     }
     if (inbound >= MAX_PENDING_CONTROL_CALLS) {
-      reply(
-        rejection(request.id, "LIMIT_EXCEEDED", "Too many control requests are already in flight."),
-      );
+      reply({
+        id: request.id,
+        ...refusedRequest(
+          operationError("LIMIT_EXCEEDED", "Too many control requests are already in flight."),
+          request,
+        ),
+      });
       return;
     }
     inbound += 1;
@@ -116,7 +121,7 @@ export function openControl(options: {
       .catch(() => operationError("INTERNAL_ERROR", "Service handler failed"))
       .then((result) => {
         inbound -= 1;
-        reply({ id: request.id, ...result }, product);
+        reply({ id: request.id, ...refusedRequest(result, request) }, product);
         if (product) {
           productInbound -= 1;
           options.admission?.progress();

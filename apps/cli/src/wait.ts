@@ -5,6 +5,7 @@ import {
   boundedIssues,
   issueCount,
   operationSchema,
+  operationError,
   waitJobSchema,
   type Issue,
   type OperationRequest,
@@ -170,12 +171,10 @@ export async function waitForWork(options: {
   };
   const expired = () => signal.aborted && signal.reason === "wait_deadline";
   const stopped = () =>
-    metadata(expired() ? "timed_out" : "interrupted", {
-      code: "ABORTED",
-      message: "Waiting was interrupted; admitted work is not rolled back",
-      retryable: false,
-      details: {},
-    });
+    metadata(
+      expired() ? "timed_out" : "interrupted",
+      operationError("ABORTED", "Waiting was interrupted; admitted work is not rolled back").error,
+    );
   const pins = record(latest.ok ? latest.data : null);
   let read = reads.get(request.operation);
   if (request.operation === "transcript.search") read = "transcript.search";
@@ -472,19 +471,12 @@ export async function waitForWork(options: {
     await close(latest);
     if (signal.aborted) return stopped();
     if (error instanceof ArtifactDeliveryError)
-      return metadata("interrupted", {
-        code: error.code,
-        message: error.message,
-        retryable: error.retryable,
-        details: {},
-      });
+      return metadata("interrupted", operationError(error.code, error.message).error);
     if (error instanceof z.ZodError)
-      return metadata("interrupted", {
-        code: "INVALID_RESPONSE",
-        message: "Waiting received malformed job identity",
-        retryable: false,
-        details: {},
-      });
+      return metadata(
+        "interrupted",
+        operationError("INVALID_RESPONSE", "Waiting received malformed job identity").error,
+      );
     throw error;
   } finally {
     if (!settled) await close(latest);

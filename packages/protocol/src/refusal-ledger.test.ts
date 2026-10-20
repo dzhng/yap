@@ -37,7 +37,13 @@ type Ledger = {
   refusedStatus: Record<string, string>;
   codes: Record<
     string,
-    { category: string | null; retryable: boolean; files: Record<string, number> }
+    {
+      category: string | null;
+      retryable: boolean;
+      retryAfterMs?: number;
+      cause?: string;
+      files: Record<string, number>;
+    }
   >;
 };
 
@@ -111,6 +117,7 @@ if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
   const codes: Ledger["codes"] = {};
   for (const code of [...scanned.keys()].sort()) {
     codes[code] = {
+      ...ledger.codes[code],
       category: ledger.codes[code]?.category ?? null,
       retryable: ledger.codes[code]?.retryable ?? false,
       files: Object.fromEntries(Object.entries(scanned.get(code)!).sort()),
@@ -121,6 +128,31 @@ if (process.env.UPDATE_REFUSAL_LEDGER === "1") {
 }
 
 describe("refusal ledger", () => {
+  it("constructs refusal envelopes only through operationError", () => {
+    const offenders: string[] = [];
+    for (const [file, source] of text) {
+      if (
+        file.endsWith(".swift") &&
+        /ServiceFailure\([^)]*\bretryable:\s*(?:true|false)\b/s.test(source)
+      )
+        offenders.push(file);
+      if (!/\.(ts|mjs)$/.test(file)) continue;
+      // Work-state projections have retry bits too; this guard concerns code/message refusals.
+      for (const match of source.matchAll(
+        /\{[^{}]*\bcode\s*[:,][^{}]*\bmessage\s*[:,][^{}]*\bretryable\s*:\s*(?:true|false)\b/g,
+      )) {
+        if (/\bstate\s*:/.test(match[0])) continue;
+        if (
+          file === "packages/protocol/src/index.ts" &&
+          match.index! > source.indexOf("export function operationError(") &&
+          match.index! < source.indexOf("export function admitOperation(")
+        )
+          continue;
+        offenders.push(`${file}:${source.slice(0, match.index).split("\n").length}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
   it("classifies every code literal in product source with exact per-file counts", () => {
     const actual = Object.fromEntries(
       [...scanned].map(([code, perFile]) => [
