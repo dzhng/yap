@@ -39,9 +39,6 @@ import { callLocal } from "@yap/client";
 import { startProjectService } from "./project-service.js";
 import { PassThrough, Writable } from "node:stream";
 import { EventEmitter } from "node:events";
-import { projectPackageManifest } from "@yap/core/project-package";
-import { fileIdentity } from "@yap/core/files";
-import type { ProjectSnapshot } from "@yap/core/projects";
 import {
   CONTROL_FRAME_BYTES,
   appOperations,
@@ -1014,85 +1011,15 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   const events = new EventEmitter();
   const cleanupHeld = once(events, "cleanup"),
     release = once(events, "release");
-  let home = "",
-    workspace = "";
-  let snapshot: ProjectSnapshot;
-  const f = await projectServiceControlFixture(cleanups, async (operation, params) => {
-    if (operation === "packageWorkspace.recover") return { ok: true, data: { recovered: 0 } };
-    if (operation === "packageWorkspace.create") {
-      workspace = join(home, "library/packages", params.name as string);
-      await mkdir(workspace, { mode: 0o700 });
-      const identity = await stat(workspace, { bigint: true });
-      return {
-        ok: true,
-        data: {
-          name: params.name,
-          identity: { dev: String(identity.dev), ino: String(identity.ino) },
-        },
-      };
-    }
-    if (operation === "packageWorkspace.admit") return { ok: true, data: {} };
-    if (operation === "archive.prepare") return { ok: true, data: { empty: true } };
-    if (operation === "archive.extract") {
-      const revision = JSON.stringify(snapshot.revisions[0]);
-      const path = "revisions/0.json";
-      const manifest = JSON.stringify(
-        projectPackageManifest(
-          snapshot,
-          [],
-          [
-            {
-              path,
-              bytes: Buffer.byteLength(revision),
-              sha256: createHash("sha256").update(revision).digest("hex"),
-            },
-          ],
-        ),
-      );
-      await mkdir(join(workspace, "content/revisions"), { recursive: true, mode: 0o700 });
-      const members = [];
-      for (const [path, text] of [
-        ["manifest.json", manifest],
-        ["revisions/0.json", revision],
-      ]) {
-        const file = join(workspace, "content", path!);
-        await writeFile(file, text!);
-        members.push({
-          path,
-          directory: false,
-          bytes: Buffer.byteLength(text!),
-          sha256: createHash("sha256").update(text!).digest("hex"),
-          identity: fileIdentity(await stat(file, { bigint: true })),
-        });
-      }
-      return {
-        ok: true,
-        data: {
-          manifest,
-          revisions: {},
-          members,
-          archiveSha256: "0".repeat(64),
-          expandedBytes: members.reduce((total, member) => total + member.bytes, 0),
-          copiedBytes: 1,
-          initialReadBytes: 0,
-          peakResidentBytes: 0,
-          parser: "fixture",
-        },
-      };
-    }
-    if (operation === "archive.cleanup") {
+  const native = mediaWorker();
+  let holdCleanup = false;
+  const f = await projectServiceControlFixture(cleanups, async (operation, params, options) => {
+    if (operation === "archive.cleanup" && holdCleanup) {
       events.emit("cleanup");
       await release;
-      await rm(join(workspace, "content"), { recursive: true });
-      return { ok: true, data: { removed: true } };
     }
-    if (operation === "packageWorkspace.remove") {
-      await rm(workspace, { recursive: true });
-      return { ok: true, data: { removed: true } };
-    }
-    throw new Error(`Unexpected package worker operation ${operation}`);
+    return native(operation, params, options);
   });
-  home = await realpath(f.home);
   cleanups.push(async () => {
     events.emit("release");
   });
@@ -1106,13 +1033,21 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const data = created.data as {
-    project: ProjectSnapshot["project"];
-    revision: ProjectSnapshot["revisions"][number];
-  };
-  snapshot = { project: data.project, revisions: [data.revision], undo: [], references: [] };
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  const home = await realpath(f.home);
   const archive = join(home, "package.zip");
-  await writeFile(archive, "x");
+  const exported = await f.control("export.create", {
+    requestId: "empty-package",
+    projectId,
+    kind: "processed-package",
+    directory: home,
+    leaf: "package.zip",
+  });
+  if (!exported.ok) throw new Error(JSON.stringify(exported));
+  await expect
+    .poll(() => f.control("export.status", { exportId: "empty-package" }), { timeout: 5_000 })
+    .toMatchObject({ ok: true, data: { state: "ready", cleanupPending: false } });
+  holdCleanup = true;
   const opened = await f.control("package.open", { path: archive });
   if (!opened.ok) throw new Error(JSON.stringify(opened));
   const id = (opened.data as { id: string }).id;
