@@ -11,6 +11,8 @@ import {
   validateSourceReceipt,
   validateRecord,
 } from "./evidence.js";
+import { FileSourceEvidence, writeSourceEvidencePages } from "./evidence-pages.js";
+import { EVIDENCE_BATCH_BYTES } from "./ordered-pages.js";
 const roots: string[] = [];
 const stores: CaptureStore[] = [];
 afterEach(() => {
@@ -156,6 +158,7 @@ function fixture(times = [0, 10, 10, 20]) {
     bytes: Buffer.byteLength(body),
   };
   return {
+    root,
     store,
     evidence: new SourceEvidenceStore(store, recordingEvidenceOwner(store)),
     identity,
@@ -164,6 +167,50 @@ function fixture(times = [0, 10, 10, 20]) {
     samples,
   };
 }
+test("export batches fill the content-byte budget, isolate oversized rows and keep ordered progress", async () => {
+  const f = fixture([]);
+  const budget = EVIDENCE_BATCH_BYTES;
+  const sizes = [budget / 2, budget / 2, budget + 1, ...Array<number>(300).fill(256)];
+  const marks = sizes.map((size, i) => {
+    const data = {
+      hostUs: i,
+      sourceUs: Math.floor(i / 2),
+      epoch: 1,
+      id: "",
+      kind: "stroke",
+      points: [{ hostUs: i, globalX: 1, globalY: 2, x: 1, y: 2 }],
+    };
+    const padding = size - Buffer.byteLength(JSON.stringify(data));
+    data.id = "é".repeat(Math.floor(padding / 2)) + "x".repeat(padding % 2);
+    expect(Buffer.byteLength(JSON.stringify(data))).toBe(size);
+    return data;
+  });
+  const body = marks.map((data) => JSON.stringify({ event: "mark", data }) + "\n").join("");
+  writeFileSync(f.file, body);
+  await f.evidence.ingest({
+    ...f.identity,
+    file: f.file,
+    receipt: {
+      ...f.receipt,
+      header: { sessionID: f.identity.sourceId, schemaVersion: 3 },
+      markEvents: marks.length,
+      bytes: Buffer.byteLength(body),
+      publications: {},
+    },
+  });
+  const batches = [...f.evidence.exportRecords(f.identity, "marks")];
+  expect(batches.map((batch) => batch.length)).toEqual([2, 1, 256, 44]);
+  for (const batch of batches) {
+    const bytes = batch.reduce((sum, row) => sum + Buffer.byteLength(row.content), 0);
+    expect(bytes <= budget || (batch.length === 1 && bytes > budget)).toBe(true);
+  }
+  expect(batches.flat().map((row) => JSON.parse(row.content))).toEqual(marks);
+  expect(batches.flat().map((row) => row.sequence)).toEqual(marks.map((_, i) => i + 1));
+  const directory = join(f.root, "portable");
+  await writeSourceEvidencePages(f.evidence, f.identity, directory);
+  const portable = new FileSourceEvidence(directory, f.identity);
+  expect([...portable.exportRecords(f.identity, "marks")]).toEqual(batches);
+});
 test("pages equal-time raw samples with explicit range and stable continuation", async () => {
   const f = fixture();
   await f.evidence.ingest({ ...f.identity, file: f.file, receipt: f.receipt });

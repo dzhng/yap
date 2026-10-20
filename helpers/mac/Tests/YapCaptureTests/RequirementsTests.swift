@@ -1,5 +1,6 @@
 import Foundation
 import YapMedia
+import YapCapture
 
 func runRequirementsTests() throws {
     let requirementsURL = URL(fileURLWithPath: #filePath)
@@ -16,4 +17,8 @@ func runRequirementsTests() throws {
     precondition(mirrored == expected,
         "Swift requirements \(mirrored) differ from JSON \(expected)")
     print("PASS requirements match protocol JSON: take \(Requirements.maximumTakeUs) us, stroke \(Requirements.maximumStrokeUs) us")
+    let recordBytes = Int(ceil(60 * 103 * Double(seconds["maximumStrokeSeconds"]!) * 2))
+    precondition(CaptureJournal.maximumRecordBytes == recordBytes && recordBytes == 3_708_000,
+        "Swift's schema-4 record bound must match protocol's stroke derivation")
+    print("PASS derived journal record bound \(recordBytes) bytes")
 }

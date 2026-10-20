@@ -1,4 +1,5 @@
 import { createReadStream } from "node:fs";
+import { JOURNAL_RECORD_BYTES, JsonLineStream } from "@yap/protocol";
 import { setImmediate } from "node:timers/promises";
 import type { CaptureStore } from "./capture-store.js";
 import { CatalogError, type Catalog } from "./catalog.js";
@@ -370,22 +371,19 @@ export async function* sourceEvidenceRecords(
   const audioEnds = new Map<string, number>();
   let first: number | null = null,
     last: number | null = null;
-  let pending = Buffer.alloc(0);
+  // Protocol framing counts the terminator; the record bound counts JSON bytes.
+  const lines = new JsonLineStream(JOURNAL_RECORD_BYTES + 1);
   for await (const chunk of createReadStream(file, { highWaterMark: 65536, signal })) {
     bytes += chunk.length;
     if (bytes > maxBytes || bytes > receipt.bytes) invalid("Evidence exceeds its byte receipt");
-    pending = Buffer.concat([pending, chunk]);
-    let newline: number;
-    while ((newline = pending.indexOf(10)) >= 0) {
-      if (newline > 65536) invalid("Evidence record exceeds read budget");
-      const line = pending.subarray(0, newline);
-      let record: Record<string, unknown>;
-      try {
-        record = object(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(line)));
-      } catch {
-        invalid("Malformed normalized evidence JSON");
-      }
-      pending = pending.subarray(newline + 1);
+    for (const line of lines.push(chunk)) {
+      if (!line.ok)
+        invalid(
+          line.error.code === "FRAME_TOO_LARGE"
+            ? "Evidence record exceeds read budget"
+            : "Malformed normalized evidence JSON",
+        );
+      const record = object(line.value);
       const event = record.event as string,
         data = object(record.data);
       validateRecord(event, data);
@@ -418,10 +416,9 @@ export async function* sourceEvidenceRecords(
         content: JSON.stringify(data),
       };
     }
-    if (pending.length > 65536) invalid("Evidence record exceeds read budget");
   }
   if (
-    pending.length ||
+    lines.finish() ||
     bytes !== receipt.bytes ||
     cursors !== receipt.cursorSamples ||
     geometries !== receipt.geometryRecords ||
@@ -621,9 +618,28 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       args.push(...bound.key);
     }
     args.push(query.limit);
+    const order = index.keys.map((key) => `${key} ${query.reverse ? "DESC" : "ASC"}`).join(",");
+    const selection = `FROM source_evidence_records ${query.index === "unplaced" ? "INDEXED BY source_evidence_geometry" : ""}
+      WHERE ${clauses.join(" AND ")} ORDER BY ${order} LIMIT ?`;
+    // Window only the next bounded set of keys and byte counts. Load content after
+    // cutting the prefix, so neither SQL's temporary rows nor JS hold 256 large records.
+    if (query.maxBytes !== undefined) {
+      return this.store.catalog
+        .prepare(`WITH candidates AS (
+          SELECT rowid AS recordId,sourceUs,sequence,length(CAST(content AS BLOB)) AS contentBytes ${selection}
+        ), ranked AS (
+          SELECT recordId,
+            SUM(contentBytes) OVER (ORDER BY ${order} ROWS UNBOUNDED PRECEDING) AS bytes,
+            ROW_NUMBER() OVER (ORDER BY ${order}) AS ordinal
+          FROM candidates
+        )
+        SELECT sequence,event,sourceUs,content FROM source_evidence_records
+        WHERE rowid IN (SELECT recordId FROM ranked WHERE bytes <= ? OR ordinal = 1)
+        ORDER BY ${order}`)
+        .all(...args, query.maxBytes) as RecordRow[];
+    }
     return this.store.catalog
-      .prepare(`SELECT sequence,event,sourceUs,content FROM source_evidence_records ${query.index === "unplaced" ? "INDEXED BY source_evidence_geometry" : ""}
-      WHERE ${clauses.join(" AND ")} ORDER BY ${index.keys.map((k) => `${k} ${query.reverse ? "DESC" : "ASC"}`).join(",")} LIMIT ?`)
+      .prepare(`SELECT sequence,event,sourceUs,content ${selection}`)
       .all(...args) as RecordRow[];
   }
 

@@ -1,0 +1,27 @@
+{
+  "audioIntervals": 0,
+  "bytes": 1353,
+  "cursorSamples": 0,
+  "displaySpaces": 0,
+  "finished": false,
+  "geometryRecords": 2,
+  "header": {
+    "height": 80,
+    "microphone": false,
+    "schemaVersion": 3,
+    "sessionID": "schema3-marks",
+    "source": {
+      "kind": "window",
+      "windowID": 7
+    },
+    "systemAudio": false,
+    "width": 120
+  },
+  "incompleteTail": false,
+  "journal": "capture.journal.jsonl",
+  "lastSequence": 9,
+  "markEvents": 4,
+  "normalizationVersion": 2,
+  "pauseEvents": 1,
+  "publications": {}
+}

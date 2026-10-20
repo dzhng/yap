@@ -18,9 +18,26 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
+import { journalGoldenCases, exportJournalGolden } from "./fixtures/journal-goldens.mjs";
 import { retryable } from "./refusal.mjs";
 const executable =
   process.env.YAP_NATIVE ?? new URL("../.build/debug/yap-native", import.meta.url).pathname;
+
+for (const entry of journalGoldenCases)
+  test(`historical normalized bytes and receipt: ${entry.name}`, (t) => {
+    const root = mkdtempSync(join(tmpdir(), "journal-golden-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const { bytes, receipt } = exportJournalGolden(executable, entry, root);
+    assert.deepEqual(
+      bytes,
+      gunzipSync(readFileSync(new URL(`${entry.name}.jsonl.gz`, entry.goldens))),
+    );
+    assert.deepEqual(
+      receipt,
+      JSON.parse(readFileSync(new URL(`${entry.name}.receipt.json`, entry.goldens))),
+    );
+  });
 function request(directory, output, extra = {}) {
   const result = spawnSync(executable, [], {
     input:

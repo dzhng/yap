@@ -1,9 +1,12 @@
+import { EVIDENCE_BATCH_BYTES } from "./ordered-pages.js";
 import { readRawCursor } from "./raw-cursor.js";
-import { test, expect, afterEach } from "vitest";
+import { test, expect, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, renameSync, readFileSync, symlinkSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { execFileSync, spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { planFrameTrail } from "./trails.js";
 import type { VisualSampler } from "./scenes.js";
 import { CaptureStore } from "./capture-store.js";
@@ -21,6 +24,138 @@ afterEach(() => {
   stores.clear();
   roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true }));
 });
+
+test.runIf(Boolean(process.env.YAP_NATIVE))(
+  "portable source pages retain every point of the production long-stroke fixture",
+  async () => {
+    const root = mkdtempSync(join(tmpdir(), "long-stroke-pages-"));
+    roots.push(root);
+    const directory = join(root, "source");
+    mkdirSync(directory);
+    copyFileSync(
+      new URL("../../../fixtures/journal/schema3-long-stroke.jsonl", import.meta.url),
+      join(directory, "capture.journal.jsonl"),
+    );
+    const file = join(root, "normalized.jsonl");
+    const native = process.env.YAP_NATIVE!;
+    const exported = spawnSync(native, [], {
+      input:
+        JSON.stringify({
+          id: "long-stroke",
+          operation: "media.sourceEvidence",
+          params: { directory, output: file },
+        }) + "\n",
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(exported.status, exported.stderr).toBe(0);
+    const response = JSON.parse(exported.stdout);
+    expect(response.ok, exported.stdout).toBe(true);
+    const store = new CaptureStore(join(root, "library.sqlite"), {
+      now: () => "",
+      newId: () => "schema3-long-stroke",
+    });
+    stores.add(store);
+    const recording = store.allocate().recording;
+    const identity = {
+      owner: { kind: "recording" as const, id: recording.id },
+      sourceId: recording.sourceId,
+      generation: "stroke",
+    };
+    const evidence = new SourceEvidenceStore(store, recordingEvidenceOwner(store));
+    // Count actual byte searches through the production importer, independent of wall time.
+    const indexOf = Buffer.prototype.indexOf;
+    let scanned = 0;
+    const search = vi.spyOn(Buffer.prototype, "indexOf").mockImplementation(function (
+      this: Buffer,
+      ...args
+    ) {
+      const found = indexOf.apply(this, args);
+      if (args[0] === 10) {
+        const start = typeof args[1] === "number" ? args[1] : 0;
+        scanned += (found < 0 ? this.length : found + 1) - start;
+      }
+      return found;
+    });
+    try {
+      await evidence.ingest({ ...identity, file, receipt: response.data });
+    } finally {
+      search.mockRestore();
+    }
+    expect(scanned).toBe(response.data.bytes);
+    const output = join(root, "portable");
+    await writeSourceEvidencePages(evidence, identity, output);
+    const portable = new FileSourceEvidence(output, identity);
+    const expected = evidence.eventRecords(identity, "marks", null, 1);
+    expect(Buffer.byteLength(expected[0]!.content)).toBeGreaterThan(65536);
+    expect(portable.eventRecords(identity, "marks", null, 1)).toEqual(expected);
+    expect(JSON.parse(expected[0]!.content).points).toHaveLength(660);
+    const written = readFileSync(join(directory, "capture.journal.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .find((row) => row.event === "mark");
+    expect(JSON.parse(expected[0]!.content)).toEqual(written.data);
+
+    const many = join(root, "many");
+    mkdirSync(many);
+    execFileSync(join(dirname(native), "YapCaptureTests"), [], {
+      env: {
+        ...process.env,
+        YAP_LONG_STROKE_FIXTURE: join(many, "capture.journal.jsonl"),
+        YAP_LONG_STROKE_COUNT: "20",
+      },
+    });
+    const manyFile = join(root, "many.jsonl");
+    const manyExport = spawnSync(native, [], {
+      input:
+        JSON.stringify({
+          id: "many",
+          operation: "media.sourceEvidence",
+          params: { directory: many, output: manyFile },
+        }) + "\n",
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(manyExport.status, manyExport.stderr).toBe(0);
+    const manyResponse = JSON.parse(manyExport.stdout);
+    expect(manyResponse.ok, manyExport.stdout).toBe(true);
+    const manyIdentity = { ...identity, generation: "many-strokes" };
+    await evidence.ingest({ ...manyIdentity, file: manyFile, receipt: manyResponse.data });
+    const exportedMarks = [];
+    for (const batch of evidence.exportRecords(manyIdentity, "marks")) {
+      const bytes = batch.reduce((sum, row) => sum + Buffer.byteLength(row.content), 0);
+      expect(bytes).toBeLessThanOrEqual(EVIDENCE_BATCH_BYTES);
+      exportedMarks.push(...batch);
+    }
+    const nativeMarks = readFileSync(manyFile, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .filter((row) => row.event === "mark");
+    expect(exportedMarks.map((row) => JSON.parse(row.content))).toEqual(
+      nativeMarks.map((row) => row.data),
+    );
+    expect(exportedMarks).toHaveLength(20);
+
+    // A corrupt portable row can fit the serialized page while exceeding the UTF-8 content bound.
+    const manifestPath = join(output, "pages.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    const descriptor = manifest.indexes.marks[0];
+    const oversized = { ...JSON.parse(expected[0]!.content), id: "é".repeat(1_854_000) };
+    const content = JSON.stringify(oversized);
+    expect(content.length).toBeLessThan(3_708_000);
+    expect(Buffer.byteLength(content)).toBeGreaterThan(3_708_000);
+    const body = Buffer.from(JSON.stringify([{ ...expected[0], content }]));
+    descriptor.bytes = body.length;
+    descriptor.sha256 = createHash("sha256").update(body).digest("hex");
+    writeFileSync(join(output, descriptor.file), body);
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    expect(() =>
+      new FileSourceEvidence(output, identity).eventRecords(identity, "marks", null, 1),
+    ).toThrow("Invalid evidence page payload");
+  },
+);
 async function fixture() {
   const root = mkdtempSync(join(tmpdir(), "source-pages-"));
   roots.push(root);
@@ -280,7 +415,7 @@ test("invalid page directories fail before returning misleading empty evidence",
   expect(() => new FileSourceEvidence(output, f.identity)).toThrow("budget");
   writeFileSync(path, original);
   const reader = new FileSourceEvidence(output, f.identity);
-  writeFileSync(join(output, manifest.indexes.cursor[0].file), Buffer.alloc(1_048_577, 32));
+  writeFileSync(join(output, manifest.indexes.cursor[0].file), Buffer.alloc(7_416_003, 32));
   expect(() => reader.latestCursor(f.identity, 10)).toThrow("budget");
 });
 

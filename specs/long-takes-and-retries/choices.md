@@ -25,3 +25,17 @@ at close.
   Sound (corrected in review: it first fell back to a build-machine checkout path).
 - **Self-retry is attached on every adapter path** (socket, control channel), not per handler.
   Sound: one rule, one owner (`apps/service/src/operation-errors.ts`).
+
+## Slice 07
+
+- **The TS reader reuses protocol's `JsonLineStream`** rather than a second splitter; Swift
+  keeps a scan offset and compacts once per chunk. Sound: one line splitter per language.
+- **Swift restates the record-bound formula** (`60 × 103 × stroke seconds × 2`) and a test
+  checks it equals protocol's `JOURNAL_RECORD_BYTES`. Sound, matching how the requirements
+  themselves are mirrored.
+- **Export reads batch up to 256 rows within a 1 MiB byte budget**, cut in SQL with a running
+  sum, and a larger record advances alone. Sound (corrected in review: it first fetched one
+  row per query, 18.6 s vs 0.85 s on 240k cursor rows; the byte-bounded version takes 1.37 s).
+- **Golden pre-change exports are stored gzip-compressed** (364 KB for 6.7 MB). Sound.
+- **The 1 MiB writer guard stays for all writes until slice 08** switches new takes to
+  schema 4. Sound: schema 3 must keep its rule.

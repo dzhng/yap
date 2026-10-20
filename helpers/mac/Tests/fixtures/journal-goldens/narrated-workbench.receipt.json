@@ -1,0 +1,37 @@
+{
+  "audioIntervals": 1,
+  "bytes": 1488048,
+  "completion": {
+    "durationUs": 134025574,
+    "sequence": 12841,
+    "state": "complete"
+  },
+  "cursorSamples": 8039,
+  "displaySpaces": 1,
+  "finished": true,
+  "firstCursorSourceUs": 49814,
+  "geometryRecords": 5,
+  "header": {
+    "height": 1970,
+    "microphone": true,
+    "schemaVersion": 1,
+    "sessionID": "cf3c7086-da91-4f85-8993-a2db464e3ec6",
+    "source": {
+      "kind": "window",
+      "windowID": 188
+    },
+    "systemAudio": false,
+    "width": 3120
+  },
+  "incompleteTail": false,
+  "journal": "capture.journal.jsonl",
+  "lastCursorSourceUs": 134019623,
+  "lastLifecycle": {
+    "state": "complete"
+  },
+  "lastSequence": 12842,
+  "markEvents": 0,
+  "normalizationVersion": 2,
+  "originHostUs": 92388474388,
+  "pauseEvents": 0
+}

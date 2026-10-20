@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { JsonLineReader, JsonLineStream, encodeJsonLine, type JsonLineOutcome } from "./framing.js";
+import { JOURNAL_RECORD_BYTES } from "./requirements.js";
 
 it("decodes a UTF-8 character split across incoming chunks without replacing it", () => {
   const frame = encodeJsonLine({ text: "A🙂B" }, 100);
@@ -64,4 +65,19 @@ it("reports a stream that ends mid-frame instead of silently dropping it", () =>
   expect(stream.finish()).toBeUndefined();
   read(stream, '{"partial":');
   expect(stream.finish()).toMatchObject({ code: "TRUNCATED_FRAME" });
+});
+
+it("admits the derived record bound across small chunks and rejects one extra UTF-8 byte", () => {
+  const value = "é".repeat((JOURNAL_RECORD_BYTES - 2) / 2);
+  const frame = Buffer.from(JSON.stringify(value) + "\n");
+  const stream = new JsonLineStream(JOURNAL_RECORD_BYTES + 1);
+  const outcomes: JsonLineOutcome[] = [];
+  for (let start = 0; start < frame.length; start += 16384)
+    outcomes.push(...stream.push(frame.subarray(start, start + 16384)));
+  expect(outcomes).toEqual([{ ok: true, value }]);
+  expect(stream.finish()).toBeUndefined();
+  const oversized = new JsonLineStream(JOURNAL_RECORD_BYTES + 1);
+  expect(read(oversized, JSON.stringify(value + "x") + "\n")).toEqual([
+    { ok: false, error: expect.objectContaining({ code: "FRAME_TOO_LARGE" }) },
+  ]);
 });

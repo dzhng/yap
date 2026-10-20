@@ -22,3 +22,6 @@ not media bytes; the repository's attributes identify which files need acquisiti
 [Verification tools](../packages/test-harness/README.md) explain how to admit copies
 into isolated state and reuse retained results before requesting new recordings.
 Treat the footage and narration as personal content.
+
+[Journal fixtures](journal/README.md) are synthetic writer-produced inputs for
+format and import checks, separate from the retained media corpus.

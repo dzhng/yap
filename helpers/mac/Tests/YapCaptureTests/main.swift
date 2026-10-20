@@ -1,6 +1,13 @@
 import Foundation
 
-if ProcessInfo.processInfo.environment["YAP_REQUIREMENTS"] != nil {
+if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
+    try writeLongStrokeFixture(to: URL(fileURLWithPath: output),
+        strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!)
+    if let video = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_VIDEO"] {
+        try await RecoveryFixture.writeVariableDurationVideo(
+            to: URL(fileURLWithPath: video), timesUs: [0, 10_000_000], endUs: 11_000_000)
+    }
+} else if ProcessInfo.processInfo.environment["YAP_REQUIREMENTS"] != nil {
     try runRequirementsTests()
 } else if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
     runCaptureClockTests()
@@ -103,6 +110,16 @@ if ProcessInfo.processInfo.environment["YAP_REQUIREMENTS"] != nil {
   let corpus = ProcessInfo.processInfo.environment["YAP_CAPTURE_GAP_CORPUS"]
 {
   try await runCaptureAudioGapProbe(output: output, corpus: corpus)
+} else if ProcessInfo.processInfo.environment["YAP_JOURNAL_TESTS"] != nil {
+  try await runCaptureJournalTests()
+  try runCaptureJournalLeaseTests()
+  try runPCMJournalTests()
+} else if ProcessInfo.processInfo.environment["YAP_RECOVERY_TESTS"] != nil {
+  try await runFractionalRecoveryDurationTest()
+  try await runSourcePublicationRecoveryTests()
+  try await runEmptyCaptureRecoveryTests()
+  try await runCanonicalRecoveryTests()
+  try await runMediaRecoveryTests()
 } else {
   try runRequirementsTests()
   runMarkRecognizerTests()
