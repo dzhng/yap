@@ -18,7 +18,6 @@ import {
   responseSchema,
   operationWaitMs,
   operationError,
-  refusalCause,
   refusalRetryAfterMs,
 } from "./index.js";
 import { workStateSchema } from "./work.js";
@@ -1101,7 +1100,6 @@ it("refusal envelopes derive retry metadata from their ledger entry", () => {
   >;
   codes.fixture = { retryable: true, retryAfterMs: 15000, cause: "Fixture is preparing" };
   try {
-    expect(refusalCause("fixture")).toBe("Fixture is preparing");
     expect(refusalRetryAfterMs("fixture")).toBe(15000);
     const result = operationError("fixture", "Still preparing", {
       retry: { operation: "job.get", params: { jobId: "missing" } },
@@ -1126,7 +1124,6 @@ it("refusal envelopes derive retry metadata from their ledger entry", () => {
     retryable: false,
     details: {},
   });
-  expect(refusalCause("unregistered")).toBeUndefined();
   expect(refusalRetryAfterMs("unregistered")).toBeUndefined();
 });
 

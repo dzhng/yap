@@ -1,4 +1,7 @@
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { JSONParser } from "@streamparser/json";
+import { fstatSync, readSync } from "node:fs";
 
 /** Incremental decoding retains semantic values, never a second raw copy of the document. */
 export class JsonDocument {
@@ -39,6 +42,25 @@ export function readJsonChunks(chunks: Iterable<Uint8Array>): unknown {
   return document.finish();
 }
 
+/** Read one regular JSON member while detecting a file that changes during the read. */
+export function readJsonDescriptor(fd: number): unknown {
+  const before = fstatSync(fd);
+  if (!before.isFile()) throw new SyntaxError("JSON inventory requires a regular member");
+  let bytes = 0;
+  function* chunks() {
+    const buffer = Buffer.alloc(64 * 1024);
+    let count: number;
+    while ((count = readSync(fd, buffer, 0, buffer.length, bytes)) > 0) {
+      bytes += count;
+      yield buffer.subarray(0, count);
+    }
+  }
+  const result = readJsonChunks(chunks());
+  if (bytes !== before.size || fstatSync(fd).size !== before.size)
+    throw new SyntaxError("JSON inventory changed during read");
+  return result;
+}
+
 /** Emit inventory members independently, without serializing the whole inventory at once. */
 function* jsonFragments(value: unknown): Generator<string> {
   if (Array.isArray(value)) {
@@ -73,4 +95,21 @@ export function* jsonChunks(value: unknown): Generator<string> {
     }
   }
   if (batch) yield batch;
+}
+
+/** Write a complete JSON inventory and return the identity of exactly its encoded bytes. */
+export async function writeJsonWithIdentity(path: string, value: unknown, signal: AbortSignal) {
+  const hash = createHash("sha256");
+  let bytes = 0;
+  function* chunks() {
+    for (const part of jsonChunks(value)) {
+      signal.throwIfAborted();
+      const buffer = Buffer.from(part);
+      hash.update(buffer);
+      bytes += buffer.length;
+      yield buffer;
+    }
+  }
+  await writeFile(path, chunks(), { flag: "wx", signal });
+  return { bytes, sha256: hash.digest("hex") };
 }

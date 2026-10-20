@@ -1,4 +1,4 @@
-import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
+import { RESPONSE_PAGE_BYTES } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
@@ -20,16 +20,16 @@ import {
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
-import { journalCapabilities, type SourceEvidenceMetadata } from "./evidence.js";
+import { receiptCursorSampling, type SourceEvidenceMetadata } from "./evidence.js";
 import { CatalogError } from "./catalog.js";
 import { selectSource, SourceSelectionRead, type SourceSelection } from "./source-selection.js";
 
-// Leave headroom for transport envelopes beneath the public eight-MiB frame bound.
+// Keep page-sized responses below the transport frame after its control envelope.
 export function boundSourceEvidenceResponse(value: unknown): void {
-  if (Buffer.byteLength(JSON.stringify(value)) > 2 * JOURNAL_RECORD_BYTES)
+  if (Buffer.byteLength(JSON.stringify(value)) > RESPONSE_PAGE_BYTES)
     throw new CatalogError(
       "LIMIT_EXCEEDED",
-      "Source evidence response exceeds two journal records; narrow the range, tracks or page limit",
+      "Source evidence response exceeds the transport page budget; narrow the range, tracks or page limit",
     );
 }
 export type CaptureSourceInput = SourceSelection & {
@@ -287,11 +287,7 @@ export class CaptureSourceRead {
     context: CaptureContext,
     range: { startUs: number; endUs: number },
   ): CaptureRow | null {
-    if (
-      !context.evidence ||
-      !journalCapabilities(context.evidence.receipt.header ?? {})!.cursorSampling.holds
-    )
-      return null;
+    if (!context.evidence || !receiptCursorSampling(context.evidence.receipt).holds) return null;
     const start = subtract(fromTime(range.startUs), fromTime(context.sourceToAssetOffsetUs));
     if (compare(start, fromTime(0)) < 0) return null;
     const held = this.records.latestCursor(context.evidence, floor(start));
@@ -494,7 +490,7 @@ export class CaptureSourceRead {
       const at = fromTime(row.sourceAtUs);
       if ((row.kind === "interruption" ? available.before(at) : available(at)).length) {
         const bytes = Buffer.byteLength(JSON.stringify(row)) + 1;
-        if (rows.length && rowBytes + bytes > JOURNAL_RECORD_BYTES) {
+        if (rows.length && rowBytes + bytes > RESPONSE_PAGE_BYTES) {
           position = before;
           break;
         }

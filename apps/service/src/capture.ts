@@ -13,7 +13,6 @@ import {
   type LifecycleEvent,
   type Recording,
   type CaptureStore,
-  type FinalizationError,
 } from "@yap/core/capture-store";
 import { CatalogError } from "@yap/core/catalog";
 import {
@@ -29,8 +28,8 @@ import {
   type OperationResult,
 } from "@yap/protocol";
 import type { ControlChannel } from "./control.js";
-import { renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
+import { type MediaWorker } from "./worker.js";
+import { captureWorkDeadlineMs } from "./publication.js";
 
 /**
  * The only outcomes this service states on its own behalf: a take it discarded, and a take whose
@@ -38,7 +37,7 @@ import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
  */
 type AuthoredOutcome = (
   | { state: "canceled" }
-  | { state: "finalizing"; finalizationError: FinalizationError | null }
+  | { state: "finalizing"; finalizationError: { code: string; message: string } | null }
   | {
       state: "interrupted";
       reason: string;
@@ -297,7 +296,7 @@ export class CaptureService {
   /** Applies one transition native reported on its own, without this service asking for it. */
   report(report: CaptureReport): Recording {
     const current = this.store.get(report.recordingId);
-    this.readReport(current, report);
+    this.checkReportIdentity(current, report);
     if (this.authoredTerminal.has(current.id)) return current;
     return this.observed(this.store.ingestLifecycle(report.recordingId, lifecycleEvent(report)));
   }
@@ -580,7 +579,6 @@ export class CaptureService {
         const finalizationError = {
           code,
           message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-          retryable: refusalRetryable(code),
         };
         this.author(selected, { state: "finalizing", finalizationError });
         this.log(
@@ -658,14 +656,11 @@ export class CaptureService {
         } catch (error) {
           // An outer media refusal does not establish invalid provenance. Keep it retry-visible;
           // a sibling's exclusive closure proof can still admit that independently verified source.
-          // Recovery refuses with a classified code and names the specific cause in details.
-          const cause = error instanceof CatalogError ? error.details.cause : undefined;
+          // Recovery refuses with its classified code.
           const code =
-            typeof cause === "string" && cause.length <= 128
-              ? cause
-              : error instanceof CatalogError && error.code.length <= 128
-                ? error.code
-                : "RECOVERY_FAILED";
+            error instanceof CatalogError && error.code.length <= 128
+              ? error.code
+              : "RECOVERY_FAILED";
           outcomes.set(kind, {
             inputsClosed: false,
             outcome: {
@@ -673,7 +668,6 @@ export class CaptureService {
               error: {
                 code,
                 message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-                retryable: refusalRetryable(code),
               },
             },
           });
@@ -753,12 +747,13 @@ export class CaptureService {
     // Each audio role: raw decode, canonical write, verification decode and support proof.
     // Primary pictures need one traversal; camera mapping/canonicalization/proof need three.
     // A noncanonical recovery only probes existing physical support once.
-    const traversals = canonicalWork ? roles * 4 + (kind === "camera" ? 3 : 1) : 1;
-    return (
-      journalWorkDeadlineMs(journalBytes) +
-      publicationDeadlineMs(members.reduce((bytes, member) => bytes + member.bytes, 0)) +
-      traversals * renderWindowDeadlineMs({ startUs: 0, endUs: durationUs })
-    );
+    return captureWorkDeadlineMs({
+      journalBytes,
+      bytes: members.reduce((bytes, member) => bytes + member.bytes, 0),
+      audioRoles: canonicalWork ? roles : 0,
+      extraTraversals: canonicalWork ? (kind === "camera" ? 3 : 1) : 1,
+      durationUs,
+    });
   }
 
   private settleRecovered(
@@ -793,12 +788,16 @@ export class CaptureService {
 
   private readReport(recording: Recording, data: unknown): CaptureReport {
     const report = captureReportSchema.parse(data);
+    this.checkReportIdentity(recording, report);
+    return report;
+  }
+
+  private checkReportIdentity(recording: Recording, report: CaptureReport): void {
     if (report.recordingId !== recording.id || report.sourceId !== recording.sourceId)
       throw new CatalogError("INVALID_STATE", "Native reported another take", {
         recordingId: recording.id,
         reportedRecordingId: report.recordingId,
       });
-    return report;
   }
 
   /** Service outcomes continue the last observed sequence; terminal state owns finality. */
@@ -923,8 +922,8 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
               report.finalizationError === null
                 ? null
                 : {
-                    ...report.finalizationError,
-                    retryable: refusalRetryable(report.finalizationError.code),
+                    code: report.finalizationError.code,
+                    message: report.finalizationError.message,
                   },
           }),
     };

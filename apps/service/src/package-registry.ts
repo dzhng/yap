@@ -56,7 +56,7 @@ type Work<T extends ArchiveManifest> = (
 type Workspace = Awaited<ReturnType<typeof provisionPackageWorkspace>>;
 type Entry<T extends ArchiveManifest> = Admission & {
   terminal: "failed" | "canceled" | "closed";
-  budget: number;
+  admittedBytes: number;
   input: AdmittedArchive;
   context: JobContext;
   requests: Map<string, Work<T>>;
@@ -108,7 +108,10 @@ export class PackageRegistry<
       state: this.phase,
       error: this.recoveryError,
       owners: this.entries.size,
-      budgetBytes: [...this.entries.values()].reduce((sum, entry) => sum + entry.budget, 0),
+      admittedBytes: [...this.entries.values()].reduce(
+        (sum, entry) => sum + entry.admittedBytes,
+        0,
+      ),
       confirmedBytes: [...this.entries.values()].reduce(
         (sum, entry) =>
           sum +
@@ -155,7 +158,7 @@ export class PackageRegistry<
     if (this.entries.size >= packageRegistryLimits.owners)
       throw new CatalogError("CAPACITY_EXCEEDED", "Too many package resources are owned", {});
     const input = admitArchive(path);
-    const budget = input.bytes;
+    const admittedBytes = input.bytes;
     let entry!: Entry<T>;
     let context: JobContext;
     try {
@@ -173,7 +176,7 @@ export class PackageRegistry<
       jobId: "",
       error: null,
       terminal: "closed",
-      budget,
+      admittedBytes,
       input,
       context,
       requests: new Map(),
@@ -289,7 +292,7 @@ export class PackageRegistry<
       if (signal.aborted || entry.state !== "opening")
         throw new CatalogError("CANCELED", "Package opening canceled");
       const { copiedBytes, expandedBytes } = entry.retained.archiveUsage;
-      entry.budget = copiedBytes + expandedBytes;
+      entry.admittedBytes = copiedBytes + expandedBytes;
       entry.input.close();
       entry.packageHandle = randomUUID();
       entry.state = "ready";
@@ -324,7 +327,7 @@ export class PackageRegistry<
           this.options.worker,
         );
       entry.input.close();
-      entry.budget = 0;
+      entry.admittedBytes = 0;
       entry.state = entry.terminal;
       this.entries.delete(entry.id);
       this.onUpdateProgress?.();

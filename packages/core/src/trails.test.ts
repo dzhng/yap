@@ -6,7 +6,6 @@ import { dirname, join } from "node:path";
 import { CaptureStore } from "./capture-store.js";
 import { recordingEvidenceOwner, SourceEvidenceStore } from "./evidence.js";
 import type { VisualSampler } from "./scenes.js";
-import { FileSourceEvidence, writeSourceEvidencePages } from "./evidence-pages.js";
 import { planFrameTrail } from "./trails.js";
 import { PresentationEvidence } from "./presentation-evidence.js";
 import { PresentationPointerHistory } from "./presentation-pointer-history.js";
@@ -1149,26 +1148,6 @@ test("change-only pointer survives a cut like the every-tick journal", async () 
     { x: 42, y: 20 },
     { x: 42, y: 20 },
   ]);
-}, 30_000);
-
-test("portable cursor pages retain held semantics across relocation", async () => {
-  const f = await fixture([], "sparse");
-  const directory = join(dirname(f.metadata.receipt.file), "portable");
-  await writeSourceEvidencePages(f.evidence, f.identity, directory);
-  const reader = new FileSourceEvidence(directory, f.identity);
-  const plan = await planFrameTrail(
-    { ...request, kept: { startUs: 1_000_000, endUs: 3_000_000 }, trailUs: 0 },
-    {
-      ...f,
-      evidence: reader,
-      sample: f.sample([
-        [1_000_000, 0],
-        [1_500_000, 0],
-      ]),
-    },
-    signal(),
-  );
-  expect(plan.overlay.pointer).toEqual({ atSourceUs: 0, x: 42, y: 20 });
 }, 30_000);
 
 test("held pointers match dense journals at scenes, trimmed spans and backward project requests", async () => {

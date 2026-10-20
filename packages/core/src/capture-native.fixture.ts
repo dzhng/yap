@@ -11,7 +11,7 @@ export function writeNativeCaptureFixture(
     sourceId?: string;
     cameraSourceId?: string;
     kind?: "display" | "camera";
-    legacy?: boolean;
+    schema?: 3 | 4;
     mic?: boolean;
     system?: boolean;
     camera?: boolean;
@@ -23,8 +23,8 @@ export function writeNativeCaptureFixture(
   execFileSync(join(dirname(resolve(native)), "YapCaptureTests"), [], {
     env: {
       ...process.env,
-      YAP_RECORDING_PROMPT_FIXTURE: directory,
-      YAP_RECORDING_PROMPT_OPTIONS: JSON.stringify(options),
+      YAP_CAPTURE_FIXTURE: directory,
+      YAP_CAPTURE_FIXTURE_OPTIONS: JSON.stringify(options),
     },
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 30_000,

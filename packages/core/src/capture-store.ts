@@ -1,9 +1,5 @@
 import { Catalog, CatalogError } from "./catalog.js";
-import {
-  captureCompletionReasonSchema,
-  type CaptureCompletionReason,
-  refusalRetryable,
-} from "@yap/protocol";
+import { type CaptureCompletionReason, refusalRetryable } from "@yap/protocol";
 import { pageCursor } from "./page-cursor.js";
 import {
   readCapturePublication,
@@ -21,6 +17,7 @@ export type RecordingState =
   | "interrupted"
   | "canceled";
 export type FinalizationError = Readonly<{ code: string; message: string; retryable: boolean }>;
+type StoredFinalizationError = Readonly<{ code: string; message: string; retryable?: boolean }>;
 export type Recording = Readonly<{
   id: string;
   sourceId: string;
@@ -44,12 +41,11 @@ export type LifecycleEvent = Readonly<{
 }> &
   Readonly<
     | { state: "recording" | "paused" | "canceled" }
-    | { state: "finalizing"; finalizationError?: FinalizationError | null }
+    | { state: "finalizing"; finalizationError?: StoredFinalizationError | null }
     | {
         state: "complete";
         sourceDurationUs: number;
         completionReason?: CaptureCompletionReason | null;
-        reason?: string | null;
       }
     | {
         state: "interrupted";
@@ -457,8 +453,7 @@ export class CaptureStore extends Catalog {
         failure.code.length < 1 ||
         failure.code.length > 128 ||
         typeof failure.message !== "string" ||
-        failure.message.length > 4096 ||
-        typeof failure.retryable !== "boolean"
+        failure.message.length > 4096
       )
         throw new CatalogError(
           "INVALID_PARAMS",
@@ -499,7 +494,7 @@ export class CaptureStore extends Catalog {
           .prepare(
             "INSERT INTO recording_completions(recordingId,reason) VALUES(?,?) ON CONFLICT(recordingId) DO UPDATE SET reason=excluded.reason",
           )
-          .run(recordingId, captureCompletionReasonSchema.parse(event.completionReason));
+          .run(recordingId, event.completionReason);
       if (event.state === "complete" || event.state === "interrupted")
         this.attachSource(recording, event.sourceDurationUs);
       this.catalog
@@ -515,7 +510,12 @@ export class CaptureStore extends Catalog {
             ? JSON.stringify(
                 event.finalizationError === undefined
                   ? recording.finalizationError
-                  : event.finalizationError,
+                  : event.finalizationError === null
+                    ? null
+                    : {
+                        code: event.finalizationError.code,
+                        message: event.finalizationError.message,
+                      },
               )
             : null,
           publication === null ? null : JSON.stringify(publication),

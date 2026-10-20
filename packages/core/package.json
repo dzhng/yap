@@ -48,10 +48,6 @@
       "types": "./dist/storage.d.ts",
       "default": "./dist/storage.js"
     },
-    "./evidence-pages": {
-      "types": "./dist/evidence-pages.d.ts",
-      "default": "./dist/evidence-pages.js"
-    },
     "./presentation-evidence": {
       "types": "./dist/presentation-evidence.d.ts",
       "default": "./dist/presentation-evidence.js"
@@ -87,10 +83,6 @@
     "./retained-image": {
       "types": "./dist/retained-image.d.ts",
       "default": "./dist/retained-image.js"
-    },
-    "./ordered-pages": {
-      "types": "./dist/ordered-pages.d.ts",
-      "default": "./dist/ordered-pages.js"
     },
     "./evidence-read": {
       "types": "./dist/evidence-read.d.ts",

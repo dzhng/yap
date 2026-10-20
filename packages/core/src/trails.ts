@@ -1,3 +1,9 @@
+import { round, fromTime } from "@yap/composition";
+import { selectSource, type SourceSelection } from "./source-selection.js";
+import type { AssetStore } from "./assets.js";
+import type { AcquisitionStore } from "./acquisitions.js";
+import type { CaptureSourceRead } from "./capture-source-read.js";
+import type { SourceVisualSampler } from "./source-scenes.js";
 import { maximumPointerTrailUs } from "@yap/composition";
 import { isDeepStrictEqual } from "node:util";
 import { CatalogError } from "./catalog.js";
@@ -339,5 +345,85 @@ export async function planVisualTrail(
     scene,
     stalePointerScene,
     stalePointerComparison,
+  };
+}
+
+export function sourceCursorOverlay(dependencies: {
+  assets: AssetStore;
+  acquisitions: AcquisitionStore;
+  capture: CaptureSourceRead;
+  evidence: SourceTrailRead;
+  sample: SourceVisualSampler;
+}) {
+  const { assets, acquisitions, capture, evidence } = dependencies;
+  return async (
+    input: SourceSelection & { atUs: number; trailUs?: number },
+    signal: AbortSignal,
+  ) => {
+    const { atUs, trailUs, ...selection } = input;
+    const selected = selectSource(assets, acquisitions, selection);
+    const context = capture.resolve(selection, "cursor");
+    if (!context.evidence)
+      throw new CatalogError("UNAVAILABLE", "Cursor rendering requires captured-video authority");
+    const offset = round(fromTime(context.sourceToAssetOffsetUs));
+    const available = selected.track.available;
+    const support = available
+      .map((range) => ({
+        startUs: round(fromTime(range.startUs)),
+        endUs: round(fromTime(range.endUs)),
+      }))
+      .find((range) => range.startUs <= atUs && atUs < range.endUs);
+    if (!support)
+      throw new CatalogError("UNAVAILABLE", "Cursor time has no physical source support");
+    const asset = assets.get(selection.assetId);
+    const sourceAsset = {
+      assetId: selection.assetId,
+      streamId: selection.streamId,
+      path: selected.track.source,
+      originUs: asset.originUs,
+    };
+    const plan = await planFrameTrail(
+      {
+        source: selected.track.source,
+        kept: { startUs: Math.max(0, support.startUs - offset), endUs: support.endUs - offset },
+        requestedSourceUs: atUs - offset,
+        ...(trailUs === undefined ? {} : { trailUs }),
+      },
+      {
+        evidence,
+        identity: context.evidence,
+        sample: async (request) => {
+          const result = await dependencies.sample(
+            {
+              asset: sourceAsset,
+              available,
+              atSourceUs: request.atSourceUs.map((at) => at + offset),
+            },
+            signal,
+          );
+          return {
+            ...result,
+            samples: result.samples
+              .filter((sample) => sample.status === "available")
+              .map((sample) => ({
+                ...sample,
+                requestedSourceUs: sample.requestedSourceUs - offset,
+                actualSourceUs: sample.actualSourceUs - offset,
+                distanceUs: Math.abs(sample.requestedSourceUs - sample.actualSourceUs),
+              })),
+          };
+        },
+      },
+      signal,
+    );
+    const point = (value: NonNullable<typeof plan.overlay.pointer>) => ({
+      ...value,
+      atSourceUs: value.atSourceUs + offset,
+    });
+    return {
+      ...plan.overlay,
+      pointer: plan.overlay.pointer ? point(plan.overlay.pointer) : null,
+      trail: plan.overlay.trail.map((run) => run.map(point)),
+    };
   };
 }

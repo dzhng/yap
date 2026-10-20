@@ -1,7 +1,24 @@
-import { EVIDENCE_BATCH_BYTES, type PageBound, type PageQuery } from "./ordered-pages.js";
 import { CatalogError } from "./catalog.js";
 import type { EvidenceIdentity, RecordRow, RawCursorSample, SourceGeometry } from "./evidence.js";
 import type { TimeRange } from "./presentation-time.js";
+
+// Ordinary batching target; a larger valid record advances alone.
+export const EVIDENCE_BATCH_BYTES = 1024 ** 2;
+export type PageKey = readonly number[];
+export type PageBound = { key: PageKey; inclusive: boolean };
+export type PageQuery = {
+  index: string;
+  lower?: PageBound;
+  upper?: PageBound;
+  reverse?: boolean;
+  limit: number;
+  /** Cumulative row bytes; an oversized first row is returned alone. */
+  maxBytes?: number;
+};
+export function comparePageKeys(a: PageKey, b: PageKey): number {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i]! < b[i]! ? -1 : 1;
+  return 0;
+}
 
 export const evidenceIndexes = [
   "cursor",
@@ -45,23 +62,27 @@ export abstract class SourceEvidenceReader {
       if (!["cursor", "geometry", "pauses", "marks"].includes(index))
         invalid("Source ranges require cursor, geometry, pause or mark records");
     }
-    let lower: PageBound | undefined = range
-      ? { key: [range.startUs, 0], inclusive: true }
-      : undefined;
-    const upper: PageBound | undefined = range
-      ? { key: [range.endUs, 0], inclusive: false }
-      : undefined;
+    yield* this.batches(identity, {
+      index,
+      ...(range
+        ? {
+            lower: { key: [range.startUs, 0], inclusive: true },
+            upper: { key: [range.endUs, 0], inclusive: false },
+          }
+        : {}),
+      maxBytes: EVIDENCE_BATCH_BYTES,
+    });
+  }
+  private *batches(
+    identity: EvidenceIdentity,
+    query: Omit<RecordQuery, "limit">,
+  ): Generator<RecordRow[]> {
+    let lower = query.lower;
     for (;;) {
-      const rows = this.records(identity, {
-        index,
-        ...(lower ? { lower } : {}),
-        ...(upper ? { upper } : {}),
-        limit: 256,
-        maxBytes: EVIDENCE_BATCH_BYTES,
-      });
+      const rows = this.records(identity, { ...query, ...(lower ? { lower } : {}), limit: 256 });
       if (!rows.length) return;
       yield rows;
-      lower = { key: recordKey(index, rows.at(-1)!), inclusive: false };
+      lower = { key: recordKey(query.index, rows.at(-1)!), inclusive: false };
     }
   }
   /** Ordered point markers for bounded timeline projection; null-time geometry stays separate. */
@@ -231,16 +252,9 @@ export abstract class SourceEvidenceReader {
     return rows.map((row) => content<T>(row));
   }
   private allRecords(identity: EvidenceIdentity, query: Omit<RecordQuery, "limit">): RecordRow[] {
-    const result: RecordRow[] = [];
-    let lower = query.lower;
-    for (;;) {
-      const rows = this.records(identity, { ...query, ...(lower ? { lower } : {}), limit: 256 });
-      if (!rows.length) return result;
-      result.push(...rows);
-      if (rows.length < 256) return result;
-      lower = { key: recordKey(query.index, rows.at(-1)!), inclusive: false };
-    }
+    return [...this.batches(identity, query)].flat();
   }
+
   hasAudio(identity: EvidenceIdentity, role: "narration" | "system"): boolean {
     this.requireComplete(identity);
     return this.records(identity, { index: role, limit: 1 }).length !== 0;

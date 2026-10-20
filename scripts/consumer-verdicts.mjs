@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import ledger from "../packages/protocol/src/refusal-ledger.json" with { type: "json" };
+import { ledgerVerdicts } from "./ledger-verdicts.mjs";
 
 const helper = new URL("../skills/yap/scripts/yap-cli.mjs", import.meta.url);
 export const consumerVerdictsPath = new URL(
@@ -9,15 +9,8 @@ export const consumerVerdictsPath = new URL(
 );
 // Installed skills run outside the repository. Ship only their local codes' compiled verdicts.
 export function consumerVerdictsSource() {
-  const codes = [
-    ...new Set(
-      [...readFileSync(helper, "utf8").matchAll(/failure\("([A-Z_]+)"/g)].map((match) => match[1]),
-    ),
-  ].sort();
   const verdicts = Object.fromEntries(
-    codes.map((code) => {
-      const entry = ledger.codes[code];
-      if (!entry) throw new Error(`Unregistered consumer code ${code}`);
+    ledgerVerdicts(helper, /failure\("([A-Z_]+)"/g).map(({ code, entry }) => {
       return [
         code,
         {

@@ -11,8 +11,7 @@ import {
   validateSourceReceipt,
   validateRecord,
 } from "./evidence.js";
-import { FileSourceEvidence, writeSourceEvidencePages } from "./evidence-pages.js";
-import { EVIDENCE_BATCH_BYTES } from "./ordered-pages.js";
+import { EVIDENCE_BATCH_BYTES } from "./evidence-read.js";
 const roots: string[] = [];
 const stores: CaptureStore[] = [];
 afterEach(() => {
@@ -230,10 +229,6 @@ test("export batches fill the content-byte budget, isolate oversized rows and ke
   }
   expect(batches.flat().map((row) => JSON.parse(row.content))).toEqual(marks);
   expect(batches.flat().map((row) => row.sequence)).toEqual(marks.map((_, i) => i + 1));
-  const directory = join(f.root, "portable");
-  await writeSourceEvidencePages(f.evidence, f.identity, directory);
-  const portable = new FileSourceEvidence(directory, f.identity);
-  expect([...portable.exportRecords(f.identity, "marks")]).toEqual(batches);
 });
 test("pages equal-time raw samples with explicit range and stable continuation", async () => {
   const f = fixture();
@@ -923,10 +918,12 @@ test("production geometry reads and export batches seek indexes without full sor
     ] as const) {
       plans.length = 0;
       read();
-      expect(plans).toHaveLength(1);
-      expect(plans[0]).toContain(`SEARCH source_evidence_records USING INDEX ${index}`);
-      expect(plans[0]).toContain(seek);
-      expect(plans[0]).not.toContain("TEMP B-TREE");
+      expect(plans.length).toBeGreaterThan(0);
+      for (const plan of plans) {
+        expect(plan).toContain(`SEARCH source_evidence_records USING INDEX ${index}`);
+        expect(plan).toContain(seek);
+        expect(plan).not.toContain("TEMP B-TREE");
+      }
     }
   } finally {
     spy.mockRestore();

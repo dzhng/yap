@@ -228,10 +228,12 @@ test("interrupted work stays owed across queue restart and resumes once", async 
           job.state === "running" ? "processing" : (job.state as "failed" | "queued" | "ready"),
         retryable: job.retryable,
         errorCode: job.errorCode,
+        retryJobId: jobId,
       };
     },
-    submit: () => {
-      resumed.retry(jobId);
+    submit: (_selection, _priority, retryJobId) => {
+      expect(retryJobId).toBe(jobId);
+      resumed.retry(retryJobId!);
     },
     report: (error) => {
       throw error;

@@ -293,13 +293,6 @@
       "reason": "Granting camera access can make the identical operation succeed.",
       "cause": "Yap needs camera access."
     },
-    "CAMERA_TOGGLE_LIMIT": {
-      "category": "resource-bound",
-      "retryable": true,
-      "files": {},
-      "reason": "This is our capture counter limit, subject to the limits audit, not invalid caller data.",
-      "cause": "The take reached Yap’s camera-toggle limit."
-    },
     "CANCELED": {
       "category": "execution-failure",
       "retryable": true,
@@ -995,7 +988,7 @@
         "packages/composition/src/source-projection.ts": 1,
         "packages/composition/src/visual-plan.ts": 1
       },
-      "reason": "The supplied selection or composition cannot describe the requested operation; owned compiler failures must split below.",
+      "reason": "The supplied selection or composition cannot describe the requested operation.",
       "cause": "The project or selection cannot be used for this request."
     },
     "INVALID_DESTINATION": {
@@ -1031,7 +1024,7 @@
         "apps/service/src/join-verification.ts": 1,
         "apps/service/src/source-channel.ts": 1,
         "apps/service/src/speaker.ts": 1,
-        "packages/core/src/acquisitions.ts": 6,
+        "packages/core/src/acquisitions.ts": 5,
         "packages/core/src/alignment-evidence.ts": 2,
         "packages/core/src/alignment-operands.ts": 1,
         "packages/core/src/alignment-processing.ts": 1,
@@ -1039,11 +1032,9 @@
         "packages/core/src/composition-pointer.ts": 8,
         "packages/core/src/correspondence.ts": 1,
         "packages/core/src/evidence-merge.ts": 1,
-        "packages/core/src/evidence-pages.ts": 2,
         "packages/core/src/evidence-read.ts": 1,
-        "packages/core/src/evidence.ts": 1,
+        "packages/core/src/evidence.ts": 4,
         "packages/core/src/files.ts": 3,
-        "packages/core/src/ordered-pages.ts": 1,
         "packages/core/src/pointer-preparation.ts": 1,
         "packages/core/src/presentation-evidence.ts": 1,
         "packages/core/src/presentation-pointer-history.ts": 1,
@@ -1072,9 +1063,8 @@
     "INVALID_INPUT_EVIDENCE": {
       "category": "malformed",
       "files": {
-        "packages/core/src/acquisitions.ts": 2,
+        "packages/core/src/acquisitions.ts": 1,
         "packages/core/src/correspondence.ts": 2,
-        "packages/core/src/evidence-pages.ts": 4,
         "packages/core/src/source-admission.ts": 1
       },
       "retryable": false,
@@ -1152,7 +1142,7 @@
         "apps/service/src/loudness.ts": 4,
         "apps/service/src/managed-files.ts": 2,
         "apps/service/src/media-probe.ts": 3,
-        "apps/service/src/package-archive.ts": 2,
+        "apps/service/src/package-archive.ts": 3,
         "apps/service/src/package-workspace.ts": 1,
         "apps/service/src/project-render.ts": 1,
         "apps/service/src/publication.ts": 8,
@@ -1185,7 +1175,7 @@
         "packages/core/src/composition-pointer.ts": 1,
         "packages/core/src/pointer-schedule.ts": 1
       },
-      "reason": "Our native output allocation and staging can be repaired; caller syntax failures split below.",
+      "reason": "Output allocation or staging can be repaired.",
       "cause": "Yap couldn't create or check the output file."
     },
     "INVALID_PACKAGE": {
@@ -1195,9 +1185,9 @@
         "apps/service/src/archive-input.ts": 2,
         "apps/service/src/portable-index.ts": 1,
         "apps/service/src/project-package-metadata.ts": 2,
-        "apps/service/src/project-packages.ts": 6,
+        "apps/service/src/project-packages.ts": 7,
         "apps/service/src/source-export.ts": 1,
-        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 7,
+        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 8,
         "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 14,
         "helpers/mac/Sources/YapWire/Wire.swift": 1,
         "packages/core/src/acquisitions.ts": 14,
@@ -1219,7 +1209,7 @@
         "packages/core/src/transcript-processing.ts": 5,
         "packages/core/src/transcript.ts": 7
       },
-      "reason": "A malformed caller-supplied package cannot be admitted unchanged; owned assembly and I/O producers split below.",
+      "reason": "A malformed supplied package cannot be admitted unchanged.",
       "cause": "The supplied package is invalid."
     },
     "INVALID_PARAMS": {
@@ -1229,6 +1219,7 @@
         "apps/macos/Sources/Yap/RecordingControls.swift": 4,
         "apps/macos/Sources/Yap/SparkleDriver.swift": 4,
         "apps/macos/Sources/Yap/main.swift": 1,
+        "apps/service/src/archive-write.ts": 1,
         "apps/service/src/asset-conversion.ts": 2,
         "apps/service/src/exports.ts": 3,
         "apps/service/src/join-verification.ts": 4,
@@ -1289,7 +1280,7 @@
         "packages/core/src/assets.ts": 3,
         "packages/core/src/files.ts": 1
       },
-      "reason": "A caller path that violates the operation’s path contract cannot be admitted; owned and I/O sites split below.",
+      "reason": "The supplied path violates the operation’s path contract.",
       "cause": "The supplied file or folder location cannot be used for this request."
     },
     "INVALID_PERMIT": {
@@ -1317,7 +1308,6 @@
         "packages/core/src/audio-spectrum.ts": 1,
         "packages/core/src/audio-wave.ts": 1,
         "packages/core/src/capture-store.ts": 1,
-        "packages/core/src/composition-pointer.ts": 1,
         "packages/core/src/evidence-read.ts": 1,
         "packages/core/src/frame-inspection.ts": 1,
         "packages/core/src/pointer-schedule.ts": 1,
@@ -1429,7 +1419,7 @@
         "skills/yap/scripts/use-case-routing.mjs": 3,
         "skills/yap/scripts/yap-cli.mjs": 1
       },
-      "reason": "Malformed caller requests cannot succeed unchanged; internal encoding sites split below.",
+      "reason": "Malformed caller requests cannot succeed unchanged.",
       "cause": "The request is incomplete or unsupported."
     },
     "INVALID_RESPONSE": {
@@ -1521,7 +1511,7 @@
         "packages/core/src/presentation-pointer-history.ts": 2,
         "packages/core/src/projects.ts": 1
       },
-      "reason": "Most sites describe our transient capture, job or publication state; irrecoverable reference cases split below.",
+      "reason": "Capture, job or publication state can change before the request is retried.",
       "cause": "Yap cannot do that in its current state."
     },
     "INVALID_STORAGE": {
@@ -1533,7 +1523,7 @@
         "apps/service/src/package-archive.ts": 1,
         "apps/service/src/package-workspace.ts": 7,
         "apps/service/src/project-packages.ts": 11,
-        "apps/service/src/publication.ts": 7,
+        "apps/service/src/publication.ts": 8,
         "apps/service/src/render.ts": 2,
         "apps/service/src/worker.ts": 1,
         "helpers/mac/Sources/YapMedia/DirectoryContents.swift": 1,
@@ -1623,18 +1613,17 @@
       "files": {
         "packages/core/src/jobs.ts": 2
       },
-      "reason": "Plain executor exceptions already store true, despite the ledger’s false value.",
+      "reason": "An executor failure can succeed on an explicitly requested later attempt.",
       "cause": "The background task failed."
     },
     "JOB_INTERRUPTED": {
       "category": "execution-failure",
       "files": {
-        "apps/service/src/project-service.ts": 1,
         "packages/core/src/jobs.ts": 3,
         "packages/core/src/transcript-backlog.ts": 1
       },
       "retryable": true,
-      "reason": "Service restart or lost execution can be explicitly retried; SQL single quotes escape the scanner.",
+      "reason": "Service restart or lost execution leaves an attempt that can be resumed.",
       "cause": "The background task was interrupted."
     },
     "JOURNAL_CHANGED": {
@@ -1709,7 +1698,6 @@
         "apps/cli/src/artifact-delivery.ts": 3,
         "apps/cli/src/main.ts": 1,
         "apps/macos/Sources/Yap/ServiceHost.swift": 3,
-        "apps/service/src/archive-write.ts": 1,
         "apps/service/src/control.ts": 6,
         "apps/service/src/exports.ts": 2,
         "apps/service/src/index.ts": 1,
@@ -1726,8 +1714,6 @@
         "helpers/mac/Sources/YapFrames/CompositionPictureExecutor.swift": 1,
         "helpers/mac/Sources/YapFrames/FrameImage.swift": 1,
         "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 1,
-        "helpers/mac/Sources/YapFrames/PresentationSource.swift": 1,
-        "helpers/mac/Sources/YapFrames/SourceVisualSamples.swift": 1,
         "helpers/mac/Sources/YapFrames/TextRaster.swift": 1,
         "helpers/mac/Sources/YapMedia/DecodedAudioInspection.swift": 1,
         "helpers/mac/Sources/YapMedia/DescriptorAudioType.swift": 1,
@@ -1736,8 +1722,7 @@
         "helpers/mac/Sources/YapMedia/MediaInput.swift": 2,
         "helpers/mac/Sources/YapMedia/StillImageSource.swift": 1,
         "helpers/mac/Sources/YapWire/AcousticImageOperation.swift": 2,
-        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 3,
-        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 3,
+        "helpers/mac/Sources/YapWire/ArchiveExtraction.swift": 2,
         "helpers/mac/Sources/YapWire/ArchiveOperation.swift": 1,
         "helpers/mac/Sources/YapWire/CorrespondenceOperation.swift": 1,
         "helpers/mac/Sources/YapWire/ManagedFiles.swift": 1,
@@ -1755,7 +1740,6 @@
         "packages/core/src/capture-source-read.ts": 1,
         "packages/core/src/composition-pointer.ts": 3,
         "packages/core/src/jobs.ts": 4,
-        "packages/core/src/ordered-pages.ts": 1,
         "packages/core/src/pointer-schedule.ts": 1,
         "packages/core/src/prepared-audio.ts": 1,
         "packages/core/src/project-evidence.ts": 3,
@@ -1770,7 +1754,7 @@
         "skills/yap/scripts/batch-prepare.mjs": 1,
         "skills/yap/scripts/yap-cli.mjs": 1
       },
-      "reason": "These broad codes include our guessed storage/output limits; invalid caller parameters must remain separate.",
+      "reason": "The implementation’s resource or output budget can be repaired or the request narrowed.",
       "cause": "The request used more resources than Yap currently allows."
     },
     "LOGIN_ITEM_FAILED": {
@@ -2224,7 +2208,7 @@
         "skills/yap/scripts/task-notes.mjs": 1,
         "skills/yap/scripts/timeline-inspection.mjs": 3
       },
-      "reason": "Our script’s guessed cue/byte/output cap can be repaired; schema-invalid caller quantities belong to INVALID_PARAMS.",
+      "reason": "Our script’s cue/byte/output cap can be repaired; schema-invalid caller quantities belong to INVALID_PARAMS.",
       "cause": "The requested output is larger than Yap currently allows."
     },
     "OUTPUT_EXISTS": {
@@ -2251,9 +2235,8 @@
     "OWNER_DELETED": {
       "category": "missing-prerequisite",
       "files": {
-        "apps/macos/Sources/YapControls/LibraryState.swift": 1,
         "apps/service/src/project-service.ts": 1,
-        "packages/core/src/jobs.ts": 6
+        "packages/core/src/jobs.ts": 7
       },
       "retryable": false,
       "reason": "The deleted or deleting owner cannot be brought back by replaying its work request.",
@@ -2359,7 +2342,6 @@
         "helpers/mac/Sources/YapFrames/LUTColor.swift": 1,
         "packages/core/src/acoustic-inspection.ts": 2,
         "packages/core/src/audio-inspection.ts": 2,
-        "packages/core/src/evidence-pages.ts": 1,
         "packages/core/src/evidence.ts": 1,
         "packages/core/src/frame-inspection.ts": 1,
         "packages/core/src/project-window.ts": 1,
@@ -2517,13 +2499,6 @@
       },
       "reason": "Our recovery execution can succeed after repair.",
       "cause": "Yap could not finish recovering the take."
-    },
-    "RECOVERY_REFUSED": {
-      "category": "execution-failure",
-      "retryable": true,
-      "files": {},
-      "reason": "Its current false classification derives from the helper denylist, including our own damaged files; permanent causes must project their own codes.",
-      "cause": "Yap couldn't check the recording during recovery."
     },
     "REFERENCE_INVALID": {
       "category": "malformed",
@@ -2889,7 +2864,6 @@
       "category": "missing-prerequisite",
       "retryable": true,
       "files": {
-        "apps/service/src/project-service.ts": 2,
         "helpers/mac/Sources/YapFrames/PresentationEvidence.swift": 2,
         "helpers/mac/Sources/YapFrames/PresentationSource.swift": 8,
         "helpers/mac/Sources/YapFrames/SourceVisualSamples.swift": 1,
@@ -2902,7 +2876,7 @@
         "packages/core/src/project-evidence.ts": 3,
         "packages/core/src/recording-prompt.ts": 1,
         "packages/core/src/scene-processing.ts": 2,
-        "packages/core/src/trails.ts": 1,
+        "packages/core/src/trails.ts": 3,
         "packages/core/src/transcript-processing.ts": 2,
         "packages/core/src/transcript.ts": 1
       },
@@ -3037,7 +3011,7 @@
         "packages/core/src/audio-inspection.ts": 1,
         "skills/yap/scripts/timeline-inspection.mjs": 1
       },
-      "reason": "Our media readers/processors can gain the needed format support; malformed caller format values belong to INVALID_PARAMS.",
+      "reason": "Media parser and execution capabilities can be repaired.",
       "cause": "Yap cannot process the required media format yet."
     },
     "UNSUPPORTED_JOB": {
@@ -3092,7 +3066,7 @@
         "packages/core/src/transcript-processing.ts": 1,
         "skills/yap/scripts/delivered-scenes.mjs": 1
       },
-      "reason": "Our media parsers and execution capabilities can be repaired; bad input selections split below.",
+      "reason": "Our media parsers and execution capabilities can be repaired.",
       "cause": "Yap cannot process this media yet."
     },
     "UNSUPPORTED_MODEL": {
@@ -3228,7 +3202,8 @@
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 4,
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1,
         "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 6,
-        "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 2
+        "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 2,
+        "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 2
       },
       "reason": "Our capture writer, encoder or filesystem can recover.",
       "cause": "Yap could not write the recorded media."

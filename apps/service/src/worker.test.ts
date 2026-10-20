@@ -2,11 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { chmod, mkdtemp, readFile, rm, writeFile, open } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import {
-  mediaWorker,
-  PROCESS_START_ALLOWANCE_MS,
-  SPEECH_MODEL_LOAD_ALLOWANCE_MS,
-} from "./worker.js";
+import { mediaWorker, PROCESS_START_ALLOWANCE_MS } from "./worker.js";
 import { operationError, operationSchema } from "@yap/protocol";
 
 const homes: string[] = [];
@@ -53,15 +49,14 @@ async function fixture() {
 }
 
 it.each([1, () => 1])(
-  "fixed process start cost is separate from tiny work budgets (%s)",
+  "explicit deadlines are total, including dynamically observed budgets (%s)",
   async (timeoutMs) => {
     const result = await mediaWorker({ YAP_NATIVE: executable })(
       "delayed-answer",
       {},
       { timeoutMs },
     );
-    expect(result).toMatchObject({ ok: true });
-    if (result.ok) expectGone((result.data as { pid: number }).pid);
+    expect(result).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
   },
 );
 
@@ -249,20 +244,13 @@ it("rejects invalid observed-work budgets", async () => {
   }
 });
 
-it("speech has a separate cold model load allowance", async () => {
+it("speech does not receive a hidden model-load allowance", async () => {
   const { home, run } = await fixture();
   const ready = join(home, "speech-ready");
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-  let settled = false;
-  const pending = run("speech.transcribe", { ready }, { timeoutMs: 1 }).then((result) => {
-    settled = true;
-    return result;
-  });
+  const pending = run("speech.transcribe", { ready }, { timeoutMs: 1 });
   const pid = await readyPid(ready);
-  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2);
-  await delay(50);
-  expect(settled).toBe(false);
-  await vi.advanceTimersByTimeAsync(SPEECH_MODEL_LOAD_ALLOWANCE_MS);
+  await vi.advanceTimersByTimeAsync(2);
   expect(await pending).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
   expectGone(pid);
 });

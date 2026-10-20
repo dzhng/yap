@@ -100,6 +100,13 @@ export type SourceEvidenceReceipt = Readonly<{
   bytes: number;
 }>;
 export type SourceEvidenceMetadata = EvidenceIdentity & { receipt: SourceEvidenceReceipt };
+export const DEFAULT_CURSOR_SAMPLING: { intervalUs: number; holds: boolean } = Object.freeze({
+  intervalUs: 16_667,
+  holds: false,
+});
+export function receiptCursorSampling(receipt: Pick<SourceEvidenceReceipt, "header">) {
+  return journalCapabilities(receipt.header ?? {})!.cursorSampling;
+}
 export type RawCursorSample = Record<string, unknown> & {
   sourceUs: number;
   x?: number | null;
@@ -123,15 +130,15 @@ export type RecordRow = {
   sourceUs: number | null;
   content: string;
 };
-function invalid(message: string): never {
-  throw new CatalogError("INVALID_EVIDENCE", message);
+function invalid(message: string, code = "INVALID_EVIDENCE"): never {
+  throw new CatalogError(code, message);
 }
 function integer(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
-function object(value: unknown): Record<string, unknown> {
+function object(value: unknown, code = "INVALID_EVIDENCE"): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    invalid("Expected evidence object");
+    invalid("Expected evidence object", code);
   return value as Record<string, unknown>;
 }
 function finite(value: unknown): boolean {
@@ -234,7 +241,10 @@ const journalSchemas = {
   3: { isPacked: true, carriesMarks: true, holdsCursor: false },
   4: { isPacked: true, carriesMarks: true, holdsCursor: true },
 } as const;
-export function journalCapabilities(header: { schemaVersion?: unknown; cursorSampling?: unknown }) {
+export function journalCapabilities(
+  header: { schemaVersion?: unknown; cursorSampling?: unknown },
+  code = "INVALID_EVIDENCE",
+) {
   const version = header.schemaVersion === undefined ? 1 : header.schemaVersion;
   if (
     typeof version !== "number" ||
@@ -242,12 +252,12 @@ export function journalCapabilities(header: { schemaVersion?: unknown; cursorSam
     !Object.hasOwn(journalSchemas, version)
   )
     return undefined;
-  let cursorSampling = { intervalUs: 16_667, holds: false };
+  let cursorSampling = { ...DEFAULT_CURSOR_SAMPLING };
   if (header.cursorSampling !== undefined) {
-    const sampling = object(header.cursorSampling);
+    const sampling = object(header.cursorSampling, code);
     const { intervalUs, holds } = sampling;
     if (!integer(intervalUs) || intervalUs === 0 || typeof holds !== "boolean")
-      invalid("Invalid journal cursor sampling");
+      invalid("Invalid journal cursor sampling", code);
     cursorSampling = { intervalUs, holds };
   }
   const capabilities = journalSchemas[version as keyof typeof journalSchemas];
@@ -256,11 +266,23 @@ export function journalCapabilities(header: { schemaVersion?: unknown; cursorSam
 }
 
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
-export function validateSourceReceipt(value: unknown, sourceId: string): SourceEvidenceReceipt {
+export function validateSourceReceipt(
+  value: unknown,
+  sourceId: string,
+  code = "INVALID_EVIDENCE",
+): SourceEvidenceReceipt {
+  function invalid(message: string): never {
+    throw new CatalogError(code, message);
+  }
+  const object = (value: unknown): Record<string, unknown> => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      invalid("Expected evidence object");
+    return value as Record<string, unknown>;
+  };
   const receipt = object(value);
   const header = object(receipt.header);
   if (header.sessionID !== sourceId) invalid("Evidence identity does not match its recording");
-  const capabilities = journalCapabilities(header);
+  const capabilities = journalCapabilities(header, code);
   if (!capabilities) invalid(`Unsupported evidence journal schema ${header.schemaVersion}`);
   if (
     typeof receipt.file !== "string" ||
@@ -378,7 +400,7 @@ export async function* sourceEvidenceRecords(
     pauses = 0,
     audio = 0,
     marks = 0;
-  const carriesMarks = journalCapabilities(receipt.header ?? {})?.carriesMarks;
+  const carriesMarks = journalCapabilities(receipt.header ?? {})!.carriesMarks;
   const audioEnds = new Map<string, number>();
   let first: number | null = null,
     last: number | null = null;
@@ -587,7 +609,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       .get(...evidenceOwnerKey(identity.owner), identity.sourceId, identity.generation) as {
       receipt: string;
     };
-    return journalCapabilities(JSON.parse(row.receipt).header ?? {})!.cursorSampling;
+    return receiptCursorSampling(JSON.parse(row.receipt));
   }
 
   protected requireComplete({ owner, sourceId, generation }: EvidenceIdentity): void {

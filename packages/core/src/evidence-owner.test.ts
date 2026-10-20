@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Catalog, CatalogError } from "./catalog.js";
 import { SourceEvidenceStore, type EvidenceIdentity } from "./evidence.js";
-import { FileSourceEvidence, writeSourceEvidencePages } from "./evidence-pages.js";
 
 const cleanup: (() => void)[] = [];
 afterEach(() => {
@@ -47,7 +46,7 @@ const identity: EvidenceIdentity = {
   generation: "same-attempt",
 };
 
-test("one catalog isolates acquisition ownership, retains raw clocks in portable pages and purges only its owner", async () => {
+test("one catalog isolates acquisition ownership, purges only its owner", async () => {
   const f = fixture();
   const sibling: EvidenceIdentity = {
     ...identity,
@@ -68,11 +67,6 @@ test("one catalog isolates acquisition ownership, retains raw clocks in portable
     { startUs: 20, endUs: 30 },
   ];
   expect(store.audio(metadata, "narration", { startUs: 0, endUs: 40 })).toEqual(expected);
-  const output = join(f.directory, "portable");
-  await writeSourceEvidencePages(store, identity, output);
-  const reader = new FileSourceEvidence(output, identity);
-  expect(reader.audio(identity, "narration", { startUs: 0, endUs: 40 })).toEqual(expected);
-  expect(() => new FileSourceEvidence(output, sibling)).toThrow("not indexed");
   await store.purge(identity.owner, new AbortController().signal);
   expect(() => store.audio(identity, "narration", { startUs: 0, endUs: 40 })).toThrow(
     "not indexed",

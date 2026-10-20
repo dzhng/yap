@@ -108,49 +108,44 @@ export type Acquisition = {
   })[];
 };
 const memberBytes = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const portableAcquisitionSchema = z
-  .strictObject({
-    id: z
-      .uuid()
-      .refine((value) => value === value.toLowerCase(), "Acquisition ID must be canonical"),
-    sourceId: z.string().min(1).max(256),
-    generation: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
-    receipt: z.record(z.string(), z.unknown()),
-    journal: z.strictObject({ bytes: memberBytes, sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
-    bindings: z
-      .array(
-        acquisitionContextSchema.shape.bindings.element
-          .extend({
-            sourceRoles: z
-              .array(z.enum(["video", "narration", "system"]))
-              .min(1)
-              .max(3),
-            sourceToAssetOffsetUs: signedTimeValueSchema,
-            supportBasis: z.enum(["physical", "captured-audio"]),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(256),
-  })
-  .transform((value) => {
-    if ("file" in value.receipt)
-      throw new CatalogError(
-        "INVALID_PACKAGE",
-        "Portable acquisition receipt must not contain a local path",
-      );
-    try {
-      const receipt = omit(
-        validateSourceReceipt({ ...value.receipt, file: "source.jsonl" }, value.sourceId),
-        "file",
-      );
-      return { ...value, receipt };
-    } catch (error) {
-      if (error instanceof CatalogError && error.code === "INVALID_EVIDENCE")
-        throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, error.details);
-      throw error;
-    }
-  });
+const portableAcquisitionShape = z.strictObject({
+  id: z.uuid().refine((value) => value === value.toLowerCase(), "Acquisition ID must be canonical"),
+  sourceId: z.string().min(1).max(256),
+  generation: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+  receipt: z.record(z.string(), z.unknown()),
+  journal: z.strictObject({ bytes: memberBytes, sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+  bindings: z
+    .array(
+      acquisitionContextSchema.shape.bindings.element
+        .extend({
+          sourceRoles: z
+            .array(z.enum(["video", "narration", "system"]))
+            .min(1)
+            .max(3),
+          sourceToAssetOffsetUs: signedTimeValueSchema,
+          supportBasis: z.enum(["physical", "captured-audio"]),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(256),
+});
+export const portableAcquisitionSchema = portableAcquisitionShape.transform((value) => {
+  if ("file" in value.receipt)
+    throw new CatalogError(
+      "INVALID_PACKAGE",
+      "Portable acquisition receipt must not contain a local path",
+    );
+  const receipt = omit(
+    validateSourceReceipt(
+      { ...value.receipt, file: "source.jsonl" },
+      value.sourceId,
+      "INVALID_INPUT_EVIDENCE",
+    ),
+    "file",
+  );
+  return { ...value, receipt };
+});
 export type PortableAcquisition = z.infer<typeof portableAcquisitionSchema>;
 export type PortableAcquisitionFiles = Record<
   "journal" | "normalized",
@@ -168,21 +163,19 @@ function portableAcquisition(value: Acquisition): PortableAcquisition {
       "Acquisition evidence identity conflicts with its owner",
     );
   const receipt = omit(value.evidence.receipt, "file");
-  try {
-    return portableAcquisitionSchema.parse({
-      id: value.id,
-      sourceId: value.sourceId,
-      generation: value.evidence.generation,
-      receipt,
-      journal: { bytes: value.journal.bytes, sha256: value.journal.sha256 },
-      bindings: value.bindings,
-    });
-  } catch (error) {
-    // This serializer consumes our retained receipt, rather than supplied package content.
-    if (error instanceof CatalogError && error.code === "INVALID_INPUT_EVIDENCE")
-      throw new CatalogError("INVALID_EVIDENCE", error.message, error.details);
-    throw error;
-  }
+  const validated = omit(
+    validateSourceReceipt({ ...receipt, file: "source.jsonl" }, value.sourceId, "INVALID_EVIDENCE"),
+    "file",
+  );
+  const parsed = portableAcquisitionShape.parse({
+    id: value.id,
+    sourceId: value.sourceId,
+    generation: value.evidence.generation,
+    receipt,
+    journal: { bytes: value.journal.bytes, sha256: value.journal.sha256 },
+    bindings: value.bindings,
+  });
+  return { ...parsed, receipt: validated };
 }
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
@@ -531,13 +524,9 @@ export class AcquisitionStore {
     if (metadata === undefined)
       throw new CatalogError("NOT_FOUND", "Acquisition does not exist", { acquisitionId });
     if (metadata === null)
-      throw new CatalogError(
-        "NOT_READY",
-        "The acquisition is still importing. Retry in 15 seconds.",
-        {
-          acquisitionId,
-        },
-      );
+      throw new CatalogError("NOT_READY", "The acquisition is still importing.", {
+        acquisitionId,
+      });
     return JSON.parse(metadata);
   }
   get(acquisitionId: string): Acquisition {
@@ -1058,7 +1047,6 @@ export class AcquisitionImporter {
               intent.kind === "capture"
                 ? { ...proof, sha256: intent.source.members[name]!.sha256 }
                 : proof,
-              undefined,
             );
         }
         const canonical = Object.fromEntries(
@@ -1124,7 +1112,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            journalCapabilities(receipt.header ?? {})?.isPacked &&
+            journalCapabilities(receipt.header ?? {})!.isPacked &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )

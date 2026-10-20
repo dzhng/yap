@@ -167,7 +167,7 @@ export type ContextJobExecutor = (execution: {
   job: ContextJob;
   signal: AbortSignal;
 }) => Promise<string>;
-type ContextRow = ContextJob & { queuedSequence: number };
+type ContextRow = Omit<ContextJob, "retryable"> & { queuedSequence: number };
 type ContextState = {
   id: string;
   execute?: ContextJobExecutor;
@@ -491,7 +491,6 @@ export class JobQueue {
       reason: null,
       errorCode: null,
       errorDetails: null,
-      retryable: false,
       generation: 1,
       result: null,
       queuedSequence: ++this.sequence,
@@ -521,10 +520,10 @@ export class JobQueue {
       return this.contextJob(context, jobId);
     }
     if (!current.retryable)
-      throw new CatalogError(current.errorCode ?? "OWNER_DELETED", "Package job cannot be retried");
+      throw new CatalogError(current.errorCode!, "Package job cannot be retried");
     this.admit(current.priority);
     state.jobs.set(jobId, {
-      ...current,
+      ...omit(current, "retryable"),
       attemptId: this.newId(),
       generation: current.generation + 1,
       queuedSequence: ++this.sequence,
@@ -532,7 +531,6 @@ export class JobQueue {
       reason: null,
       errorCode: null,
       errorDetails: null,
-      retryable: false,
       result: null,
     });
     this.runQueued();
@@ -548,7 +546,6 @@ export class JobQueue {
         reason: "canceled",
         errorCode: "CANCELED",
         errorDetails: null,
-        retryable: true,
       });
       this.attempts.get(job.attemptId)?.controller.abort();
       this.capacityAvailable();
@@ -578,7 +575,6 @@ export class JobQueue {
             reason: "context_closed",
             errorCode: "CONTEXT_CLOSED",
             errorDetails: null,
-            retryable: false,
           });
       const attempts = [...this.attempts.values()].filter((attempt) => attempt.context === state);
       for (const attempt of attempts) attempt.controller.abort();
@@ -688,7 +684,7 @@ export class JobQueue {
       )
         return current.jobId;
       if (!current.retryable)
-        throw new CatalogError(current.errorCode ?? "OWNER_DELETED", "This job cannot be retried", {
+        throw new CatalogError(current.errorCode!, "This job cannot be retried", {
           state: current.state,
           reason: current.reason,
           errorCode: current.errorCode,
@@ -762,7 +758,7 @@ export class JobQueue {
       const current = this.job(jobId);
       if (current.state !== "waiting" && current.state !== "queued" && current.state !== "running")
         return null;
-      this.discard(jobId, "canceled");
+      this.discard(jobId, "canceled", "CANCELED");
       return current.attemptId;
     });
     if (stopped !== null) {
@@ -857,16 +853,16 @@ export class JobQueue {
           | undefined)
       : undefined;
     const details = errorDetails === null ? null : JSON.parse(errorDetails);
+    const retryable = refusalRetryable(row.errorCode ?? "");
     return {
       id,
       state: workState(state),
       ...summary,
       attemptGeneration: generation,
       target,
-      retryable: refusalRetryable(row.errorCode ?? ""),
+      retryable,
       errorDetails: details,
-      ...(!["waiting", "queued", "running", "ready"].includes(state) &&
-      refusalRetryable(row.errorCode ?? "")
+      ...(retryable
         ? {
             details: {
               retry: { operation: "job.retry", params: { jobId: id } },
@@ -1324,7 +1320,9 @@ export class JobQueue {
         if (this.closed) break;
         if (this.job(row.jobId).state !== "waiting") continue;
         if (this.targets.isDeleting(targetFrom(row))) {
-          this.store.transaction(() => this.discard(row.jobId, `${row.targetKind}_unavailable`));
+          this.store.transaction(() =>
+            this.discard(row.jobId, `${row.targetKind}_unavailable`, "OWNER_DELETED"),
+          );
           this.scheduleAdmission();
           continue;
         }
@@ -1415,11 +1413,10 @@ export class JobQueue {
     this.releaseFinishedInputs(jobId, completedAttempt);
   }
 
-  private discard(jobId: string, reason: string): void {
+  private discard(jobId: string, reason: string, code: "CANCELED" | "OWNER_DELETED"): void {
     const target = this.job(jobId).target;
     const owner: JobOwner = { kind: target.kind, id: target.id };
     // Only a vanished owner is permanent; every other cancellation can be requested again.
-    const code = reason.endsWith("_unavailable") ? "OWNER_DELETED" : "CANCELED";
     this.store.catalog
       .prepare(
         "UPDATE jobs SET state='canceled',reason=?,errorCode=?,errorDetails=?,retryable=? WHERE jobId=?",
@@ -1482,7 +1479,7 @@ export class JobQueue {
         if (!row) return null;
         const fields = omit(row, "queuedSequence");
         if (!this.targets.isAvailable(targetFrom(fields))) {
-          this.discard(row.jobId, `${row.targetKind}_unavailable`);
+          this.discard(row.jobId, `${row.targetKind}_unavailable`, "OWNER_DELETED");
           continue;
         }
         this.store.catalog.prepare("UPDATE jobs SET state='running' WHERE jobId=?").run(row.jobId);
@@ -1595,7 +1592,7 @@ export class JobQueue {
       if (!current || current.attemptId !== job.attemptId || current.state !== "running") return;
       // An answer that outlived its owner, or its owner's discard, is dropped rather than resurrecting it.
       if (!this.targets.isAvailable(job.target)) {
-        this.discard(job.jobId, `${job.target.kind}_unavailable`);
+        this.discard(job.jobId, `${job.target.kind}_unavailable`, "OWNER_DELETED");
         return;
       }
       if ("error" in outcome) {

@@ -1,5 +1,5 @@
-import { readJsonDescriptor } from "@yap/core/ordered-pages";
-import { jsonChunks } from "@yap/core/json-stream";
+import { readJsonDescriptor } from "@yap/core/json-stream";
+import { jsonChunks, writeJsonWithIdentity } from "@yap/core/json-stream";
 import { portableProjectSpeakers, type PortableSpeakerCheckpoint } from "./portable-speakers.js";
 import { publishedOutput } from "@yap/protocol";
 import { omit } from "@yap/composition";
@@ -975,7 +975,13 @@ export class ProjectPackages {
               const receipt = context.files.open(receiptPath);
               let value: unknown;
               try {
-                value = readJsonDescriptor(receipt.fd);
+                try {
+                  value = readJsonDescriptor(receipt.fd);
+                } catch (error) {
+                  if (error instanceof SyntaxError)
+                    throw new CatalogError("INVALID_PACKAGE", error.message);
+                  throw error;
+                }
               } finally {
                 receipt.close();
               }
@@ -1339,21 +1345,11 @@ export class ProjectPackages {
       await add(path, Buffer.byteLength(body), createHash("sha256").update(body).digest("hex"));
     };
     const json = async (path: string, value: unknown) => {
-      const file = await open(join(input.directory, path), "wx");
-      const hash = createHash("sha256");
-      let bytes = 0;
-      try {
-        for (const chunk of jsonChunks(value)) {
-          signal.throwIfAborted();
-          const buffer = Buffer.from(chunk);
-          await file.writeFile(buffer);
-          hash.update(buffer);
-          bytes += buffer.length;
-        }
-      } finally {
-        await file.close();
-      }
-      const sha256 = hash.digest("hex");
+      const { bytes, sha256 } = await writeJsonWithIdentity(
+        join(input.directory, path),
+        value,
+        signal,
+      );
       await add(path, bytes, sha256);
       return { bytes, sha256 };
     };

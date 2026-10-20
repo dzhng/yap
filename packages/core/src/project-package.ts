@@ -468,12 +468,7 @@ export function parseProjectPackageManifest(
   body: unknown,
   limits: ArchiveLimits,
 ): ProjectPackageManifest {
-  let value: unknown;
-  try {
-    value = typeof body === "string" ? JSON.parse(body) : body;
-  } catch {
-    invalid("Invalid project manifest JSON");
-  }
+  let value = body;
   if (
     value &&
     typeof value === "object" &&

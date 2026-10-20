@@ -25,6 +25,7 @@ function fixture() {
   for (const file of [
     "release-signing.mjs",
     "release-info.mjs",
+    "ledger-verdicts.mjs",
     "sparkle/framework.mjs",
     "launcher/verdicts.mjs",
     "launcher/main.c",

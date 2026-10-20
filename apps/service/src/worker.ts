@@ -33,14 +33,21 @@ export const SPEECH_MODEL_LOAD_ALLOWANCE_MS = 600_000;
 /** Inferred real-time media traversal × selected seconds × 2× margin, excluding pauses. */
 export function renderWindowDeadlineMs(range: SelectionRange): number {
   const durationUs = ceil(subtract(fromTime(range.endUs), fromTime(range.startUs)));
-  return Math.max(1, derivedBound(1000, durationUs, 2));
+  return PROCESS_START_ALLOWANCE_MS + Math.max(1, derivedBound(1000, durationUs, 2));
 }
 
 /** Model preparation owns its wait; inference gets selected available narration at 2× real time. */
 export function transcriptionDeadlineMs(available: readonly SelectionRange[]): number {
-  return Math.max(
-    1,
-    available.reduce((total, range) => total + renderWindowDeadlineMs(range), 0),
+  return (
+    Math.max(
+      1,
+      available.reduce(
+        (total, range) => total + renderWindowDeadlineMs(range) - PROCESS_START_ALLOWANCE_MS,
+        0,
+      ),
+    ) +
+    PROCESS_START_ALLOWANCE_MS +
+    SPEECH_MODEL_LOAD_ALLOWANCE_MS
   );
 }
 
@@ -214,11 +221,9 @@ function ownedProcess(
       if (timeoutMs === null) return; // Finite cleanup inventory, cancellation/parent ownership only.
       let allowed: number;
       try {
-        allowed = typeof timeoutMs === "function" ? timeoutMs() : timeoutMs;
-        if (!Number.isFinite(allowed) || allowed < 0) throw new Error("Invalid observed work");
-        allowed +=
-          PROCESS_START_ALLOWANCE_MS +
-          (operation === "speech.transcribe" ? SPEECH_MODEL_LOAD_ALLOWANCE_MS : 0);
+        const requested = typeof timeoutMs === "function" ? timeoutMs() : timeoutMs;
+        if (!Number.isFinite(requested) || requested < 0) throw new Error("Invalid observed work");
+        allowed = requested;
       } catch {
         finish(operationError("INVALID_STORAGE", "Cannot observe native work budget"));
         return;

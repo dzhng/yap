@@ -17,7 +17,7 @@ export type RecordingPromptFacts = {
     mic: boolean | undefined;
     system: boolean | undefined;
   };
-  kind?: NonNullable<CapturePublishedSource["take"]>["kind"];
+  kind?: "display" | "window" | "area" | "camera";
   marks?: CapturePublishedSource["marks"];
   transcript: "none" | "pending" | "ready";
 };
@@ -88,7 +88,7 @@ export function renderRecordingPrompt(facts: RecordingPromptFacts): string {
   ].join("\n");
 }
 
-/** Projects and imported videos keep their one-line ID handoff behind the same operation (P4). */
+/** Projects and imported videos keep their one-line ID handoff behind the same operation. */
 export function handoffPrompt(kind: "project" | "asset", id: string): string {
   return kind === "project"
     ? `I want you to use this project with this ID with the Yap CLI: ${id}`

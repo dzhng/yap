@@ -143,12 +143,12 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   const bytes = (await stat(f.input)).size;
   const admission = await f.registry.open(f.input);
   assert.equal(admission.packageHandle, null);
-  assert.equal(f.registry.usage().budgetBytes, bytes);
+  assert.equal(f.registry.usage().admittedBytes, bytes);
   const handle = await ready(f, admission.id),
     context = f.registry.lookup(handle);
   const expanded = Object.values(f.files).reduce((sum, value) => sum + Buffer.byteLength(value), 0);
   assert.deepEqual(context.archiveUsage, { copiedBytes: bytes, expandedBytes: expanded });
-  assert.equal(f.registry.usage().budgetBytes, bytes + expanded);
+  assert.equal(f.registry.usage().admittedBytes, bytes + expanded);
   assert.equal(f.registry.usage().confirmedBytes, bytes + expanded);
   assert.equal(f.store.catalog.prepare("SELECT COUNT(*) AS n FROM recordings").get().n, 0);
   assert.deepEqual(context.manifest.snapshot, f.snapshot);
@@ -160,7 +160,7 @@ test("registry reserves before extraction, charges copied bytes, and closes with
   await f.registry.close(admission.id);
   assert.equal(f.registry.status(admission.id).state, "closed");
   assert.deepEqual(await readdir(f.directory), []);
-  assert.equal(f.registry.usage().budgetBytes, 0);
+  assert.equal(f.registry.usage().admittedBytes, 0);
   assert.throws(() => f.registry.lookup(handle), { code: "CONTEXT_CLOSED" });
   assert.throws(() => context.files.open(f.mediaPath), { code: "CONTEXT_CLOSED" });
   await f.registry.close(admission.id);
@@ -177,7 +177,7 @@ test("large pending admissions have no aggregate byte pool and cancellation rele
   await truncate(f.input, bytes);
   const admissions = [];
   for (let i = 0; i < 4; i++) admissions.push(await f.registry.open(f.input));
-  assert.equal(f.registry.usage().budgetBytes, 4 * bytes);
+  assert.equal(f.registry.usage().admittedBytes, 4 * bytes);
   assert.equal(f.registry.usage().owners, 4);
   await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   assert.deepEqual(await readdir(f.directory), []);
@@ -185,7 +185,7 @@ test("large pending admissions have no aggregate byte pool and cancellation rele
     await f.registry.close(admission.id);
     assert.equal(f.registry.status(admission.id).state, "canceled");
   }
-  assert.equal(f.registry.usage().budgetBytes, 0);
+  assert.equal(f.registry.usage().admittedBytes, 0);
   const later = await f.registry.open(f.input);
   await f.registry.close(later.id);
 });
@@ -207,7 +207,7 @@ test("four same-content resource owners stay independent and failed close retain
     await assert.rejects(closing, { code: "ARCHIVE_CLEANUP_FAILED" });
     assert.equal(f.registry.status(admissions[0].id).state, "cleanup_failed");
     assert.equal(f.registry.usage().owners, 4);
-    assert.equal(f.registry.usage().budgetBytes, before.budgetBytes);
+    assert.equal(f.registry.usage().admittedBytes, before.admittedBytes);
     await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
     const sibling = f.registry.lookup(handles[1]).files.open(f.mediaPath);
     assert.ok(sibling.fd >= 0);
@@ -217,7 +217,7 @@ test("four same-content resource owners stay independent and failed close retain
   }
   await f.registry.close(admissions[0].id);
   assert.equal(f.registry.usage().owners, 3);
-  assert.equal(f.registry.usage().budgetBytes, (before.budgetBytes * 3) / 4);
+  assert.equal(f.registry.usage().admittedBytes, (before.admittedBytes * 3) / 4);
   const replacement = await f.registry.open(f.input);
   const replacementHandle = await ready(f, replacement.id);
   assert.notEqual(replacementHandle, handles[0]);
@@ -252,7 +252,7 @@ test("failed validation cleans up, while an unconfirmed nonempty creation keeps 
     (value) => value.state === "failed",
   );
   assert.equal(f.registry.status(invalid.id).packageHandle, null);
-  assert.equal(f.registry.usage().budgetBytes, 0);
+  assert.equal(f.registry.usage().admittedBytes, 0);
   assert.deepEqual(await readdir(f.directory), []);
   let foreign;
   const g = await fixture(t, {
@@ -276,18 +276,18 @@ test("failed validation cleans up, while an unconfirmed nonempty creation keeps 
   });
   await g.registry.recover();
   const lost = await g.registry.open(g.input),
-    budget = g.registry.usage().budgetBytes;
+    budget = g.registry.usage().admittedBytes;
   await waitFor(
     () => g.registry.status(lost.id),
     (value) => value.state === "cleanup_failed",
   );
-  assert.equal(g.registry.usage().budgetBytes, budget);
+  assert.equal(g.registry.usage().admittedBytes, budget);
   assert.equal(g.registry.status(lost.id).packageHandle, null);
   assert.equal(await readFile(foreign, "utf8"), "preserve");
   await rm(foreign);
   await g.registry.close(lost.id);
   assert.equal(g.registry.status(lost.id).state, "failed");
-  assert.equal(g.registry.usage().budgetBytes, 0);
+  assert.equal(g.registry.usage().admittedBytes, 0);
   assert.deepEqual(await readdir(g.directory), []);
 });
 
@@ -561,7 +561,7 @@ test("close fences delivery and drains an actual native media worker before remo
       (error) => error.code === "ESRCH",
     );
     assert.throws(() => f.delivery.read(delivery.token, 0, 20), { code: "ARTIFACT_EXPIRED" });
-    assert.equal(f.registry.usage().budgetBytes, 0);
+    assert.equal(f.registry.usage().admittedBytes, 0);
     assert.deepEqual(await readdir(f.directory), []);
   } finally {
     await f.registry.close(admission.id);
@@ -585,7 +585,7 @@ test("correctly hashed malformed project resource metadata fails before readines
   f.files["manifest.json"] = JSON.stringify(manifest);
   // Structural admission and exact hashes succeed; the canonical typed resource owner refuses.
   assert.equal(
-    parseProjectPackageManifest(f.files["manifest.json"], archiveLimits).format,
+    parseProjectPackageManifest(JSON.parse(f.files["manifest.json"]), archiveLimits).format,
     "yap-project",
   );
   await f.writeArchive();
@@ -601,7 +601,7 @@ test("correctly hashed malformed project resource metadata fails before readines
     () => f.registry.usage(),
     (value) => value.owners === 0,
   );
-  assert.equal(f.registry.usage().budgetBytes, 0);
+  assert.equal(f.registry.usage().admittedBytes, 0);
   assert.deepEqual(await readdir(f.directory), []);
   assert.deepEqual(
     JSON.parse(JSON.stringify(f.projects.snapshot(f.snapshot.project.id))),
@@ -615,7 +615,7 @@ test("four pending opens reserve actual input bytes and retain all validated own
   const capture = f.store.allocate().recording;
   const admissions = [];
   for (let i = 0; i < 4; i++) admissions.push(await f.registry.open(f.input));
-  assert.equal(f.registry.usage().budgetBytes, 4 * (await stat(f.input)).size);
+  assert.equal(f.registry.usage().admittedBytes, 4 * (await stat(f.input)).size);
   await assert.rejects(f.registry.open(f.input), { code: "CAPACITY_EXCEEDED" });
   f.store.ingestLifecycle(capture.id, {
     sourceId: capture.sourceId,
@@ -670,11 +670,11 @@ test("partial copy cancellation drains the actual worker before returning reserv
         const copied = (await stat(join(f.directory, admission.id, ".input"))).size;
         assert.ok(copied > 0 && copied < input.length);
         assert.equal(f.registry.status(admission.id).packageHandle, null);
-        assert.equal(f.registry.usage().budgetBytes, input.length);
+        assert.equal(f.registry.usage().admittedBytes, input.length);
         await f.registry.close(admission.id);
         assert.equal(copyClosed, true);
         assert.equal((await completion).state, "canceled");
-        assert.equal(f.registry.usage().budgetBytes, 0);
+        assert.equal(f.registry.usage().admittedBytes, 0);
         assert.deepEqual(await readdir(f.directory), []);
         assert.deepEqual(await readFile(f.input), input);
       } finally {

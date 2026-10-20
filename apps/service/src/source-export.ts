@@ -6,11 +6,11 @@ import { isDeepStrictEqual } from "node:util";
 import { dirname, join } from "node:path";
 import { readMediaProbe } from "./media-probe.js";
 import { type SourceExporter } from "@yap/core/source-admission";
-import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
+import { captureWorkDeadlineMs } from "./publication.js";
 import { CatalogError } from "@yap/core/catalog";
 import { fileIdentity } from "@yap/core/files";
 import type { SourceEvidenceReceipt } from "@yap/core/evidence";
-import { renderWindowDeadlineMs, nativeResult, type MediaWorker } from "./worker.js";
+import { nativeResult, type MediaWorker } from "./worker.js";
 
 /** Canonical verification budgets source work separately from file size: sparse media can
  * be tiny but expensive. Duration allowance is an inferred fallback until traversal throughput is measured. */
@@ -44,25 +44,28 @@ async function verificationDeadline(
   const journalBytes = await size("capture.journal.jsonl");
   // Verification traverses each selected canonical role twice. A primary video does
   // not have a camera receipt; count media operands, never publication receipt names.
-  let mediaWork = 0;
+  let mediaRoles = 0;
   for (const role of ["video", "narration", "system"] as const) {
     const operand = canonical?.[role];
     if (canonical ? !operand : !(await size(`${role}.mov`))) continue;
     const streams = operand?.metadata?.streams.filter(
       (stream) => stream.kind === (role === "video" ? "video" : "audio"),
     );
-    const stream = streams?.find(
-      (stream) => stream.decodable && stream.startUs !== undefined && stream.endUs !== undefined,
-    );
-    mediaWork +=
-      2 *
-      renderWindowDeadlineMs(
-        stream?.endUs === undefined
-          ? { startUs: 0, endUs: mediaDurationUs }
-          : { startUs: stream.startUs!, endUs: stream.endUs },
-      );
+    if (
+      !streams ||
+      streams.some(
+        (stream) => stream.decodable && stream.startUs !== undefined && stream.endUs !== undefined,
+      )
+    )
+      mediaRoles++;
   }
-  return journalWorkDeadlineMs(journalBytes) + publicationDeadlineMs(bytes) + mediaWork;
+  return captureWorkDeadlineMs({
+    journalBytes,
+    bytes,
+    audioRoles: 0,
+    extraTraversals: mediaRoles * 2,
+    durationUs: mediaDurationUs,
+  });
 }
 
 /** Native verifies canonical bytes through the admitted inode, never a reopened donor path. */
@@ -140,7 +143,7 @@ export function sourceExporter(
           },
           {
             signal,
-            timeoutMs: () => timeoutMs,
+            timeoutMs,
             descriptors: [...handles.map((file) => file.fd), ...lifetimes],
           },
         ),

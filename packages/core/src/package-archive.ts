@@ -28,7 +28,6 @@ const memberSchema = z.strictObject({
 });
 const receiptSchema = z.strictObject({
   manifest: z.unknown(),
-  manifestIdentity: z.strictObject({ bytes: integer, sha256: digest }),
   revisions: z.record(z.string(), z.string()),
   members: z.array(memberSchema),
   archiveSha256: digest,
@@ -68,7 +67,6 @@ export function verifyArchiveReceipt<T extends ArchiveManifest>(
   };
   if (!parsed.success) return invalid("Invalid native archive receipt");
   const receipt = parsed.data;
-  if (receipt.copiedBytes < 1) return invalid("Archive receipt exceeds its limits");
   const manifest = validate(receipt.manifest, limits);
   const expected = new Map(manifest.inventory.map((entry) => [entry.path, entry]));
   const actual = new Map<string, z.infer<typeof memberSchema>>();
@@ -104,13 +102,7 @@ export function verifyArchiveReceipt<T extends ArchiveManifest>(
       return invalid("Archive metadata bytes do not match their inventory");
   };
   const manifestEntry = actual.get("manifest.json");
-  if (
-    !manifestEntry ||
-    manifestEntry.directory ||
-    manifestEntry.bytes !== receipt.manifestIdentity.bytes ||
-    manifestEntry.sha256 !== receipt.manifestIdentity.sha256
-  )
-    return invalid("Archive manifest identity differs from its parsed member");
+  if (!manifestEntry || manifestEntry.directory) return invalid("Archive manifest is missing");
   for (const [path, text] of Object.entries(receipt.revisions)) checkText(path, text);
   const requiredDirectories = new Set<string>();
   for (const entry of manifest.inventory) {

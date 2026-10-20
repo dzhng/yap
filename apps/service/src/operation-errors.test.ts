@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { callLocal } from "@yap/client";
 import { operationSchema, refusalRetryable } from "@yap/protocol";
 import { CatalogError } from "@yap/core/catalog";
-import { operationFailure, refusedRequest } from "./operation-errors.js";
+import { operationFailure, withResolvingCall } from "./operation-errors.js";
 import { projectServiceControlFixture } from "./project-service.fixture.js";
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -73,7 +73,7 @@ it.each(["NOT_READY", "NOT_FOUND"])(
   "keeps an owner's explicit resolving request for %s",
   (code) => {
     const retry = { operation: "model.status", params: { modelId: "parakeet" } };
-    const result = refusedRequest(
+    const result = withResolvingCall(
       operationFailure(new CatalogError(code, "Still preparing", { modelId: "parakeet", retry })),
       { id: "fixture", operation: "job.get", params: { jobId: "missing" } },
     );

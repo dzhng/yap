@@ -1,4 +1,4 @@
-import { JOURNAL_RECORD_BYTES } from "@yap/protocol";
+import { RESPONSE_PAGE_BYTES } from "@yap/protocol";
 import {
   compare,
   fromTime,
@@ -187,11 +187,11 @@ export function mergeEvents(
       rows.push(row);
       state.tracks[index]!.head = null;
     },
-    // A page targets one derived maximum record, leaving the transport's envelope headroom.
+    // A page stays below the transport frame after its response envelope.
     (index) =>
       !rows.length ||
       bytes + Buffer.byteLength(JSON.stringify(state.tracks[index]!.head!.row)) + 1 <=
-        JOURNAL_RECORD_BYTES,
+        RESPONSE_PAGE_BYTES,
   );
   return rows;
 }

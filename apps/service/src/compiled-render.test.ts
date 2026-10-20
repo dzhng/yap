@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { expect, test } from "vitest";
 import { executeComposition } from "./composition-worker.js";
 import { audioDeadline, projectAudioRenderer } from "./project-render.js";
-import { renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
+import { PROCESS_START_ALLOWANCE_MS, renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
 
 test("a large compiled audio plan reaches execution without enlarging control frames", async () => {
   const directory = await mkdtemp(join(tmpdir(), "compiled-render-"));
@@ -311,8 +311,10 @@ test("fractional frame-duration preparation receives a conservative bounded dead
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
   });
   // Query + state + retime output each cost six seconds; input is 246478 / 48000 seconds.
-  expect(audioDeadline(window)).toBe(2 * Math.ceil(18000 + 246478 / 48));
-  expect(audioDeadline(window, true)).toBe(12000);
+  expect(audioDeadline(window)).toBe(
+    PROCESS_START_ALLOWANCE_MS + 2 * Math.ceil(18000 + 246478 / 48),
+  );
+  expect(audioDeadline(window, true)).toBe(PROCESS_START_ALLOWANCE_MS + 12000);
 });
 
 test("successive bulk domain requests retire their control files in the same attempt", async () => {

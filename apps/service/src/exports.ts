@@ -979,7 +979,7 @@ export class MediaExports {
     }
     if (intent.kind === "video" && !this.hasPreparedInput(intent)) {
       const pinned = intent.snapshot as PinnedProjectPreview;
-      const repairable = (job: Job) => {
+      const retryablePreviewDependency = (job: Job) => {
         if (job.state !== "failed") return false;
         if (job.errorCode === "PINNED_IMPLEMENTATION_UNAVAILABLE")
           throw new CatalogError(
@@ -1004,7 +1004,7 @@ export class MediaExports {
         typeof failure.errorDetails?.dependency === "string"
       )
         failure = this.owners.jobs.job(failure.errorDetails.dependency);
-      const retryPreview = failure !== undefined && repairable(failure);
+      const retryPreview = failure !== undefined && retryablePreviewDependency(failure);
       const prepared = await this.owners.project.preview.prepare(pinned);
       prepared.submit(() => {
         this.requireAdmission(exportId);
@@ -1013,7 +1013,7 @@ export class MediaExports {
       });
       if (retryPreview) {
         const current = await this.owners.project.preview.request(pinned);
-        if (current.jobId && repairable(this.owners.jobs.job(current.jobId)))
+        if (current.jobId && retryablePreviewDependency(this.owners.jobs.job(current.jobId)))
           await this.owners.project.preview.retry(pinned);
       }
     }

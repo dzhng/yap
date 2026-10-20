@@ -1,3 +1,4 @@
+import { RESPONSE_PAGE_BYTES } from "@yap/protocol";
 import {
   fromTime,
   compare,
@@ -1535,7 +1536,7 @@ test.each(["asset", "missing", "pending", "malformed"] as const)(
       else
         expect(() => f.captureRead.resolveMany([next], "cursor")).toThrow(
           failure === "pending"
-            ? "The acquisition is still importing. Retry in 15 seconds."
+            ? "The acquisition is still importing."
             : "Acquisition does not exist",
         );
     }
@@ -2010,7 +2011,7 @@ test("capture replies close by bytes and resume without losing observations", as
       limit: 5000,
       ...(sourceCursor ? { cursor: sourceCursor } : {}),
     });
-    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(RESPONSE_PAGE_BYTES);
     sourceRows.push(...result.page!.rows);
     sourceCursor = result.page!.nextCursor;
   } while (sourceCursor);
@@ -2034,7 +2035,7 @@ test("capture replies close by bytes and resume without losing observations", as
       limit: 5000,
       ...(pageCursor ? { cursor: pageCursor } : {}),
     });
-    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(4 * 1024 * 1024);
+    expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(RESPONSE_PAGE_BYTES);
     projected.push(...result.page!.rows);
     pageCursor = result.page!.nextCursor ?? undefined;
   } while (pageCursor);

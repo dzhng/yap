@@ -19,24 +19,32 @@ export function operationFailure(error: unknown): OperationFailure {
 }
 
 /** An identical refused request is a resolving call only when it is valid and safe to resend. */
-export function refusedRequest(
+export function withResolvingCall(
   result: OperationResult,
   request: OperationRequest,
 ): OperationResult {
-  if (result.ok) return result;
+  if (result.ok || !result.error.retryable || result.error.details.retry !== undefined)
+    return result;
   const parsed = operationSchema.safeParse({
     operation: request.operation,
     params: request.params,
   });
-  const retry =
-    result.error.retryable &&
-    parsed.success &&
-    (readOnlyOperations.has(parsed.data.operation) ||
-      ("requestId" in parsed.data.params && typeof parsed.data.params.requestId === "string"))
-      ? { operation: request.operation, params: request.params }
-      : undefined;
-  return operationError(result.error.code, result.error.message, {
-    ...result.error.details,
-    ...(result.error.details.retry === undefined && retry ? { retry } : {}),
-  });
+  if (
+    !parsed.success ||
+    !(
+      readOnlyOperations.has(parsed.data.operation) ||
+      ("requestId" in parsed.data.params && typeof parsed.data.params.requestId === "string")
+    )
+  )
+    return result;
+  return {
+    ...result,
+    error: {
+      ...result.error,
+      details: {
+        ...result.error.details,
+        retry: { operation: request.operation, params: request.params },
+      },
+    },
+  };
 }

@@ -12,7 +12,3 @@ export function refusalRetryable(code: string): boolean {
 export function refusalRetryAfterMs(code: string): number | undefined {
   return entries[code]?.retryAfterMs;
 }
-
-export function refusalCause(code: string): string | undefined {
-  return entries[code]?.cause;
-}

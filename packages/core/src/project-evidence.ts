@@ -1,6 +1,6 @@
 import { readJsonChunks, jsonChunks } from "./json-stream.js";
 import { createHash } from "node:crypto";
-import { open } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { z } from "zod";
 import {
   compare,
@@ -598,21 +598,7 @@ export class ProjectEvidenceInspection {
     signal?.throwIfAborted();
     const reservation = this.options.cache.reserve({ kind: "project", id: projectId });
     try {
-      const file = await open(reservation.path, "wx");
-      try {
-        let buffer = "";
-        for (const part of jsonChunks(value)) {
-          buffer += part;
-          if (buffer.length >= 64 * 1024) {
-            signal?.throwIfAborted();
-            await file.writeFile(buffer);
-            buffer = "";
-          }
-        }
-        if (buffer) await file.writeFile(buffer);
-      } finally {
-        await file.close();
-      }
+      await writeFile(reservation.path, jsonChunks(value), { flag: "wx", signal });
       signal?.throwIfAborted();
       await this.options.cache.publish(reservation.id);
       signal?.throwIfAborted();

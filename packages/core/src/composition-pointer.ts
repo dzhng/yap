@@ -105,23 +105,15 @@ export async function prepareCompositionPointers(
     evidence: SourceEvidenceReader;
   },
   signal: AbortSignal,
-  limits: { [K in keyof typeof pointerPreparationLimits]: number } = pointerPreparationLimits,
 ): Promise<PreparedPointers> {
   if (!isAbsolute(input.output))
     throw new CatalogError(
       "INVALID_OUTPUT",
       "Pointer preparation requires an absolute attempt path",
     );
-  for (const [key, value] of Object.entries(limits))
-    if (
-      !Number.isSafeInteger(value) ||
-      value < 1 ||
-      value > pointerPreparationLimits[key as keyof typeof limits]
-    )
-      throw new CatalogError("INVALID_RANGE", "Pointer preparation requires bounded limits");
   const clips = new Map(input.model.clips.map(({ clip }) => [clip.id, clip]));
   const selections = new Map<string, SourceSelection>();
-  // Compiler windows are replayable; this bounded scan discovers only participating sources.
+  // Compiler windows are replayable; this scan discovers only participating sources.
   const operations = async function* (frames: Iterable<CompiledFrame>) {
     let frameCount = 0,
       operationCount = 0;
@@ -153,7 +145,7 @@ export async function prepareCompositionPointers(
       acquisitionId: clip.acquisitionId,
     };
     selections.set(JSON.stringify(selection), selection);
-    if (selections.size > limits.maxSources)
+    if (selections.size > pointerPreparationLimits.maxSources)
       throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds source lease budget");
   }
   const contexts = new Map<string, Held>();
@@ -263,7 +255,7 @@ export async function prepareCompositionPointers(
           }
         }
         const data = Buffer.from(JSON.stringify(row) + "\n");
-        if (data.length > limits.rowBytes)
+        if (data.length > pointerPreparationLimits.rowBytes)
           throw new CatalogError("LIMIT_EXCEEDED", "Pointer preparation exceeds byte budget");
         await file.writeFile(data);
         hash.update(data);

@@ -1,6 +1,6 @@
+import { refusalRetryable } from "@yap/protocol";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { refusalRetryable } from "@yap/protocol";
 import { CatalogError } from "./catalog.js";
 import { journalCapabilities } from "./evidence.js";
 
@@ -18,7 +18,7 @@ const media = z.strictObject({
   sha256: hash,
 });
 const published = z.strictObject({
-  take: z.strictObject({ kind: z.enum(["display", "window", "area", "camera"]) }).optional(),
+  take: z.strictObject({ kind: z.enum(["display", "window", "region", "camera"]) }).optional(),
   marks: z.strictObject({ pins: z.boolean(), strokes: z.boolean() }).optional(),
   kind: z.enum(["primary", "camera"]),
   sourceId: identity,
@@ -51,10 +51,7 @@ const outcome = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("published"), source: published }),
   z.strictObject({
     state: z.literal("pending"),
-    error: diagnostic.strip().transform((error) => ({
-      ...error,
-      retryable: refusalRetryable(error.code),
-    })),
+    error: z.object(diagnostic.shape),
   }),
   z.strictObject({ state: z.literal("unavailable"), error: diagnostic }),
 ]);
@@ -96,14 +93,20 @@ export type CaptureSourceAuthority = {
 };
 export type CapturePublication = z.infer<typeof observation>;
 export type CaptureSourceOutcome = z.infer<typeof outcome>;
-export function readCaptureSourceOutcome(value: unknown): CaptureSourceOutcome | null {
+export function readCaptureSourceOutcome(value: unknown) {
   const parsed = outcome.nullable().safeParse(value);
   if (!parsed.success)
     throw new CatalogError(
       "INVALID_RESPONSE",
       "Source recovery returned an invalid publication outcome",
     );
-  return parsed.data;
+  const parsedOutcome = parsed.data;
+  return parsedOutcome?.state === "pending"
+    ? {
+        ...parsedOutcome,
+        error: { ...parsedOutcome.error, retryable: refusalRetryable(parsedOutcome.error.code) },
+      }
+    : parsedOutcome;
 }
 export type RecoveryReceipt = {
   durationUs: number;
@@ -196,7 +199,7 @@ export function readCapturePublication(
         "Published source differs from allocated source/device authority",
       );
     const camera = kind === "camera";
-    const packed = journalCapabilities({ schemaVersion: receipt.journal.layout })?.isPacked;
+    const packed = journalCapabilities({ schemaVersion: receipt.journal.layout })!.isPacked;
     if (
       receipt.journal.file !== (camera ? "capture.journal.jsonl" : "source.journal.jsonl") ||
       // A companion camera keeps its own schema-1 journal; a primary source's is packed.

@@ -6,8 +6,8 @@ import { openDirectoryLease } from "@yap/core/files";
 import type { CaptureStore } from "@yap/core/capture-store";
 import { isSettled } from "@yap/core/capture-store";
 import type { JobExecution, JobQueue } from "@yap/core/jobs";
-import { nativeResult, renderWindowDeadlineMs, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs, journalWorkDeadlineMs } from "./publication.js";
+import { nativeResult, type MediaWorker } from "./worker.js";
+import { captureWorkDeadlineMs } from "./publication.js";
 
 const artifact = "capture-cleanup";
 type RoleResult = {
@@ -97,6 +97,13 @@ export class CaptureCleanup {
           else roles.add(name.split(".")[0]!);
         }
       }
+      const timeoutMs = captureWorkDeadlineMs({
+        journalBytes,
+        bytes,
+        audioRoles: roles.size,
+        extraTraversals: 0,
+        durationUs: recording.sourceDurationUs ?? MAXIMUM_TAKE_US,
+      });
       const value = cleanupResult(
         nativeResult(
           await this.worker(
@@ -105,16 +112,7 @@ export class CaptureCleanup {
             {
               signal,
               descriptors: [lease.fd],
-              timeoutMs: () =>
-                journalWorkDeadlineMs(journalBytes) +
-                publicationDeadlineMs(bytes) +
-                // Per audio role: raw decode, canonical write, verification and support proof.
-                roles.size *
-                  4 *
-                  renderWindowDeadlineMs({
-                    startUs: 0,
-                    endUs: recording.sourceDurationUs ?? MAXIMUM_TAKE_US,
-                  }),
+              timeoutMs,
             },
           ),
         ),

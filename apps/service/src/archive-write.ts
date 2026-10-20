@@ -22,7 +22,7 @@ export async function writeArchive(
   const limits = options.limits ?? archiveLimits;
   validateArchiveLimits(limits);
   if (!Number.isSafeInteger(input.bytes) || input.bytes < 0)
-    throw new CatalogError("LIMIT_EXCEEDED", "ZIP input byte total exceeds its limit");
+    throw new CatalogError("INVALID_PARAMS", "ZIP input byte total must be a nonnegative integer");
   const stage = await workspace.handle.stat({ bigint: true }),
     source = await input.handle.stat({ bigint: true }),
     plan = await input.plan.stat({ bigint: true });
@@ -73,7 +73,7 @@ export async function writeArchive(
           {
             ...nativeOptions,
             descriptors: [workspace.handle.fd, input.handle.fd, input.plan.fd],
-            timeoutMs: options.timeoutMs ?? (() => publicationDeadlineMs(input.bytes)),
+            timeoutMs: options.timeoutMs ?? publicationDeadlineMs(input.bytes),
             ...(options.signal ? { signal: options.signal } : {}),
           },
         ),

@@ -39,6 +39,7 @@ async function cursorTake() {
           sourceWidth: 16,
           sourceHeight: 16,
           samples: (params.atSourceUs as number[]).map((at) => ({
+            status: "available",
             requestedSourceUs: at,
             actualSourceUs: at,
             width: 8,

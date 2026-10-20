@@ -1,7 +1,7 @@
 import { admitMicrosecondRange, round, fromTime, type Issue } from "@yap/composition";
 import { z } from "zod";
 import { CatalogError } from "./catalog.js";
-import { comparePageKeys, type PageBound } from "./ordered-pages.js";
+import { comparePageKeys, type PageBound } from "./evidence-read.js";
 import type { TimeRange } from "./presentation-time.js";
 import type {
   TranscriptMetadata,

@@ -2,7 +2,7 @@ import { readSync } from "node:fs";
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { readJsonDescriptor } from "@yap/core/ordered-pages";
+import { readJsonDescriptor } from "@yap/core/json-stream";
 import { publicationDeadlineMs } from "./publication.js";
 import type { FileHandle } from "node:fs/promises";
 import { omit } from "@yap/composition";
@@ -145,7 +145,14 @@ async function extractArchive<T extends ArchiveManifest>(
         "INVALID_NATIVE_RESPONSE",
         "Archive extraction must confirm its retained receipt",
       );
-    const inventory = readJsonDescriptor(receipt.fd);
+    let inventory: unknown;
+    try {
+      inventory = readJsonDescriptor(receipt.fd);
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new CatalogError("INVALID_NATIVE_RESPONSE", error.message);
+      throw error;
+    }
     const verified = verifyArchiveReceipt(inventory, limits, options.validate);
     if (verified.copiedBytes !== archive.bytes)
       throw new CatalogError("INVALID_NATIVE_RESPONSE", "Archive copy size differs from admission");

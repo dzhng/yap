@@ -26,7 +26,7 @@ function validateProjectPackage(
   metadata: ReadonlyMap<string, string> = new Map(),
 ) {
   return resolveProjectPackage(
-    parseProjectPackageManifest(body, limits),
+    parseProjectPackageManifest(JSON.parse(body), limits),
     revisions,
     limits,
     new Map(
@@ -600,6 +600,6 @@ test("portable manifest retains a growing revision dependency inventory", () => 
       },
     ],
   );
-  const parsed = parseProjectPackageManifest(JSON.stringify(manifest), archiveLimits);
+  const parsed = parseProjectPackageManifest(manifest, archiveLimits);
   expect(parsed.references[0]!.resources.at(-1)).toEqual({ kind: "asset", id: "source-25000" });
 });

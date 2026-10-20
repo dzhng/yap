@@ -20,8 +20,6 @@ import { PreparedAudioStore } from "@yap/core/prepared-audio";
 import { admitProjectRange, projectComposition } from "@yap/core/project-window";
 import { selectSource } from "@yap/core/source-selection";
 import {
-  round,
-  fromTime,
   outputCapabilities,
   audioOutputCapabilities,
   createSourceRangeProjection,
@@ -67,7 +65,7 @@ import {
 } from "@yap/core/imported-transcript";
 import { AcquisitionStore, AcquisitionImporter } from "@yap/core/acquisitions";
 import { SourceEvidenceStore } from "@yap/core/evidence";
-import { planFrameTrail } from "@yap/core/trails";
+import { sourceCursorOverlay } from "@yap/core/trails";
 import { MediaExports } from "./exports.js";
 import { PointerPreparation } from "@yap/core/pointer-preparation";
 import { ProjectPreviewInspection } from "@yap/core/project-preview";
@@ -384,13 +382,15 @@ export async function startProjectService(options: {
       readiness: () => transcriptionStarted && transcripts.recognitionReadiness().state === "ready",
       status: (selection) => {
         const status = transcripts.sourceStatus(selection);
-        return { ...status, errorCode: status.jobId ? queue.job(status.jobId).errorCode : null };
+        return {
+          ...status,
+          errorCode: status.jobId ? queue.job(status.jobId).errorCode : null,
+          retryJobId: status.jobId,
+        };
       },
-      submit: (selection) => {
-        const status = transcripts.sourceStatus(selection);
-        if (status.jobId && queue.job(status.jobId).errorCode === "JOB_INTERRUPTED")
-          queue.retry(status.jobId);
-        else transcripts.prepareSource(selection, "background");
+      submit: (selection, priority, retryJobId) => {
+        if (retryJobId) queue.retry(retryJobId);
+        else transcripts.prepareSource(selection, priority);
       },
       report: (error) => console.error(error),
     });
@@ -996,84 +996,16 @@ export async function startProjectService(options: {
               nativeResult(await execute("media.sourceFrame", { ...request, output }, { signal })),
           ),
       },
-      cursorOverlay: async (input, signal) => {
-        const { atUs, trailUs, ...selection } = input;
-        const selected = selectSource(assets, acquisitions, selection);
-        const context = capture.resolve(selection, "cursor");
-        if (!context.evidence)
-          throw new CatalogError(
-            "UNAVAILABLE",
-            "Cursor rendering requires captured-video authority",
-          );
-        const offset = round(fromTime(context.sourceToAssetOffsetUs));
-        const available = selected.track.available;
-        const support = available
-          .map((range) => sourceRangeAsMicroseconds(range)!)
-          .find((range) => range.startUs <= atUs && atUs < range.endUs);
-        if (!support)
-          throw new CatalogError("UNAVAILABLE", "Cursor time has no physical source support");
-        const asset = assets.get(selection.assetId);
-        const sourceAsset = {
-          assetId: selection.assetId,
-          streamId: selection.streamId,
-          path: selected.track.source,
-          originUs: asset.originUs,
-        };
-        const plan = await planFrameTrail(
-          {
-            source: selected.track.source,
-            kept: { startUs: Math.max(0, support.startUs - offset), endUs: support.endUs - offset },
-            requestedSourceUs: atUs - offset,
-            trailUs,
-          },
-          {
-            evidence,
-            identity: context.evidence,
-            sample: async (request) => {
-              const result = nativeResult(
-                await worker(
-                  "media.sourceVisualSamples",
-                  {
-                    asset: sourceAsset,
-                    available,
-                    atSourceUs: request.atSourceUs.map((at) => at + offset),
-                  },
-                  { signal },
-                ),
-              ) as {
-                sourceWidth: number;
-                sourceHeight: number;
-                samples: {
-                  requestedSourceUs: number;
-                  actualSourceUs: number;
-                  width: number;
-                  height: number;
-                  rgbBase64: string;
-                }[];
-              };
-              return {
-                ...result,
-                samples: result.samples.map((sample) => ({
-                  ...sample,
-                  requestedSourceUs: sample.requestedSourceUs - offset,
-                  actualSourceUs: sample.actualSourceUs - offset,
-                  distanceUs: Math.abs(sample.requestedSourceUs - sample.actualSourceUs),
-                })),
-              };
-            },
-          },
-          signal,
-        );
-        const point = (value: NonNullable<typeof plan.overlay.pointer>) => ({
-          ...value,
-          atSourceUs: value.atSourceUs + offset,
-        });
-        return {
-          ...plan.overlay,
-          pointer: plan.overlay.pointer ? point(plan.overlay.pointer) : null,
-          trail: plan.overlay.trail.map((run) => run.map(point)),
-        };
-      },
+      cursorOverlay: sourceCursorOverlay({
+        assets,
+        acquisitions,
+        capture,
+        evidence,
+        sample: async (request, signal) =>
+          nativeResult(
+            await worker("media.sourceVisualSamples", request, { signal }),
+          ) as SourceVisualObservations,
+      }),
     });
     const projectIndex = new ScreenshotIndexStore<ProjectIndexRecords>(
       catalog,

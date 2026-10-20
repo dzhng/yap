@@ -17,12 +17,13 @@ type TranscriptStatus = {
     | "canceled";
   retryable: boolean;
   errorCode?: string | null;
+  retryJobId?: string | null;
 };
 
 export type TranscriptBacklogDriver = {
   readiness(): boolean;
   status(selection: TranscriptBacklogSelection): TranscriptStatus;
-  submit(selection: TranscriptBacklogSelection, priority: "background"): void;
+  submit(selection: TranscriptBacklogSelection, priority: "background", retryJobId?: string): void;
   /** Where a failure nobody awaits goes; a drain never rejects on one row's behalf. */
   report(error: unknown): void;
 };
@@ -123,7 +124,7 @@ export class TranscriptBacklog {
         return this.driver.submit(selection, "background");
       case "failed":
         if (status.errorCode === "JOB_INTERRUPTED")
-          return this.driver.submit(selection, "background");
+          return this.driver.submit(selection, "background", status.retryJobId ?? undefined);
         return this.remove(selection);
       case "canceled":
       case "ready":

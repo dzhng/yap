@@ -1,5 +1,6 @@
 {
   "maximumTakeSeconds": 43200,
   "maximumStrokeSeconds": 300,
-  "strokeBytesPerSecond": 6180
+  "strokeBytesPerSecond": 6180,
+  "journalRecordMargin": 2
 }

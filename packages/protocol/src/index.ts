@@ -34,7 +34,6 @@ export const retryDirectiveSchema = z
   .refine((request) => operationSchema.safeParse(request).success, {
     message: "Retry must name an existing operation with valid parameters",
   });
-export type RetryDirective = z.infer<typeof retryDirectiveSchema>;
 const errorDetailsSchema = z
   .object({ retry: retryDirectiveSchema.optional() })
   .catchall(z.unknown());

@@ -140,7 +140,7 @@ function publish(
     system?: boolean;
     camera?: boolean;
     kind?: "display" | "camera";
-    legacy?: boolean;
+    schema?: 3 | 4;
     marks?: CapturePublishedSource["marks"];
   } = {},
 ) {
@@ -479,7 +479,7 @@ it("an imported take with a failed transcript makes no promise, even before back
 
 it("legacy camera summary keeps unknown picture identity without inventing a screen", async () => {
   const sources = fixture();
-  publish(sources, { kind: "camera", legacy: true });
+  publish(sources, { kind: "camera", schema: 3 });
   expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(
     [
       "I recorded something for you. Watch it with Yap.",

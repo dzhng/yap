@@ -1,5 +1,5 @@
+import { PROCESS_START_ALLOWANCE_MS } from "./worker.js";
 import { join } from "node:path";
-import { derivedBound, MAXIMUM_TAKE_US } from "@yap/protocol";
 import { constants } from "node:fs";
 import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
@@ -102,7 +102,7 @@ export class Publication {
           { destination, leaf },
           {
             descriptors: [parent.fd],
-            timeoutMs: () => publicationDeadlineMs(bytes),
+            timeoutMs: publicationDeadlineMs(bytes),
             ...(signal ? { signal } : {}),
           },
         ),
@@ -312,7 +312,7 @@ export class Publication {
       { ...this.identities, ...params },
       {
         ...(options.signal ? { signal: options.signal } : {}),
-        ...(this.timeoutMs !== undefined ? { timeoutMs: () => this.timeoutMs! } : {}),
+        ...(this.timeoutMs !== undefined ? { timeoutMs: this.timeoutMs } : {}),
         descriptors: [
           this.stage.fd,
           this.destination.fd,
@@ -434,20 +434,50 @@ export class Publication {
 }
 
 /** Three payload passes and two displaced-destination passes at inferred 4 MiB/s, 2× margin.
- * Express actual bytes as bytes per required take second; this is work, not a file ceiling. */
+ * Includes one process startup allowance; this is work, not a file ceiling. */
 export function publicationDeadlineMs(bytes: number, replacementBytes = 0): number {
   if (![bytes, replacementBytes].every((value) => Number.isSafeInteger(value) && value >= 0))
     throw new CatalogError("INVALID_STORAGE", "Publication byte count is invalid");
-  const bytesPerSecond = (bytes * 3 + replacementBytes * 2) / (MAXIMUM_TAKE_US / 1_000_000);
-  return Math.max(1, derivedBound((bytesPerSecond / 4_194_304) * 1000, MAXIMUM_TAKE_US, 2));
+  // Publication planning uses 4 MiB/s: three payload passes and two displaced
+  // destination passes, with a 2× margin. The take requirement cancels from this byte formula.
+  return (
+    PROCESS_START_ALLOWANCE_MS +
+    Math.max(1, Math.ceil(((bytes * 3 + replacementBytes * 2) / 4_194_304) * 1000 * 2))
+  );
 }
+
+// Measured by specs/long-takes-and-retries/assets/probes/results.json (12-hour combined typical).
+const journalPassMsPerByte = (51.863325166 * 1000) / 1_392_503_313;
 
 /** Six stop-time journal passes at the slice-00 measured cost per byte, with 2× margin.
  * Scale by actual bytes; pauses, extra roles and callbacks can grow the journal independently. */
 export function journalWorkDeadlineMs(bytes: number): number {
-  const rate = bytes / (MAXIMUM_TAKE_US / 1_000_000);
-  return Math.max(
-    1,
-    derivedBound(((6 * 51.863325166) / 1_392_503_313) * rate * 1000, MAXIMUM_TAKE_US, 2),
+  // Six journal traversals at the measured per-pass rate, with 2× margin.
+  return Math.max(1, Math.ceil(6 * journalPassMsPerByte * bytes * 2));
+}
+
+/** Shared capture budget: journal and bytes plus explicit media traversals at the selected duration. */
+export function captureWorkDeadlineMs(input: {
+  journalBytes: number;
+  bytes: number;
+  audioRoles: number;
+  extraTraversals: number;
+  durationUs: number;
+}): number {
+  if (
+    ![
+      input.journalBytes,
+      input.bytes,
+      input.audioRoles,
+      input.extraTraversals,
+      input.durationUs,
+    ].every((value) => Number.isSafeInteger(value) && value >= 0)
+  )
+    throw new CatalogError("INVALID_STORAGE", "Capture work budget inputs are invalid");
+  const duration = Math.max(1, Math.ceil((input.durationUs / 1_000_000) * 2 * 1000));
+  return (
+    journalWorkDeadlineMs(input.journalBytes) +
+    publicationDeadlineMs(input.bytes) +
+    (input.audioRoles * 4 + input.extraTraversals) * duration
   );
 }

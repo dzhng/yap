@@ -252,7 +252,7 @@ export function audioDeadline(window: AudioWindowInput["window"], retained = fal
   }
   // Preparation is measured in frames; only its scheduling budget rounds up to milliseconds.
   const preparationMs = Number((preparationFrames * 1000n + 47999n) / 48000n);
-  return Math.min(renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs);
+  return renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs;
 }
 type PointerOwners = { preparation: PointerPreparation; evidence: SourceEvidenceReader };
 export function projectPointerHistoryRenderer(
