@@ -65,3 +65,21 @@ File layout; per-code wording of `cause`.
 ## Review
 
 Checkpoint H1, non-blocking (see README).
+
+## Implementation record — 2026-10-20
+
+[Error verdicts](../error-verdicts.md) holds one row per code (273 rows: 208 retryable, 45 not,
+20 non-error tokens), producer anchors, labelled inferences, the helper/ledger disagreements, the
+app overrides and a completeness command that prints nothing. 129 codes move from non-retryable
+to retryable; `ACQUISITION_NOT_FOUND` moves the other way. Proposed new codes:
+`INVALID_INPUT_EVIDENCE` (caller evidence), `PINNED_IMPLEMENTATION_UNAVAILABLE` (vanished pin),
+`OWNER_DELETED` (discarded owner). Wait codes carry an advisory 15 000 ms.
+
+Code changes: the scanner covers `apps/macos/Sources` (40 newly classified literals; existing
+verdicts untouched until slice 05), and two app messages no longer embed a code
+(`ExportController.swift:261`, `LibraryController.swift:49`), which the scanner extension
+exposed. `refusal-ledger.test.ts`: 7 passed.
+
+Open for slice 06: confirm which `jobs.ts` discard sites are user cancels (retryable `CANCELED`)
+and which are deleted owners (`OWNER_DELETED`); the audit lists `jobs.ts:1395` under
+`OWNER_DELETED`, but the planning sweep identified it as the user-cancel path.

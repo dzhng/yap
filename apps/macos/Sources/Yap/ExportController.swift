@@ -258,7 +258,7 @@ final class ExportController {
                     }
                     for summary in summaries {
                         guard let exportId = summary["id"] as? String else {
-                            failedStatus = failedStatus ?? "INVALID_RESPONSE: export.list returned an unreadable export identity"
+                            failedStatus = failedStatus ?? "export.list returned an unreadable export identity"
                             continue
                         }
                         do throws(ServiceFailure) {
