@@ -64,6 +64,13 @@ export function sourceDirectory(
  * permissions and media belong to native; nothing here re-derives a transition, a duration or a
  * device state machine of its own.
  */
+/** A recorded failure waits for an explicit retry; a shutdown that cut recovery short does not. */
+function failedFinalization(recording: Recording): boolean {
+  return (
+    recording.finalizationError !== null && recording.finalizationError.code !== "RECOVERY_CANCELED"
+  );
+}
+
 export class CaptureService {
   onUpdateProgress: (() => void) | undefined;
   get updateBlocked(): boolean {
@@ -253,7 +260,7 @@ export class CaptureService {
       if (answer.ok) return this.apply(recording, answer.data);
       if (answer.error.code !== "INVALID_STATE") throw fromNative(answer);
       // Native is not holding this take, so its own durable media is the only truth left.
-      return this.reconcile(recording);
+      return this.reconcile(recording, { retryFailure: true });
     });
   }
 
@@ -296,7 +303,7 @@ export class CaptureService {
     if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
     for (const recording of this.store.unsettled()) {
       if (this.stopping) break;
-      if (this.store.isDeleting(recording.id)) continue;
+      if (this.store.isDeleting(recording.id) || failedFinalization(recording)) continue;
       try {
         const started = await this.serialize(async () => {
           await this.reconcile(recording);
@@ -446,7 +453,7 @@ export class CaptureService {
       if (current.state !== "canceled") {
         const report = await this.endNativeCapture(current);
         if (report) current = this.report(report);
-        else return this.reconcile(current, true);
+        else return this.reconcile(current, { discardIfEmpty: true });
         // A joined finalization can win; the terminal rule preserves that take for explicit deletion.
         current = this.author(current, { state: "canceled" });
       }
@@ -482,7 +489,10 @@ export class CaptureService {
       );
   }
 
-  private async reconcile(recording: Recording, discardIfEmpty = false): Promise<Recording> {
+  private async reconcile(
+    recording: Recording,
+    { discardIfEmpty = false, retryFailure = false } = {},
+  ): Promise<Recording> {
     if (this.recovery?.recordingId === recording.id) return this.store.get(recording.id);
     this.requireRecoveryQuiet();
     // The app can outlive its service. Never fence its native sequence merely because this service restarted.
@@ -494,7 +504,7 @@ export class CaptureService {
         { recordingId: recording.id, deviceRecordingId: device.recordingId },
       );
     const current = this.store.get(recording.id);
-    if (isSettled(current.state)) return current;
+    if (isSettled(current.state) || (failedFinalization(current) && !retryFailure)) return current;
     const finalizing = this.author(current, {
       state: "finalizing",
       finalizationError: null,

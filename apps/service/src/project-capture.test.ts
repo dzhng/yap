@@ -1,7 +1,10 @@
 import { captureFixture, sourceWorker } from "./project-capture.fixture.js";
+import { execFileSync } from "node:child_process";
+import { mediaWorker } from "./worker.js";
+import { readCaptureSourceOutcome, readRecoveryReceipt } from "@yap/core/capture-publication";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
@@ -522,6 +525,107 @@ test("failed queue admission stays pending without read mutations and resumes fr
       .all()
       .map((row) => JSON.parse(row.admission as string)),
   ).toMatchObject([{ kind: "capture", recordingId, sourceId }]);
+});
+
+test("a capture import with a stale nonretryable bit reports and follows job.retry", async () => {
+  const native = process.env.YAP_NATIVE;
+  if (!native)
+    throw new Error("YAP_NATIVE is required for the production capture-import retry test");
+  const worker = mediaWorker({ YAP_NATIVE: native });
+  const f = await fixture(undefined, worker);
+  const started = await f.call("capture.start", {
+    requestId: "ledger-retry",
+    source: { kind: "display", id: 1 },
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(f.home, "library", "recordings", recordingId, "source");
+  // Synthetic observations replace hardware; the production journal writer and publisher own bytes.
+  execFileSync(join(dirname(native), "YapCaptureTests"), [], {
+    env: {
+      ...process.env,
+      YAP_LONG_STROKE_SOURCE_ID: sourceId,
+      YAP_LONG_STROKE_FIXTURE: join(directory, "capture.journal.jsonl"),
+      YAP_LONG_STROKE_VIDEO: join(directory, "video.mov"),
+    },
+  });
+  const recovered = await worker("media.recover", {
+    directory,
+    sourceAuthority: { kind: "primary", sourceId },
+  });
+  if (!recovered.ok) throw new Error(JSON.stringify(recovered));
+  const receipt = readRecoveryReceipt(recovered.data);
+  const publication = readCaptureSourceOutcome(receipt.sourcePublication);
+  expect(publication?.state).toBe("published");
+  const database = new DatabaseSync(join(f.home, "library", "catalog.sqlite"));
+  cleanup.push(async () => database.close());
+  // Real storage failure during import settlement, not an inserted failed job or a fake importer.
+  database.exec(
+    "CREATE TRIGGER refuse_evidence BEFORE INSERT ON source_evidence_records BEGIN SELECT RAISE(ABORT,'fixture storage unavailable'); END",
+  );
+  await f.call("capture.stop", { recordingId });
+  await f.report({
+    recordingId,
+    sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: receipt.durationUs,
+    publication: {
+      generation: "ledger-retry",
+      sourceId,
+      inputsClosed: true,
+      primary: publication,
+      camera: null,
+    },
+  });
+  let current = f;
+  const inspect = async () => {
+    const result = await current.call("recording.get", { recordingId });
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return (
+      result.data as {
+        sourceAdmissions: {
+          acquisitionId: string;
+          job: { id: string; state: string; attemptId: string };
+        }[];
+      }
+    ).sourceAdmissions[0]!;
+  };
+  await expect.poll(async () => (await inspect()).job.state).toBe("failed");
+  const failed = await inspect();
+  expect(failed.job).toMatchObject({
+    errorCode: "JOB_FAILED",
+    reason: expect.stringContaining("fixture storage unavailable"),
+  });
+  database.prepare("UPDATE jobs SET retryable=0 WHERE jobId=?").run(failed.job.id);
+  database.exec("DROP TRIGGER refuse_evidence");
+  await f.service.close();
+  current = await fixture(f.home, worker);
+  expect((await inspect()).job.attemptId).toBe(failed.job.attemptId);
+  const retry = { operation: "job.retry", params: { jobId: failed.job.id } };
+  expect((await inspect()).job).toMatchObject({
+    state: "failed",
+    retryable: true,
+    details: { retry },
+  });
+  expect(await current.call("job.get", retry.params)).toMatchObject({
+    ok: true,
+    data: { details: { retry } },
+  });
+  expect(await current.call(retry.operation, retry.params)).toMatchObject({
+    ok: true,
+    data: { id: failed.job.id },
+  });
+  await expect.poll(async () => (await inspect()).job.state).toBe("ready");
+  const ready = await inspect();
+  expect(ready.acquisitionId).toBe(failed.acquisitionId);
+  expect(ready.job.attemptId).not.toBe(failed.job.attemptId);
+  expect(
+    await current.call("acquisition.get", { acquisitionId: ready.acquisitionId }),
+  ).toMatchObject({
+    ok: true,
+    data: { id: ready.acquisitionId, sourceId, bindings: [{ sourceRoles: ["video"] }] },
+  });
 });
 
 test("explicit source retry publishes the same acquisition and remains ready without donor files", async () => {

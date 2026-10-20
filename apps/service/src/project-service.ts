@@ -382,7 +382,6 @@ export async function startProjectService(options: {
       readiness: () => transcriptionStarted && transcripts.recognitionReadiness().state === "ready",
       status: (selection) => transcripts.sourceStatus(selection),
       submit: (selection) => transcripts.prepareSource(selection, "background"),
-      retry: (selection) => transcripts.retrySource(selection),
       report: (error) => console.error(error),
     });
     const acquisitionImports = new AcquisitionImporter(

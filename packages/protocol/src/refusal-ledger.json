@@ -503,7 +503,7 @@
         "apps/service/src/package-registry.ts": 2,
         "apps/service/src/project-packages.ts": 4,
         "packages/core/src/files.ts": 3,
-        "packages/core/src/jobs.ts": 1
+        "packages/core/src/jobs.ts": 2
       },
       "reason": "The exact process-local package handle has ended; opening a new handle changes the reference.",
       "cause": "This package handle is closed."
@@ -614,6 +614,7 @@
       "retryable": true,
       "files": {
         "packages/core/src/acoustic-inspection.ts": 1,
+        "packages/core/src/jobs.ts": 1,
         "packages/core/src/rendered-speech.ts": 1
       },
       "reason": "The derived prerequisite can be prepared again.",
@@ -1625,7 +1626,7 @@
       "category": "execution-failure",
       "retryable": true,
       "files": {
-        "packages/core/src/jobs.ts": 1
+        "packages/core/src/jobs.ts": 2
       },
       "reason": "Plain executor exceptions already store true, despite the ledger’s false value.",
       "cause": "The background operation failed."
@@ -1633,7 +1634,7 @@
     "JOB_INTERRUPTED": {
       "category": "execution-failure",
       "files": {
-        "packages/core/src/jobs.ts": 2
+        "packages/core/src/jobs.ts": 3
       },
       "retryable": true,
       "reason": "Service restart or lost execution can be explicitly retried; SQL single quotes escape the scanner.",
@@ -2087,7 +2088,7 @@
         "packages/core/src/capture-store.ts": 2,
         "packages/core/src/files.ts": 2,
         "packages/core/src/imported-transcript.ts": 1,
-        "packages/core/src/jobs.ts": 3,
+        "packages/core/src/jobs.ts": 4,
         "packages/core/src/models.ts": 1,
         "packages/core/src/prepared-audio.ts": 1,
         "packages/core/src/projects.ts": 3,
@@ -2262,7 +2263,9 @@
     },
     "OWNER_DELETED": {
       "category": "missing-prerequisite",
-      "files": {},
+      "files": {
+        "packages/core/src/jobs.ts": 4
+      },
       "retryable": false,
       "reason": "The deleted or deleting owner cannot be brought back by replaying its work request.",
       "cause": "The item that owned this work was deleted."

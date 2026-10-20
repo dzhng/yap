@@ -3,13 +3,13 @@ import Foundation
 import YapCapture
 
 /// Fixed hardware observations; serialization belongs to the production journal writer.
-func writeLongStrokeFixture(to output: URL, strokeCount: Int = 1) throws {
+func writeLongStrokeFixture(to output: URL, strokeCount: Int = 1, sourceID: String = "schema3-long-stroke") throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
     defer { try? FileManager.default.removeItem(at: directory) }
     let source = CaptureSource(kind: "display", displayID: 1)
     let journal = try CaptureJournal(directory: directory.path, header: CaptureJournalHeader(
-        schemaVersion: 3, sessionID: "schema3-long-stroke", source: source,
+        schemaVersion: 3, sessionID: sourceID, source: source,
         width: 1920, height: 1080, microphone: false, systemAudio: false))
     let origin: Int64 = 100_000_000_000
     try journal.recordPCMOrigin(JournalPCMOrigin(

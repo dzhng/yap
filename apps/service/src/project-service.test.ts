@@ -2121,48 +2121,66 @@ test("acquisition publication enqueues audio streams with its acquisition select
   ).toEqual([{ assetId: binding.assetId, streamId: binding.streamId, acquisitionId }]);
 });
 
-test("non-retryable transcript failure is not resubmitted by a second drain", async () => {
-  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
-  const base = controlledSpeech(requests);
-  const worker = async (...args: Parameters<typeof base>) => {
-    if (args[0] === "speech.transcribe")
-      return {
-        ok: false as const,
-        error: {
-          code: "INVALID_REQUEST",
-          message: "fixture refusal",
-          retryable: false,
-          details: {},
-        },
-      };
-    return base(...args);
-  };
-  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-failure-"));
-  cleanups.push(() => rm(home, { recursive: true, force: true }));
-  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
-  await modelMetadata(await realpath(join(home, "library")));
-  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
-    ok: true,
-    data: { state: "ready" },
-  });
-  const imported = await f.call("asset.import", { requestId: "nonretryable", path: f.path });
-  expect(imported.ok).toBe(true);
-  if (!imported.ok) return;
-  await f.job((imported.data as { jobId: string }).jobId, "ready");
-  await f.call("model.prepare", { modelId: "parakeet" });
-  await expect
-    .poll(() =>
+test.each(["INVALID_REQUEST", "MEDIA_WORKER_FAILED"])(
+  "%s transcript failure is left for explicit retry",
+  async (code) => {
+    const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+    const base = controlledSpeech(requests);
+    let attempts = 0;
+    const worker = async (...args: Parameters<typeof base>) => {
+      if (args[0] === "speech.transcribe") {
+        attempts++;
+        return {
+          ok: false as const,
+          error: {
+            code,
+            message: "fixture refusal",
+            retryable: false,
+            details: {},
+          },
+        };
+      }
+      return base(...args);
+    };
+    const home = await mkdtemp(join(tmpdir(), "transcript-backlog-failure-"));
+    cleanups.push(() => rm(home, { recursive: true, force: true }));
+    const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
+    await modelMetadata(await realpath(join(home, "library")));
+    expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+      ok: true,
+      data: { state: "ready" },
+    });
+    const imported = await f.call("asset.import", { requestId: "nonretryable", path: f.path });
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    await f.job((imported.data as { jobId: string }).jobId, "ready");
+    await f.call("model.prepare", { modelId: "parakeet" });
+    await expect
+      .poll(() =>
+        f.service.captures.catalog
+          .prepare(
+            "SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript' AND state='failed'",
+          )
+          .get(),
+      )
+      .toEqual({ count: 2 });
+    const failures = () =>
       f.service.captures.catalog
         .prepare(
-          "SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript' AND state='failed'",
+          "SELECT jobId,attemptId,generation,state,errorCode FROM jobs WHERE artifact='transcript' ORDER BY jobId",
         )
-        .get(),
-    )
-    .toEqual({ count: 2 });
-  const before = requests.length;
-  await f.call("model.prepare", { modelId: "parakeet" });
-  expect(requests).toHaveLength(before);
-});
+        .all();
+    const before = failures();
+    await expect
+      .poll(() =>
+        f.service.captures.catalog.prepare("SELECT assetId FROM transcript_backlog").all(),
+      )
+      .toEqual([]);
+    await f.call("model.prepare", { modelId: "parakeet" });
+    expect(failures()).toEqual(before);
+    expect(attempts).toBe(2);
+  },
+);
 
 test("selected-source transcript reads report unprepared models without downloading or inventing a recording", async () => {
   const requests: string[] = [];

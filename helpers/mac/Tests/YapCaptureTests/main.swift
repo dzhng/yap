@@ -9,7 +9,8 @@ if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] 
     try runSchema4HeaderTests()
 } else if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
     try writeLongStrokeFixture(to: URL(fileURLWithPath: output),
-        strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!)
+        strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!,
+        sourceID: ProcessInfo.processInfo.environment["YAP_LONG_STROKE_SOURCE_ID"] ?? "schema3-long-stroke")
     if let video = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_VIDEO"] {
         try await RecoveryFixture.writeVariableDurationVideo(
             to: URL(fileURLWithPath: video), timesUs: [0, 10_000_000], endUs: 11_000_000)

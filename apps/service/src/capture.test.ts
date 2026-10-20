@@ -296,6 +296,17 @@ function capturingPeer(
       return options.answerStart === false ? undefined : report("recording");
     }
     if (operation === "capture.stop") {
+      // Like the native helper, a stop with no take capturing answers INVALID_STATE.
+      if (!take)
+        return {
+          ok: false,
+          error: {
+            code: "INVALID_STATE",
+            message: "No take is capturing.",
+            retryable: true,
+            details: {},
+          },
+        };
       const duration = options.durationUs ?? 4_000_000;
       const answer = report(
         options.reason ? "interrupted" : "complete",
@@ -677,7 +688,7 @@ it("settles a stranded take with no recoverable video without authoring a projec
   });
 });
 
-it("leaves a take alone when its recovery cannot run, and settles it once one can", async () => {
+it("keeps a failed recovery for an explicit retry, which settles it once recovery can run", async () => {
   const home = await temporaryHome();
   const abandoned = await startService(home, capturingPeer());
   const started = await abandoned.call("capture.start", { requestId: "s", source: fixtureSource });
@@ -699,6 +710,12 @@ it("leaves a take alone when its recovery cannot run, and settles it once one ca
   const service = await startService(home, capturingPeer(), {
     YAP_NATIVE: await recovers({ durationUs: 2_000_000, journal: { header: {} } }),
   });
+  // A recorded failure is not retried on startup; Retry Finalization (capture.stop) asks again.
+  expect(await service.call("recording.get", { recordingId })).toMatchObject({
+    ok: true,
+    data: { state: "finalizing", finalizationError: { retryable: true } },
+  });
+  await service.call("capture.stop", { recordingId });
   await expect
     .poll(() => service.call("recording.get", { recordingId }), { timeout: 5_000 })
     .toMatchObject({

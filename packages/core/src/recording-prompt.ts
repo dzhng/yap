@@ -150,7 +150,7 @@ function transcriptState(sources: RecordingPromptSources, selection: TranscriptB
   if (status.state === "ready") return "ready";
   if (status.state === "queued" || status.state === "processing") return "pending";
   const terminal =
-    ["failed", "canceled", "unavailable"].includes(status.state) && !status.retryable;
+    status.state === "failed" || (status.state === "unavailable" && !status.retryable);
   return sources.backlog.pending(selection) && !terminal ? "pending" : "none";
 }
 

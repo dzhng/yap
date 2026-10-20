@@ -675,3 +675,104 @@ test.each([
     }
   },
 );
+
+// A shutdown during recovery is an interruption, not a failure: the next service finishes it.
+test("startup resumes a recovery that shutdown interrupted", async () => {
+  const home = await mkdtemp("/tmp/yap-interrupted-recovery-startup-");
+  const store = new CaptureStore(join(home, "library.sqlite"), {
+    now: () => new Date().toISOString(),
+    newId: randomUUID,
+  });
+  const take = store.allocate().recording;
+  const native = async (operation: string) =>
+    operation === "capture.status"
+      ? idleNative
+      : {
+          ok: false as const,
+          error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
+        };
+  let attempts = 0;
+  const first = new CaptureService(store, home, native, async (_operation, _params, options) => {
+    attempts++;
+    // Hold recovery until the service shuts down underneath it.
+    await new Promise((_, reject) =>
+      options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+    );
+    throw new Error("unreachable");
+  });
+  try {
+    store.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 1, state: "recording" });
+    await first.stop(take.id);
+    await expect.poll(() => attempts).toBe(1);
+    await first.close();
+    await expect.poll(() => store.get(take.id).finalizationError?.code).toBe("RECOVERY_CANCELED");
+    const second = new CaptureService(store, home, native, async () => {
+      attempts++;
+      return { ok: true, data: await recoveredSource(home, take.id, take.sourceId, 10) };
+    });
+    try {
+      await second.reconcileStranded();
+      await expect.poll(() => store.get(take.id).state).toBe("interrupted");
+      expect(attempts).toBe(2);
+      expect(store.get(take.id).finalizationError).toBeNull();
+    } finally {
+      await second.close();
+    }
+  } finally {
+    store.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+// Characterize restart independently of the explicit Retry Finalization path.
+test("startup leaves a recorded finalization failure for capture.stop", async () => {
+  const home = await mkdtemp("/tmp/yap-failed-finalization-startup-");
+  const store = new CaptureStore(join(home, "library.sqlite"), {
+    now: () => new Date().toISOString(),
+    newId: randomUUID,
+  });
+  const take = store.allocate().recording;
+  let attempts = 0;
+  const service = new CaptureService(
+    store,
+    home,
+    async (operation) =>
+      operation === "capture.status"
+        ? idleNative
+        : {
+            ok: false,
+            error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
+          },
+    async () => {
+      attempts++;
+      if (attempts === 1)
+        return {
+          ok: false,
+          error: {
+            code: "MEDIA_WORKER_FAILED",
+            message: "Retained for explicit retry",
+            retryable: true,
+            details: {},
+          },
+        };
+      return { ok: true, data: await recoveredSource(home, take.id, take.sourceId, 10) };
+    },
+  );
+  try {
+    store.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 1, state: "recording" });
+    await service.stop(take.id);
+    await expect.poll(() => store.get(take.id).finalizationError?.code).toBe("MEDIA_WORKER_FAILED");
+    const failed = store.get(take.id);
+    await service.reconcileStranded();
+    expect(attempts).toBe(1);
+    expect(store.get(take.id)).toEqual(failed);
+    await service.stop(take.id);
+    await expect.poll(() => store.get(take.id).state).toBe("interrupted");
+    expect(attempts).toBe(2);
+    expect(store.get(take.id).finalizationError).toBeNull();
+  } finally {
+    await service.close();
+    store.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
