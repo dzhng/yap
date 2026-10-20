@@ -91,6 +91,11 @@ to record, ⇧ to draw and pin, `⌥⇧V` to paste a prompt that hands the recor
 agent. It is built; its handoff names the checks left for a signed, installed build, and its
 choices ledger holds every call made without the user.
 
+[Long takes and honest retries](long-takes-and-retries/README.md) makes a take that recorded
+fine always importable: limits derive from two stated requirements (a 12-hour take, a 5-minute
+stroke), every failure says whether and how to retry, and the app never shows an error without
+a way forward. Planned; start at its Next Agent Prompt.
+
 ## Future proposals
 
 These directories hold planning questions, not unfinished implementation slices.
