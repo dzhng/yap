@@ -12,15 +12,15 @@ and the user's answers. This README is the build plan; where they differ, this R
 ## Next Agent Prompt
 
 Status 2026-10-20: slices 00 (scale probe, [report](assets/probes/README.md)), 01 (error
-verdicts; H1 passed unchanged) and 03 (requirements owner) are done. Slice 04 is in progress;
-slice 02 (limits audit) is next. Origin take
+verdicts; H1 passed unchanged), 02 ([limits verdicts](limit-verdicts.md)) and 03 are done.
+Slice 02 awaits orchestrator-run H1; slice 04 is in progress. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Pick up at [slice 02](slices/02-limits-audit.md) and the
-error track ([04](slices/04-error-envelope.md) → 05 → 06). Slice 02 produces a verdict list;
-give the user the non-blocking review window described in
-[Review checkpoints](#review-checkpoints) before any slice that applies it.
+You are implementing this spec. Continue the error track
+([04](slices/04-error-envelope.md) → 05 → 06); slices 07 and 10 consume the limits verdicts.
+The orchestrator runs the limits verdicts' non-blocking H1 window described in
+[Review checkpoints](#review-checkpoints) before any slice that applies them.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
 production path, faking only hardware. Run the narrowest check that proves the slice; the full
@@ -40,7 +40,7 @@ Warnings:
 TODO:
 - [x] 00 Scale probe: what 12 hours of each journal stream costs ([slice](slices/00-scale-probe.md))
 - [x] 01 Error audit verdicts ([slice](slices/01-error-audit.md))
-- [ ] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
+- [x] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md); H1 pending)
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [ ] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
 - [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
