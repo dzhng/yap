@@ -24,6 +24,8 @@ preparation or inference, while a replay may only read existing files.
   requests and expected responses.
 
 Files alongside this README are lab measurements that cross those domains. The
+[long-take lab](long-take/README.md) measures synthetic journal growth and the cost of
+production evidence readers, publication and catalog indexing. The
 [installed caller journey](personal-release.mjs) is deliberately separate from
 scratch integration: it consumes a supplied edit plan through the installed CLI
 and can operate on the person's library.

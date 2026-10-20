@@ -1,0 +1,4263 @@
+{
+  "command": [
+    "node",
+    "$REPO/packages/test-harness/long-take/probe.mjs",
+    "--output",
+    "$OUT",
+    "--hours",
+    "1,2.2,12",
+    "--build",
+    "$BUILD"
+  ],
+  "revision": "e21db58b5e1a01aa844f94717ed94a5abf220e04",
+  "environment": {
+    "node": "v24.14.0",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "cpu": "Apple M5 Pro"
+  },
+  "rates": {
+    "pcmHz": 94,
+    "cursorHz": 60,
+    "cameraHz": 30
+  },
+  "strokeSeconds": 300,
+  "budgetSecondsPerLength": 3600,
+  "results": [
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 108000,
+        "cursorChanges": 56159,
+        "cursorSamples": 216000,
+        "markEvents": 3,
+        "pcmAppends": 338400
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 5.371203541000001,
+      "lastProgress": "generated 3600/3600.0s pcm=338400 cursor=216000 camera=108000",
+      "peakRSSBytes": 28573696,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-combined-typical/source",
+        "combined-typical",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-combined-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 115185583,
+          "lines": 345668,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 345668,
+          "state": "complete"
+        },
+        "cursorSamples": 216000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 60,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 3599983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 345668,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 2.49642,
+      "lastProgress": "streamed cursor=216000",
+      "peakRSSBytes": 18694144,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-combined-typical/source"
+      ],
+      "log": "$OUT/1h-combined-typical/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 5.347634458,
+      "peakRSSBytes": 18989056,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-combined-typical/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-combined-typical/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "export",
+      "detail": {
+        "bytes": 37573841,
+        "cursorSamples": 216000,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 3.560970709000001,
+      "peakRSSBytes": 25706496,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-combined-typical/source",
+        "$OUT/1h-combined-typical/evidence.jsonl",
+        "$OUT/1h-combined-typical/receipt.json"
+      ],
+      "log": "$OUT/1h-combined-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 115185583,
+          "lines": 345668,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 37573841,
+          "lines": 216064,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.10026583299999765,
+      "peakRSSBytes": 106708992,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-combined-typical"
+      ],
+      "log": "$OUT/1h-combined-typical/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-typical",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.19102045799999906,
+      "peakRSSBytes": 111017984,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-combined-typical"
+      ],
+      "log": "$OUT/1h-combined-typical/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 108000,
+        "cursorChanges": 215999,
+        "cursorSamples": 216000,
+        "markEvents": 3,
+        "pcmAppends": 338400
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 4.231332624999999,
+      "lastProgress": "generated 3600/3600.0s pcm=338400 cursor=216000 camera=108000",
+      "peakRSSBytes": 28540928,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-combined-worst/source",
+        "combined-worst",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-combined-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 115185661,
+          "lines": 345668,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 345668,
+          "state": "complete"
+        },
+        "cursorSamples": 216000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 60,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 3599983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 345668,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 2.541741834,
+      "lastProgress": "streamed cursor=216000",
+      "peakRSSBytes": 18644992,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-combined-worst/source"
+      ],
+      "log": "$OUT/1h-combined-worst/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 5.461295583000003,
+      "peakRSSBytes": 19103744,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-combined-worst/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-combined-worst/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "export",
+      "detail": {
+        "bytes": 37573919,
+        "cursorSamples": 216000,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 3.562613833000003,
+      "peakRSSBytes": 25640960,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-combined-worst/source",
+        "$OUT/1h-combined-worst/evidence.jsonl",
+        "$OUT/1h-combined-worst/receipt.json"
+      ],
+      "log": "$OUT/1h-combined-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 115185661,
+          "lines": 345668,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 37573919,
+          "lines": 216064,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.11494441600000573,
+      "peakRSSBytes": 107790336,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-combined-worst"
+      ],
+      "log": "$OUT/1h-combined-worst/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "combined-worst",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.19729899999999906,
+      "peakRSSBytes": 111345664,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-combined-worst"
+      ],
+      "log": "$OUT/1h-combined-worst/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 338400
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 2.7430982080000033,
+      "lastProgress": "generated 3600/3600.0s pcm=338400 cursor=0 camera=0",
+      "peakRSSBytes": 13156352,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-pcm/source",
+        "pcm",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-pcm/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 84054590,
+          "lines": 338404,
+          "maxLineBytes": 358,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 338404,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 338404,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.9747178749999947,
+      "peakRSSBytes": 13320192,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-pcm/source"
+      ],
+      "log": "$OUT/1h-pcm/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 4.104363333000001,
+      "peakRSSBytes": 13811712,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-pcm/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-pcm/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "export",
+      "detail": {
+        "bytes": 0,
+        "cursorSamples": 0,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 2.0420153750000027,
+      "peakRSSBytes": 13795328,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-pcm/source",
+        "$OUT/1h-pcm/evidence.jsonl",
+        "$OUT/1h-pcm/receipt.json"
+      ],
+      "log": "$OUT/1h-pcm/export.log",
+      "files": {
+        "journal": {
+          "bytes": 84054590,
+          "lines": 338404,
+          "maxLineBytes": 358,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 0,
+          "lines": 0,
+          "maxLineBytes": 0,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.07674495899999602,
+      "peakRSSBytes": 89309184,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-pcm"
+      ],
+      "log": "$OUT/1h-pcm/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "pcm",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.0838505839999998,
+      "peakRSSBytes": 90767360,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-pcm"
+      ],
+      "log": "$OUT/1h-pcm/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 56159,
+        "cursorSamples": 216000,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.4360517089999994,
+      "lastProgress": "generated 3600/3600.0s pcm=0 cursor=216000 camera=0",
+      "peakRSSBytes": 13385728,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-cursor-typical/source",
+        "cursor-typical",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-cursor-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 30352826,
+          "lines": 7264,
+          "maxLineBytes": 4322,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 7264,
+          "state": "complete"
+        },
+        "cursorSamples": 216000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 60,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 3599983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 7264,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.45955320899999785,
+      "lastProgress": "streamed cursor=216000",
+      "peakRSSBytes": 13516800,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-cursor-typical/source"
+      ],
+      "log": "$OUT/1h-cursor-typical/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 1.2044997500000028,
+      "peakRSSBytes": 14172160,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-cursor-typical/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-cursor-typical/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "export",
+      "detail": {
+        "bytes": 36810643,
+        "cursorSamples": 216000,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.8146937919999981,
+      "peakRSSBytes": 14303232,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-cursor-typical/source",
+        "$OUT/1h-cursor-typical/evidence.jsonl",
+        "$OUT/1h-cursor-typical/receipt.json"
+      ],
+      "log": "$OUT/1h-cursor-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 30352826,
+          "lines": 7264,
+          "maxLineBytes": 4322,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 36810643,
+          "lines": 216061,
+          "maxLineBytes": 279,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 216061,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 60,
+          "globalX": 483.125,
+          "globalY": 1069.375,
+          "sourceUs": 3599983333,
+          "x": 463.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.3897168750000055,
+      "lastProgress": "validated 216000 normalized records",
+      "peakRSSBytes": 185057280,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-cursor-typical"
+      ],
+      "log": "$OUT/1h-cursor-typical/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-typical",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 216061,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 60,
+          "globalX": 483.125,
+          "globalY": 1069.375,
+          "sourceUs": 3599983333,
+          "x": 463.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 1.3897851670000019,
+      "peakRSSBytes": 214007808,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-cursor-typical"
+      ],
+      "log": "$OUT/1h-cursor-typical/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 215999,
+        "cursorSamples": 216000,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.5067775000000038,
+      "lastProgress": "generated 3600/3600.0s pcm=0 cursor=216000 camera=0",
+      "peakRSSBytes": 13369344,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-cursor-worst/source",
+        "cursor-worst",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-cursor-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 30352904,
+          "lines": 7264,
+          "maxLineBytes": 4276,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 7264,
+          "state": "complete"
+        },
+        "cursorSamples": 216000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 60,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 3599983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 7264,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.562008541999996,
+      "lastProgress": "streamed cursor=216000",
+      "peakRSSBytes": 13549568,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-cursor-worst/source"
+      ],
+      "log": "$OUT/1h-cursor-worst/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 1.1815079169999954,
+      "peakRSSBytes": 13991936,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-cursor-worst/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-cursor-worst/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "export",
+      "detail": {
+        "bytes": 36810721,
+        "cursorSamples": 216000,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.7625460000000022,
+      "peakRSSBytes": 14254080,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-cursor-worst/source",
+        "$OUT/1h-cursor-worst/evidence.jsonl",
+        "$OUT/1h-cursor-worst/receipt.json"
+      ],
+      "log": "$OUT/1h-cursor-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 30352904,
+          "lines": 7264,
+          "maxLineBytes": 4276,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 36810721,
+          "lines": 216061,
+          "maxLineBytes": 279,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 216061,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 60,
+          "globalX": 963.125,
+          "globalY": 1069.375,
+          "sourceUs": 3599983333,
+          "x": 943.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.39784137499999633,
+      "lastProgress": "validated 216000 normalized records",
+      "peakRSSBytes": 185647104,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-cursor-worst"
+      ],
+      "log": "$OUT/1h-cursor-worst/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "cursor-worst",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 216061,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 60,
+          "globalX": 963.125,
+          "globalY": 1069.375,
+          "sourceUs": 3599983333,
+          "x": 943.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 1.3803659590000026,
+      "peakRSSBytes": 193298432,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-cursor-worst"
+      ],
+      "log": "$OUT/1h-cursor-worst/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 3,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.050389000000002855,
+      "lastProgress": "generated 3600/3600.0s pcm=0 cursor=0 camera=0",
+      "peakRSSBytes": 29605888,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-events/source",
+        "events",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-events/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 781608,
+          "lines": 67,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 67,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 60,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 67,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.06637254199999734,
+      "peakRSSBytes": 18399232,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-events/source"
+      ],
+      "log": "$OUT/1h-events/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.1209326660000006,
+      "peakRSSBytes": 18776064,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-events/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-events/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "export",
+      "detail": {
+        "bytes": 780013,
+        "cursorSamples": 0,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.08228320900000108,
+      "peakRSSBytes": 25378816,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-events/source",
+        "$OUT/1h-events/evidence.jsonl",
+        "$OUT/1h-events/receipt.json"
+      ],
+      "log": "$OUT/1h-events/export.log",
+      "files": {
+        "journal": {
+          "bytes": 781608,
+          "lines": 67,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 780013,
+          "lines": 64,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.09612204199999541,
+      "peakRSSBytes": 89620480,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-events"
+      ],
+      "log": "$OUT/1h-events/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "events",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.10165729199999624,
+      "peakRSSBytes": 91340800,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-events"
+      ],
+      "log": "$OUT/1h-events/ingest.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 108000,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.1497071660000002,
+      "lastProgress": "generated 3600/3600.0s pcm=0 cursor=0 camera=108000",
+      "peakRSSBytes": 13287424,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/1h-camera/source",
+        "camera",
+        "3600",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/1h-camera/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 705,
+          "lines": 3,
+          "maxLineBytes": 353,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 3600000000,
+          "sequence": 3,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 3,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.011123041999999259,
+      "peakRSSBytes": 13025280,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/1h-camera/source"
+      ],
+      "log": "$OUT/1h-camera/stream.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.011584374999998545,
+      "peakRSSBytes": 13320192,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/1h-camera/source",
+        "3600000000"
+      ],
+      "log": "$OUT/1h-camera/publish.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "export",
+      "detail": {
+        "bytes": 0,
+        "cursorSamples": 0,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.011472999999998137,
+      "peakRSSBytes": 13533184,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/1h-camera/source",
+        "$OUT/1h-camera/evidence.jsonl",
+        "$OUT/1h-camera/receipt.json"
+      ],
+      "log": "$OUT/1h-camera/export.log",
+      "files": {
+        "journal": {
+          "bytes": 705,
+          "lines": 3,
+          "maxLineBytes": 353,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 54389338,
+          "lines": 108000,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 0,
+          "lines": 0,
+          "maxLineBytes": 0,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.0861796669999967,
+      "peakRSSBytes": 89505792,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/1h-camera"
+      ],
+      "log": "$OUT/1h-camera/ts-read.log"
+    },
+    {
+      "seconds": 3600,
+      "profile": "camera",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.09143287499999861,
+      "peakRSSBytes": 90619904,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/1h-camera"
+      ],
+      "log": "$OUT/1h-camera/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 237600,
+        "cursorChanges": 123551,
+        "cursorSamples": 475200,
+        "markEvents": 3,
+        "pcmAppends": 744480
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 9.149481458,
+      "lastProgress": "generated 7800/7920.0s pcm=733200 cursor=468000 camera=234000",
+      "peakRSSBytes": 28442624,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-combined-typical/source",
+        "combined-typical",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 253384731,
+          "lines": 760460,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 760460,
+          "state": "complete"
+        },
+        "cursorSamples": 475200,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 132,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 7919983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 760460,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 5.388312375,
+      "lastProgress": "streamed cursor=468000",
+      "peakRSSBytes": 18677760,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-combined-typical/source"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 11.391741166999998,
+      "peakRSSBytes": 19791872,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-combined-typical/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "export",
+      "detail": {
+        "bytes": 81984493,
+        "cursorSamples": 475200,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 7.638260209,
+      "peakRSSBytes": 25624576,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-combined-typical/source",
+        "$CORRECTED/2.2h-combined-typical/evidence.jsonl",
+        "$CORRECTED/2.2h-combined-typical/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 253384731,
+          "lines": 760460,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 81984493,
+          "lines": 475336,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.09304974999999831,
+      "peakRSSBytes": 105922560,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-combined-typical"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-typical",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.1791125830000019,
+      "peakRSSBytes": 109772800,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-combined-typical"
+      ],
+      "log": "$CORRECTED/2.2h-combined-typical/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 237600,
+        "cursorChanges": 475199,
+        "cursorSamples": 475200,
+        "markEvents": 3,
+        "pcmAppends": 744480
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 9.497503166999996,
+      "lastProgress": "generated 7800/7920.0s pcm=733200 cursor=468000 camera=234000",
+      "peakRSSBytes": 28426240,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-combined-worst/source",
+        "combined-worst",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 253384771,
+          "lines": 760460,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 760460,
+          "state": "complete"
+        },
+        "cursorSamples": 475200,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 132,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 7919983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 760460,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 5.751645875000002,
+      "lastProgress": "streamed cursor=468000",
+      "peakRSSBytes": 18726912,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-combined-worst/source"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 18.113753791999997,
+      "peakRSSBytes": 20627456,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-combined-worst/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "export",
+      "detail": {
+        "bytes": 81984533,
+        "cursorSamples": 475200,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 11.117927208000008,
+      "peakRSSBytes": 25690112,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-combined-worst/source",
+        "$CORRECTED/2.2h-combined-worst/evidence.jsonl",
+        "$CORRECTED/2.2h-combined-worst/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 253384771,
+          "lines": 760460,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 81984533,
+          "lines": 475336,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.13457554200000596,
+      "peakRSSBytes": 107937792,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-combined-worst"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "combined-worst",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.3063477500000008,
+      "peakRSSBytes": 111525888,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-combined-worst"
+      ],
+      "log": "$CORRECTED/2.2h-combined-worst/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 744480
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 7.113208375000002,
+      "lastProgress": "generated 7800/7920.0s pcm=733200 cursor=0 camera=0",
+      "peakRSSBytes": 13107200,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-pcm/source",
+        "pcm",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 185574590,
+          "lines": 744484,
+          "maxLineBytes": 358,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 744484,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 744484,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 4.892361667000005,
+      "peakRSSBytes": 13238272,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-pcm/source"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 9.942431291,
+      "peakRSSBytes": 13778944,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-pcm/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "export",
+      "detail": {
+        "bytes": 0,
+        "cursorSamples": 0,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 4.902009665999998,
+      "peakRSSBytes": 13729792,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-pcm/source",
+        "$CORRECTED/2.2h-pcm/evidence.jsonl",
+        "$CORRECTED/2.2h-pcm/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/export.log",
+      "files": {
+        "journal": {
+          "bytes": 185574590,
+          "lines": 744484,
+          "maxLineBytes": 358,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 0,
+          "lines": 0,
+          "maxLineBytes": 0,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.09283408299999428,
+      "peakRSSBytes": 89587712,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-pcm"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "pcm",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.09460741699999198,
+      "peakRSSBytes": 91160576,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-pcm"
+      ],
+      "log": "$CORRECTED/2.2h-pcm/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 123551,
+        "cursorSamples": 475200,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.0470792090000032,
+      "lastProgress": "generated 7800/7920.0s pcm=0 cursor=468000 camera=0",
+      "peakRSSBytes": 13434880,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-cursor-typical/source",
+        "cursor-typical",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 67020527,
+          "lines": 15976,
+          "maxLineBytes": 4353,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 15976,
+          "state": "complete"
+        },
+        "cursorSamples": 475200,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 132,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 7919983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 15976,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.1180846250000032,
+      "lastProgress": "streamed cursor=468000",
+      "peakRSSBytes": 13484032,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-cursor-typical/source"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 2.3126138749999954,
+      "peakRSSBytes": 13991936,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-cursor-typical/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "export",
+      "detail": {
+        "bytes": 81221295,
+        "cursorSamples": 475200,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 3.485179084000003,
+      "peakRSSBytes": 14221312,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-cursor-typical/source",
+        "$CORRECTED/2.2h-cursor-typical/evidence.jsonl",
+        "$CORRECTED/2.2h-cursor-typical/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 67020527,
+          "lines": 15976,
+          "maxLineBytes": 4353,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 81221295,
+          "lines": 475333,
+          "maxLineBytes": 280,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 475333,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 132,
+          "globalX": 1827.125,
+          "globalY": 421.375,
+          "sourceUs": 7919983333,
+          "x": 1807.125,
+          "y": 421.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.6591163330000127,
+      "lastProgress": "validated 468000 normalized records",
+      "peakRSSBytes": 249544704,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-cursor-typical"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-typical",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 475333,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 132,
+          "globalX": 1827.125,
+          "globalY": 421.375,
+          "sourceUs": 7919983333,
+          "x": 1807.125,
+          "y": 421.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 2.676966624999986,
+      "peakRSSBytes": 249413632,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-cursor-typical"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-typical/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 475199,
+        "cursorSamples": 475200,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.0335591249999998,
+      "lastProgress": "generated 7800/7920.0s pcm=0 cursor=468000 camera=0",
+      "peakRSSBytes": 13434880,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-cursor-worst/source",
+        "cursor-worst",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 67020567,
+          "lines": 15976,
+          "maxLineBytes": 4307,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 15976,
+          "state": "complete"
+        },
+        "cursorSamples": 475200,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 132,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 7919983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 15976,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 1.0942047919999895,
+      "lastProgress": "streamed cursor=468000",
+      "peakRSSBytes": 13500416,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-cursor-worst/source"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 2.277105958,
+      "peakRSSBytes": 13975552,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-cursor-worst/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "export",
+      "detail": {
+        "bytes": 81221335,
+        "cursorSamples": 475200,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 3.5817691249999917,
+      "peakRSSBytes": 14221312,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-cursor-worst/source",
+        "$CORRECTED/2.2h-cursor-worst/evidence.jsonl",
+        "$CORRECTED/2.2h-cursor-worst/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 67020567,
+          "lines": 15976,
+          "maxLineBytes": 4307,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 81221335,
+          "lines": 475333,
+          "maxLineBytes": 280,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 475333,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 132,
+          "globalX": 963.125,
+          "globalY": 1069.375,
+          "sourceUs": 7919983333,
+          "x": 943.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.6683764999999985,
+      "lastProgress": "validated 468000 normalized records",
+      "peakRSSBytes": 249839616,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-cursor-worst"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "cursor-worst",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 475333,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 132,
+          "globalX": 963.125,
+          "globalY": 1069.375,
+          "sourceUs": 7919983333,
+          "x": 943.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 2.6552236249999988,
+      "peakRSSBytes": 240238592,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-cursor-worst"
+      ],
+      "log": "$CORRECTED/2.2h-cursor-worst/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 3,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.04997691599999962,
+      "lastProgress": "generated 7800/7920.0s pcm=0 cursor=0 camera=0",
+      "peakRSSBytes": 28246016,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-events/source",
+        "events",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-events/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 802813,
+          "lines": 139,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 139,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 132,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 139,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.06369758400000865,
+      "peakRSSBytes": 18399232,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-events/source"
+      ],
+      "log": "$CORRECTED/2.2h-events/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.12514195800000744,
+      "peakRSSBytes": 18759680,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-events/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-events/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "export",
+      "detail": {
+        "bytes": 800170,
+        "cursorSamples": 0,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.07483608300000197,
+      "peakRSSBytes": 25329664,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-events/source",
+        "$CORRECTED/2.2h-events/evidence.jsonl",
+        "$CORRECTED/2.2h-events/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-events/export.log",
+      "files": {
+        "journal": {
+          "bytes": 802813,
+          "lines": 139,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 800170,
+          "lines": 136,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.09129670800000894,
+      "peakRSSBytes": 89636864,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-events"
+      ],
+      "log": "$CORRECTED/2.2h-events/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "events",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.09640391599999566,
+      "peakRSSBytes": 90718208,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-events"
+      ],
+      "log": "$CORRECTED/2.2h-events/ingest.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 237600,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 2.4411053749999994,
+      "lastProgress": "generated 7800/7920.0s pcm=0 cursor=0 camera=234000",
+      "peakRSSBytes": 13221888,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$CORRECTED/2.2h-camera/source",
+        "camera",
+        "7920.000000000001",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$CORRECTED/2.2h-camera/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 705,
+          "lines": 3,
+          "maxLineBytes": 353,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 7920000000,
+          "sequence": 3,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 3,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.011217334000015398,
+      "peakRSSBytes": 13025280,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$CORRECTED/2.2h-camera/source"
+      ],
+      "log": "$CORRECTED/2.2h-camera/stream.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.01138925000000745,
+      "peakRSSBytes": 13303808,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$CORRECTED/2.2h-camera/source",
+        "7920000000"
+      ],
+      "log": "$CORRECTED/2.2h-camera/publish.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "export",
+      "detail": {
+        "bytes": 0,
+        "cursorSamples": 0,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.013034625000000234,
+      "peakRSSBytes": 13500416,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$CORRECTED/2.2h-camera/source",
+        "$CORRECTED/2.2h-camera/evidence.jsonl",
+        "$CORRECTED/2.2h-camera/receipt.json"
+      ],
+      "log": "$CORRECTED/2.2h-camera/export.log",
+      "files": {
+        "journal": {
+          "bytes": 705,
+          "lines": 3,
+          "maxLineBytes": 353,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 120096538,
+          "lines": 237600,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 0,
+          "lines": 0,
+          "maxLineBytes": 0,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.0940962919999729,
+      "peakRSSBytes": 89587712,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$CORRECTED/2.2h-camera"
+      ],
+      "log": "$CORRECTED/2.2h-camera/ts-read.log"
+    },
+    {
+      "seconds": 7920.000000000001,
+      "profile": "camera",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.0993315419999999,
+      "peakRSSBytes": 90931200,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$CORRECTED/2.2h-camera"
+      ],
+      "log": "$CORRECTED/2.2h-camera/ingest.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 1296000,
+        "cursorChanges": 673919,
+        "cursorSamples": 2592000,
+        "markEvents": 3,
+        "pcmAppends": 4060800
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 123.53149879199997,
+      "lastProgress": "generated 43200/43200.0s pcm=4060800 cursor=2592000 camera=1296000",
+      "peakRSSBytes": 31260672,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-combined-typical/source",
+        "combined-typical",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-combined-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503313,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 4147928,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 4147928,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 51.863325165999996,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 18710528,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-combined-typical/source"
+      ],
+      "log": "$OUT/12h-combined-typical/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 9.877475791999954,
+      "peakRSSBytes": 18841600,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-combined-typical/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-combined-typical/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.01529674999997951,
+      "peakRSSBytes": 12206080,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-combined-typical/source",
+        "$OUT/12h-combined-typical/evidence.jsonl",
+        "$OUT/12h-combined-typical/receipt.json"
+      ],
+      "log": "$OUT/12h-combined-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503313,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 1296000,
+        "cursorChanges": 2591999,
+        "cursorSamples": 2592000,
+        "markEvents": 3,
+        "pcmAppends": 4060800
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 81.947642375,
+      "lastProgress": "generated 43200/43200.0s pcm=4060800 cursor=2592000 camera=1296000",
+      "peakRSSBytes": 28639232,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-combined-worst/source",
+        "combined-worst",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-combined-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503241,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 4147928,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 4147928,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 45.96530695900001,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 18710528,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-combined-worst/source"
+      ],
+      "log": "$OUT/12h-combined-worst/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 9.444206958000082,
+      "peakRSSBytes": 18808832,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-combined-worst/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-combined-worst/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.014183041999931447,
+      "peakRSSBytes": 12189696,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-combined-worst/source",
+        "$OUT/12h-combined-worst/evidence.jsonl",
+        "$OUT/12h-combined-worst/receipt.json"
+      ],
+      "log": "$OUT/12h-combined-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503241,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 4060800
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 53.05125425,
+      "lastProgress": "generated 43200/43200.0s pcm=4060800 cursor=0 camera=0",
+      "peakRSSBytes": 13189120,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-pcm/source",
+        "pcm",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-pcm/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 1021920328,
+          "lines": 4060804,
+          "maxLineBytes": 360,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 4060804,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 4060804,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 39.489058291999974,
+      "peakRSSBytes": 13254656,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-pcm/source"
+      ],
+      "log": "$OUT/12h-pcm/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 10.038405582999927,
+      "peakRSSBytes": 13451264,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-pcm/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-pcm/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.017770125000039116,
+      "peakRSSBytes": 12288000,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-pcm/source",
+        "$OUT/12h-pcm/evidence.jsonl",
+        "$OUT/12h-pcm/receipt.json"
+      ],
+      "log": "$OUT/12h-pcm/export.log",
+      "files": {
+        "journal": {
+          "bytes": 1021920328,
+          "lines": 4060804,
+          "maxLineBytes": 360,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "pcm",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 673919,
+        "cursorSamples": 2592000,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 6.89918737499998,
+      "lastProgress": "generated 43200/43200.0s pcm=0 cursor=2592000 camera=0",
+      "peakRSSBytes": 13451264,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-cursor-typical/source",
+        "cursor-typical",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-cursor-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 369635100,
+          "lines": 87124,
+          "maxLineBytes": 4383,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 87124,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 87124,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 7.844621999999974,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 13533184,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-cursor-typical/source"
+      ],
+      "log": "$OUT/12h-cursor-typical/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 5.323214374999981,
+      "peakRSSBytes": 13598720,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-cursor-typical/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-cursor-typical/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.01215824999997858,
+      "peakRSSBytes": 12189696,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-cursor-typical/source",
+        "$OUT/12h-cursor-typical/evidence.jsonl",
+        "$OUT/12h-cursor-typical/receipt.json"
+      ],
+      "log": "$OUT/12h-cursor-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 369635100,
+          "lines": 87124,
+          "maxLineBytes": 4383,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-typical",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 2591999,
+        "cursorSamples": 2592000,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 5.532829292000039,
+      "lastProgress": "generated 43200/43200.0s pcm=0 cursor=2592000 camera=0",
+      "peakRSSBytes": 13434880,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-cursor-worst/source",
+        "cursor-worst",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-cursor-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 369635028,
+          "lines": 87124,
+          "maxLineBytes": 4337,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 87124,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 87124,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 5.896785125000053,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 13533184,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-cursor-worst/source"
+      ],
+      "log": "$OUT/12h-cursor-worst/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 4.5726555420000805,
+      "peakRSSBytes": 13631488,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-cursor-worst/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-cursor-worst/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.010797374999965541,
+      "peakRSSBytes": 12189696,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-cursor-worst/source",
+        "$OUT/12h-cursor-worst/evidence.jsonl",
+        "$OUT/12h-cursor-worst/receipt.json"
+      ],
+      "log": "$OUT/12h-cursor-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 369635028,
+          "lines": 87124,
+          "maxLineBytes": 4337,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "cursor-worst",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 0,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 3,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.0549622499999823,
+      "lastProgress": "generated 43200/43200.0s pcm=0 cursor=0 camera=0",
+      "peakRSSBytes": 28147712,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-events/source",
+        "events",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-events/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 977121,
+          "lines": 727,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 727,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 727,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.06722441600007005,
+      "peakRSSBytes": 18366464,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-events/source"
+      ],
+      "log": "$OUT/12h-events/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.11724508300004527,
+      "peakRSSBytes": 18759680,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-events/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-events/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "export",
+      "detail": {
+        "bytes": 965657,
+        "cursorSamples": 0,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.08627391600003466,
+      "peakRSSBytes": 25329664,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-events/source",
+        "$OUT/12h-events/evidence.jsonl",
+        "$OUT/12h-events/receipt.json"
+      ],
+      "log": "$OUT/12h-events/export.log",
+      "files": {
+        "journal": {
+          "bytes": 977121,
+          "lines": 727,
+          "maxLineBytes": 762819,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 965657,
+          "lines": 724,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "ts-read",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.08276183400000446,
+      "peakRSSBytes": 89456640,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/12h-events"
+      ],
+      "log": "$OUT/12h-events/ts-read.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "events",
+      "stage": "ingest",
+      "status": "fail",
+      "code": "INVALID_EVIDENCE",
+      "message": "Evidence record exceeds read budget",
+      "exitCode": 1,
+      "wallSeconds": 0.09277908400003798,
+      "peakRSSBytes": 91324416,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/12h-events"
+      ],
+      "log": "$OUT/12h-events/ingest.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 1296000,
+        "cursorChanges": 0,
+        "cursorSamples": 0,
+        "markEvents": 0,
+        "pcmAppends": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 12.697026208000025,
+      "lastProgress": "generated 43200/43200.0s pcm=0 cursor=0 camera=1296000",
+      "peakRSSBytes": 13271040,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-camera/source",
+        "camera",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-camera/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 706,
+          "lines": 3,
+          "maxLineBytes": 354,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 3,
+          "state": "complete"
+        },
+        "cursorSamples": 0,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "geometryEpochs": 0,
+        "header": {
+          "height": 1080,
+          "microphone": false,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastSequence": 3,
+        "markEvents": 0,
+        "originHostUs": 100000000000,
+        "pauses": []
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.011647624999983236,
+      "peakRSSBytes": 12976128,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$OUT/12h-camera/source"
+      ],
+      "log": "$OUT/12h-camera/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.01146799999999348,
+      "peakRSSBytes": 13303808,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$OUT/12h-camera/source",
+        "43200000000"
+      ],
+      "log": "$OUT/12h-camera/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "export",
+      "detail": {
+        "bytes": 0,
+        "cursorSamples": 0,
+        "markEvents": 0
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 0.012414875000016763,
+      "peakRSSBytes": 13500416,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-camera/source",
+        "$OUT/12h-camera/evidence.jsonl",
+        "$OUT/12h-camera/receipt.json"
+      ],
+      "log": "$OUT/12h-camera/export.log",
+      "files": {
+        "journal": {
+          "bytes": 706,
+          "lines": 3,
+          "maxLineBytes": 354,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 0,
+          "lines": 0,
+          "maxLineBytes": 0,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.08418370800011325,
+      "peakRSSBytes": 89686016,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/12h-camera"
+      ],
+      "log": "$OUT/12h-camera/ts-read.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "camera",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 0
+      },
+      "exitCode": 0,
+      "wallSeconds": 0.08911087500001304,
+      "peakRSSBytes": 90800128,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/12h-camera"
+      ],
+      "log": "$OUT/12h-camera/ingest.log"
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 259200,
+        "cursorChanges": 134783,
+        "cursorSamples": 518400,
+        "markEvents": 3,
+        "pcmAppends": 812160
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 11.233993834000001,
+      "lastProgress": "generated 8400/8640.0s pcm=789600 cursor=504000 camera=252000",
+      "peakRSSBytes": 28524544,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$BRACKET/2.4h-combined-typical/source",
+        "combined-typical",
+        "8640",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$BRACKET/2.4h-combined-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 276441182,
+          "lines": 829592,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 131047738,
+          "lines": 259200,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 8640000000,
+          "sequence": 829592,
+          "state": "complete"
+        },
+        "cursorSamples": 518400,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 144,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 8639983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 829592,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 6.119903416000001,
+      "lastProgress": "streamed cursor=504000",
+      "peakRSSBytes": 18710528,
+      "command": [
+        "$BUILD/long-take",
+        "stream",
+        "$BRACKET/2.4h-combined-typical/source"
+      ],
+      "log": "$BRACKET/2.4h-combined-typical/stream.log"
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "publish",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 6.017101583,
+      "peakRSSBytes": 18743296,
+      "command": [
+        "$BUILD/long-take",
+        "publish",
+        "$BRACKET/2.4h-combined-typical/source",
+        "8640000000"
+      ],
+      "log": "$BRACKET/2.4h-combined-typical/publish.log"
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "export",
+      "code": "EVIDENCE_LIMIT",
+      "message": "Journal exceeds the evidence read budget.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 0.009783292000000074,
+      "peakRSSBytes": 12189696,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$BRACKET/2.4h-combined-typical/source",
+        "$BRACKET/2.4h-combined-typical/evidence.jsonl",
+        "$BRACKET/2.4h-combined-typical/receipt.json"
+      ],
+      "log": "$BRACKET/2.4h-combined-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 276441182,
+          "lines": 829592,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 131047738,
+          "lines": 259200,
+          "maxLineBytes": 506,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "ts-read",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    },
+    {
+      "seconds": 8640,
+      "profile": "combined-typical",
+      "stage": "ingest",
+      "status": "blocked",
+      "message": "Production export produced no admitted input"
+    }
+  ],
+  "swift": "Apple Swift version 6.3.3 (swiftlang-6.3.3.1.3 clang-2100.1.1.101)\nTarget: arm64-apple-macosx26.0",
+  "sourceSHA256": {
+    "packages/test-harness/long-take/Main.swift": "c4d28da51d58e650279c9fdd2f355ec9440bc2fb779ef66233b795b94e98ab83",
+    "packages/test-harness/long-take/probe.mjs": "ec4a2af9bef71367f2276c93ccc8857230ec16f88179bf508640eeab0793b0f5",
+    "packages/test-harness/long-take/ts-stage.mjs": "df0c72adc7a67cd22a4b4604be5846f9f26346789d27523b1bf8f41d7d06e7fb",
+    "helpers/mac/Sources/YapCapture/CaptureJournal.swift": "bdc0ba8f2ad98b2130d0040bc4cd04ef30288c8048d0392e45d0ce817aff0c41",
+    "helpers/mac/Sources/YapCapture/JournalPCM.swift": "3f9bf60d4a7014c749271b8ec563816f5d2a8849fe607fb46f0873288837e804",
+    "helpers/mac/Sources/YapCapture/CaptureSourcePublication.swift": "79f10bb1a6e8002a0a85a98772a63714addf9fffa514e5dbf375c108b0376fca",
+    "helpers/mac/Sources/YapWire/SourceEvidenceExport.swift": "bbb72a236ece12301aa53133dbf0401993b21b2ec3e0d813b8dcb654cef4729a",
+    "packages/core/src/evidence.ts": "d1056db743a697c0b4d0648cd73531eae3d226911a2c552014b0ce3300696ccf",
+    "packages/core/src/catalog.ts": "cbc3c06a90ba5bb9a19671c6b7b10d19ced7055cb83ca649751c29faf8d88535",
+    "packages/core/src/capture-store.ts": "4cb258b9c3f7e856760a5db3598c22e903d84f7597df91c5fe9ec4869ff66188"
+  },
+  "twelveHourElapsedSecondsFromStageLogTimes": 480.1060000127031,
+  "correctedCommand": [
+    "node",
+    "$REPO/packages/test-harness/long-take/probe.mjs",
+    "--output",
+    "$CORRECTED",
+    "--hours",
+    "2.2",
+    "--build",
+    "$BUILD"
+  ],
+  "bracketCommand": [
+    "node",
+    "$REPO/packages/test-harness/long-take/probe.mjs",
+    "--output",
+    "$BRACKET",
+    "--hours",
+    "2.4",
+    "--profiles",
+    "combined-typical",
+    "--build",
+    "$BUILD"
+  ]
+}
