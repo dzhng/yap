@@ -110,3 +110,6 @@ Narrow verification:
   remaining blocking findings. The local Codex CLI review
   could not complete because model capacity was unavailable; it is not a clean verdict.
 - Full repository tests were not run. Failed-job retry-field integration awaits slice 06.
+
+H2 (prompt goldens): shown to the user with every variant; no response within the window.
+Decision: the goldens stand as written.

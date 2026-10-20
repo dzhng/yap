@@ -11,11 +11,11 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–11 are done (audits passed H1 unchanged; H2 prompt goldens next). Origin take
+Status 2026-10-20: slices 00–11 are done (audits passed H1 unchanged; prompt goldens passed H2 unchanged). Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Run H2 (prompt goldens), then [slice 12](slices/12-app-failures.md)
+You are implementing this spec. Pick up at [slice 12](slices/12-app-failures.md)
 and [13](slices/13-closeout.md).
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
