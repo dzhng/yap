@@ -292,7 +292,7 @@ test("partial freeze survives relaunch; replay keeps failure and explicit retry 
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
-    errorCode: "ACQUISITION_NOT_FOUND",
+    errorCode: "MEDIA_UNAVAILABLE",
     retryable: true,
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -340,7 +340,7 @@ test("a changed frozen journal refuses before observing newly available video", 
   await f.queue.idle();
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
-    errorCode: "ACQUISITION_NOT_FOUND",
+    errorCode: "MEDIA_UNAVAILABLE",
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
   const frozen = f.acquisitions.intent(job.target.id);
@@ -351,7 +351,7 @@ test("a changed frozen journal refuses before observing newly available video", 
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
     errorCode: "SOURCE_CHANGED",
-    retryable: false,
+    retryable: true,
   });
   expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
   expect(f.acquisitions.ready(job.target.id)).toBe(false);
@@ -382,7 +382,7 @@ test("observed optional absence cannot be replaced after a failed native attempt
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
     errorCode: "SOURCE_CHANGED",
-    retryable: false,
+    retryable: true,
   });
   expect(f.acquisitions.intent(job.target.id)).toEqual(frozen);
 });
@@ -400,7 +400,7 @@ test("a foreign source journal fails before publishing evidence or assets", asyn
   expect(f.queue.inspect(job.jobId)).toMatchObject({
     state: "failed",
     errorCode: "SOURCE_CHANGED",
-    retryable: false,
+    retryable: true,
     published: null,
   });
   if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
@@ -486,7 +486,7 @@ test.each(["source", "parent"])(
     await f.queue.idle();
     expect(f.queue.inspect(job.jobId)).toMatchObject({
       state: "failed",
-      errorCode: "ACQUISITION_NOT_FOUND",
+      errorCode: "MEDIA_UNAVAILABLE",
     });
     if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
     const frozen = f.acquisitions.intent(job.target.id);
@@ -759,7 +759,49 @@ test("a captured camera movie holding a picture across its off time is refused",
   expect(f.queue.inspect(take.jobId)).toMatchObject({
     state: "failed",
     errorCode: "INVALID_EVIDENCE",
-    retryable: false,
+    retryable: true,
   });
   expect(() => f.acquisitions.get(take.acquisitionId)).toThrow();
+});
+
+test("portable admission rejects supplied evidence while retained serialization stays repairable", async () => {
+  const f = await fixture();
+  await writeFile(
+    join(f.donor, "source.journal.jsonl"),
+    JSON.stringify({ sessionID: f.recording.sourceId }),
+  );
+  await writeFile(join(f.donor, "video.mov"), "video");
+  const job = f.admit(f.recording.id);
+  f.queue.start();
+  await f.queue.idle();
+  if (job.target.kind !== "acquisition") throw new Error("Wrong domain");
+  const portable = f.importer.portable(job.target.id);
+  const invalid = {
+    ...portable.acquisition,
+    receipt: { ...portable.acquisition.receipt, cursorSamples: -1 },
+  };
+  const files = {
+    journal: { ...portable.files.journal, sha256: portable.acquisition.journal.sha256 },
+    normalized: {
+      ...portable.files.normalized,
+      sha256: createHash("sha256")
+        .update(await readFile(portable.files.normalized.path))
+        .digest("hex"),
+    },
+  };
+  await expect(
+    f.importer.verifyPortable(invalid, files, signal(), {
+      exportSource: f.native.exportSource,
+      assetFiles: new Map(),
+      assets: new Map(),
+    }),
+  ).rejects.toMatchObject({ code: "INVALID_INPUT_EVIDENCE", retryable: false });
+  f.captures.catalog
+    .prepare(
+      "UPDATE acquisitions SET metadata=json_set(metadata,'$.evidence.receipt.cursorSamples',-1) WHERE id=?",
+    )
+    .run(job.target.id);
+  expect(() => f.importer.portable(job.target.id)).toThrow(
+    expect.objectContaining({ code: "INVALID_EVIDENCE", retryable: true }),
+  );
 });

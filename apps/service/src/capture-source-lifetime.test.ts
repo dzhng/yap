@@ -456,7 +456,7 @@ test("a recording used by a project refuses until cascade retires its copies and
     ok: false,
     error: {
       code: "IN_USE",
-      retryable: false,
+      retryable: true,
       details: {
         recordingId: take.recordingId,
         usedBy: [{ kind: "project", id: projectId, revisions: 2 }],

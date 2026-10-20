@@ -172,7 +172,18 @@ test("declared audio prefixes and held spans preserve signed PCM, ordered steps 
       [held],
     );
     assert.equal(wrongImplementation.reply.ok, false, JSON.stringify(wrongImplementation.reply));
-    assert.equal(wrongImplementation.reply.error.code, "NOT_READY");
+    assert.equal(wrongImplementation.reply.error.code, "PINNED_IMPLEMENTATION_UNAVAILABLE");
+    const missingImplementation = execute(
+      "media.prepareCompositionAudioDomain",
+      { domainIndex: 1, input: "program", statePreparationImplementationId: undefined },
+      [held],
+    );
+    assert.equal(
+      missingImplementation.reply.ok,
+      false,
+      JSON.stringify(missingImplementation.reply),
+    );
+    assert.equal(missingImplementation.reply.error.code, "INTERNAL_ERROR");
     const final = execute("media.mixCompositionAudio", {}, [
       held,
       { ...held, domainIndex: 1, recipe: normalization },

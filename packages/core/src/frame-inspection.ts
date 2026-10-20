@@ -703,7 +703,11 @@ export class MediaFrameInspection {
       faceObservations: parsed.data.faceObservationRequest,
     });
     if (plan.options.implementationId !== parsed.data.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned image renderer is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned image renderer is unavailable",
+        {},
+      );
     return this.publish(job.target, signal, async (output) => {
       const receipt = imageReceiptSchema.safeParse(
         await plan.renderer.render(
@@ -767,7 +771,11 @@ export class MediaFrameInspection {
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a selected source");
     if (parsed.data.implementationId !== this.owners.sourceRenderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned picture renderer is unavailable",
+        {},
+      );
     const plan = this.sourcePlan({
       ...parsed.data.selection,
       ...parsed.data,
@@ -978,9 +986,13 @@ export class MediaFrameInspection {
   admit(job: Job): ReturnType<JobAdmission> {
     const options = optionsSchema.parse(JSON.parse(job.input));
     if (options.implementationId !== this.project.renderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {
-        implementationId: options.implementationId,
-      });
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned picture renderer is unavailable",
+        {
+          implementationId: options.implementationId,
+        },
+      );
     if (job.target.kind !== "project" || job.artifact !== "frame")
       throw new CatalogError("UNSUPPORTED_JOB", "Picture admission requires a project job");
     const plan = this.planProject({
@@ -1004,7 +1016,11 @@ export class MediaFrameInspection {
     if (job.target.kind !== "project" || job.artifact !== "frame" || !parsed.success)
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a project frame");
     if (parsed.data.implementationId !== this.project.renderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {});
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned picture renderer is unavailable",
+        {},
+      );
     const plan = this.planProject({
       projectId: job.target.id,
       revisionId: job.target.revisionId,

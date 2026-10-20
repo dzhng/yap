@@ -135,7 +135,11 @@ test("selected source pictures preserve explicit streams, physical sample clocks
       assert.equal(failed.reply.ok, false);
       assert.equal(
         failed.reply.error.code,
-        changes.atUs === 450000 ? "SOURCE_PICTURE_UNAVAILABLE" : "UNAVAILABLE",
+        changes.atUs === 450000
+          ? "SOURCE_PICTURE_UNAVAILABLE"
+          : changes.available
+            ? "UNAVAILABLE_SUPPORT"
+            : "NOT_FOUND",
       );
       assert.equal(existsSync(failed.params.output), false);
     }
@@ -197,8 +201,8 @@ test("selected frame wire refuses malformed requests and preserves source and ou
       ["INVALID_REQUEST", false],
       ["INVALID_REQUEST", false],
       ["INVALID_REQUEST", false],
-      ["NATIVE_DECODE_FAILED", false],
-      ["INVALID_OUTPUT", false],
+      ["NATIVE_DECODE_FAILED", true],
+      ["INVALID_OUTPUT", true],
     ].entries()) {
       assert.equal(replies[index].id, String(index));
       assert.equal(replies[index].ok, false);

@@ -35,7 +35,11 @@ test("the native process answers every shared conformance line in order", () => 
       continue;
     }
     assert.equal(response.error.code, fixture.expected.code, fixture.name);
-    assert.equal(retryable(response.error), false, fixture.name);
+    assert.equal(
+      retryable(response.error),
+      fixture.expected.code === "MODEL_UNAVAILABLE",
+      fixture.name,
+    );
     assert.equal(typeof response.error.message, "string", fixture.name);
     assert.deepEqual(response.error.details, {}, fixture.name);
   }
@@ -95,7 +99,7 @@ test("a changed directory identity reports the same final failure through every 
     ];
     for (const failure of failures) {
       assert.equal(failure.code, "INVALID_STORAGE");
-      assert.equal(retryable(failure), false, JSON.stringify(failure));
+      assert.equal(retryable(failure), true, JSON.stringify(failure));
     }
   } finally {
     closeSync(directory);

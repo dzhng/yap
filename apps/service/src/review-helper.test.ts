@@ -15,7 +15,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
     error: {
       code: "MEDIA_WORKER_UNAVAILABLE",
       message: "Controlled fixture has no native audio renderer",
-      retryable: false,
+      retryable: true,
       details: {},
     },
   }));

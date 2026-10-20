@@ -66,7 +66,7 @@ test("recovery preflights invalid and overbound roots without partial deletion",
   await writeFile(join(f.parent.directory, "unexpected"), "preserve");
   await assert.rejects(recoverPackageWorkspaces(f.parent, worker), {
     code: "INVALID_STORAGE",
-    retryable: false,
+    retryable: true,
   });
   assert.equal(await readFile(join(a.path, "data"), "utf8"), a.name);
   await rm(join(f.parent.directory, "unexpected"));
@@ -74,7 +74,7 @@ test("recovery preflights invalid and overbound roots without partial deletion",
   for (let i = 0; i < 4; i++) others.push(await f.orphan());
   await assert.rejects(recoverPackageWorkspaces(f.parent, worker), {
     code: "INVALID_STORAGE",
-    retryable: false,
+    retryable: true,
   });
   for (const child of [a, ...others])
     assert.equal(await readFile(join(child.path, "data"), "utf8"), child.name);
@@ -91,7 +91,7 @@ test("recovery rejects linked or nonprivate children and preserves every orphan"
   await symlink(target, linked);
   await assert.rejects(recoverPackageWorkspaces(f.parent, worker), {
     code: "INVALID_STORAGE",
-    retryable: false,
+    retryable: true,
   });
   assert.equal(await readFile(join(a.path, "data"), "utf8"), a.name);
   assert.equal(await readFile(join(target, "sentinel"), "utf8"), "foreign");
@@ -99,7 +99,7 @@ test("recovery rejects linked or nonprivate children and preserves every orphan"
   await mkdir(linked, { mode: 0o755 });
   await assert.rejects(recoverPackageWorkspaces(f.parent, worker), {
     code: "INVALID_STORAGE",
-    retryable: false,
+    retryable: true,
   });
   assert.equal(await readFile(join(a.path, "data"), "utf8"), a.name);
 });
@@ -153,7 +153,7 @@ test("failed provision cleanup retains exact identity and rejects a replacement"
   await writeFile(join(directory, "sentinel"), "foreign");
   await assert.rejects(cleanupFailedPackageWorkspace(f.parent, name, failure, worker), {
     code: "INVALID_STORAGE",
-    retryable: false,
+    retryable: true,
   });
   assert.equal(await readFile(join(directory, "sentinel"), "utf8"), "foreign");
   await rm(directory, { recursive: true });

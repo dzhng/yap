@@ -538,7 +538,7 @@ test("a source reader that never advances hits a terminal work limit and release
     select(fixture(), () => ({ generation: "g", chunks: chunks() })),
   ).rejects.toMatchObject({
     code: "LIMIT_EXCEEDED",
-    retryable: false,
+    retryable: true,
     details: {
       revisionId: "revision",
       limitKind: "maximumWork",

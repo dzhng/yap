@@ -52,7 +52,7 @@ public enum SourceFrameRenderer {
             try ExactRange.areAvailable(request.available)
         else { throw NativeFailure("INVALID_REQUEST", "Invalid selected source picture request.") }
         guard try request.available.contains(where: { try $0.contains(ExactTime(Int128(request.atUs))) }) else {
-            throw NativeFailure("UNAVAILABLE", "Requested picture is outside selected source support.")
+            throw NativeFailure("UNAVAILABLE_SUPPORT", "Requested picture is outside selected source support.")
         }
         let container = try ExactTime(Int128(request.atUs)).adding(request.asset.originUs)
         let output = try NewFile(at: request.output, assembledAs: "frame.png")

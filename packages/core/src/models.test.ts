@@ -245,7 +245,7 @@ test("a file whose bytes differ from its pin is refused", async () => {
   const speech = open();
 
   await expect(speech.prepare("tiny", new AbortController().signal)).rejects.toEqual(
-    failure("MODEL_HASH_MISMATCH"),
+    failure("MODEL_HASH_MISMATCH", true),
   );
 
   expect(await speech.status("tiny")).toMatchObject({
@@ -268,7 +268,7 @@ test("a file longer or shorter than its pin is refused without reading past the 
     const speech = open();
 
     await expect(speech.prepare("tiny", new AbortController().signal)).rejects.toEqual(
-      failure("MODEL_HASH_MISMATCH"),
+      failure("MODEL_HASH_MISMATCH", true),
     );
     await expect(stat(revision)).rejects.toMatchObject({ code: "ENOENT" });
   }
@@ -499,7 +499,7 @@ test("a models directory that is a link is refused", async () => {
   await symlink(elsewhere, join(home, "models"));
 
   expect(() => new Models(home, offline, [manifest], catalogFor(home))).toThrow(
-    failure("MODEL_STORAGE_FAILED"),
+    failure("MODEL_STORAGE_FAILED", true),
   );
 });
 
@@ -747,7 +747,7 @@ test("registered platform requirements cannot become false ready execution input
   expect(await models.status("voice")).toMatchObject({
     state: "failed",
     code: "MODEL_PLATFORM_UNSUPPORTED",
-    retryable: false,
+    retryable: true,
   });
   expect(() => models.prepare("voice", new AbortController().signal, f.sources)).toThrow(
     expect.objectContaining({ code: "MODEL_PLATFORM_UNSUPPORTED" }),

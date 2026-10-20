@@ -3,12 +3,10 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stageServiceLedger } from "./fixtures/service-ledger.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const output = resolve(process.argv[2]);
 mkdirSync(output, { recursive: true });
-stageServiceLedger(output);
 const files = (directory) =>
   readdirSync(directory)
     .filter((name) => name.endsWith(".swift"))

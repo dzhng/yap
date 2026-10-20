@@ -1,4 +1,5 @@
 import Foundation
+import YapMedia
 
 /// A refusal as the service states it: its own code, and a message a person can act on.
 struct ServiceFailure: LocalizedError, Sendable {
@@ -13,22 +14,10 @@ struct ServiceFailure: LocalizedError, Sendable {
     init(code: String, message: String, retryable: Bool? = nil, retryAfterMs: Int? = nil, details: Data? = nil) {
         self.code = code
         self.message = message
-        self.retryable = retryable ?? Self.ledger[code]?.retryable ?? false
-        self.retryAfterMs = retryAfterMs ?? Self.ledger[code]?.retryAfterMs
+        self.retryable = retryable ?? RefusalLedger.retryable(code)
+        self.retryAfterMs = retryAfterMs ?? RefusalLedger.retryAfterMs(code)
         self.details = details
     }
-
-    private struct Ledger: Decodable {
-        struct Entry: Decodable { let retryable: Bool; let retryAfterMs: Int? }
-        let codes: [String: Entry]
-    }
-    private static let ledger: [String: Ledger.Entry] = {
-        guard let url = Bundle.main.url(forResource: "refusal-ledger", withExtension: "json", subdirectory: "service"),
-            let data = try? Data(contentsOf: url),
-            let ledger = try? JSONDecoder().decode(Ledger.self, from: data)
-        else { fatalError("Missing or invalid bundled refusal ledger at service/refusal-ledger.json") }
-        return ledger.codes
-    }()
 
     var envelope: [String: Any] {
         var result: [String: Any] = ["code": code, "message": message, "retryable": retryable,

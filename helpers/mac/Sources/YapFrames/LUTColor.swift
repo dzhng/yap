@@ -24,12 +24,15 @@ public enum LUTColor {
         return "coreimage-unit-linear-srgb-cube-trilinear-v1:" + ProcessInfo.processInfo.operatingSystemVersionString
     }
     static func requireImplementation(_ identity: String?) throws {
-        guard let identity, identity == implementationId else {
-            throw NativeFailure("NOT_READY", "The bound native LUT recipe is unavailable.")
+        guard let identity else {
+            throw NativeFailure("INTERNAL_ERROR", "The compiled plan has no bound implementation.")
+        }
+        guard identity == implementationId else {
+            throw NativeFailure("PINNED_IMPLEMENTATION_UNAVAILABLE", "The bound native LUT recipe is unavailable.")
         }
     }
     public static func apply(_ cube: CubeLUT, to image: CIImage) throws -> CIImage {
-        guard let kernel else { throw NativeFailure("NOT_READY", "The native LUT recipe is unavailable.") }
+        guard let kernel else { throw NativeFailure("PREREQUISITE_MISSING", "The native LUT recipe is unavailable.") }
         if cube.isIdentity { return image }
         let size = cube.metadata.size
         let bytes = cube.rgba.withUnsafeBytes { Data($0) }

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { stageServiceLedger } from "./service-ledger.mjs";
+import { mediaLinkArguments } from "./swift-media.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/Yap/", import.meta.url));
 const homeSources = [
@@ -62,10 +62,18 @@ export function compileHomeDriver(scratch) {
 `,
   );
   const executable = join(scratch, "driver");
-  stageServiceLedger(scratch);
   execFileSync(
     "swiftc",
-    ["-swift-version", "6", "-parse-as-library", ...homeSources, driver, "-o", executable],
+    [
+      "-swift-version",
+      "6",
+      "-parse-as-library",
+      ...mediaLinkArguments(),
+      ...homeSources,
+      driver,
+      "-o",
+      executable,
+    ],
     { stdio: "pipe", timeout: 180_000 },
   );
   return executable;

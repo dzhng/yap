@@ -169,7 +169,7 @@ function prefixInputs(plan: Pick<StatePlan, "nodes">) {
         sampleAt(fromTime(selected.endUs), 48000) <= sampleAt(fromTime(selected.startUs), 48000))
     )
       throw new CompositionError(
-        "NOT_READY",
+        "INVALID_RANGE",
         "Detector clip tap has no samples in the state domain",
         { target, range },
       );

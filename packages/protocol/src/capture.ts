@@ -107,7 +107,6 @@ export const captureReportSchema = z
       .object({
         code: z.string().min(1).max(128),
         message: z.string().max(4096),
-        retryable: z.boolean(),
       })
       .nullable()
       .optional(),

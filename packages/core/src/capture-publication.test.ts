@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { readCapturePublication, readRecoveryReceipt } from "./capture-publication.js";
+import {
+  readCapturePublication,
+  readCaptureSourceOutcome,
+  readRecoveryReceipt,
+} from "./capture-publication.js";
 
 test("recovery receipt rejects unknown top-level fields", () => {
   expect(() =>
@@ -101,4 +105,16 @@ test("a screen take journaled with marks (layout 3) publishes like one without",
     ).toBe(layout);
   for (const layout of [1, 4])
     expect(() => readCapturePublication(screenPublication(layout), allocation, null)).toThrow();
+});
+
+test("native pending publication projects its code's verdict without a wire retry bit", () => {
+  expect(
+    readCaptureSourceOutcome({
+      state: "pending",
+      error: { code: "INVALID_JOURNAL", message: "Retained journal needs repair" },
+    }),
+  ).toEqual({
+    state: "pending",
+    error: { code: "INVALID_JOURNAL", message: "Retained journal needs repair", retryable: true },
+  });
 });

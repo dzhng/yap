@@ -81,13 +81,33 @@ export async function verifySourceEvidence(input: {
     ] as const) {
       await copyImportedFile(file.path, join(sourceDirectory, name), signal, file, 268_435_456);
     }
-    const derived = await input.exportSource(
-      sourceDirectory,
-      output,
-      signal,
-      canonical,
-      input.lifetime ? [input.lifetime.fd] : undefined,
-    );
+    const derived = await input
+      .exportSource(
+        sourceDirectory,
+        output,
+        signal,
+        canonical,
+        input.lifetime ? [input.lifetime.fd] : undefined,
+      )
+      .catch((error: unknown) => {
+        // These refusals validate the supplied journal/media, before normalized output exists.
+        if (
+          error instanceof CatalogError &&
+          [
+            "INVALID_JOURNAL",
+            "INVALID_JOURNAL_PREFIX",
+            "INVALID_MEDIA",
+            "PACKED_MEDIA_INVALID",
+            "INVALID_CAMERA_MAPPING",
+            "INVALID_AUDIO_TIMING",
+          ].includes(error.code)
+        )
+          throw new CatalogError("INVALID_INPUT_EVIDENCE", error.message, {
+            ...error.details,
+            cause: error.code,
+          });
+        throw error;
+      });
     const receipt = omit(derived, "file");
     // Historical receipts predate message disclosure. Reproduce that declared format
     // without weakening publication proofs, normalized bytes, or current-format equality.

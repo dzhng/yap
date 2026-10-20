@@ -203,7 +203,7 @@ test("retained history sizes terminate an impossible aggregate instead of evicti
   expect(f.cache.bytes).toBeLessThan(900);
   for (let i = 0; i < 3; i++) {
     expect(() => f.pointers.admit([first, second])).toThrowError(
-      expect.objectContaining({ code: "LIMIT_EXCEEDED", retryable: false }),
+      expect.objectContaining({ code: "LIMIT_EXCEEDED", retryable: true }),
     );
   }
   await f.jobs.idle();

@@ -70,9 +70,10 @@ test("ordinary launch owns one service child and answers health without starting
     id: "idle-latest",
     ok: false,
     error: {
-      code: "NOT_FOUND",
-      message: "Recording does not exist",
-      retryable: false,
+      code: "NOT_READY",
+      message: "There are no recordings yet",
+      retryable: true,
+      retryAfterMs: 15000,
       details: {},
     },
   });

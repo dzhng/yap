@@ -345,7 +345,9 @@ test("portable receipt uses the native ingest validator and its pinned source ge
   );
   const invalid = { ...f.metadata, receipt: { ...f.metadata.receipt, cursorSamples: -1 } };
   writeFileSync(path, JSON.stringify(invalid));
-  expect(() => readSourceMetadata(f.root, f.identity)).toThrow("Invalid evidence receipt");
+  expect(() => readSourceMetadata(f.root, f.identity)).toThrow(
+    expect.objectContaining({ code: "INVALID_INPUT_EVIDENCE", retryable: false }),
+  );
   await expect(
     f.evidence.ingest({
       ...f.identity,

@@ -143,7 +143,7 @@ export class AssetConversionJobs {
       streams.filter((item) => item?.kind === "audio").length > 1
     )
       throw new CatalogError(
-        "UNSUPPORTED_MEDIA",
+        "INVALID_PARAMS",
         "Conversion selects one video and at most one audio stream",
       );
     const base = { assetId: asset.id, streamIds, recipe: input.recipe };

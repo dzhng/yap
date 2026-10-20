@@ -252,7 +252,7 @@ test("deletion retains a take when idle status still names its native source", a
       operation === "capture.cancel"
         ? {
             ok: false,
-            error: { code: "INVALID_STATE", message: "Not held", retryable: false, details: {} },
+            error: { code: "INVALID_STATE", message: "Not held", retryable: true, details: {} },
           }
         : {
             ...idleNative,
@@ -306,7 +306,7 @@ test("deletion waits for running recovery and does not admit recovery for anothe
             error: {
               code: "INVALID_STATE",
               message: "not holding take",
-              retryable: false,
+              retryable: true,
               details: {},
             },
           }
@@ -481,7 +481,7 @@ test("proved native closure releases heavy work while deletion files and intent 
     expect(queue.job(job.jobId).state).toBe("queued");
     finish({
       ok: false,
-      error: { code: "INVALID_STATE", message: "no longer held", retryable: false, details: {} },
+      error: { code: "INVALID_STATE", message: "no longer held", retryable: true, details: {} },
     });
     await quiet;
     await queue.idle();
@@ -610,7 +610,7 @@ test.each(["media", "empty", "failed", "ambiguous"] as const)(
               error: {
                 code: "INVALID_STATE",
                 message: "No take held",
-                retryable: false,
+                retryable: true,
                 details: {},
               },
             },

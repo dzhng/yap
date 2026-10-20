@@ -5,7 +5,7 @@ import {
   type ProcessingStep,
   resolveOutputSettings,
 } from "@yap/composition";
-import { constants, readSync } from "node:fs";
+import { readSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
@@ -18,7 +18,7 @@ import {
   selectNormalizationAttempt,
 } from "@yap/core/audio-measurement";
 import { checkProjectAudioResult } from "@yap/core/audio-inspection";
-import { mkdtemp, mkdir, writeFile, readFile, rm, copyFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, copyFile, link } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { callLocal } from "@yap/client";
@@ -1753,7 +1753,8 @@ real(
       for (const relative of Object.keys(receipt.files)) {
         const target = join(replaced, relative);
         await mkdir(dirname(target), { recursive: true });
-        await copyFile(join(installation!, relative), target, constants.COPYFILE_FICLONE);
+        // The fixture changes the receipt identity; verified executable bytes stay shared.
+        await link(join(installation!, relative), target);
       }
       const receiptBytes = JSON.stringify({ ...receipt, fixtureGeneration: "replacement" });
       await writeFile(join(replaced, "receipt.json"), receiptBytes);

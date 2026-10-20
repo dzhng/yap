@@ -25,3 +25,20 @@ at close.
   Sound (corrected in review: it first fell back to a build-machine checkout path).
 - **Self-retry is attached on every adapter path** (socket, control channel), not per handler.
   Sound: one rule, one owner (`apps/service/src/operation-errors.ts`).
+
+## Slice 05
+
+- **One Swift reader of the ledger, `YapMedia.RefusalLedger`, serves the app and the native
+  helper.** Inside an `.app` it reads the bundled `service/refusal-ledger.json` (fatal if
+  missing); a source-built tool or test reads the checkout's JSON. Sound (corrected in review:
+  the app and helper first had separate readers, and the app's fixtures staged copies).
+- **The C launcher's verdicts are compiled from the ledger at build** (`scripts/launcher/verdicts.mjs`),
+  because the launcher must answer when the app's files can't be opened. Sound: a generated
+  projection, not a second table.
+- **Caller-supplied evidence is classified at the boundary that knows provenance**
+  (`INVALID_INPUT_EVIDENCE`), so a reader never guesses from file names. Sound.
+- **Stored capture diagnostics ignore their historical retry bit on read** and use the ledger.
+  Sound, and needs no migration.
+- **A test fixture hard-links verified immutable tool files** instead of cloning them, because the
+  clone missed an existing 2-second probe deadline under the pinned Node. Sound: test
+  infrastructure only, production deadlines unchanged.

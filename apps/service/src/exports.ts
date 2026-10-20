@@ -980,9 +980,14 @@ export class MediaExports {
     if (intent.kind === "video" && !this.hasPreparedInput(intent)) {
       const pinned = intent.snapshot as PinnedProjectPreview;
       const repairable = (job: Job) => {
-        if (job.state !== "failed" || !job.retryable) return false;
-        if (job.errorCode === "NOT_READY")
-          return job.errorDetails?.implementationId === pinned.implementationId;
+        if (job.state !== "failed") return false;
+        if (job.errorCode === "PINNED_IMPLEMENTATION_UNAVAILABLE")
+          throw new CatalogError(
+            job.errorCode,
+            "The saved export's implementation is unavailable; explicitly request fresh work with a current implementation",
+            { exportId, implementationId: pinned.implementationId },
+          );
+        if (!job.retryable) return false;
         if (
           job.errorCode !== "DEPENDENCY_FAILED" ||
           typeof job.errorDetails?.dependency !== "string"
@@ -992,25 +997,24 @@ export class MediaExports {
           this.owners.jobs.job(job.errorDetails.dependency).artifact === "pointer-presentation"
         );
       };
+      const prior = this.owners.jobs.status(this.identity(intent));
+      let failure = prior.jobId ? this.owners.jobs.job(prior.jobId) : undefined;
+      if (
+        failure?.errorCode === "DEPENDENCY_FAILED" &&
+        typeof failure.errorDetails?.dependency === "string"
+      )
+        failure = this.owners.jobs.job(failure.errorDetails.dependency);
+      const retryPreview = failure !== undefined && repairable(failure);
       const prepared = await this.owners.project.preview.prepare(pinned);
       prepared.submit(() => {
         this.requireAdmission(exportId);
         this.requireActive(this.require(exportId));
         this.assertOwner(intent);
       });
-      const prior = this.owners.jobs.status(this.identity(intent));
-      if (prior.jobId) {
-        let failure = this.owners.jobs.job(prior.jobId);
-        if (
-          failure.errorCode === "DEPENDENCY_FAILED" &&
-          typeof failure.errorDetails?.dependency === "string"
-        )
-          failure = this.owners.jobs.job(failure.errorDetails.dependency);
-        if (repairable(failure)) {
-          const current = await this.owners.project.preview.request(pinned);
-          if (current.jobId && repairable(this.owners.jobs.job(current.jobId)))
-            await this.owners.project.preview.retry(pinned);
-        }
+      if (retryPreview) {
+        const current = await this.owners.project.preview.request(pinned);
+        if (current.jobId && repairable(this.owners.jobs.job(current.jobId)))
+          await this.owners.project.preview.retry(pinned);
       }
     }
     const job = this.owners.jobs.submitDeferred(

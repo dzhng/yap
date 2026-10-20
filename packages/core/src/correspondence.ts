@@ -34,12 +34,12 @@ export function admitCorrespondence(input: {
     const selectedAnchors = measurement.anchors.filter((anchor) => anchor.selected !== null);
     if (selectedAnchors.length !== measurement.anchors.length)
       throw new CatalogError(
-        "INVALID_EVIDENCE",
+        "INVALID_INPUT_EVIDENCE",
         "Accepted correspondence requires every anchor to be selected",
       );
     if (measurement.candidates.filter((candidate) => candidate.selected).length !== 1)
       throw new CatalogError(
-        "INVALID_EVIDENCE",
+        "INVALID_INPUT_EVIDENCE",
         "Accepted correspondence requires one selected mapping",
       );
   }

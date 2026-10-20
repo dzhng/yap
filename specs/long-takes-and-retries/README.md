@@ -11,13 +11,13 @@ and the user's answers. This README is the build plan; where they differ, this R
 
 ## Next Agent Prompt
 
-Status 2026-10-20: slices 00–04 are done (audits passed H1 unchanged). Slice 07 is in
-progress; slice 05 is next on the error track. Origin take
+Status 2026-10-20: slices 00–05 are implemented (audits passed H1 unchanged). Slice 07 is in
+progress; slice 06 is next on the error track. Origin take
 `99099abb-fb1c-4018-a364-b263dcd58057` is intact and failed (`INVALID_EVIDENCE`, stored
 non-retryable); it is the final acceptance check and must not be touched before then.
 
-You are implementing this spec. Pick up at [slice 05](slices/05-ledger-verdicts.md) on the
-error track (05 → 06) and the journal track ([07](slices/07-journal-readers.md) → 08 → 09;
+You are implementing this spec. Pick up at [slice 06](slices/06-job-retryability.md) on the
+error track and the journal track ([07](slices/07-journal-readers.md) → 08 → 09;
 10 after 07). Both audits passed H1; apply them as written.
 
 Before each slice: read its file, invoke `write-tests`, and work red/green through the
@@ -25,9 +25,15 @@ production path, faking only hardware. Run the narrowest check that proves the s
 repository run happens once, in slice 13.
 
 Warnings:
-- Fresh checkouts lack the native helper binary and ffmpeg, so four service tests
-  (alignment, join, measurement, speaker) fail there on the unchanged baseline too. Build the
-  native helper before treating them as regressions.
+- Slice 05's native helper and capture/frame test products are built. Targeted native,
+  recovery, export integration and native-backed service/core checks pass. Swift app failures
+  and native publication share one ledger reader; packaged-app missing-ledger refusal and
+  source-built checkout resolution pass. The packaged-app lifetime test was not run here
+  (`dist/Yap.app` is absent); its revised empty-library response passed through the service.
+  `OWNER_DELETED` remains ledger-only; slice 06 must distinguish cancellation from
+  deleted-owner discards before changing `jobs.ts`.
+- Native checks require the prepared RNNoise model and built helper. Audio-processing
+  integration also needs the verified FFmpeg distribution and the repo's pinned Node runtime.
 - Scale probe: a 12-hour journal is 1.39 GB (audio bookkeeping 1.02 GB, cursor 370 MB). The
   5-minute stroke line fails TS reading at every length; publication hits its 256 MiB budget
   between 2.2 and 2.4 hours. Camera mapping is a size model, not verified media.
@@ -44,7 +50,7 @@ TODO:
 - [x] 02 Limits audit verdicts ([slice](slices/02-limits-audit.md))
 - [x] 03 Requirement owner: 12-hour take, 5-minute stroke, DEVELOPMENT.md ([slice](slices/03-requirements-owner.md))
 - [x] 04 Error envelope: `retryAfterMs`, `details.retry`, one constructor ([slice](slices/04-error-envelope.md))
-- [ ] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
+- [x] 05 Apply error verdicts ([slice](slices/05-ledger-verdicts.md))
 - [ ] 06 Job retryability from the code; no automatic failure retries ([slice](slices/06-job-retryability.md))
 - [ ] 07 Linear journal readers with a derived record bound ([slice](slices/07-journal-readers.md))
 - [ ] 08 Journal schema 4: capabilities, take summary, 5-minute stroke ([slice](slices/08-schema-4.md))
