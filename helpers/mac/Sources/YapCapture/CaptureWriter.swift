@@ -6,14 +6,6 @@ import YapProtocol
 import Synchronization
 @preconcurrency import ScreenCaptureKit
 
-/// What a live take tells the person drawing on it, in the order it happened: the stroke still
-/// being drawn and each mark once it is recorded. It carries the recognizer's decisions, so
-/// whoever draws them classifies nothing.
-public enum CaptureMarkUpdate: Equatable, Sendable {
-    case liveStroke([MarkPoint])
-    case committed(JournalMark)
-}
-
 // All writer and clock mutations run on this queue, including control boundaries.
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
@@ -713,19 +705,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         sourceDurationUs: Int64, continuation: CheckedContinuation<CaptureResult, Never>
     ) {
         let group = DispatchGroup()
-        for track in tracks.values {
-            if track.samples == 0 {
-                track.writer.cancelWriting()
-                continue
-            }
-            let end = track.role == "video"
-                ? CMTime(value: sourceDurationUs, timescale: 1_000_000)
-                : CMTime(value: track.physicalFrames, timescale: Int32(track.sampleRate!))
-            track.writer.endSession(atSourceTime: end)
-            track.input.markAsFinished()
-            group.enter()
-            track.writer.finishWriting { group.leave() }
-        }
+        for track in tracks.values { track.finish(sourceDurationUs: sourceDurationUs, joining: group) }
         group.notify(queue: queue) {
             for track in self.tracks.values
             where track.samples > 0 && track.writer.status != .completed {
@@ -757,13 +737,9 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 durationUs: self.tracks["video"]?.samples == 0 ? 0 : sourceDurationUs,
                 hostOriginUs: self.clock.originUs, pauses: self.clock.pauses,
                 tracks: self.tracks.values.sorted { $0.role < $1.role }.map { track in
-                    CapturedTrack(
-                        role: track.role, file: track.file, firstSampleUs: track.first,
-                        lastSampleEndUs: track.end, samples: track.samples,
-                        droppedSamples: self.dropped[track.role, default: 0],
-                        omittedSamples: self.omitted[track.role, default: 0],
-                        heldTailUs: track.heldTailUs, sampleRate: track.sampleRate,
-                        channelCount: track.channelCount)
+                    track.captured(
+                        dropped: self.dropped[track.role, default: 0],
+                        omitted: self.omitted[track.role, default: 0])
                 }, failure: self.failure,
                 systemAudioScope: self.request.systemAudio
                     ? "whole-system-excluding-recorder" : "disabled",

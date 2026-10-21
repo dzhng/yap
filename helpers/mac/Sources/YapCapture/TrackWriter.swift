@@ -58,4 +58,25 @@ final class TrackWriter {
         }
         writer.startSession(atSourceTime: .zero)
     }
+
+    /// Ends the track at the take's source duration and joins its finish to `group`. A track
+    /// that never received a sample is discarded.
+    func finish(sourceDurationUs: Int64, joining group: DispatchGroup) {
+        guard samples > 0 else { return writer.cancelWriting() }
+        let end = role == "video"
+            ? CMTime(value: sourceDurationUs, timescale: 1_000_000)
+            : CMTime(value: physicalFrames, timescale: Int32(sampleRate!))
+        writer.endSession(atSourceTime: end)
+        input.markAsFinished()
+        group.enter()
+        writer.finishWriting { group.leave() }
+    }
+
+    /// The track as the take's result reports it.
+    func captured(dropped: Int, omitted: Int) -> CapturedTrack {
+        CapturedTrack(
+            role: role, file: file, firstSampleUs: first, lastSampleEndUs: end, samples: samples,
+            droppedSamples: dropped, omittedSamples: omitted, heldTailUs: heldTailUs,
+            sampleRate: sampleRate, channelCount: channelCount)
+    }
 }

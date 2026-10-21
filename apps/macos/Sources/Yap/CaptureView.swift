@@ -1,16 +1,6 @@
 import AppKit
 import YapControls
 
-/// Presentation requests. Existing operations retain ControlsAction; new source/device intents
-/// are admitted by RecordingControls when the production shell binds this view.
-enum CaptureViewIntent: Equatable {
-    case controls(ControlsAction)
-    case chooseSource(CaptureViewInput.Source)
-    case camera(String)
-    case countdown(Bool)
-    case openLibrary
-}
-
 /// Immutable rendering facts, never an owner of selections, permission, recording state or time.
 struct CaptureViewInput: Equatable {
     enum Source: String, CaseIterable { case display, window, area, cameraOnly }

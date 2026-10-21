@@ -1056,7 +1056,7 @@ final class RecordingControls: NSObject {
             if let choices = captureChoices(identifier: nativeID, input: view.input),
                 let selected = (control as? NSPopUpButton)?.indexOfSelectedItem ?? (control as? SourcePickerButton)?.selected {
                 row["submenu"] = choices.enumerated().map { index, choice in
-                    ["item": Self.intentID(choice.intent), "title": choice.title, "enabled": control.isEnabled, "checked": index == selected] as [String: Any]
+                    ["item": choice.intent.id, "title": choice.title, "enabled": control.isEnabled, "checked": index == selected] as [String: Any]
                 }
             }
             return row
@@ -1096,7 +1096,7 @@ final class RecordingControls: NSObject {
         for chooserID in ["source.device", "camera.device", "microphone.device"] {
             guard let chooser = view.control(identifier: chooserID), chooser.isEnabled,
                 let choices = captureChoices(identifier: chooserID, input: view.input),
-                let index = choices.firstIndex(where: { Self.intentID($0.intent) == identifier }) else { continue }
+                let index = choices.firstIndex(where: { $0.intent.id == identifier }) else { continue }
             if let picker = chooser as? SourcePickerButton {
                 picker.choose(at: index)
                 return true
@@ -1122,16 +1122,6 @@ final class RecordingControls: NSObject {
         default: nil
         }
     }
-    private static func intentID(_ intent: CaptureViewIntent) -> String {
-        switch intent {
-        case .controls(let action): action.id
-        case .chooseSource(let source): "source.\(source.rawValue)"
-        case .camera(let id): "camera.\(id ?? "off")"
-        case .countdown(let enabled): "countdown.\(enabled ? "on" : "off")"
-        case .openLibrary: ControlsAction.openLibrary.id
-        }
-    }
-
     private func captureInput() -> CaptureViewInput {
         let mode = sourceMode
         var sources: [CaptureViewInput.Choice] = []
