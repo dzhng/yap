@@ -28,7 +28,7 @@ final class PromptHandoff {
             paster.copy(text)
             notice.show(Paster.Outcome.copied.notice!)
         case .paste:
-            if let said = paster.paste(text).notice { notice.show(said) }
+            if let said = await paster.paste(text).notice { notice.show(said) }
         }
     }
 

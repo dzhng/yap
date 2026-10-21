@@ -43,7 +43,10 @@ verdict, least confident first.
   the prompt carries the duration and marks; only a take stopped from the app's shortcut, menu
   or floating controls does it. A take an agent stops through the service, one the 12-hour
   limit ends, and an interrupted or discarded take leave the clipboard alone.
-- **Paste posts the physical V key with Command only.** Layouts that move V may not paste.
+- **Paste posts the physical V key with Command only, once the shortcut is let go.** Layouts
+  that move V may not paste. Pressing ⌘V while ⌥⇧ were still held pasted nothing in apps that
+  read the keyboard's live state (the user hit this on 2026-10-21 in 0.1.70), so a paste waits up
+  to a second for the modifiers to come up, then copies and says to press ⌘V.
 - **Accessibility granted while Yap runs waits for a reopen.** macOS reports the grant at once
   but drops Yap's ⌘V until Yap reopens, so a paste looked done and did nothing (the user hit
   this on 2026-10-21). The paster counts a grant only if Yap was trusted when it opened; until

@@ -64,8 +64,10 @@ action. Screen source controls remain disabled until access is granted and expla
 which permission enables them; camera-only capture stays independent of screen access.
 Permission denial remains actionable without choosing another device.
 Accessibility is optional and only ever granted in System Settings: with it the paste shortcut
-presses ⌘V in the front app, with Command alone whatever the person is still holding; without it
-the prompt is copied and a non-activating notice says to press ⌘V. macOS reports a grant made
+presses ⌘V in the front app once the person lets go of the shortcut, since an app that reads the
+keyboard as it is would take ⌘V under a held ⌥⇧ for ⌥⇧⌘V and paste nothing; without it, or
+with the keys still held a second later, the prompt is copied and a non-activating notice says to
+press ⌘V. macOS reports a grant made
 while Yap runs at once but drops the keystrokes Yap sends until it reopens, so until then the
 paster keeps copying and the notice and Settings say to reopen Yap. A take the person stops from
 the app (shortcut, menu or floating controls) copies its own prompt once it is complete, with the
