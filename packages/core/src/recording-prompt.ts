@@ -39,7 +39,7 @@ function openingLine({ screen, camera, mic }: RecordingPromptFacts["captured"]):
   if (screen && mic)
     return "I recorded my screen to show you something. Watch it with Yap and act on what I asked for.";
   if (screen) return "I recorded my screen without narration. Watch what happens with Yap.";
-  if (camera) return "I recorded myself on camera. Watch it with Yap.";
+  if (camera && screen === false) return "I recorded myself on camera. Watch it with Yap.";
   if (screen === false && camera === false && mic)
     return "I recorded my voice. Listen to it with Yap.";
   return "I recorded something for you. Watch it with Yap.";

@@ -489,6 +489,19 @@ it("legacy camera summary keeps unknown picture identity without inventing a scr
   );
 });
 
+it("legacy screen take with a camera does not claim a camera-only recording", async () => {
+  const sources = fixture();
+  publish(sources, { kind: "display", camera: true, mic: true, schema: 3 });
+  expect(renderRecordingPrompt(await recordingPromptFacts(sources))).toBe(
+    [
+      "I recorded something for you. Watch it with Yap.",
+      "Recording: take-1 (3:10, camera, microphone, no system audio).",
+      "The transcript is being prepared automatically.",
+      pointer,
+    ].join("\n"),
+  );
+});
+
 test.each(["missing", "disconnected"] as const)(
   "an existing take with %s device observations does not invent absent inputs",
   async (observation) => {
