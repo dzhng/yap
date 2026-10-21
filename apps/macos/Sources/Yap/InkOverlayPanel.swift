@@ -1,14 +1,14 @@
 import AppKit
 import YapCapture
+import YapControls
 
 /**
  The ink a person draws and the pins they drop during a screen take, shown over every display.
 
  It draws what the capture's mark stream says and nothing else: the stroke under the pointer while
  ⇧ is held, each recorded stroke and pin, and the absence of whatever undo took back. Which input
- is a stroke, a pin or a click is the recognizer's decision, never this one's. Ink only leaves the
- screen: a stroke fades once drawn and a pin a few seconds after it is dropped, while the recording
- keeps every mark.
+ is a stroke, a pin or a click is the recognizer's decision, never this one's. When each mark
+ leaves the screen is [InkLifetimes]'s, and so is which mark undo can still take back.
 
  The person sees the ink and the recording never does: each display's panel is unshared from the
  moment it opens, so no capture sees it.
@@ -17,10 +17,6 @@ import YapCapture
 final class InkOverlayPanel {
     static let title = "Yap Ink"
     private static let ink = NSColor(srgbRed: 1, green: 0x3b / 255, blue: 0x30 / 255, alpha: 1)
-    /// A released stroke stays readable for a moment, then goes faster as it ends.
-    private static let fadeSeconds: TimeInterval = 1.2
-    /// A pin is gone this long after it is dropped, its last moment spent fading like a stroke.
-    private static let pinSeconds: TimeInterval = 5
 
     private struct Screen {
         let display: CGDirectDisplayID
@@ -31,17 +27,24 @@ final class InkOverlayPanel {
     private var screens: [Screen] = []
     private var live: [MarkPoint] = []
     private var strokes: [(id: String, points: [MarkPoint])] = []
-    private var pins: [(id: String, number: Int, point: MarkPoint, dropped: Date)] = []
-    /// Released strokes fade together: one drawn while another is still visible fades with it.
-    private var fadeStarted: Date?
-    private var strokeOpacity: CGFloat = 1
-    /// Runs while any ink is on its way out, and stops once none is left.
+    private var pins: [(id: String, number: Int, point: MarkPoint)] = []
+    private var lifetimes = InkLifetimes()
+    /// Runs while any ink is on screen, and stops once none is left.
     private var fadeTimer: Timer?
+    /// A fixture's stopped clock, so a check sees the same picture however long it takes.
+    private var heldAt: Date?
+    private var now: Date { heldAt ?? Date() }
 
     /// Opens a panel on each display while a take is live and takes them all down, ink and all,
     /// when it is not.
     func update(active: Bool) {
         if active { show() } else { hide() }
+    }
+
+    /// Takes back the most recent mark still on screen; with nothing on screen, undo does nothing.
+    func undo(_ capture: CaptureController?) throws {
+        guard let id = lifetimes.latestOnScreen(at: now) else { return }
+        try capture?.undoMark(id)
     }
 
     /// A mark that arrives before the panels open is kept and drawn once they do.
@@ -51,20 +54,19 @@ final class InkOverlayPanel {
             live = points
         case .committed(let mark) where mark.kind == "stroke":
             strokes.append((mark.id, mark.points.map(Self.global)))
-            if fadeStarted == nil {
-                fadeStarted = Date()
-                strokeOpacity = 1
-            }
+            lifetimes.add(mark.id, .stroke, at: now)
             startFading()
         case .committed(let mark) where mark.kind == "pin":
             guard let number = mark.pin, let point = mark.points.first else { return }
-            pins.append((mark.id, number, Self.global(point), Date()))
+            pins.append((mark.id, number, Self.global(point)))
+            lifetimes.add(mark.id, .pin, at: now)
             startFading()
         case .committed:
             return
         case .retracted(let id):
             strokes.removeAll { $0.id == id }
             pins.removeAll { $0.id == id }
+            lifetimes.remove(id)
         }
         redraw()
     }
@@ -93,16 +95,17 @@ final class InkOverlayPanel {
     private func hide() {
         fadeTimer?.invalidate()
         fadeTimer = nil
+        heldAt = nil
         for screen in screens { screen.panel.close() }
         screens.removeAll()
         live.removeAll()
         strokes.removeAll()
         pins.removeAll()
-        fadeStarted = nil
+        lifetimes = InkLifetimes()
     }
 
     private func startFading() {
-        guard fadeTimer == nil else { return }
+        guard fadeTimer == nil, heldAt == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.fade() }
         }
@@ -111,34 +114,16 @@ final class InkOverlayPanel {
     }
 
     private func fade() {
-        let now = Date()
-        if let fadeStarted {
-            strokeOpacity = Self.opacity(fading: now.timeIntervalSince(fadeStarted))
-            if strokeOpacity == 0 {
-                strokes.removeAll()
-                self.fadeStarted = nil
-            }
-        }
-        pins.removeAll { now.timeIntervalSince($0.dropped) >= Self.pinSeconds }
-        if fadeStarted == nil, pins.isEmpty {
+        if !lifetimes.expire(at: now) {
             fadeTimer?.invalidate()
             fadeTimer = nil
         }
         redraw()
     }
 
-    /// Readable for a moment, then faster as it ends: full strength at zero, gone at fadeSeconds.
-    private static func opacity(fading elapsed: TimeInterval) -> CGFloat {
-        let progress = min(1, max(0, elapsed / fadeSeconds))
-        return 1 - CGFloat(progress * progress)
-    }
-
-    private func pinOpacity(_ dropped: Date, now: Date) -> CGFloat {
-        Self.opacity(fading: now.timeIntervalSince(dropped) - (Self.pinSeconds - Self.fadeSeconds))
-    }
-
     private func redraw() {
-        let now = Date()
+        let now = now
+        func shown(_ id: String) -> CGFloat? { lifetimes.opacity(of: id, at: now).map { CGFloat($0) } }
         for screen in screens {
             // Global points are top-left based; each panel draws in its own display's corner.
             let frame = screen.panel.frame
@@ -147,9 +132,9 @@ final class InkOverlayPanel {
                 NSPoint(x: point.x - frame.minX, y: top - point.y - frame.minY)
             }
             screen.view.content = InkView.Content(
-                strokes: strokes.map { ($0.points.map(local), strokeOpacity) }
+                strokes: strokes.compactMap { stroke in shown(stroke.id).map { (stroke.points.map(local), $0) } }
                     + (live.isEmpty ? [] : [(live.map(local), 1)]),
-                pins: pins.map { (local($0.point), $0.number, pinOpacity($0.dropped, now: now)) })
+                pins: pins.compactMap { pin in shown(pin.id).map { (local(pin.point), pin.number, $0) } })
         }
     }
 
@@ -177,6 +162,7 @@ final class InkOverlayPanel {
             let angle = Double(step) / 48 * 2.15 * .pi - 0.6
             return point(cos(angle) * (150 + Double(step) * 0.8), sin(angle) * 62 + Double(step) * 0.6)
         }
+        heldAt = Date()
         let firstPin = mark("fixture-pin-1", "pin", pin: 1, [point(-120, 0)])
         let secondPin = mark("fixture-pin-2", "pin", pin: 2, [point(120, -40)])
         var marks: [JournalMark] = []
@@ -187,8 +173,8 @@ final class InkOverlayPanel {
             marks = [mark("fixture-stroke", "stroke", loop)]
         case "stroke-fading":
             receive(.committed(mark("fixture-stroke", "stroke", loop)))
-            // Halfway through the fade, held there so the picture is the same every time.
-            strokeOpacity = 0.75
+            // Halfway through its 1.2 s fade, at three-quarters strength.
+            heldAt = heldAt?.addingTimeInterval(0.6)
             marks = [mark("fixture-stroke", "stroke", loop)]
         case "two-pins":
             receive(.committed(firstPin))
@@ -202,9 +188,6 @@ final class InkOverlayPanel {
         default:
             return nil
         }
-        // Nothing fades in a fixture, so a check sees the same picture however long it takes.
-        fadeTimer?.invalidate()
-        fadeTimer = nil
         redraw()
         if front {
             // A check of what a take records needs the ink where a person would see it.

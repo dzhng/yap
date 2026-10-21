@@ -93,7 +93,7 @@ final class RecordingControls: NSObject {
         })
     private lazy var overlay = RecordingOverlayPanel(
         preferences: preferences, perform: { [weak self] action in self?.perform(action) })
-    private lazy var inkOverlay = InkOverlayPanel()
+    private lazy var ink = InkOverlayPanel()
     private let recordingPreview = PreviewWindow()
     private let paster = Paster()
     private lazy var pasteNotice = PasteNotice()
@@ -360,14 +360,14 @@ final class RecordingControls: NSObject {
 
     /// The marks a screen take recognizes, for the ink over every display.
     func receiveMarkUpdate(_ update: CaptureMarkUpdate) {
-        inkOverlay.receive(update)
+        ink.receive(update)
     }
 
     /// Ink a check asked to look at stays up with or without a take.
     func showInk(scene: String, front: Bool) -> (display: CGDirectDisplayID, marks: [CGRect])? {
         guard ControlsProbe.observed else { return nil }
         observedInk = true
-        return inkOverlay.showFixture(scene, front: front)
+        return ink.showFixture(scene, front: front)
     }
 
     @objc private func toggleCapture() {
@@ -515,7 +515,7 @@ final class RecordingControls: NSObject {
             copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
         case .undoMark:
             guard state.isLive else { return render() }
-            do { try captureController?.undoMark() }
+            do { try ink.undo(captureController) }
             catch { state.failure = .init(error.localizedDescription) }
         case .pauseOrResume:
             guard state.isLive else { return render() }
@@ -933,7 +933,7 @@ final class RecordingControls: NSObject {
         capturePopover.update(captureInput())
         libraryWindow.update(state: state, exports: exports.state)
         overlay.update(RecordingOverlay.presentation(for: state) ?? observedOverlay)
-        inkOverlay.update(active: observedInk || state.showsInk)
+        ink.update(active: observedInk || state.showsInk)
         let camera = RecordingOverlay.camera(for: state)
         // A camera that is off forgets its last picture, so turning it on again never shows it.
         if !camera.recording { cameraPreviewImage = nil }

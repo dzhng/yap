@@ -65,10 +65,12 @@ Capture and marks
   / `packedSchema` owns which schemas are packed, on both sides.
 - Clicks come from a global mouse monitor, ⇧ and the pointer from the 60 Hz sampler (slice 00
   probe), and a press's own ⇧ flag decides pin versus click.
-- The recognizer owns no undo state; undo appends a retraction for the latest live stroke or
-  pin, and pin numbers only count up, so badges and prompt numbers match after an undo. Undo
-  first took any kind, clicks included, so on the user's origin take every ⌥⇧Z after a pin took
-  back an unseen click and the pin stayed; a person undoes what they drew, not what they clicked.
+- The recognizer owns no undo state. Undo takes back the most recent stroke or pin still on
+  screen: the app's ink lifetimes name it and capture appends a retraction for that mark, and
+  with nothing on screen undo does nothing. Pin numbers only count up, so badges and prompt
+  numbers match after an undo. Undo first took the latest mark of any kind, clicks included, so
+  on the user's origin take every ⌥⇧Z after a pin took back an unseen click and the pin stayed.
+  Once pins cleared on their own, the user asked that an undo skip what already cleared.
 - Mark points keep global points and natively projected pixels like cursor samples, through
   the one `CursorTrack.projection`; points outside the picture store null.
 - The live window lookup uses the CoreGraphics window list, layer 0, Yap's processes removed;

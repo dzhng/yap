@@ -300,8 +300,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         publishActiveStroke(recognizer)
     }
 
-    /// Appends a retracting mark for the most recent stroke or pin that has not already been undone.
-    package func undoMark() throws {
+    /// Appends a retracting mark for the stroke or pin the app names.
+    package func undoMark(_ id: String) throws {
         try queue.sync {
             guard !finishing, failure == nil, request.source.kind != "camera" else {
                 throw CaptureFailure("INVALID_STATE", "No screen capture is recording marks.")
@@ -309,7 +309,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             let hostUs = nowUs()
             // A paused take has no source time now; its undo lands where the pause began.
             guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs),
-                let mark = undoable.retraction(hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch),
+                let mark = undoable.retraction(of: id, hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch),
                 let target = mark.retracts
             else { return }
             let written = record { try journal.recordMark(mark) }

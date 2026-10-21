@@ -68,7 +68,7 @@ func runLiveMarkJournalTests() throws {
     precondition(
         updates.list == [.liveStroke([first]), .liveStroke([first, second]), .committed(marks[0]), .liveStroke([])],
         "The overlay sees the live stroke grow, then the recorded mark, got \(updates.list)")
-    try writer.undoMark()
+    try writer.undoMark(marks[0].id)
     marks.removeAll()
     _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
     precondition(
@@ -84,20 +84,22 @@ func runLiveMarkJournalTests() throws {
         }
     }
     writer.pause()
-    try writer.undoMark()
+    marks.removeAll()
+    _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+    let latest = marks.last
+    try writer.undoMark(latest?.id ?? "")
     marks.removeAll()
     _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
     let live = marks.filter { $0.retracts == nil }
     precondition(
-        marks.filter { $0.retracts != nil }.map(\.retracts) == [marks[0].id, live.last?.id]
+        marks.filter { $0.retracts != nil }.map(\.retracts) == [marks[0].id, latest?.id]
             && live.count == 2,
-        "Undo while paused retracts the latest mark, got \(marks)")
+        "Undo while paused retracts the mark it names, got \(marks)")
     print("PASS replayed cursor readings produce a source-timed journal mark and the overlay's stream")
     try runUndoSkipsClicksTest()
 }
 
-/// A person clicks through their demo after dropping a pin; undo takes back the pin they can see,
-/// never a click they cannot.
+/// Undo takes back the stroke or pin it names, once; a click is never something a person undoes.
 private func runUndoSkipsClicksTest() throws {
     let directory = RecoveryFixture.directory("undo-skips-clicks")
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -122,12 +124,17 @@ private func runUndoSkipsClicksTest() throws {
         writer.acceptButton(down: true, shift: false, point: point, hostUs: origin + 30)
         writer.acceptButton(down: false, shift: false, point: point, hostUs: origin + 40)
     }
-    try writer.undoMark()
     var marks: [JournalMark] = []
     _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
-    precondition(marks.map(\.kind) == ["pin", "click", "pin"], "A pin, a click, then the undo, got \(marks)")
-    precondition(marks[2].retracts == marks[0].id, "Undo takes back the pin, not the click, got \(marks)")
-    print("PASS undo takes back the latest pin or stroke, never a click")
+    precondition(marks.map(\.kind) == ["pin", "click"], "A pin, then a click, got \(marks)")
+    let (pin, click) = (marks[0].id, marks[1].id)
+    for id in [click, pin, pin, "unknown"] { try writer.undoMark(id) }
+    marks.removeAll()
+    _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+    precondition(
+        marks.compactMap(\.retracts) == [pin],
+        "Only the pin is taken back, and only once, got \(marks)")
+    print("PASS undo takes back the stroke or pin it names, never a click")
 }
 
 /// What the writer told the overlay, in order. The writer calls it on its own queue, which the
