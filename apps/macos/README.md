@@ -41,7 +41,9 @@ controls share that one preference.
 No capture sees the floating controls: not Yap's own recording, screenshots or screen sharing.
 The ink and numbered pins a person draws during a screen take float over every display and
 are never visible to any capture either. They draw only the mark stream the capture recognizes
-(the live stroke, recorded marks, undos) and classify nothing.
+(the live stroke, recorded marks, undos) and classify nothing. Ink leaves the screen on its own,
+as [InkLifetimes](Sources/YapControls/InkLifetimes.swift) decides, and undo takes back the latest
+mark still showing; the recording keeps every mark.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
 turned on and off during the take; the menu's switch only decides how it starts. A reserved
 camera that starts off is not opened, so its light stays off until it is turned on. The menu's
