@@ -16,7 +16,8 @@ owns scratch-media setup. Historical normalized byte references belong to the na
 
 Schema-4 fixtures come from the native
 [summary tests](../../helpers/mac/Tests/YapCaptureTests/Schema4Tests.swift), using real journal
-and publication writers. Pins and strokes are summary facts only while they survive undo.
+and publication writers. Pins and strokes are summary facts whenever the take recorded one; an
+undo row from an older app takes none away.
 Set `YAP_SCHEMA4_SUMMARY=1` and `YAP_SCHEMA4_FIXTURE_DIRECTORY` to a new scratch directory
 to generate them. Optional take facts stay absent on historical receipts; re-publication never
 adds facts to an existing receipt.

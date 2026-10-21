@@ -134,7 +134,7 @@ export class CaptureSourceRead {
     const sources = new SourceSelectionRead(this.assets, this.acquisitions, selections);
     return selections.map((selection) => this.resolve(selection, domain, sources));
   }
-  /** A take's live marks in capture order, retractions applied, in asset time: the one reader of marks. */
+  /** Every mark a take recorded, in capture order and asset time: the one reader of marks. */
   marks(selection: SourceSelection): CaptureMark[] {
     const context = this.resolve(selection, "events");
     if (
@@ -222,11 +222,10 @@ export class CaptureSourceRead {
         });
       after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
     }
-    const retracted = new Set(
-      rows.map((row) => row.data.retracts).filter((id): id is string => typeof id === "string"),
-    );
+    // A row carrying `retracts` is an undo that older apps journaled. Undo only ever cleared the
+    // screen, so it is not a mark and takes none away.
     return rows
-      .filter((row) => row.data.retracts == null && !retracted.has(row.data.id as string))
+      .filter((row) => row.data.retracts == null)
       .map((row) => {
         const data = row.data;
         return {

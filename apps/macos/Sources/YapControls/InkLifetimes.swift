@@ -1,9 +1,9 @@
 import Foundation
 
 /// How long each mark stays on screen during a take: the one owner of when ink leaves the screen,
-/// and so of which mark undo can still take back. A released stroke fades over 1.2 s, and strokes
-/// on screen together fade together. A pin stays 5 s, its last 1.2 s fading the same way. Only the
-/// screen forgets: the recording keeps every mark.
+/// on its own or because undo cleared it. A released stroke fades over 1.2 s, and strokes on screen
+/// together fade together. A pin stays 5 s, its last 1.2 s fading the same way. Only the screen
+/// forgets: the recording keeps every mark.
 public struct InkLifetimes: Sendable {
     public enum Kind: Sendable { case stroke, pin }
 
@@ -21,7 +21,7 @@ public struct InkLifetimes: Sendable {
         marks.append((id, kind, now))
     }
 
-    public mutating func remove(_ id: String) {
+    private mutating func remove(_ id: String) {
         marks.removeAll { $0.id == id }
         if !marks.contains(where: { $0.kind == .stroke }) { strokeFade = nil }
     }
@@ -45,9 +45,11 @@ public struct InkLifetimes: Sendable {
         return !marks.isEmpty
     }
 
-    /// The most recent mark still on screen: what undo takes back, so a mark that already cleared
-    /// on its own is never the one an undo spends itself on.
-    public func latestOnScreen(at now: Date) -> String? {
-        marks.last { opacity(of: $0.id, at: now) != nil }?.id
+    /// Undo: takes the most recent mark still on screen off it, and answers which one. A mark that
+    /// already cleared on its own is never the one an undo spends itself on.
+    public mutating func clearLatest(at now: Date) -> String? {
+        guard let id = marks.last(where: { opacity(of: $0.id, at: now) != nil })?.id else { return nil }
+        remove(id)
+        return id
     }
 }

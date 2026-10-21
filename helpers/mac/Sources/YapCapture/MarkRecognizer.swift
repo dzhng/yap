@@ -101,7 +101,7 @@ public struct MarkRecognizer {
     private var strokeTravel: Double = 0
     private var pendingPress: MarkPress?
     private var buttonDown = false
-    /// Pin numbers only count up within a take, so a retracted pin's number is never reused.
+    /// Pin numbers only count up within a take, so no two pins share a number.
     private var nextPinNumber = 1
 
     public var paused: Bool

@@ -34,8 +34,9 @@ Marks a person makes during a screen take (strokes while ⇧ is held, ⇧-click 
 clicks) are capture evidence like the pointer, so they live in the same schema-4 journal
 with the same clock and geometry epoch. The [recognizer](MarkRecognizer.swift) owns the gesture
 rules and stays free of AppKit; the writer feeds it modifier state and pointer readings, never
-keys, and projects each point through the same placement cursor samples use. Undo appends a
-retraction instead of rewriting the journal, so a published take still proves its prefix.
+keys, and projects each point through the same placement cursor samples use. Undo Mark only
+clears ink from the screen, so the journal keeps every mark; older apps journaled an undo as a
+row carrying `retracts`, which readers skip and which takes no mark away.
 
 Take and stroke endings follow the shared
 [requirements and derived-bound rule](../../../../DEVELOPMENT.md#limits-come-from-requirements).
@@ -128,7 +129,7 @@ Schema 4 records cursor sampling in its header. The sampler still observes at 60
 but writes only changes in projected position, buttons, eligibility or geometry epoch;
 each sample holds until the next one, and readers carry that held value forward. A
 sample is written at the first reading and after each resume. The take summary records
-optional capture kind and whether live pins or strokes remain after retractions. Older
+optional capture kind and whether the take recorded any pins or strokes. Older
 journals omit these fields and keep their prior every-tick semantics.
 
 Fragmented media can preserve a decodable process-crash prefix. A crash before the

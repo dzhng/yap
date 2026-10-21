@@ -515,8 +515,7 @@ final class RecordingControls: NSObject {
             copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
         case .undoMark:
             guard state.isLive else { return render() }
-            do { try ink.undo(captureController) }
-            catch { state.failure = .init(error.localizedDescription) }
+            ink.clearLatest()
         case .pauseOrResume:
             guard state.isLive else { return render() }
             send(state.device?.state == .paused ? "capture.resume" : "capture.pause", live())

@@ -1663,7 +1663,7 @@ test("capture source and project reads preserve raw clocks, exact retimes and mi
   });
 });
 
-test("timeline events expose active marks with projected points and stable paging", async () => {
+test("timeline events expose marks with projected points and stable paging", async () => {
   const f = await fixture();
   const captured = await f.capture([
     {
@@ -1733,23 +1733,23 @@ test("timeline events expose active marks with projected points and stable pagin
     cursor = page.page!.nextCursor;
   }
   const marks = rows.filter((row) => row.kind === "mark");
-  expect(marks).toHaveLength(1);
-  expect(marks[0]).toMatchObject({
+  expect(marks).toHaveLength(2);
+  expect(marks[1]).toMatchObject({
     captureAtUs: 700,
     observation: { id: "pin-1", points: [{ hostUs: 4, x: 16, y: 28 }] },
   });
   const direct = f.captureRead.marks(selection);
-  expect(direct).toHaveLength(1);
+  expect(direct).toHaveLength(2);
   // The mark reader answers in asset time, the clock its event row already reports.
-  expect(direct[0]).toEqual(
+  expect(direct[1]).toEqual(
     expect.objectContaining({
-      assetUs: marks[0]!.sourceAtUs,
+      assetUs: marks[1]!.sourceAtUs,
       id: "pin-1",
       points: [expect.objectContaining({ x: 16, y: 28 })],
     }),
   );
-  expect(direct[0]).not.toHaveProperty("sourceUs");
-  expect(marks[0]!.sourceAtUs).not.toBe(700);
+  expect(direct[1]).not.toHaveProperty("sourceUs");
+  expect(marks[1]!.sourceAtUs).not.toBe(700);
   expect(f.sourceEvents.events({ assetId: f.asset.id, streamId: "video" })).toMatchObject({
     state: "unavailable",
     page: null,

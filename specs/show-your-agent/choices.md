@@ -40,8 +40,6 @@ verdict, least confident first.
   paste notice.
 - **Paste posts the physical V key with Command only.** Layouts that move V may not paste.
 - **Displays are fixed at take start**: a display connected mid-take gets no ink panel.
-- **An undo during a pause is timed where the pause began**, the last moment the recording has;
-  retractions apply whatever their time.
 - **Ink drawn in the instant before a start answers can still be lost** if a status read from
   before the start renders in between; the window is the service round trip.
 - **On a retimed clip, travel since a choice reported late is mapped at a fixed offset**, so it
@@ -65,19 +63,19 @@ Capture and marks
   / `packedSchema` owns which schemas are packed, on both sides.
 - Clicks come from a global mouse monitor, ⇧ and the pointer from the 60 Hz sampler (slice 00
   probe), and a press's own ⇧ flag decides pin versus click.
-- The recognizer owns no undo state. Undo takes back the most recent stroke or pin still on
-  screen: the app's ink lifetimes name it and capture appends a retraction for that mark, and
-  with nothing on screen undo does nothing. Pin numbers only count up, so badges and prompt
-  numbers match after an undo. Undo first took the latest mark of any kind, clicks included, so
-  on the user's origin take every ⌥⇧Z after a pin took back an unseen click and the pin stayed.
-  Once pins cleared on their own, the user asked that an undo skip what already cleared.
+- Undo is the screen's alone (P1): the app's ink lifetimes clear the most recent stroke or pin
+  still on screen, capture is never told, and with nothing on screen undo does nothing. Pin
+  numbers only count up, so badges and prompt numbers always match. Undo first took the latest
+  mark of any kind, clicks included, so on the user's origin take every ⌥⇧Z after a pin took
+  back an unseen click and the pin stayed. Once pins cleared on their own, the user asked that
+  an undo skip what already cleared.
 - Mark points keep global points and natively projected pixels like cursor samples, through
   the one `CursorTrack.projection`; points outside the picture store null.
 - The live window lookup uses the CoreGraphics window list, layer 0, Yap's processes removed;
   windows share the journal's `JournalMarkWindow` shape.
-- `CaptureSourceRead.marks()` is the one reader of marks, retractions applied, answering in
-  asset time from one capture-to-asset conversion.
-- The capture side publishes one ordered mark stream (live stroke, committed, retracted); the
+- `CaptureSourceRead.marks()` is the one reader of marks, answering every recorded mark in
+  asset time from one capture-to-asset conversion; it skips the undo rows older apps wrote.
+- The capture side publishes one ordered mark stream (live stroke, committed); the
   ink overlay classifies nothing and is hidden from every capture by its unshared panels alone
   (`main` removed the mid-take window exclusion in v0.1.61).
 - The ink is up from the moment a start answers that its take is live (`ControlsState.showsInk`),

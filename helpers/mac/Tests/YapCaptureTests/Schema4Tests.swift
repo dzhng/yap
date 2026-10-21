@@ -123,8 +123,8 @@ private func verifyTakeSummary(version: Int, undo: Bool, sourceKind: String = "d
     if version == 4 {
         precondition((receipt["take"] as? [String: String])?["kind"] == sourceKind,
             "Publication must retain the take kind separately from source authority")
-        precondition(receipt["marks"] as? [String: Bool] == ["pins": !undo, "strokes": !undo],
-            "Publication must report only live pins and strokes")
+        precondition(receipt["marks"] as? [String: Bool] == ["pins": true, "strokes": true],
+            "Publication reports every pin and stroke the take recorded; an undo row takes none away")
     } else {
         precondition(receipt["take"] == nil && receipt["marks"] == nil,
             "Old source summaries must omit optional take facts")
@@ -153,7 +153,7 @@ private func verifyTakeSummary(version: Int, undo: Bool, sourceKind: String = "d
     }
     journal.lease.release()
     let recovered = try await CapturePublishedSource.recover(directory: root.path)
-    precondition(recovered.sourceId == "schema4-marks" && recovered.marks?.pins == (version == 4 ? !undo : nil))
+    precondition(recovered.sourceId == "schema4-marks" && recovered.marks?.pins == (version == 4 ? true : nil))
     let recoveredBytes = try Data(contentsOf: url)
     precondition(recoveredBytes == bytes, "Read-only recovery must retain publication bytes")
     if version == 4 {
@@ -166,5 +166,5 @@ private func verifyTakeSummary(version: Int, undo: Bool, sourceKind: String = "d
         } catch is CaptureFailure {}
         try bytes.write(to: url)
     }
-    print("PASS schema\(version) summary live marks=\(!undo), optional facts and immutable republish")
+    print("PASS schema\(version) summary keeps every mark (undo rows=\(undo)), optional facts and immutable republish")
 }

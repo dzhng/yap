@@ -242,15 +242,6 @@ public final class NativeCapture {
         }
     }
 
-    /// Appends an undo mark for the named stroke or pin in the running screen take. Shortcut
-    /// bindings live in the app; this is the capture operation they call.
-    public func undoMark(_ id: String) throws {
-        guard let sink, failure == nil, state == .recording || state == .paused else {
-            throw CaptureFailure("INVALID_STATE", "No healthy capture is active.")
-        }
-        try sink.undoMark(id)
-    }
-
     /// The running take's reserved companion camera and whether it is on. Nil when no take holds one.
     public var companionCamera: (deviceId: String, on: Bool)? {
         reservedCamera.map { ($0.deviceId, $0.isOn) }

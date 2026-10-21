@@ -470,15 +470,14 @@ package enum CaptureSourcePublication {
     }
     private static func summary(lease: CaptureJournalLease, descriptor: Int32, layout: Int) throws -> (CaptureJournalSummary, CapturePublishedSource.Marks?) {
         let summarizesTake = JournalSchema.summarizesTake(layout)
-        var live: [String: String] = [:]
+        var kinds = Set<String>()
         let facts = try CaptureJournal.readEvidence(directory: lease.directory,             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             mark: { mark in
-                guard summarizesTake else { return }
-                if let target = mark.retracts { live.removeValue(forKey: target) }
-                else if mark.kind == "pin" || mark.kind == "stroke" { live[mark.id] = mark.kind }
+                // An undo row from an older app only cleared the screen; it takes no mark away.
+                if summarizesTake, mark.retracts == nil { kinds.insert(mark.kind) }
             }, retainPrefix: true, descriptor: descriptor, layout: layout)
         let marks: CapturePublishedSource.Marks? = summarizesTake
-            ? .init(pins: live.values.contains("pin"), strokes: live.values.contains("stroke")) : nil
+            ? .init(pins: kinds.contains("pin"), strokes: kinds.contains("stroke")) : nil
         return (facts, marks)
     }
     private static func memberIdentity(_ name: String, lease: CaptureJournalLease, canonical: [String: String]? = nil) throws -> CaptureMediaIdentity {

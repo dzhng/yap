@@ -8,8 +8,8 @@ export type IndexCaptureOwners = {
 };
 
 /**
- * What a recording's journal adds to picture selection: a moment at each live mark, pin and click
- * (retractions already applied by the capture reader, the one owner of marks) and the pointer
+ * What a recording's journal adds to picture selection: a moment at each mark, pin and click
+ * (read through the capture reader, the one owner of marks) and the pointer
  * path that lets coverage notice pointing around. Times are asset microseconds, converted by the
  * capture reader's clock. A selection without an acquisition has neither.
  */

@@ -64,12 +64,11 @@ private final class TrackWriter {
 }
 
 /// What a live take tells the person drawing on it, in the order it happened: the stroke still
-/// being drawn, each mark once it is recorded, and each mark undo takes back. It carries the
-/// recognizer's decisions, so whoever draws them classifies nothing.
+/// being drawn and each mark once it is recorded. It carries the recognizer's decisions, so
+/// whoever draws them classifies nothing.
 public enum CaptureMarkUpdate: Equatable, Sendable {
     case liveStroke([MarkPoint])
     case committed(JournalMark)
-    case retracted(String)
 }
 
 // All writer and clock mutations run on this queue, including control boundaries.
@@ -119,7 +118,6 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var zeroOriginHeight: Double?
     private var markRecognizer: MarkRecognizer?
     private var markMonitorTokens: [Any] = []
-    private var undoable = UndoableMarks()
     package var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
     /// Points of the live stroke the overlay was last told about. A stroke only grows until it
     /// ends, so its length is enough to know whether there is anything new to say.
@@ -300,25 +298,6 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         publishActiveStroke(recognizer)
     }
 
-    /// Appends a retracting mark for the stroke or pin the app names.
-    package func undoMark(_ id: String) throws {
-        try queue.sync {
-            guard !finishing, failure == nil, request.source.kind != "camera" else {
-                throw CaptureFailure("INVALID_STATE", "No screen capture is recording marks.")
-            }
-            let hostUs = nowUs()
-            // A paused take has no source time now; its undo lands where the pause began.
-            guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs),
-                let mark = undoable.retraction(of: id, hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch),
-                let target = mark.retracts
-            else { return }
-            let written = record { try journal.recordMark(mark) }
-            guard written else { return }
-            undoable.retract(target)
-            onMarkUpdate?(.retracted(target))
-        }
-    }
-
     private func installMarkMonitors() {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp]
         let register = { [weak self] in
@@ -377,7 +356,6 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 window: event.window)
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
-            undoable.record(mark)
             onMarkUpdate?(.committed(mark))
         }
     }

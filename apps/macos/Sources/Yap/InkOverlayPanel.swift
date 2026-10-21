@@ -6,9 +6,10 @@ import YapControls
  The ink a person draws and the pins they drop during a screen take, shown over every display.
 
  It draws what the capture's mark stream says and nothing else: the stroke under the pointer while
- ⇧ is held, each recorded stroke and pin, and the absence of whatever undo took back. Which input
- is a stroke, a pin or a click is the recognizer's decision, never this one's. When each mark
- leaves the screen is [InkLifetimes]'s, and so is which mark undo can still take back.
+ ⇧ is held, and each recorded stroke and pin. Which input is a stroke, a pin or a click is the
+ recognizer's decision, never this one's. When each mark leaves the screen is [InkLifetimes]'s,
+ whether it fades on its own or undo clears it. Undo is the screen's alone: the recording keeps
+ every mark.
 
  The person sees the ink and the recording never does: each display's panel is unshared from the
  moment it opens, so no capture sees it.
@@ -41,10 +42,12 @@ final class InkOverlayPanel {
         if active { show() } else { hide() }
     }
 
-    /// Takes back the most recent mark still on screen; with nothing on screen, undo does nothing.
-    func undo(_ capture: CaptureController?) throws {
-        guard let id = lifetimes.latestOnScreen(at: now) else { return }
-        try capture?.undoMark(id)
+    /// Undo: clears the most recent mark still on screen; with nothing on screen it does nothing.
+    func clearLatest() {
+        guard let id = lifetimes.clearLatest(at: now) else { return }
+        strokes.removeAll { $0.id == id }
+        pins.removeAll { $0.id == id }
+        redraw()
     }
 
     /// A mark that arrives before the panels open is kept and drawn once they do.
@@ -63,10 +66,6 @@ final class InkOverlayPanel {
             startFading()
         case .committed:
             return
-        case .retracted(let id):
-            strokes.removeAll { $0.id == id }
-            pins.removeAll { $0.id == id }
-            lifetimes.remove(id)
         }
         redraw()
     }
@@ -183,7 +182,7 @@ final class InkOverlayPanel {
         case "after-undo":
             receive(.committed(firstPin))
             receive(.committed(secondPin))
-            receive(.retracted(secondPin.id))
+            clearLatest()
             marks = [firstPin, secondPin]
         default:
             return nil

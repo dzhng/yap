@@ -74,9 +74,6 @@ final class CaptureController {
         }
     }
 
-    /// Appends a retracting mark for the named stroke or pin. Shortcut bindings call this entry point.
-    func undoMark(_ id: String) throws { try capture.undoMark(id) }
-
     func attach(to host: ServiceHost) {
         self.host = host
     }

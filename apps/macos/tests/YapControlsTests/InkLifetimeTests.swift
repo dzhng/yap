@@ -21,17 +21,18 @@ func runInkLifetimeTests() {
         "Strokes on screen together fade together")
     precondition(strokes.opacity(of: "second", at: at(1.2)) == nil, "A stroke is gone 1.2 s after the fade starts")
 
-    // Undo reaches only what a person can still see.
+    // Undo clears only what a person can still see, newest first.
     var ink = InkLifetimes()
     ink.add("pin-1", .pin, at: start)
     ink.add("pin-2", .pin, at: at(0.5))
     ink.add("stroke", .stroke, at: at(1))
-    precondition(ink.latestOnScreen(at: at(1.5)) == "stroke", "Undo takes the stroke while it shows")
+    var early = ink
+    precondition(early.clearLatest(at: at(1.5)) == "stroke", "Undo clears the stroke while it shows")
+    precondition(early.opacity(of: "stroke", at: at(1.5)) == nil, "A cleared mark leaves the screen at once")
     precondition(
-        ink.latestOnScreen(at: at(2.5)) == "pin-2",
-        "Once the stroke has faded, undo takes the latest pin still on screen")
-    ink.remove("pin-2")
-    precondition(ink.latestOnScreen(at: at(2.5)) == "pin-1", "After an undo, the next undo takes the pin before it")
-    precondition(ink.latestOnScreen(at: at(5)) == nil, "With everything cleared, undo has nothing to take")
-    print("PASS ink leaves the screen on its own and undo takes only what is still on it")
+        ink.clearLatest(at: at(2.5)) == "pin-2",
+        "Once the stroke has faded on its own, undo clears the latest pin still on screen")
+    precondition(ink.clearLatest(at: at(2.5)) == "pin-1", "The next undo clears the pin before it")
+    precondition(ink.clearLatest(at: at(2.5)) == nil, "With everything cleared, undo has nothing to clear")
+    print("PASS ink leaves the screen on its own and undo clears only what is still on it")
 }
