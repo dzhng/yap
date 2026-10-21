@@ -44,8 +44,7 @@ final class RecordingControls: NSObject {
     private var updateFenced = false
     private var permissionRequests = 0
     private var lastUpdateBlockers: [String] = []
-    private var sourcePreviews: [String: NSImage] = [:]
-    private var sourcePreviewRequests = Set<String>()
+    private lazy var sourcePreviews = SourcePreviews { [weak self] in self?.render() }
     private lazy var preview = PreviewController(
         call: { [weak self] operation, params in
             guard let self else { throw Self.noService }
@@ -930,7 +929,7 @@ final class RecordingControls: NSObject {
             updateProgress?()
         }
         syncShortcutLifetime()
-        if !capturePopover.isShown { forgetSourcePreviewRequests() }
+        if !capturePopover.isShown { sourcePreviews.forgetRequests() }
         capturePopover.update(captureInput())
         libraryWindow.update(state: state, exports: exports.state)
         overlay.update(RecordingOverlay.presentation(for: state) ?? observedOverlay)
@@ -1144,14 +1143,14 @@ final class RecordingControls: NSObject {
         case .display:
             sources = state.sources.displays.map { display in
                 .init(title: display.name, intent: .controls(.selectDisplay(display.id)),
-                      preview: sourcePreview(display: display.id))
+                      preview: sourcePreviews.display(display.id, taking: capturePopover.isShown))
             }
             if case .display(let display) = state.selection.source { selectedSource = state.sources.displays.firstIndex { $0.id == display.id } ?? -1 }
             else { selectedSource = -1 }
         case .window:
             sources = state.sources.windows.map { window in
                 .init(title: window.label,
-                      intent: .controls(.selectWindow(window.id)), preview: sourcePreview(window: window.id))
+                      intent: .controls(.selectWindow(window.id)), preview: sourcePreviews.window(window.id, taking: capturePopover.isShown))
             }
             if case .window(let window) = state.selection.source { selectedSource = state.sources.windows.firstIndex { $0.id == window.id } ?? -1 }
             else { selectedSource = -1 }
@@ -1243,52 +1242,6 @@ final class RecordingControls: NSObject {
                 canCopyPrompt: !pending)
         }
         return input
-    }
-
-    private func sourcePreview(display id: Int) -> NSImage? {
-        sourcePreview(key: "display:\(id)") { content in
-            content.displays.first { Int($0.displayID) == id }.map { CaptureExclusion.displayFilter($0, in: content) }
-        }
-    }
-
-    private func sourcePreview(window id: Int) -> NSImage? {
-        sourcePreview(key: "window:\(id)") { content in
-            content.windows.first { Int($0.windowID) == id }.map { SCContentFilter(desktopIndependentWindow: $0) }
-        }
-    }
-
-    /// A source's picture. Pictures are taken only while the capture panel is open, once per source
-    /// each time it opens: current when it opens, not retaken on every status poll, and a source
-    /// that cannot be taken is not retried until the next opening. The last opening's picture shows
-    /// until the new one answers, and the answer redraws the panel.
-    private func sourcePreview(key: String, filter: @escaping (SCShareableContent) -> SCContentFilter?) -> NSImage? {
-        guard capturePopover.isShown, sourcePreviewRequests.insert(key).inserted else { return sourcePreviews[key] }
-        Task { [weak self] in
-            guard let picture = try? await Self.thumbnail(filter), let self else { return }
-            sourcePreviews[key] = NSImage(cgImage: picture, size: NSSize(width: picture.width, height: picture.height))
-            render()
-        }
-        return sourcePreviews[key]
-    }
-
-    /// Called while the capture panel is closed: the next opening takes every picture again, and
-    /// only the pictures of sources the last opening listed are kept until then.
-    private func forgetSourcePreviewRequests() {
-        guard !sourcePreviewRequests.isEmpty else { return }
-        sourcePreviews = sourcePreviews.filter { sourcePreviewRequests.contains($0.key) }
-        sourcePreviewRequests.removeAll()
-    }
-
-    /// A picture sized for the source chooser's cards, at the source's own pixel scale.
-    private static func thumbnail(_ filter: (SCShareableContent) -> SCContentFilter?) async throws -> CGImage? {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-        guard let filter = filter(content) else { return nil }
-        let config = SCStreamConfiguration()
-        let scale = min(1, 180 / max(filter.contentRect.width, 1)) * CGFloat(filter.pointPixelScale)
-        config.width = max(1, Int(filter.contentRect.width * scale))
-        config.height = max(1, Int(filter.contentRect.height * scale))
-        config.showsCursor = false
-        return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
     }
 
     private func showStatusItem() {
