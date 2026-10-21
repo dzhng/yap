@@ -2,6 +2,16 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.69
+
+**Pins clear on their own.** A pin you drop while recording now fades away after 5 seconds, so
+the screen no longer fills up with numbered pins. Only the screen forgets: the recording keeps
+every pin and drawing for your agent.
+
+**Undo Mark (⌥⇧Z) takes back what you can see.** It used to take back your last plain click
+instead, so pressing it after clicking around left the pin on screen. Now it takes back the
+latest pin or drawing still on screen, and does nothing once everything has cleared.
+
 ## 0.1.68
 
 **Copy prompt** on a recording made before 0.1.67 with the camera on no longer says you
