@@ -23,7 +23,7 @@
 - User feedback: it's one product, so "show people" uses the same keys: Record `⌥⇧S`,
   Ask `⌥⇧V`. `positioning.md`'s messaging rules now say so.
 
-**Done 2026-10-19:** `header.png` and `og.png` regenerated with the new line ([art](../assets/art/README.md)).
+**Done 2026-10-19:** `header.png` and `og.png` regenerated with the new line ([art](../assets/art/README.md)). On 2026-10-21 the scene was redrawn (Xiaohei untangles instead of using a magnifying glass) and the site hero lost its duplicate wordmark.
 `launch-poster.jpg` is a frame of the launch film, which shows the site as it was then; it stays.
 
 **Was remaining:** regenerate the images that draw the old tagline: `.github/readme/header.png`

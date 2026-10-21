@@ -178,9 +178,9 @@ h1 span {
   height: auto;
   mix-blend-mode: multiply;
 }
+/* The hero art breaks out of the section to a wider band than the text. */
 .hero-art {
-  margin: 1.5rem auto 0;
-  max-width: 1080px;
+  margin: 1.5rem calc(50% - min(50vw - 1rem, 660px)) 0;
 }
 
 .ctas {

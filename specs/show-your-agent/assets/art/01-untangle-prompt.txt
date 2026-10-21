@@ -1,0 +1,26 @@
+Generate one standalone wide horizontal illustration for a product web page hero. Lay the whole drawing out as one long horizontal band across the middle of the canvas, with empty white space above and below, so it can be cropped to a 3:1 strip without cutting anything. The drawing should fill the full width edge to edge.
+
+Visual DNA:
+Pure white background. Minimalist black hand-drawn line art. Slightly wobbly pen lines. Lots of empty white space. Sparse red, orange, and blue handwritten English annotations. Clean absurd product-sketch feeling. No gradients, no shadows, no paper texture, no complex background, no commercial vector style, no PPT infographic look, no cute mascot poster, no children's illustration, no realistic UI.
+
+Recurring IP character required:
+Xiaohei, a small solid-black absurd creature with white dot eyes, tiny thin legs, blank serious expression, slightly uneven hand-drawn body shape, two small pointed ears. Xiaohei must perform the core conceptual action. Deadpan and slightly bizarre, not cute.
+
+Core idea:
+You just talk and point at your screen; your AI agent watches and listens, gets exactly what you meant, then fixes the thing or makes a great video.
+
+Composition, left to right:
+1. Left: a scruffy-haired person, drawn in black line, talking excitedly with one hand, and with the other hand drawing a thick red circle on an open laptop screen; inside the circle a small red round pin badge with the number "1".
+2. An orange messy scribble tangle comes out of the person's mouth and travels right as one long orange line.
+3. Center: Xiaohei stands holding the tangled orange line in both tiny hands, pulling it hand over hand and calmly untangling it with a blank serious stare; a small loose pile of tangle lies at its feet, and behind Xiaohei the line continues perfectly straight and neat.
+4. Right: the payoff, drawn LARGE and confident — the two outputs are the biggest objects in the picture besides the person. A neat straight orange line splits into two: the upper branch ends at a big code window with a bold blue check mark, the lower branch ends at a big video player card with a red play triangle and a few tiny sparkle ticks around it.
+
+Required English handwritten labels, spelled exactly, and no other text:
+"just yap" (orange, near the person) / "point at it" (red, near the circled laptop) / "got it" (blue, near Xiaohei) / "fixed" (blue, near the code window) / "great video" (orange, near the video card).
+No wordmark, no logo, no title, no tagline anywhere.
+
+Color use:
+Black for line art and Xiaohei. Orange for the talk line and paths. Red only for the circle, the pin and the play triangle. Blue for the "got it" and "fixed" notes and the check mark.
+
+Constraints:
+Keep at least 30% blank white space. Do not make it a diagram or slide. Double-check the spelling of every label.
