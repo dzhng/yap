@@ -119,7 +119,8 @@ final class ControlsProbe {
             // pointer and nothing brought to the front of somebody's work. A see-through window
             // can be cut to a top-left rectangle of its points and laid over a plain backdrop.
             guard let title = command["window"] as? String, let path = command["path"] as? String,
-                let view = NSApplication.shared.windows.first(where: { $0.title == title })?.contentView
+                // A closed panel can linger in the window list; the picture is the one on screen.
+                let view = NSApplication.shared.windows.first(where: { $0.title == title && $0.isVisible })?.contentView
             else { return ["ok": false, "error": "No window named that has a picture to write."] }
             let crop = (command["crop"] as? [Double]).map {
                 NSRect(x: $0[0], y: view.bounds.height - $0[1] - $0[3], width: $0[2], height: $0[3])

@@ -27,10 +27,11 @@ function items(reply: OperationResult) {
 }
 
 /** A captured take whose evidence carries an inside-the-picture cursor trail. */
-async function cursorTake() {
+async function cursorTake({ marks = [] as unknown[], failFirst = true } = {}) {
   const samples = [10, 20, 30, 40];
   const overlays: unknown[] = [];
-  let failNext = true;
+  const rendered = new Map<number, unknown>();
+  let failNext = failFirst;
   const f = await captureFixture(cleanups, undefined, async (operation, params, options) => {
     if (operation === "media.sourceVisualSamples") {
       return {
@@ -51,6 +52,7 @@ async function cursorTake() {
     }
     if (operation === "media.sourceFrame") {
       overlays.push(params.cursorOverlay);
+      rendered.set(Number(params.atUs), params.cursorOverlay);
       if (failNext) {
         failNext = false;
         return {
@@ -124,6 +126,7 @@ async function cursorTake() {
           geometryEpoch: 1,
         },
       })),
+      ...marks,
     ];
     const body = records.map((row) => JSON.stringify(row) + "\n").join("");
     await writeFile(String(params.output), body);
@@ -133,6 +136,14 @@ async function cursorTake() {
         ...(result.data as Record<string, unknown>),
         cursorSamples: samples.length,
         geometryRecords: 1,
+        markEvents: marks.length,
+        // Marks arrive only in journals whose schema carries them.
+        ...(marks.length
+          ? {
+              header: { ...(result.data as { header: object }).header, schemaVersion: 3 },
+              publications: (result.data as { publications?: object }).publications ?? {},
+            }
+          : {}),
         firstCursorSourceUs: samples[0],
         lastCursorSourceUs: samples.at(-1),
         lastSequence: records.length,
@@ -156,6 +167,7 @@ async function cursorTake() {
   return {
     ...f,
     overlays,
+    rendered,
     selection: {
       assetId: bindings[0]!.assetId,
       streamId: bindings[0]!.streamId,
@@ -201,6 +213,85 @@ test("a failed cursor.render item recovers through job.retry with the jobId it r
   });
   for (const item of items(await f.call("cursor.render", request)).concat(ready!))
     if (item.data.delivery) await f.call("artifact.close", { token: item.data.delivery.token });
+});
+
+test("cursor.render draws the marks the person had on screen at each moment", async () => {
+  // Host and capture clocks agree here, so each time reads the same on both.
+  const mark = (data: Record<string, unknown>) => ({
+    event: "mark",
+    data: { epoch: 1, sourceUs: data.hostUs, ...data },
+  });
+  const point = (hostUs: number, x: number, y: number) => ({
+    hostUs,
+    globalX: x,
+    globalY: y,
+    x,
+    y,
+  });
+  const f = await cursorTake({
+    failFirst: false,
+    marks: [
+      mark({
+        hostUs: 10,
+        id: "pin-1",
+        kind: "pin",
+        pin: 1,
+        points: [point(10, 4, 4)],
+        onScreen: { fadeHostUs: 25, untilHostUs: 35 },
+      }),
+      mark({
+        hostUs: 12,
+        id: "pin-2",
+        kind: "pin",
+        pin: 2,
+        points: [point(12, 12, 4)],
+        onScreen: { fadeHostUs: 27, untilHostUs: 37 },
+      }),
+      mark({ hostUs: 15, id: "undo-1", kind: "pin", pin: 2, points: [], retracts: "pin-2" }),
+      mark({
+        hostUs: 20,
+        id: "stroke-1",
+        kind: "stroke",
+        points: [point(20, 6, 8), point(30, 10, 8)],
+        onScreen: { fadeHostUs: 30, untilHostUs: 50 },
+      }),
+      mark({ hostUs: 21, id: "click-1", kind: "click", points: [point(21, 2, 2)] }),
+    ],
+  });
+  const request = { ...f.selection, atUs: [13, 25, 40], trailUs: 30 };
+  await expect
+    .poll(async () => items(await f.call("cursor.render", request)).map((item) => item.data.state))
+    .toEqual(["ready", "ready", "ready"]);
+  const ink = (atUs: number) => (f.rendered.get(atUs) as { ink?: unknown }).ink;
+  const pin1 = { kind: "pin", pin: 1, runs: [[{ x: 4, y: 4 }]], fade: { fromUs: 25, untilUs: 35 } };
+  // Both pins show until an undo clears the second; the stroke shows only what was drawn so far,
+  // at full strength until it is released; the first pin is gone once its 5 s are up.
+  expect(ink(13)).toEqual({
+    scale: 1,
+    marks: [
+      pin1,
+      { kind: "pin", pin: 2, runs: [[{ x: 12, y: 4 }]], fade: { fromUs: 27, untilUs: 37 } },
+    ],
+  });
+  expect(ink(25)).toEqual({
+    scale: 1,
+    marks: [pin1, { kind: "stroke", runs: [[{ x: 6, y: 8 }]], fade: null }],
+  });
+  expect(ink(40)).toEqual({
+    scale: 1,
+    marks: [
+      {
+        kind: "stroke",
+        runs: [
+          [
+            { x: 6, y: 8 },
+            { x: 10, y: 8 },
+          ],
+        ],
+        fade: { fromUs: 30, untilUs: 50 },
+      },
+    ],
+  });
 });
 
 // Native conformance uses synthetic media and production-written journals, without worker stubs.

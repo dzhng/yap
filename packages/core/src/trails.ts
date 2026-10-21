@@ -2,7 +2,7 @@ import { round, fromTime } from "@yap/composition";
 import { selectSource, type SourceSelection } from "./source-selection.js";
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
-import type { CaptureSourceRead } from "./capture-source-read.js";
+import type { CaptureMark, CaptureSourceRead } from "./capture-source-read.js";
 import type { SourceVisualSampler } from "./source-scenes.js";
 import { maximumPointerTrailUs } from "@yap/composition";
 import { isDeepStrictEqual } from "node:util";
@@ -25,7 +25,21 @@ import {
 import type { TimeRange } from "./presentation-time.js";
 
 export type CursorPoint = { atSourceUs: number; x: number; y: number };
-export type FrameOverlay = { trail: CursorPoint[][]; trailUs: number; pointer: CursorPoint | null };
+/** A stroke or pin on the person's screen at the requested moment, in source pixels. */
+export type FrameMark = {
+  kind: "stroke" | "pin";
+  pin?: number;
+  runs: { x: number; y: number }[][];
+  /** When it faded on screen; null while a stroke is still being drawn at full strength. */
+  fade: { fromUs: number; untilUs: number } | null;
+};
+export type FrameOverlay = {
+  trail: CursorPoint[][];
+  trailUs: number;
+  pointer: CursorPoint | null;
+  /** Source pixels per screen point, and the marks on screen; absent when none were. */
+  ink?: { scale: number; marks: FrameMark[] };
+};
 export type TrailCutoff = {
   reason:
     | "kept_start"
@@ -420,10 +434,56 @@ export function sourceCursorOverlay(dependencies: {
       ...value,
       atSourceUs: value.atSourceUs + offset,
     });
+    const requested = plan.geometry.requested;
+    // Import validated both as finite numbers; a global point spans this many pixels per point.
+    const { contentScale, scaleFactor } = requested.geometry as Record<string, number>;
+    const marks = inkAt(capture.marks(selection), atUs, requested.epoch);
     return {
       ...plan.overlay,
       pointer: plan.overlay.pointer ? point(plan.overlay.pointer) : null,
       trail: plan.overlay.trail.map((run) => run.map(point)),
+      ...(marks.length
+        ? {
+            ink: {
+              scale: contentScale! * scaleFactor!,
+              marks,
+            },
+          }
+        : {}),
     };
   };
+}
+
+/**
+ * The marks on the person's screen at `atUs`, as they saw them: a stroke only as far as it was
+ * drawn, at full strength until released, and nothing that had faded or been cleared. Points are
+ * the pixels each was projected to, so only marks of the frame's own geometry epoch are placed.
+ */
+function inkAt(marks: CaptureMark[], atUs: number, epoch: number): FrameMark[] {
+  return marks.flatMap((mark): FrameMark[] => {
+    if (mark.kind === "click" || mark.shownForUs === undefined || !mark.fade) return [];
+    if (mark.epoch !== epoch || atUs < mark.assetUs || atUs >= mark.assetUs + mark.shownForUs)
+      return [];
+    // Point times share the mark's host clock, so each is an offset from the mark's own time.
+    const at = (hostUs: number) => mark.assetUs + hostUs - mark.hostUs;
+    const runs: { x: number; y: number }[][] = [[]];
+    for (const point of mark.points) {
+      if (at(point.hostUs) > atUs) break;
+      if (point.x === null || point.y === null) runs.push([]);
+      else runs.at(-1)!.push({ x: point.x, y: point.y });
+    }
+    const drawn = runs.filter((run) => run.length);
+    if (!drawn.length) return [];
+    const released = at(mark.points.at(-1)!.hostUs) <= atUs;
+    return [
+      {
+        kind: mark.kind,
+        ...(mark.pin === undefined ? {} : { pin: mark.pin }),
+        runs: drawn,
+        fade: released
+          ? { fromUs: mark.assetUs + mark.fade.fromUs, untilUs: mark.assetUs + mark.fade.untilUs }
+          : null,
+      },
+    ];
+  });
 }

@@ -2758,7 +2758,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v11-trail-policy",
+      implementationId: "native-source-picture-v12-ink",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {

@@ -17,6 +17,7 @@ let package = Package(
             dependencies: [
                 "YapControls",
                 .product(name: "YapCapture", package: "mac"),
+                .product(name: "YapInk", package: "mac"),
                 .product(name: "YapProtocol", package: "mac"),
             ],
             swiftSettings: [.unsafeFlags(["-F", sparkleDirectory])],

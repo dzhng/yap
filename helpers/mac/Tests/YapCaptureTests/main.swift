@@ -11,6 +11,7 @@ if ProcessInfo.processInfo.environment["YAP_MAXIMUM_TAKE"] != nil {
     try runChangeOnlyCursorTests()
 } else if ProcessInfo.processInfo.environment["YAP_CURSOR_TESTS"] != nil {
     try runCursorGeometryTests()
+    runInkLifetimeTests()
     try runSchema4HeaderTests()
 } else if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
     try writeLongStrokeFixture(to: URL(fileURLWithPath: output),

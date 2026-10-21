@@ -24,6 +24,18 @@ public struct JournalMarkWindow: Codable, Sendable, Equatable {
     }
 }
 
+/// When a stroke or pin was on the person's screen, in host time: at full strength until
+/// `fadeHostUs`, then fading until it is gone at `untilHostUs`. An undo can clear it sooner.
+public struct JournalMarkScreen: Codable, Sendable, Equatable {
+    public let fadeHostUs: Int64
+    public let untilHostUs: Int64
+    public init(fadeHostUs: Int64, untilHostUs: Int64) {
+        self.fadeHostUs = fadeHostUs; self.untilHostUs = untilHostUs
+    }
+}
+
+/// A stroke, pin or click, or an undo. An undo row names in `retracts` the mark it cleared from
+/// the screen, and carries no points; the mark it names stays evidence.
 public struct JournalMark: Codable, Sendable, Equatable {
     public let hostUs: Int64
     public let sourceUs: Int64
@@ -33,14 +45,16 @@ public struct JournalMark: Codable, Sendable, Equatable {
     public let pin: Int?
     public let points: [JournalMarkPoint]
     public let window: JournalMarkWindow?
+    public let onScreen: JournalMarkScreen?
     public let retracts: String?
     public init(
         hostUs: Int64, sourceUs: Int64, epoch: Int, id: String, kind: String, pin: Int? = nil,
-        points: [JournalMarkPoint], window: JournalMarkWindow? = nil, retracts: String? = nil
+        points: [JournalMarkPoint], window: JournalMarkWindow? = nil,
+        onScreen: JournalMarkScreen? = nil, retracts: String? = nil
     ) {
         self.hostUs = hostUs; self.sourceUs = sourceUs; self.epoch = epoch; self.id = id
         self.kind = kind; self.pin = pin; self.points = points; self.window = window
-        self.retracts = retracts
+        self.onScreen = onScreen; self.retracts = retracts
     }
 }
 
@@ -56,6 +70,10 @@ func validMark(_ mark: JournalMark) -> Bool {
             && (($0.x == nil) == ($0.y == nil))
             && ($0.x == nil || ($0.x!.isFinite && $0.y!.isFinite))
     }) else { return false }
+    if let screen = mark.onScreen {
+        guard mark.kind != "click", mark.retracts == nil,
+            screen.fadeHostUs >= 0, screen.untilHostUs > screen.fadeHostUs else { return false }
+    }
     if let window = mark.window {
         guard !window.app.isEmpty, window.app.utf8.count <= 256,
             window.title.utf8.count <= 4096,

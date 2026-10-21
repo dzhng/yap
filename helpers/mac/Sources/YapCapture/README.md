@@ -34,9 +34,13 @@ Marks a person makes during a screen take (strokes while ⇧ is held, ⇧-click 
 clicks) are capture evidence like the pointer, so they live in the same schema-4 journal
 with the same clock and geometry epoch. The [recognizer](MarkRecognizer.swift) owns the gesture
 rules and stays free of AppKit; the writer feeds it modifier state and pointer readings, never
-keys, and projects each point through the same placement cursor samples use. Undo Mark only
-clears ink from the screen, so the journal keeps every mark; older apps journaled an undo as a
-row carrying `retracts`, which readers skip and which takes no mark away.
+keys, and projects each point through the same placement cursor samples use.
+
+A mark is a moment, not a lasting state. [InkLifetimes](InkLifetimes.swift) decides how long
+each stroke and pin stays on the person's screen, and the writer journals that window with the
+mark, so every reader and every drawing of it agrees with what the person saw. Undo Mark clears
+the newest mark still showing and appends a row whose `retracts` names it: when it left the
+screen early. No row removes a mark; the journal keeps every one.
 
 Take and stroke endings follow the shared
 [requirements and derived-bound rule](../../../../DEVELOPMENT.md#limits-come-from-requirements).

@@ -2,10 +2,11 @@ import AppKit
 import Foundation
 
 /// What a screen take keeps about the marks a person makes: the recognizer that tells strokes,
-/// pins and clicks apart, the global mouse monitor that feeds it button edges, and how much of
-/// the live stroke the overlay has been told.
+/// pins and clicks apart, the global mouse monitor that feeds it button edges, when each mark
+/// leaves the person's screen, and how much of the live stroke the overlay has been told.
 struct LiveMarks {
     var recognizer: MarkRecognizer?
+    var ink = InkLifetimes()
     var monitorTokens: [Any] = []
     /// Points of the live stroke the overlay was last told about. A stroke only grows until it
     /// ends, so its length is enough to know whether there is anything new to say.
@@ -15,6 +16,19 @@ struct LiveMarks {
 /// Marks a person makes during a screen take, from button edges and pointer readings to the
 /// journal and the overlay's stream.
 extension CaptureWriter {
+    /// Undo Mark: clears the newest stroke or pin still on screen and journals when it left.
+    package func clearLatestMark(at hostUs: Int64) {
+        queue.sync {
+            // A paused take has no source time now; its clear lands where the pause began.
+            guard !finishing, failure == nil,
+                let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs),
+                let row = marks.ink.clearLatest(at: hostUs, sourceUs: sourceUs, epoch: cursor.epoch),
+                record({ try journal.recordMark(row) }), let id = row.retracts
+            else { return }
+            onMarkUpdate?(.cleared(id))
+        }
+    }
+
     func installMarkMonitors() {
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp]
         let register = { [weak self] in
@@ -56,7 +70,7 @@ extension CaptureWriter {
 
     func append(_ events: [MarkEvent]) {
         for event in events {
-            guard let first = event.points.first else { continue }
+            guard let first = event.points.first, let last = event.points.last else { continue }
             guard let sourceUs = clock.sourceTime(for: first.hostUs) else { continue }
             let mark = JournalMark(
                 hostUs: first.hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
@@ -70,9 +84,10 @@ extension CaptureWriter {
                         x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
                         hostUs: point.hostUs)
                 },
-                window: event.window)
-            let written = record { try journal.recordMark(mark) }
-            guard written else { return }
+                window: event.window,
+                onScreen: marks.ink.window(for: event.kind.rawValue, committedAt: last.hostUs))
+            guard record({ try journal.recordMark(mark) }) else { return }
+            marks.ink.show(mark)
             onMarkUpdate?(.committed(mark))
         }
     }

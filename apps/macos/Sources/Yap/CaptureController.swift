@@ -74,6 +74,10 @@ final class CaptureController {
         }
     }
 
+    /// Undo Mark: clears the newest stroke or pin still on screen; the take keeps it as evidence.
+    /// Without a take there is nothing on screen, so it does nothing.
+    func clearLatestMark() { capture.clearLatestMark() }
+
     func attach(to host: ServiceHost) {
         self.host = host
     }

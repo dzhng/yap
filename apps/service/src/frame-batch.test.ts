@@ -354,7 +354,7 @@ function writeAsBeforeOwnIds(home: string) {
     text
       .replace(/"id":("[^"]*"),"(rect|requestedRect)"/g, '"regionId":$1,"$2"')
       .replaceAll('"id":"face-', '"faceId":"face-')
-      .replaceAll('"native-source-picture-v11-trail-policy"', '"native-source-picture-v9-cursor"');
+      .replaceAll('"native-source-picture-v12-ink"', '"native-source-picture-v9-cursor"');
   const db = new DatabaseSync(join(home, "library", "catalog.sqlite"));
   try {
     const tables = db

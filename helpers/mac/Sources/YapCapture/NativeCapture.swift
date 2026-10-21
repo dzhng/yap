@@ -242,6 +242,10 @@ public final class NativeCapture {
         }
     }
 
+    /// Undo Mark: clears the newest stroke or pin still on screen in the running take. Shortcut
+    /// bindings live in the app; this is the capture operation they call.
+    public func clearLatestMark() { sink?.clearLatestMark(at: CaptureHostTime.nowUs()) }
+
     /// The running take's reserved companion camera and whether it is on. Nil when no take holds one.
     public var companionCamera: (deviceId: String, on: Bool)? {
         reservedCamera.map { ($0.deviceId, $0.isOn) }

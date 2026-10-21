@@ -986,7 +986,7 @@ export async function startProjectService(options: {
           ),
       },
       sourceRenderer: {
-        implementationId: "native-source-picture-v11-trail-policy",
+        implementationId: "native-source-picture-v12-ink",
         render: async (request, signal) =>
           withRenderedFile(
             worker,

@@ -101,3 +101,107 @@ test("timeline events expose marks with projected points and stable paging", asy
     page: null,
   });
 });
+
+test("each mark says how long it stayed on the person's screen", async () => {
+  const f = await fixture();
+  const point = (hostUs: number) => ({ hostUs, globalX: 101, globalY: 202, x: 16, y: 28 });
+  const captured = await f.capture([
+    {
+      event: "geometry",
+      data: {
+        epoch: 1,
+        hostUs: 1,
+        sourceUs: 500,
+        geometry: {
+          outputWidth: 200,
+          outputHeight: 100,
+          contentScale: 2,
+          scaleFactor: 1,
+          contentRect: { x: 10, y: 20, width: 100, height: 50 },
+          screenRect: { x: 100, y: 200, width: 50, height: 25 },
+        },
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 1_000,
+        sourceUs: 600,
+        epoch: 1,
+        id: "stroke-1",
+        kind: "stroke",
+        points: [point(1_000), point(1_400)],
+        onScreen: { fadeHostUs: 1_400, untilHostUs: 1_201_400 },
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 2_000,
+        sourceUs: 700,
+        epoch: 1,
+        id: "pin-1",
+        kind: "pin",
+        pin: 1,
+        points: [point(2_000)],
+        onScreen: { fadeHostUs: 3_802_000, untilHostUs: 5_002_000 },
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 3_000,
+        sourceUs: 750,
+        epoch: 1,
+        id: "pin-2",
+        kind: "pin",
+        pin: 2,
+        points: [point(3_000)],
+        onScreen: { fadeHostUs: 3_803_000, untilHostUs: 5_003_000 },
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 1_003_000,
+        sourceUs: 800,
+        epoch: 1,
+        id: "undo-1",
+        kind: "pin",
+        pin: 2,
+        points: [],
+        retracts: "pin-2",
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 4_000,
+        sourceUs: 850,
+        epoch: 1,
+        id: "click-1",
+        kind: "click",
+        points: [point(4_000)],
+      },
+    },
+  ]);
+  const selection = { assetId: f.asset.id, streamId: "video", acquisitionId: captured.id };
+  const rows = f.sourceEvents
+    .events({ ...selection, limit: 100 })
+    .page!.rows.filter((row) => row.kind === "mark");
+  // A stroke shows while it is drawn and fades away after; a pin shows 5 s unless an undo cleared
+  // it sooner; a click was never drawn. Every mark stays listed.
+  expect(rows.map((row) => [row.observation.id, row.observation.shownForUs])).toEqual([
+    ["stroke-1", 1_200_400],
+    ["pin-1", 5_000_000],
+    ["pin-2", 50],
+    ["click-1", undefined],
+  ]);
+  expect(rows[0]!.observation).not.toHaveProperty("onScreen");
+  expect(f.captureRead.marks(selection).map((mark) => mark.shownForUs)).toEqual([
+    1_200_400,
+    5_000_000,
+    50,
+    undefined,
+  ]);
+});

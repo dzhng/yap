@@ -52,6 +52,10 @@ if CommandLine.arguments.contains("--source-authority") {
     finish()
 }
 
+if CommandLine.arguments.contains("--source-ink") {
+    try await verifySourceInk(in: images)
+    finish()
+}
 if CommandLine.arguments.contains("--pointer-readability") {
     try await verifyCompositionPointerReadability(in: images)
     finish()
@@ -105,6 +109,7 @@ if CommandLine.arguments.contains("--exact-picture") { finish() }
 
 try await verifySourcePictures(in: images)
 try await verifySourceAuthority(in: images)
+try await verifySourceInk(in: images)
 if CommandLine.arguments.contains("--source-pictures") { finish() }
 
 try await verifyCompositionPointerReadability(in: images)

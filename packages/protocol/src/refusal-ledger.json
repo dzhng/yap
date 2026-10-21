@@ -1299,7 +1299,7 @@
       "files": {
         "apps/service/src/delivery.ts": 1,
         "helpers/mac/Sources/YapAudio/ExcerptLayout.swift": 6,
-        "helpers/mac/Sources/YapFrames/FrameTypes.swift": 5,
+        "helpers/mac/Sources/YapFrames/FrameTypes.swift": 6,
         "packages/composition/src/compiler.ts": 1,
         "packages/composition/src/edits.ts": 1,
         "packages/composition/src/errors.ts": 1,

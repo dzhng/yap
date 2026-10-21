@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "YapCapture", targets: ["YapCapture"]),
         .library(name: "YapProtocol", targets: ["YapProtocol"]),
+        .library(name: "YapInk", targets: ["YapInk"]),
         .executable(name: "yap-native", targets: ["YapNative"]),
     ],
     dependencies: [
@@ -26,7 +27,8 @@ let package = Package(
             linkerSettings: [.linkedLibrary("archive.2")]),
         .systemLibrary(name: "CLibArchive"),
         .target(name: "YapCapture", dependencies: ["YapMedia", "YapProtocol"], exclude: ["README.md"]),
-        .target(name: "YapFrames", dependencies: ["YapMedia"], exclude: ["README.md"]),
+        .target(name: "YapFrames", dependencies: ["YapMedia", "YapInk"], exclude: ["README.md"]),
+        .target(name: "YapInk", exclude: ["README.md"]),
         .target(name: "YapAudio", dependencies: ["YapMedia", .product(name: "YapDenoise", package: "denoise"), .product(name: "YapStretch", package: "stretch")], exclude: ["README.md"]),
         .target(
             name: "YapSpeech",

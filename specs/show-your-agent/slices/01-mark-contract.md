@@ -17,7 +17,8 @@ layers change in one commit.
   id, kind: "stroke" | "pin" | "click", pin?: number,
   points: [{ x, y, hostUs }],          // global points, top-left origin, as cursor samples (P3)
   window?: { app, title, bounds },     // window under the first point, Yap's own windows skipped
-  retracts?: id }                      // written by undo until 0.1.69 (P1); no points, read as nothing
+  onScreen?: { fadeHostUs, untilHostUs }, // when a stroke or pin showed (P8, schema 4)
+  retracts?: id }                      // an undo: when the named mark left the screen (P1); no points
 ```
 
 - Swift: schema 3 header, `JournalMark`, `recordMark`, reader callback beside `streamEvidence`

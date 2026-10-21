@@ -104,6 +104,53 @@ private func runButtonMarksTest() throws {
         marks.map(\.kind) == ["pin", "click"] && marks[0].pin == 1,
         "A ⇧-click journals pin 1 and a plain click a click, got \(marks)")
     print("PASS a ⇧-click and a plain click both reach the journal")
+    try runClearedMarkTest()
+}
+
+/// Each pin is journaled with when it shows on screen, and an undo journals when it cleared the
+/// newest one early, leaving both pins in the journal.
+private func runClearedMarkTest() throws {
+    let directory = RecoveryFixture.directory("cleared-marks")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try CaptureWriter(
+        request: CaptureRequest(
+            source: CaptureSource(kind: "window", windowID: 1),
+            outputDirectory: directory.path, microphone: false, systemAudio: false),
+        width: 32, height: 32, sessionID: "cleared-marks", requestedSourceRect: nil,
+        onFailure: { _ in })
+    defer { writer.cancel() }
+    let updates = MarkUpdates()
+    writer.onMarkUpdate = { updates.list.append($0) }
+    let origin = CaptureHostTime.nowUs()
+    let geometry = CaptureGeometry(
+        outputWidth: 32, outputHeight: 32,
+        contentRect: GeometryRect(x: 0, y: 0, width: 16, height: 16), contentScale: 1,
+        scaleFactor: 1, screenRect: GeometryRect(x: 100, y: 100, width: 16, height: 16),
+        boundingRect: nil, requestedSourceRect: nil)
+    writer.queue.sync {
+        writer.ingest(liveMarkFrame(atHostUs: origin, geometry: geometry), of: .screen)
+        let point = CGPoint(x: 105, y: 105)
+        writer.acceptButton(down: true, shift: true, point: point, hostUs: origin + 10)
+        writer.acceptButton(down: false, shift: true, point: point, hostUs: origin + 20)
+        writer.acceptButton(down: true, shift: true, point: point, hostUs: origin + 30)
+        writer.acceptButton(down: false, shift: true, point: point, hostUs: origin + 40)
+    }
+    writer.clearLatestMark(at: origin + 1_000_000)
+    var marks: [JournalMark] = []
+    _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+    precondition(
+        marks.count == 3 && marks[0].kind == "pin" && marks[1].kind == "pin"
+            && marks[0].onScreen == JournalMarkScreen(fadeHostUs: origin + 3_800_010, untilHostUs: origin + 5_000_010)
+            && marks[1].onScreen == JournalMarkScreen(fadeHostUs: origin + 3_800_030, untilHostUs: origin + 5_000_030),
+        "Each pin is journaled with the 5 s it shows for, got \(marks)")
+    precondition(
+        marks[2].retracts == marks[1].id && marks[2].points.isEmpty && marks[2].onScreen == nil
+            && marks[2].hostUs == origin + 1_000_000,
+        "Undo journals when it cleared the newest pin, got \(marks[2])")
+    precondition(
+        updates.list.last == .cleared(marks[1].id),
+        "The overlay is told which pin undo cleared, got \(updates.list)")
+    print("PASS marks are journaled with when they show, and an undo with when it cleared one")
 }
 
 /// What the writer told the overlay, in order. The writer calls it on its own queue, which the

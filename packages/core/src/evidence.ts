@@ -208,6 +208,17 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
         : data.pin !== undefined)
     )
       invalid("Invalid normalized mark");
+    if (data.onScreen != null) {
+      const screen = object(data.onScreen);
+      if (
+        data.kind === "click" ||
+        data.retracts != null ||
+        !integer(screen.fadeHostUs) ||
+        !integer(screen.untilHostUs) ||
+        screen.untilHostUs <= screen.fadeHostUs
+      )
+        invalid("Invalid normalized mark screen window");
+    }
     for (const point of data.points) {
       const value = object(point);
       if (

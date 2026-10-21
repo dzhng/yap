@@ -71,6 +71,13 @@ export type CaptureMark = {
   points: CaptureMarkPoint[];
   pin?: number;
   window?: Record<string, unknown>;
+  /**
+   * How long the mark stayed on the person's screen from `assetUs`: until it faded on its own, or
+   * until an undo cleared it sooner. A click is never drawn, so it has none.
+   */
+  shownForUs?: number;
+  /** When it faded on screen, in microseconds after `assetUs`; for drawing it as it was seen. */
+  fade?: { fromUs: number; untilUs: number };
 };
 // The journal's own form: capture-clock `sourceUs` and the order it was written in.
 type JournalMark = Omit<CaptureMark, "assetUs"> & { sourceUs: number; sequence: number };
@@ -222,12 +229,26 @@ export class CaptureSourceRead {
         });
       after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
     }
-    // A row carrying `retracts` is an undo that older apps journaled. Undo only ever cleared the
-    // screen, so it is not a mark and takes none away.
+    // A row carrying `retracts` is an undo: it says when the mark it names left the screen, and
+    // takes no mark away.
+    const cleared = new Map<string, number>();
+    for (const row of rows)
+      if (typeof row.data.retracts === "string" && !cleared.has(row.data.retracts))
+        cleared.set(row.data.retracts, row.sourceUs);
     return rows
       .filter((row) => row.data.retracts == null)
       .map((row) => {
         const data = row.data;
+        const hostUs = data.hostUs as number;
+        const screen = data.onScreen as { fadeHostUs: number; untilHostUs: number } | undefined;
+        const clearedAt = cleared.get(data.id as string);
+        const shown = screen && {
+          shownForUs: Math.min(
+            screen.untilHostUs - hostUs,
+            clearedAt === undefined ? Infinity : Math.max(0, clearedAt - row.sourceUs),
+          ),
+          fade: { fromUs: screen.fadeHostUs - hostUs, untilUs: screen.untilHostUs - hostUs },
+        };
         return {
           sourceUs: row.sourceUs,
           sequence: row.sequence,
@@ -238,6 +259,7 @@ export class CaptureSourceRead {
           points: data.points as CaptureMarkPoint[],
           ...(data.pin === undefined ? {} : { pin: data.pin as number }),
           ...(data.window === undefined ? {} : { window: data.window as Record<string, unknown> }),
+          ...shown,
         };
       });
   }
@@ -354,7 +376,7 @@ export class CaptureSourceRead {
           captureAtUs: next.sourceUs,
           sourceSequence: next.sequence,
           observation: (() => {
-            const { sequence: _sequence, ...mark } = next;
+            const { sequence: _sequence, fade: _fade, ...mark } = next;
             return mark as Record<string, unknown>;
           })(),
         };

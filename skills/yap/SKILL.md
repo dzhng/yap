@@ -24,11 +24,13 @@ importing. It names no operations; exploring is yours:
 - Read what they said first. With microphone capture and automatic transcription
   enabled, the prompt says whether the transcript is being prepared or ready.
   `transcript.review` returns it, or reports it pending, without starting a second run.
-- Each mark is a moment they point at. Once imported, `timeline.events` lists the
-  marks for the recording's acquisition (pin numbers match the badges they saw),
-  and `index.get` has a frame at every mark, pin and click when its selection
-  names that `acquisitionId`. Use `cursor.render` around a mark to see where they
-  pointed.
+- Each mark is a moment they point at, not a lasting note: a pin or drawing was on
+  their screen for a few seconds (`shownForUs`), so read it with what they said and
+  showed around that time. Once imported, `timeline.events` lists the marks for the
+  recording's acquisition (pin numbers match the badges they saw), and `index.get`
+  has a frame at every mark, pin and click when its selection names that
+  `acquisitionId`. `cursor.render` around a mark shows the pointer and the marks on
+  their screen at that moment, as they saw them.
 - Retry is always explicit, except that a `JOB_INTERRUPTED` transcript attempt is resumed once
   when the automatic transcription backlog is restored after a restart. A retryable refusal identifies itself with
   `error.retryable`; when it carries `retryAfterMs`, wait that long before trying

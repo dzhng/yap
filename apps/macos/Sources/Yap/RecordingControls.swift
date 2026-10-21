@@ -514,8 +514,7 @@ final class RecordingControls: NSObject {
             let recordingId = state.isLive ? (live()?["recordingId"] as? String) : nil
             copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
         case .undoMark:
-            guard state.isLive else { return render() }
-            ink.clearLatest()
+            captureController?.clearLatestMark()
         case .pauseOrResume:
             guard state.isLive else { return render() }
             send(state.device?.state == .paused ? "capture.resume" : "capture.pause", live())
