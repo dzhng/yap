@@ -39,6 +39,7 @@ enum ControlsProbe { static let observed = true }
             ("manual", .init()),
             ("notice", .init(available: true, enabled: true, canCheck: true)),
             ("accessibility-allowed", .init(available: true, enabled: true, canCheck: true)),
+            ("accessibility-reopen", .init(available: true, enabled: true, canCheck: true)),
         ]
         for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for (name, updates) in states {
@@ -46,7 +47,7 @@ enum ControlsProbe { static let observed = true }
                 let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
                 model.state.permissions = ControlsState.Permissions(
                     screen: .granted, microphone: .granted,
-                    accessibility: name == "accessibility-allowed" ? .granted : .denied)
+                    accessibility: name == "accessibility-allowed" ? .granted : name == "accessibility-reopen" ? .reopenToUse : .denied)
                 model.state.updates = updates
                 if name == "notice" {
                     model.state.adminMessage = "Yap 0.1.41 cannot update itself. Back up ~/.yap, then reinstall Yap from justyap.io."

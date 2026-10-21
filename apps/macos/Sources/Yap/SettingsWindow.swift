@@ -316,6 +316,11 @@ struct SettingsView: View {
             case .granted?:
                 Label(kind.statusTitle(for: .granted), systemImage: "checkmark.circle.fill")
                     .labelStyle(StatusLabelStyle(tint: .green))
+            case .reopenToUse?:
+                // Allowed already: nothing is left to grant, but Yap must reopen before it applies,
+                // so the icon asks for a reopen rather than saying access is missing.
+                Label(kind.statusTitle(for: .reopenToUse), systemImage: "arrow.clockwise.circle.fill")
+                    .labelStyle(StatusLabelStyle(tint: .orange))
             case let missing?:
                 HStack(spacing: 10) {
                     // An optional access that is off is a choice, not a problem to fix.

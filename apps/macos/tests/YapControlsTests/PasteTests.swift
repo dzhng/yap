@@ -24,7 +24,22 @@ func runPasteTests() {
     precondition(untrusted.paste("second prompt") == .copied, "Without Accessibility, the prompt is only copied")
     precondition(pasteboard.string(forType: .string) == "second prompt", "The copied prompt replaces the last one")
     precondition(posted.isEmpty, "Nothing is typed into another app without Accessibility")
-    precondition(Paster.copiedNotice == "Copied, press ⌘V", "The notice says what to press")
+    precondition(Paster.Outcome.copied.notice == "Copied, press ⌘V", "The notice says what to press")
+
+    // macOS reports a grant made while Yap runs at once, but drops the keystrokes Yap sends
+    // until Yap reopens: until then the prompt is copied, and the notice says how to finish.
+    posted.removeAll()
+    var allowed = false
+    let grantedLater = Paster(pasteboard: pasteboard, trusted: { allowed }, post: { posted.append($0) })
+    allowed = true
+    precondition(grantedLater.access == .reopenToUse, "A grant made while Yap runs waits for Yap to reopen")
+    precondition(grantedLater.paste("third prompt") == .copiedUntilReopen, "Until then the prompt is only copied")
+    precondition(pasteboard.string(forType: .string) == "third prompt" && posted.isEmpty,
+                 "Nothing is typed that macOS would drop")
+    precondition(Paster.Outcome.copiedUntilReopen.notice == "Copied, press ⌘V (reopen Yap to auto-paste)",
+                 "The notice says what to press now and how to have Yap paste")
+    precondition(trusted.access == .granted && Paster.Outcome.pasted.notice == nil,
+                 "Trusted from the start, Yap pastes and says nothing")
     print("PASS ⌥⇧V pastes with Command only, or copies and says to press ⌘V")
 }
 
@@ -38,5 +53,7 @@ func runAccessibilityPermissionTests() {
                  "Accessibility is never prompted for; its button opens the privacy pane")
     precondition(PermissionKind.accessibility.settingsURL.absoluteString.hasSuffix("Privacy_Accessibility"),
                  "The button opens the Accessibility pane")
+    precondition(PermissionKind.accessibility.statusTitle(for: .reopenToUse) == "Reopen Yap to finish",
+                 "A grant that waits on Yap reopening says so, not that it is optional")
     print("PASS Accessibility is optional and only granted in System Settings")
 }

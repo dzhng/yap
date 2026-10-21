@@ -37,6 +37,8 @@ extension ControlsState {
         case undetermined
         /// Asking again prompts for nothing; only System Settings can change it.
         case denied
+        /// Allowed in System Settings while the app ran; it takes effect once the app reopens.
+        case reopenToUse
 
         /// AVFoundation's authorization, as native capture names it.
         public init(authorization: String) {
@@ -132,7 +134,7 @@ public enum PermissionKind: String, CaseIterable, Sendable {
     public func allowTitle(for access: ControlsState.Access) -> String {
         switch access {
         case .denied: "Allow in System Settings…"
-        case .undetermined, .granted:
+        case .undetermined, .granted, .reopenToUse:
             switch self {
             case .screen: "Allow Screen Recording…"
             case .microphone: "Allow Microphone Access…"
@@ -143,9 +145,10 @@ public enum PermissionKind: String, CaseIterable, Sendable {
     }
 
     public func statusTitle(for access: ControlsState.Access) -> String {
-        if isOptional, access != .granted { return "Optional" }
+        if isOptional, access != .granted, access != .reopenToUse { return "Optional" }
         return switch access {
         case .granted: "Allowed"
+        case .reopenToUse: "Reopen Yap to finish"
         case .undetermined: "Not allowed yet"
         case .denied: "Not allowed"
         }

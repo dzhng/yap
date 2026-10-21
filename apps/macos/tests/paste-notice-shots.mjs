@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compileControlsCheck } from "./fixtures/swift-controls.mjs";
 
-// Render the production "Copied, press ⌘V" panel offscreen, light and dark, without a service,
+// Render the production paste notices offscreen, light and dark, without a service,
 // a paste or anything ordered over the person's work.
 const output = resolve(process.env.SHOTS ?? "specs/show-your-agent/assets/paste-notice");
 mkdirSync(output, { recursive: true });
@@ -15,6 +15,7 @@ try {
     ["PasteNotice", "OverlayPanel"],
     String.raw`
 import AppKit
+import YapControls
 
 enum ControlsProbe { static let observed = true }
 @main struct Shots {
@@ -22,21 +23,23 @@ enum ControlsProbe { static let observed = true }
         NSApplication.shared.setActivationPolicy(.prohibited)
         let output = CommandLine.arguments[1]
         for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            let panel = PasteNotice.makePanel()
-            precondition(panel.styleMask.contains(.nonactivatingPanel), "The notice never takes focus")
-            precondition(panel.ignoresMouseEvents, "A click falls through the notice to the app underneath")
-            panel.appearance = NSAppearance(named: appearance)
-            panel.setFrameOrigin(NSPoint(x: -10000, y: -10000))
-            panel.present()
-            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
-            let content = panel.contentView!
-            content.layoutSubtreeIfNeeded()
-            let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
-            content.cacheDisplay(in: content.bounds, to: bitmap)
-            try! bitmap.representation(using: .png, properties: [:])!.write(to:
-                URL(fileURLWithPath: "\(output)/\(theme)-copied.png"))
-            panel.orderOut(nil)
-            panel.close()
+            for (name, outcome) in [("copied", Paster.Outcome.copied), ("reopen", .copiedUntilReopen)] {
+                let panel = PasteNotice.makePanel(outcome.notice!)
+                precondition(panel.styleMask.contains(.nonactivatingPanel), "The notice never takes focus")
+                precondition(panel.ignoresMouseEvents, "A click falls through the notice to the app underneath")
+                panel.appearance = NSAppearance(named: appearance)
+                panel.setFrameOrigin(NSPoint(x: -10000, y: -10000))
+                panel.present()
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+                let content = panel.contentView!
+                content.layoutSubtreeIfNeeded()
+                let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to:
+                    URL(fileURLWithPath: "\(output)/\(theme)-\(name).png"))
+                panel.orderOut(nil)
+                panel.close()
+            }
         }
     }
 }

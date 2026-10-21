@@ -39,6 +39,12 @@ verdict, least confident first.
 - **A failed `recording.prompt` from ⌥⇧V reports where the menu shows failures**, not in the
   paste notice.
 - **Paste posts the physical V key with Command only.** Layouts that move V may not paste.
+- **Accessibility granted while Yap runs waits for a reopen.** macOS reports the grant at once
+  but drops Yap's ⌘V until Yap reopens, so a paste looked done and did nothing (the user hit
+  this on 2026-10-21). The paster counts a grant only if Yap was trusted when it opened; until
+  then it copies, the notice adds "reopen Yap to auto-paste" and Settings says "Reopen Yap to
+  finish". Yap does not relaunch itself: its service ends with it, so a relaunch could cut off a
+  take, an export or a transcript, and only the update installer knows how to wait for quiet.
 - **Displays are fixed at take start**: a display connected mid-take gets no ink panel.
 - **Ink drawn in the instant before a start answers can still be lost** if a status read from
   before the start renders in between; the window is the service round trip.

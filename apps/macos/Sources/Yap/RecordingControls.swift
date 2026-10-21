@@ -762,7 +762,7 @@ final class RecordingControls: NSObject {
     private func request(_ kind: PermissionKind) {
         readPermissions()
         switch state.permissions?.access(to: kind) {
-        case .granted: return
+        case .granted, .reopenToUse: return
         case .denied:
             NSWorkspace.shared.open(kind.settingsURL)
             return
@@ -797,7 +797,7 @@ final class RecordingControls: NSObject {
             screen: NativeCapture.screenPermission ? .granted : screenRequestRefused ? .denied : .undetermined,
             microphone: .init(authorization: NativeCapture.microphonePermission),
             camera: .init(authorization: NativeCapture.cameraPermission),
-            accessibility: AXIsProcessTrusted() ? .granted : .denied)
+            accessibility: paster.access)
     }
 
     // MARK: reading
@@ -1034,9 +1034,7 @@ final class RecordingControls: NSObject {
                 state.resolveFailure(request: request)
                 if !paste {
                     paster.copy(answer.text)
-                } else if paster.paste(answer.text) == .copied {
-                    pasteNotice.show()
-                }
+                } else if let notice = paster.paste(answer.text).notice { pasteNotice.show(notice) }
             } catch {
                 state.failure = .init("Couldn't \(paste ? "paste" : "copy") prompt: \(error.localizedDescription)", scope: surface,
                     request: request, action: paste ? .copyPrompt(target) : nil)
