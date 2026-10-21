@@ -2,6 +2,21 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.71
+
+**Finishing a take copies its prompt.** Stop a recording with ⌥⇧S, the menu or the floating
+Finish button and, once it has saved, Yap copies its prompt and shows "Copied, press ⌘V". A take
+an agent stops leaves your clipboard alone.
+
+**Paste Prompt (⌥⇧V) pastes in more apps.** It now waits for you to let go of the shortcut before
+pressing ⌘V. Apps such as Chrome and Electron apps saw the ⌥⇧ you were still holding and pasted
+nothing.
+
+**Your agent sees your marks the way you did.** Each pin and drawing says how long it stayed on
+your screen, so your agent reads it as a moment you pointed at, not a lasting note. Cursor renders
+draw the pins and drawings that were on screen at that moment, without the ones that had faded or
+that you cleared. Marks from earlier versions are still listed but aren't drawn.
+
 ## 0.1.70
 
 **Undo Mark (⌥⇧Z) only clears your screen.** It takes the newest pin or drawing off the screen
