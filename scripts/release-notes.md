@@ -2,6 +2,12 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.68
+
+**Copy prompt** on a recording made before 0.1.67 with the camera on no longer says you
+recorded yourself on camera when you recorded your screen. Those older recordings don't say
+whether they captured a screen, so the prompt now says only that you recorded something.
+
 ## 0.1.67
 
 A take can now run for up to 12 hours (long takes used to fail after about two), and a long
