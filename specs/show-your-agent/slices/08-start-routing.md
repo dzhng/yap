@@ -9,7 +9,7 @@
   origin survives the start replay (`ControlsState` `beginStart`, 586-605) and places the
   countdown when it is on.
 - Restart reuses the take's own source (L6), not the menu's (`RecordingControls.swift:461`).
-- `⌥⇧Z` appends a retracting mark (P1) through the slice 04 path; `⌥⇧X` cancels a take or
+- `⌥⇧Z` clears the newest mark still on screen and writes nothing (P1); `⌥⇧X` cancels a take or
   abandons a countdown; `⌥⇧P` pauses/resumes. Z, X, P, R are held only while a take or
   countdown is live (`GlobalShortcuts.hold()`, `:55-58`).
 - A second `⌥⇧S` within 0.4 s of a start is ignored (P7).

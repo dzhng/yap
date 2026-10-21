@@ -4,7 +4,8 @@
 
 **Seam:** a full-screen `OverlayPanel` per display (`apps/macos/Sources/Yap/OverlayPanel.swift`,
 `sharingType = .none`), `ignoresMouseEvents = true`, as proven in slice 00. It consumes only the
-recognizer's output stream: strokes, numbered pin badges, retractions. It classifies nothing.
+recognizer's output stream: strokes and numbered pin badges. It classifies nothing; undo (P1)
+clears the newest mark still on screen here and nowhere else.
 
 **Slice variable:** the look of ink and pins only. Judge on crops of a stroke, a pin badge and
 a stroke fading; the control panel, Settings and the prompt are out of scope here.
