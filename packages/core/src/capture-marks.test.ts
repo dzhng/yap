@@ -205,3 +205,50 @@ test("each mark says how long it stayed on the person's screen", async () => {
     undefined,
   ]);
 });
+
+test("a pause ends what was on screen where the recording stopped, on the recording's clock", async () => {
+  const f = await fixture();
+  const point = (hostUs: number) => ({ hostUs, globalX: 101, globalY: 202, x: 16, y: 28 });
+  const captured = await f.capture([
+    {
+      event: "mark",
+      data: {
+        hostUs: 2_000,
+        sourceUs: 600,
+        epoch: 1,
+        id: "pin-1",
+        kind: "pin",
+        pin: 1,
+        points: [point(2_000)],
+        onScreen: { fadeHostUs: 3_802_000, untilHostUs: 5_002_000 },
+      },
+    },
+    // One second on, the take pauses for a minute; the pin fades out while nothing records.
+    { event: "pause", data: { atSourceUs: 1_000_600, elapsedPauseUs: 60_000_000 } },
+    {
+      event: "mark",
+      data: {
+        hostUs: 70_000_000,
+        sourceUs: 9_998_000,
+        epoch: 1,
+        id: "pin-2",
+        kind: "pin",
+        pin: 2,
+        points: [point(70_000_000)],
+        onScreen: { fadeHostUs: 73_800_000, untilHostUs: 75_000_000 },
+      },
+    },
+  ]);
+  const selection = { assetId: f.asset.id, streamId: "video", acquisitionId: captured.id };
+  const [before, after] = f.captureRead.marks(selection);
+  // On the recording, the first pin is gone at the pause: it shows for the second before it.
+  expect(before).toMatchObject({ id: "pin-1", shownForUs: 1_000_000 });
+  // Its fade would have begun after the pause point, so up to it the pin is at full strength.
+  expect(before!.drawing!.fade.fromUs).toBeGreaterThanOrEqual(before!.shownForUs!);
+  // A pause before a mark changes nothing about it.
+  expect(after).toMatchObject({
+    id: "pin-2",
+    shownForUs: 5_000_000,
+    drawing: { pointsUs: [0], fade: { fromUs: 3_800_000, untilUs: 5_000_000 } },
+  });
+});

@@ -473,7 +473,7 @@ package enum CaptureSourcePublication {
         var kinds = Set<String>()
         let facts = try CaptureJournal.readEvidence(directory: lease.directory,             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             mark: { mark in
-                // An undo row from an older app only cleared the screen; it takes no mark away.
+                // An undo row says when a mark left the screen; it takes no mark away.
                 if summarizesTake, mark.retracts == nil { kinds.insert(mark.kind) }
             }, retainPrefix: true, descriptor: descriptor, layout: layout)
         let marks: CapturePublishedSource.Marks? = summarizesTake

@@ -500,8 +500,7 @@ final class RecordingControls: NSObject {
         case .setCamera(let on):
             if let request = state.setCamera(on) { setCamera(request) }
         case .startOrStop:
-            if state.isLive, let stopped = live()?["recordingId"] as? String { prompts.stopped(stopped) }
-            state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
+            state.isLive ? send("capture.stop", live(), then: prompts.stopped) : countThenStart(origin: origin ?? .menu)
         case .dismissFailure:
             state.failure = nil
         case .retryFailure:

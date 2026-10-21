@@ -12,7 +12,8 @@ test("journal version literals stay in the two capability tables", () => {
       .map((name) => directory + name);
   });
   const typescript = readdirSync(new URL("packages/core/src/", root))
-    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+    // Tests and their fixtures write journals of a named version; they never interpret one.
+    .filter((name) => name.endsWith(".ts") && !/\.(test|fixture)\.ts$/.test(name))
     .map((name) => "packages/core/src/" + name);
   const violations: string[] = [];
   for (const path of [...swift, ...typescript]) {

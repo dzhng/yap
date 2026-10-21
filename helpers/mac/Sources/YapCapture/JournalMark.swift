@@ -72,7 +72,8 @@ func validMark(_ mark: JournalMark) -> Bool {
     }) else { return false }
     if let screen = mark.onScreen {
         guard mark.kind != "click", mark.retracts == nil,
-            screen.fadeHostUs >= 0, screen.untilHostUs > screen.fadeHostUs else { return false }
+            screen.fadeHostUs >= 0, screen.untilHostUs > max(screen.fadeHostUs, mark.hostUs)
+        else { return false }
     }
     if let window = mark.window {
         guard !window.app.isEmpty, window.app.utf8.count <= 256,

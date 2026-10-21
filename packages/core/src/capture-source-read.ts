@@ -72,13 +72,42 @@ export type CaptureMark = {
   pin?: number;
   window?: Record<string, unknown>;
   /**
-   * How long the mark stayed on the person's screen from `assetUs`: until it faded on its own, or
-   * until an undo cleared it sooner. A click is never drawn, so it has none.
+   * How long the mark stayed on the person's screen from `assetUs`, on the recording's clock:
+   * until it faded on its own, an undo cleared it, or the take paused. A click is never drawn,
+   * so it has none.
    */
   shownForUs?: number;
-  /** When it faded on screen, in microseconds after `assetUs`; for drawing it as it was seen. */
-  fade?: { fromUs: number; untilUs: number };
+  /**
+   * For drawing it as it was seen, in microseconds after `assetUs`: when each point was drawn,
+   * and its fade. The fade keeps its full length, so a pause that ends the mark mid-fade
+   * leaves it at the strength it had.
+   */
+  drawing?: { pointsUs: number[]; fade: { fromUs: number; untilUs: number } };
 };
+type Pause = { atSourceUs: number; elapsedPauseUs: number };
+
+/**
+ * Where a host time lands after a mark, on the capture clock and as an offset from the mark.
+ * Host time runs on through a pause and the capture clock does not, so a moment inside a pause
+ * lands where the pause began.
+ */
+function captureOffsetUs(
+  mark: { hostUs: number; sourceUs: number },
+  hostUs: number,
+  pauses: Pause[],
+) {
+  let host = mark.hostUs,
+    source = mark.sourceUs;
+  for (const pause of pauses) {
+    if (pause.atSourceUs < source) continue;
+    const pausedAt = host + pause.atSourceUs - source;
+    if (hostUs < pausedAt) break;
+    if (hostUs < pausedAt + pause.elapsedPauseUs) return pause.atSourceUs - mark.sourceUs;
+    host = pausedAt + pause.elapsedPauseUs;
+    source = pause.atSourceUs;
+  }
+  return source - mark.sourceUs + hostUs - host;
+}
 // The journal's own form: capture-clock `sourceUs` and the order it was written in.
 type JournalMark = Omit<CaptureMark, "assetUs"> & { sourceUs: number; sequence: number };
 export type CaptureRow = {
@@ -216,19 +245,23 @@ export class CaptureSourceRead {
     };
   }
   private readMarks(identity: SourceEvidenceMetadata): JournalMark[] {
-    const rows = [] as { sequence: number; sourceUs: number; data: Record<string, unknown> }[];
-    let after: [number, number] | null = null;
-    for (;;) {
-      const page = this.records.eventRecords(identity, "marks", after, 256);
-      if (!page.length) break;
-      for (const row of page)
-        rows.push({
-          sequence: row.sequence,
-          sourceUs: row.sourceUs!,
-          data: JSON.parse(row.content),
-        });
-      after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
-    }
+    const read = (index: "marks" | "pauses") => {
+      const rows = [] as { sequence: number; sourceUs: number; data: Record<string, unknown> }[];
+      let after: [number, number] | null = null;
+      for (;;) {
+        const page = this.records.eventRecords(identity, index, after, 256);
+        if (!page.length) return rows;
+        for (const row of page)
+          rows.push({
+            sequence: row.sequence,
+            sourceUs: row.sourceUs!,
+            data: JSON.parse(row.content),
+          });
+        after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
+      }
+    };
+    const rows = read("marks");
+    const pauses = read("pauses").map((row) => row.data as Pause);
     // A row carrying `retracts` is an undo: it says when the mark it names left the screen, and
     // takes no mark away.
     const cleared = new Map<string, number>();
@@ -239,15 +272,23 @@ export class CaptureSourceRead {
       .filter((row) => row.data.retracts == null)
       .map((row) => {
         const data = row.data;
-        const hostUs = data.hostUs as number;
+        const anchor = { hostUs: data.hostUs as number, sourceUs: row.sourceUs };
+        const at = (hostUs: number) => captureOffsetUs(anchor, hostUs, pauses);
         const screen = data.onScreen as { fadeHostUs: number; untilHostUs: number } | undefined;
         const clearedAt = cleared.get(data.id as string);
+        const fadeFromUs = screen && at(screen.fadeHostUs);
         const shown = screen && {
           shownForUs: Math.min(
-            screen.untilHostUs - hostUs,
+            at(screen.untilHostUs),
             clearedAt === undefined ? Infinity : Math.max(0, clearedAt - row.sourceUs),
           ),
-          fade: { fromUs: screen.fadeHostUs - hostUs, untilUs: screen.untilHostUs - hostUs },
+          drawing: {
+            pointsUs: (data.points as CaptureMarkPoint[]).map((point) => at(point.hostUs)),
+            fade: {
+              fromUs: fadeFromUs!,
+              untilUs: fadeFromUs! + screen.untilHostUs - screen.fadeHostUs,
+            },
+          },
         };
         return {
           sourceUs: row.sourceUs,
@@ -376,7 +417,7 @@ export class CaptureSourceRead {
           captureAtUs: next.sourceUs,
           sourceSequence: next.sequence,
           observation: (() => {
-            const { sequence: _sequence, fade: _fade, ...mark } = next;
+            const { sequence: _sequence, drawing: _drawing, ...mark } = next;
             return mark as Record<string, unknown>;
           })(),
         };

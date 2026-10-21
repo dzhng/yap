@@ -12,6 +12,8 @@ placement is the platform responsibility, not a second interpretation of edits:
   descriptor containment and new-output publication shared by native consumers.
 - [Pictures](Sources/YapFrames/README.md) and
   [audio](Sources/YapAudio/README.md) execute compiled plans.
+- [Ink](Sources/YapInk/README.md) owns how a person's marks look, drawn live by the
+  app and in review frames of their recording.
 - [Speech](Sources/YapSpeech/README.md) owns local engine execution and
   source-bound word timing.
 

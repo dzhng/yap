@@ -215,7 +215,7 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
         data.retracts != null ||
         !integer(screen.fadeHostUs) ||
         !integer(screen.untilHostUs) ||
-        screen.untilHostUs <= screen.fadeHostUs
+        screen.untilHostUs <= Math.max(screen.fadeHostUs, data.hostUs as number)
       )
         invalid("Invalid normalized mark screen window");
     }

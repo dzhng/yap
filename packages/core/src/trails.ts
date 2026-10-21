@@ -434,10 +434,15 @@ export function sourceCursorOverlay(dependencies: {
       ...value,
       atSourceUs: value.atSourceUs + offset,
     });
-    const requested = plan.geometry.requested;
+    const { requested, selected: decoded } = plan.geometry;
     // Import validated both as finite numbers; a global point spans this many pixels per point.
     const { contentScale, scaleFactor } = requested.geometry as Record<string, number>;
-    const marks = inkAt(capture.marks(selection), atUs, requested.epoch);
+    // Ink is placed through the frame's own geometry; a picture decoded under another one, a
+    // moved or resized window, gets none, as the trail does.
+    const marks =
+      requested.epoch === decoded.epoch
+        ? inkAt(capture.marks(selection), atUs, requested.epoch)
+        : [];
     return {
       ...plan.overlay,
       pointer: plan.overlay.pointer ? point(plan.overlay.pointer) : null,
@@ -461,27 +466,29 @@ export function sourceCursorOverlay(dependencies: {
  */
 function inkAt(marks: CaptureMark[], atUs: number, epoch: number): FrameMark[] {
   return marks.flatMap((mark): FrameMark[] => {
-    if (mark.kind === "click" || mark.shownForUs === undefined || !mark.fade) return [];
+    const drawing = mark.drawing;
+    if (mark.kind === "click" || mark.shownForUs === undefined || !drawing) return [];
     if (mark.epoch !== epoch || atUs < mark.assetUs || atUs >= mark.assetUs + mark.shownForUs)
       return [];
-    // Point times share the mark's host clock, so each is an offset from the mark's own time.
-    const at = (hostUs: number) => mark.assetUs + hostUs - mark.hostUs;
     const runs: { x: number; y: number }[][] = [[]];
-    for (const point of mark.points) {
-      if (at(point.hostUs) > atUs) break;
+    for (const [index, point] of mark.points.entries()) {
+      if (mark.assetUs + drawing.pointsUs[index]! > atUs) break;
       if (point.x === null || point.y === null) runs.push([]);
       else runs.at(-1)!.push({ x: point.x, y: point.y });
     }
     const drawn = runs.filter((run) => run.length);
     if (!drawn.length) return [];
-    const released = at(mark.points.at(-1)!.hostUs) <= atUs;
+    const released = mark.assetUs + drawing.pointsUs.at(-1)! <= atUs;
     return [
       {
         kind: mark.kind,
         ...(mark.pin === undefined ? {} : { pin: mark.pin }),
         runs: drawn,
         fade: released
-          ? { fromUs: mark.assetUs + mark.fade.fromUs, untilUs: mark.assetUs + mark.fade.untilUs }
+          ? {
+              fromUs: mark.assetUs + drawing.fade.fromUs,
+              untilUs: mark.assetUs + drawing.fade.untilUs,
+            }
           : null,
       },
     ];

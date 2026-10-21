@@ -32,8 +32,14 @@ final class PromptHandoff {
         }
     }
 
-    /// The person stopped this take from these controls.
-    func stopped(_ recordingId: String) { finished.stopped(recordingId) }
+    /// The person stopped a take from these controls, as the service's answer to that stop names
+    /// it. A stop that failed hands nothing over.
+    func stopped(_ answer: Result<Data, ServiceFailure>) {
+        guard let data = try? answer.get(),
+            let take = try? JSONDecoder().decode(ControlsState.TakeStatus.self, from: data)
+        else { return }
+        finished.stopped(take.id)
+    }
 
     /// The take whose prompt to announce now that it is complete, answered once.
     func finishedTake(_ take: ControlsState.TakeStatus?) -> String? { finished.observe(take) }

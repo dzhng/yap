@@ -85,9 +85,15 @@ Capture and marks
   an undo skip what already cleared.
 - The on-screen window (P8) is an optional `onScreen` field on schema-4 marks, with no schema
   bump: older readers ignore it, and a mark without one is a mark from before it existed. The
-  window is in host time and the reader places it as an offset from the mark, so a pause
-  inside a mark's few seconds can leave it listed as shown a little longer than the recording
-  shows it.
+  window is in host time, as the screen keeps it.
+- The window is journaled in host time; the reader moves it onto the recording's clock through
+  the take's pauses, so a mark that left the screen during a pause ends where the pause began,
+  and one it fades through keeps the strength it had there.
+- Undo Mark has no CLI operation: like drawing a mark, it is a gesture made during a take, and
+  the journal row it leaves is evidence agents read through `timeline.events`.
+- Ink in a review frame keeps the size the person saw, with no readable minimum on a small
+  `maxLongEdge`: the frame shows what was on screen, and an agent wanting detail asks for a
+  larger frame.
 - One owner of the ink's look, `YapInk`, draws it live and in review frames. The frame is
   drawn at source pixels per screen point from the frame's geometry, and only marks of the
   frame's own geometry epoch are placed, as with the pointer trail.
