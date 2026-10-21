@@ -19,14 +19,18 @@ verified. The full-run comparison and focused triage are recorded in
 [full-run triage](assets/verification/13-full-run-triage.md) and
 [second review round](assets/verification/13r2-review.md).
 
-Slice 13 still has two open items:
+Slice 13 still has one open item, plus one partial:
 - **Fresh-agent check.** No Claude or Codex check on an importing take has run yet.
-- **Origin-take acceptance.** Take `99099abb-fb1c-4018-a364-b263dcd58057` is intact (primary and
-  camera published, journal 6,255,256 bytes) and still failed on the installed 0.1.66. Once
-  the user's app updates to 0.1.67, press its Library **Retry** (or run `job.retry`), then
-  check the import, Copy prompt and Play. Never touch its files or rows before then.
+- **Origin-take acceptance (import and prompt done; Play unverified).** On 2026-10-21, with
+  0.1.67 installed, `job.retry` re-ran the failed import of take
+  `99099abb-fb1c-4018-a364-b263dcd58057` (job `ecdc956d…`, attempt 2). It is ready: 34 mark
+  events and 11,413 cursor samples, with the transcript ready. A video-making agent session
+  then used the take through the normal flow. Its `recording.prompt` opened with
+  "I recorded myself on camera": the take predates `take.kind`, so the prompt couldn't know a
+  screen was captured. That was fixed in v0.1.68. Still unconfirmed in the app: **Play**, and
+  **Copy prompt** after the update to 0.1.68.
 
-After both pass, run close-spec.
+After the fresh-agent check, and once the user confirms Play, run close-spec.
 
 You are implementing this spec. Pick up at [slice 13](slices/13-closeout.md).
 
