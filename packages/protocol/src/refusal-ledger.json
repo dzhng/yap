@@ -684,7 +684,7 @@
       "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 1
+        "helpers/mac/Sources/YapCapture/TrackWriter.swift": 1
       },
       "reason": "The machine’s encoder or our selected configuration can be repaired.",
       "cause": "Yap couldn't open the tool that saves video or audio."
@@ -894,7 +894,8 @@
       "retryable": true,
       "files": {
         "helpers/mac/Sources/YapCapture/CapturePCM.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 3
+        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 2,
+        "helpers/mac/Sources/YapCapture/TrackWriter.swift": 1
       },
       "reason": "Capture’s own PCM metadata can be repaired.",
       "cause": "Yap couldn't read the recorded audio's format details."
@@ -3200,8 +3201,9 @@
         "helpers/mac/Sources/YapCapture/CameraCaptureInput.swift": 2,
         "helpers/mac/Sources/YapCapture/CameraWriter.swift": 4,
         "helpers/mac/Sources/YapCapture/CaptureClockIngress.swift": 1,
-        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 6,
+        "helpers/mac/Sources/YapCapture/CaptureWriter.swift": 5,
         "helpers/mac/Sources/YapCapture/HeldTailFrame.swift": 2,
+        "helpers/mac/Sources/YapCapture/TrackWriter.swift": 1,
         "helpers/mac/Sources/YapWire/ArchiveAssembly.swift": 2
       },
       "reason": "Our capture writer, encoder or filesystem can recover.",
