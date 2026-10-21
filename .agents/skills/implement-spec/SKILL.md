@@ -33,7 +33,7 @@ depends on prior work.
    replace it with the simpler architecture and update the spec handoff.
 3. Implement one coherent pass: usually one slice, one vertical checkpoint, or
    one architecture correction. Keep the review surface small enough to audit.
-4. Verify the actual contract. For behavior changes, run the focused unit tests
+4. Verify the actual contract. For behavior changes, run the focused tests
    first; for browser-visible work, use the real browser/harness and inspect
    screenshots so the subject is framed and readable, not merely nonblank.
    A visual CHANGE carries two extra proofs before you claim it: a

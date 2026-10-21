@@ -28,6 +28,8 @@ A change that reaches the whole system (a recording or edit format, a contract e
 
 Every expensive run must answer a question a cheaper one can't. Recording, transcribing and rendering are the expensive runs here; do only the ones a change can move. Reuse a result that is still valid, and rerun only what a change could have invalidated. Docs and data that no code reads need no run at all.
 
+Default to end-to-end or system-level tests for regression coverage; use a unit test only for specific, complex business logic when fast feedback will materially speed development.
+
 Write the test first. Before changing behaviour or fixing a bug, invoke [`write-tests`](.agents/skills/write-tests/SKILL.md) and follow its red/green workflow. Test what the product does and how it fails, not how the code is shaped.
 
 A change that shouldn't alter behaviour (a refactor, a performance change) must leave the output unchanged, or be a named decision.
