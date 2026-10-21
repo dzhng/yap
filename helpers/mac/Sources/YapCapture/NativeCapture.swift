@@ -242,7 +242,7 @@ public final class NativeCapture {
         }
     }
 
-    /// Appends an undo mark for the most recent unretracted mark in the running screen take.
+    /// Appends an undo mark for the most recent unretracted stroke or pin in the running screen take.
     /// Shortcut bindings live in the app; this is the capture operation they call.
     public func undoMark() throws {
         guard let sink, failure == nil, state == .recording || state == .paused else {

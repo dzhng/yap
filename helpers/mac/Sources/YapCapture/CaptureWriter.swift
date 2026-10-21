@@ -300,7 +300,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         publishActiveStroke(recognizer)
     }
 
-    /// Appends a retracting mark for the most recent mark that has not already been undone.
+    /// Appends a retracting mark for the most recent stroke or pin that has not already been undone.
     package func undoMark() throws {
         try queue.sync {
             guard !finishing, failure == nil, request.source.kind != "camera" else {
@@ -330,26 +330,25 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     appKit: NSEvent.mouseLocation, zeroOriginHeight: GlobalPointSpace.zeroOriginHeight())
                 let hostUs = nowUs()
                 self.queue.async {
-                    guard !self.finishing, self.failure == nil, var recognizer = self.markRecognizer else { return }
-                    guard self.clock.sourceTime(for: hostUs) != nil else { return }
-                    recognizer.updateCaptureState(
-                        paused: self.clock.isPaused, hasFirstFrame: self.clock.originUs != nil)
-                    let events: [MarkEvent]
-                    if isDown {
-                        events = recognizer.feed(
-                            press: MarkPress(
-                                hostUs: hostUs, point: point, shift: shift))
-                    } else {
-                        events = recognizer.feed(release: MarkRelease(hostUs: hostUs, point: point))
-                    }
-                    self.markRecognizer = recognizer
-                    self.append(events)
-                    self.publishActiveStroke(recognizer)
+                    self.acceptButton(down: isDown, shift: shift, point: point, hostUs: hostUs)
                 }
             }
         }
         let token: Any? = Thread.isMainThread ? register() : DispatchQueue.main.sync(execute: register)
         if let token { markMonitorTokens = [token] }
+    }
+
+    /// Feeds one left-button edge from the global monitor to the recognizer, on the writer queue.
+    package func acceptButton(down: Bool, shift: Bool, point: CGPoint, hostUs: Int64) {
+        guard !finishing, failure == nil, var recognizer = markRecognizer else { return }
+        guard clock.sourceTime(for: hostUs) != nil else { return }
+        recognizer.updateCaptureState(paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
+        let events = down
+            ? recognizer.feed(press: MarkPress(hostUs: hostUs, point: point, shift: shift))
+            : recognizer.feed(release: MarkRelease(hostUs: hostUs, point: point))
+        markRecognizer = recognizer
+        append(events)
+        publishActiveStroke(recognizer)
     }
 
     private func removeMarkMonitors() {

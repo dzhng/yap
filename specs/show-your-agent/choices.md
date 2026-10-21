@@ -8,8 +8,11 @@ verdict, least confident first.
 
 - **Ink look.** #ff3b30; 5 pt strokes and 32 pt pins, each with a white edge and a soft
   shadow so they hold on red, busy or light content; a stroke fades over 1.2 s after ⇧ is
-  released, strokes visible together fade together; pins stay until undone or the take ends.
-  Two unprimed critiques shaped it ([shots](assets/ink/README.md)).
+  released, strokes visible together fade together. Pins first stayed until undone or the take
+  ended; on 2026-10-21 the user asked for them to clear on their own, so each pin is gone 5 s
+  after it is dropped, fading over its last 1.2 s like a stroke. Only the screen forgets: the
+  recording keeps every mark. Two unprimed critiques shaped the look
+  ([shots](assets/ink/README.md)).
 - **Settings shortcut look.** Two groups, "Shortcuts" and "While Recording", so the lifetime
   is stated once; a row warns only when macOS refused its key or another action uses it, with
   an orange field border ([shots](assets/settings/README.md)).
@@ -62,8 +65,10 @@ Capture and marks
   / `packedSchema` owns which schemas are packed, on both sides.
 - Clicks come from a global mouse monitor, ⇧ and the pointer from the 60 Hz sampler (slice 00
   probe), and a press's own ⇧ flag decides pin versus click.
-- The recognizer owns no undo state; undo appends a retraction for the latest live mark of any
-  kind, and pin numbers only count up, so badges and prompt numbers match after an undo.
+- The recognizer owns no undo state; undo appends a retraction for the latest live stroke or
+  pin, and pin numbers only count up, so badges and prompt numbers match after an undo. Undo
+  first took any kind, clicks included, so on the user's origin take every ⌥⇧Z after a pin took
+  back an unseen click and the pin stayed; a person undoes what they drew, not what they clicked.
 - Mark points keep global points and natively projected pixels like cursor samples, through
   the one `CursorTrack.projection`; points outside the picture store null.
 - The live window lookup uses the CoreGraphics window list, layer 0, Yap's processes removed;

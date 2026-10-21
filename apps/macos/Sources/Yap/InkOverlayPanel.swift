@@ -6,7 +6,9 @@ import YapCapture
 
  It draws what the capture's mark stream says and nothing else: the stroke under the pointer while
  ⇧ is held, each recorded stroke and pin, and the absence of whatever undo took back. Which input
- is a stroke, a pin or a click is the recognizer's decision, never this one's.
+ is a stroke, a pin or a click is the recognizer's decision, never this one's. Ink only leaves the
+ screen: a stroke fades once drawn and a pin a few seconds after it is dropped, while the recording
+ keeps every mark.
 
  The person sees the ink and the recording never does: each display's panel is unshared from the
  moment it opens, so no capture sees it.
@@ -17,6 +19,8 @@ final class InkOverlayPanel {
     private static let ink = NSColor(srgbRed: 1, green: 0x3b / 255, blue: 0x30 / 255, alpha: 1)
     /// A released stroke stays readable for a moment, then goes faster as it ends.
     private static let fadeSeconds: TimeInterval = 1.2
+    /// A pin is gone this long after it is dropped, its last moment spent fading like a stroke.
+    private static let pinSeconds: TimeInterval = 5
 
     private struct Screen {
         let display: CGDirectDisplayID
@@ -27,10 +31,11 @@ final class InkOverlayPanel {
     private var screens: [Screen] = []
     private var live: [MarkPoint] = []
     private var strokes: [(id: String, points: [MarkPoint])] = []
-    private var pins: [(id: String, number: Int, point: MarkPoint)] = []
+    private var pins: [(id: String, number: Int, point: MarkPoint, dropped: Date)] = []
     /// Released strokes fade together: one drawn while another is still visible fades with it.
     private var fadeStarted: Date?
     private var strokeOpacity: CGFloat = 1
+    /// Runs while any ink is on its way out, and stops once none is left.
     private var fadeTimer: Timer?
 
     /// Opens a panel on each display while a take is live and takes them all down, ink and all,
@@ -49,11 +54,12 @@ final class InkOverlayPanel {
             if fadeStarted == nil {
                 fadeStarted = Date()
                 strokeOpacity = 1
-                startFading()
             }
+            startFading()
         case .committed(let mark) where mark.kind == "pin":
             guard let number = mark.pin, let point = mark.points.first else { return }
-            pins.append((mark.id, number, Self.global(point)))
+            pins.append((mark.id, number, Self.global(point), Date()))
+            startFading()
         case .committed:
             return
         case .retracted(let id):
@@ -96,7 +102,7 @@ final class InkOverlayPanel {
     }
 
     private func startFading() {
-        fadeTimer?.invalidate()
+        guard fadeTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.fade() }
         }
@@ -105,19 +111,34 @@ final class InkOverlayPanel {
     }
 
     private func fade() {
-        guard let fadeStarted else { return }
-        let progress = min(1, Date().timeIntervalSince(fadeStarted) / Self.fadeSeconds)
-        strokeOpacity = 1 - CGFloat(progress * progress)
-        if progress >= 1 {
-            strokes.removeAll()
-            self.fadeStarted = nil
+        let now = Date()
+        if let fadeStarted {
+            strokeOpacity = Self.opacity(fading: now.timeIntervalSince(fadeStarted))
+            if strokeOpacity == 0 {
+                strokes.removeAll()
+                self.fadeStarted = nil
+            }
+        }
+        pins.removeAll { now.timeIntervalSince($0.dropped) >= Self.pinSeconds }
+        if fadeStarted == nil, pins.isEmpty {
             fadeTimer?.invalidate()
             fadeTimer = nil
         }
         redraw()
     }
 
+    /// Readable for a moment, then faster as it ends: full strength at zero, gone at fadeSeconds.
+    private static func opacity(fading elapsed: TimeInterval) -> CGFloat {
+        let progress = min(1, max(0, elapsed / fadeSeconds))
+        return 1 - CGFloat(progress * progress)
+    }
+
+    private func pinOpacity(_ dropped: Date, now: Date) -> CGFloat {
+        Self.opacity(fading: now.timeIntervalSince(dropped) - (Self.pinSeconds - Self.fadeSeconds))
+    }
+
     private func redraw() {
+        let now = Date()
         for screen in screens {
             // Global points are top-left based; each panel draws in its own display's corner.
             let frame = screen.panel.frame
@@ -128,7 +149,7 @@ final class InkOverlayPanel {
             screen.view.content = InkView.Content(
                 strokes: strokes.map { ($0.points.map(local), strokeOpacity) }
                     + (live.isEmpty ? [] : [(live.map(local), 1)]),
-                pins: pins.map { (local($0.point), $0.number) })
+                pins: pins.map { (local($0.point), $0.number, pinOpacity($0.dropped, now: now)) })
         }
     }
 
@@ -167,10 +188,7 @@ final class InkOverlayPanel {
         case "stroke-fading":
             receive(.committed(mark("fixture-stroke", "stroke", loop)))
             // Halfway through the fade, held there so the picture is the same every time.
-            fadeTimer?.invalidate()
-            fadeTimer = nil
             strokeOpacity = 0.75
-            redraw()
             marks = [mark("fixture-stroke", "stroke", loop)]
         case "two-pins":
             receive(.committed(firstPin))
@@ -184,6 +202,10 @@ final class InkOverlayPanel {
         default:
             return nil
         }
+        // Nothing fades in a fixture, so a check sees the same picture however long it takes.
+        fadeTimer?.invalidate()
+        fadeTimer = nil
+        redraw()
         if front {
             // A check of what a take records needs the ink where a person would see it.
             screen.panel.level = .floating
@@ -204,7 +226,7 @@ final class InkOverlayPanel {
 private final class InkView: NSView {
     struct Content {
         var strokes: [(points: [NSPoint], opacity: CGFloat)] = []
-        var pins: [(center: NSPoint, number: Int)] = []
+        var pins: [(center: NSPoint, number: Int, opacity: CGFloat)] = []
     }
 
     static let lineWidth: CGFloat = 5
@@ -254,7 +276,16 @@ private final class InkView: NSView {
             .font: NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .heavy),
             .foregroundColor: NSColor.white,
         ]
-        for pin in content.pins {
+        for pin in content.pins where pin.opacity > 0 {
+            // The badge fades as one picture, so its number never shows through a faded fill.
+            let context = NSGraphicsContext.current?.cgContext
+            context?.saveGState()
+            context?.setAlpha(pin.opacity)
+            context?.beginTransparencyLayer(auxiliaryInfo: nil)
+            defer {
+                context?.endTransparencyLayer()
+                context?.restoreGState()
+            }
             let r = Self.pinRadius
             let badge = NSBezierPath(ovalIn: NSRect(x: pin.center.x - r, y: pin.center.y - r, width: r * 2, height: r * 2))
             // The same white edge and shadow as the strokes, so a badge keeps its outline on red,

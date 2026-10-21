@@ -1,11 +1,12 @@
+import CoreGraphics
 import CoreMedia
 import CoreVideo
 import Foundation
 @preconcurrency import ScreenCaptureKit
 import YapCapture
 
-/// Marks a person makes during a screen take, from the writer's pointer readings to the journal
-/// and the overlay's stream.
+/// Marks a person makes during a screen take, from the writer's pointer readings and button edges
+/// to the journal and the overlay's stream.
 func runLiveMarkJournalTests() throws {
     let directory = RecoveryFixture.directory("live-marks")
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -92,6 +93,41 @@ func runLiveMarkJournalTests() throws {
             && live.count == 2,
         "Undo while paused retracts the latest mark, got \(marks)")
     print("PASS replayed cursor readings produce a source-timed journal mark and the overlay's stream")
+    try runUndoSkipsClicksTest()
+}
+
+/// A person clicks through their demo after dropping a pin; undo takes back the pin they can see,
+/// never a click they cannot.
+private func runUndoSkipsClicksTest() throws {
+    let directory = RecoveryFixture.directory("undo-skips-clicks")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let writer = try CaptureWriter(
+        request: CaptureRequest(
+            source: CaptureSource(kind: "window", windowID: 1),
+            outputDirectory: directory.path, microphone: false, systemAudio: false),
+        width: 32, height: 32, sessionID: "undo-skips-clicks", requestedSourceRect: nil,
+        onFailure: { _ in })
+    defer { writer.cancel() }
+    let origin = CaptureHostTime.nowUs()
+    let geometry = CaptureGeometry(
+        outputWidth: 32, outputHeight: 32,
+        contentRect: GeometryRect(x: 0, y: 0, width: 16, height: 16), contentScale: 1,
+        scaleFactor: 1, screenRect: GeometryRect(x: 100, y: 100, width: 16, height: 16),
+        boundingRect: nil, requestedSourceRect: nil)
+    writer.queue.sync {
+        writer.ingest(liveMarkFrame(atHostUs: origin, geometry: geometry), of: .screen)
+        let point = CGPoint(x: 105, y: 105)
+        writer.acceptButton(down: true, shift: true, point: point, hostUs: origin + 10)
+        writer.acceptButton(down: false, shift: true, point: point, hostUs: origin + 20)
+        writer.acceptButton(down: true, shift: false, point: point, hostUs: origin + 30)
+        writer.acceptButton(down: false, shift: false, point: point, hostUs: origin + 40)
+    }
+    try writer.undoMark()
+    var marks: [JournalMark] = []
+    _ = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+    precondition(marks.map(\.kind) == ["pin", "click", "pin"], "A pin, a click, then the undo, got \(marks)")
+    precondition(marks[2].retracts == marks[0].id, "Undo takes back the pin, not the click, got \(marks)")
+    print("PASS undo takes back the latest pin or stroke, never a click")
 }
 
 /// What the writer told the overlay, in order. The writer calls it on its own queue, which the
