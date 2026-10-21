@@ -38,6 +38,11 @@ verdict, least confident first.
   no transcript for them (P5).
 - **A failed `recording.prompt` from ⌥⇧V reports where the menu shows failures**, not in the
   paste notice.
+- **A take the person finishes copies its prompt on its own** (asked for by the user on
+  2026-10-21), with the "Copied, press ⌘V" notice. It waits for the take to settle complete, so
+  the prompt carries the duration and marks; only a take stopped from the app's shortcut, menu
+  or floating controls does it. A take an agent stops through the service, one the 12-hour
+  limit ends, and an interrupted or discarded take leave the clipboard alone.
 - **Paste posts the physical V key with Command only.** Layouts that move V may not paste.
 - **Accessibility granted while Yap runs waits for a reopen.** macOS reports the grant at once
   but drops Yap's ⌘V until Yap reopens, so a paste looked done and did nothing (the user hit

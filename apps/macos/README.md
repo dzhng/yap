@@ -67,9 +67,13 @@ Accessibility is optional and only ever granted in System Settings: with it the 
 presses ⌘V in the front app, with Command alone whatever the person is still holding; without it
 the prompt is copied and a non-activating notice says to press ⌘V. macOS reports a grant made
 while Yap runs at once but drops the keystrokes Yap sends until it reopens, so until then the
-paster keeps copying and the notice and Settings say to reopen Yap. Every prompt copy, button or
-shortcut, goes through one [paster](Sources/YapControls/Paster.swift), and its text comes from the
-service's `recording.prompt`, so the app never writes a prompt of its own.
+paster keeps copying and the notice and Settings say to reopen Yap. A take the person stops from
+the app (shortcut, menu or floating controls) copies its own prompt once it is complete, with the
+same notice; a take stopped through the service, as an agent stops one, leaves the clipboard
+alone. Every prompt, button, shortcut or finished take, is handed over by one
+[handoff](Sources/Yap/PromptHandoff.swift) through one [paster](Sources/YapControls/Paster.swift),
+and its text comes from the service's `recording.prompt`, so the app never writes a prompt of its
+own. A launch a check drives copies to a pasteboard of its own, never the person's.
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves

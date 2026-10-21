@@ -16,6 +16,11 @@ final class ControlsProbe {
         !(ProcessInfo.processInfo.environment[variable] ?? "").isEmpty
     }
 
+    /// Where a driven launch's prompts are copied, so a check reads them back without ever
+    /// touching what the person has on their own clipboard. Unique to the launch, since a named
+    /// pasteboard outlives the app and would hand one check another's prompt.
+    static let pasteboard = NSPasteboard.withUniqueName()
+
     /// Access states a display fixture shows instead of the system's, so every permission state of
     /// the controls can be looked at without changing what macOS has recorded for this app.
     static var displayedPermissions: ControlsState.Permissions? {
@@ -58,6 +63,7 @@ final class ControlsProbe {
     func stop() {
         timer?.invalidate()
         timer = nil
+        Self.pasteboard.releaseGlobally()
     }
 
     private var commandPath: String { (directory as NSString).appendingPathComponent("command.json") }
@@ -75,6 +81,8 @@ final class ControlsProbe {
         switch command["do"] as? String {
         case "snapshot":
             return ["ok": true, "rows": controls.captureRows, "status": controls.captureView?.input.status ?? "Idle", "library": controls.libraryRows]
+        case "pasteboard":
+            return ["ok": true, "text": Self.pasteboard.string(forType: .string) ?? NSNull()]
         case "windows":
             return ["ok": true, "windows": Self.windows(), "active": NSApplication.shared.isActive]
         case "open":

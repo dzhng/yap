@@ -95,8 +95,7 @@ final class RecordingControls: NSObject {
         preferences: preferences, perform: { [weak self] action in self?.perform(action) })
     private lazy var ink = InkOverlayPanel()
     private let recordingPreview = PreviewWindow()
-    private let paster = Paster()
-    private lazy var pasteNotice = PasteNotice()
+    private let prompts = PromptHandoff()
     private lazy var countdown = StartCountdown(shortcuts: shortcuts)
     private lazy var settings = SettingsWindow(
         preferences: preferences,
@@ -501,6 +500,7 @@ final class RecordingControls: NSObject {
         case .setCamera(let on):
             if let request = state.setCamera(on) { setCamera(request) }
         case .startOrStop:
+            if state.isLive, let stopped = live()?["recordingId"] as? String { prompts.stopped(stopped) }
             state.isLive ? send("capture.stop", live()) : countThenStart(origin: origin ?? .menu)
         case .dismissFailure:
             state.failure = nil
@@ -512,7 +512,7 @@ final class RecordingControls: NSObject {
             }
         case .pastePrompt:
             let recordingId = state.isLive ? (live()?["recordingId"] as? String) : nil
-            copyPrompt(recordingId.map(MediaTarget.recording), paste: true)
+            copyPrompt(recordingId.map(MediaTarget.recording), .paste)
         case .undoMark:
             captureController?.clearLatestMark()
         case .pauseOrResume:
@@ -796,7 +796,7 @@ final class RecordingControls: NSObject {
             screen: NativeCapture.screenPermission ? .granted : screenRequestRefused ? .denied : .undetermined,
             microphone: .init(authorization: NativeCapture.microphonePermission),
             camera: .init(authorization: NativeCapture.cameraPermission),
-            accessibility: paster.access)
+            accessibility: prompts.paster.access)
     }
 
     // MARK: reading
@@ -881,6 +881,7 @@ final class RecordingControls: NSObject {
             }
         }
         if state.observeTake(observed) { showCaptureIfClosed() }
+        if let finished = prompts.finishedTake(state.take) { copyPrompt(.recording(finished), .announce) }
     }
 
     private func readSources() async {
@@ -1024,25 +1025,19 @@ final class RecordingControls: NSObject {
 
     /// The service owns the handoff text; the app only copies what `recording.prompt` returns, or
     /// pastes it into the front app for the paste shortcut. No target means the newest recording.
-    private func copyPrompt(_ target: MediaTarget?, paste: Bool = false, surface: ControlsState.Failure.Scope = .capture) {
+    private func copyPrompt(_ target: MediaTarget?, _ delivery: PromptHandoff.Delivery = .copy, surface: ControlsState.Failure.Scope = .capture) {
         let request = "recording.prompt.\(String(describing: target))"
         Task { @MainActor in
             do throws(ServiceFailure) {
-                let answer = try await service().call(
-                    "recording.prompt", target?.parameters ?? [:], as: PromptAnswer.self)
+                try await prompts.handOver(target, delivery, from: service())
                 state.resolveFailure(request: request)
-                if !paste {
-                    paster.copy(answer.text)
-                } else if let notice = paster.paste(answer.text).notice { pasteNotice.show(notice) }
             } catch {
-                state.failure = .init("Couldn't \(paste ? "paste" : "copy") prompt: \(error.localizedDescription)", scope: surface,
-                    request: request, action: paste ? .copyPrompt(target) : nil)
+                state.failure = .init("Couldn't \(delivery == .paste ? "paste" : "copy") prompt: \(error.localizedDescription)", scope: surface,
+                    request: request, action: delivery == .copy ? nil : .copyPrompt(target))
                 render()
             }
         }
     }
-
-    private struct PromptAnswer: Decodable { let text: String }
 
     var captureRows: [[String: Any]] {
         guard let view = captureView else { return [] }
