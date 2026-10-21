@@ -119,8 +119,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var zeroOriginHeight: Double?
     private var markRecognizer: MarkRecognizer?
     private var markMonitorTokens: [Any] = []
-    private var recordedMarks: [(id: String, kind: String, pin: Int?)] = []
-    private var retractedMarkIDs = Set<String>()
+    private var undoable = UndoableMarks()
     package var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
     /// Points of the live stroke the overlay was last told about. A stroke only grows until it
     /// ends, so its length is enough to know whether there is anything new to say.
@@ -307,19 +306,16 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             guard !finishing, failure == nil, request.source.kind != "camera" else {
                 throw CaptureFailure("INVALID_STATE", "No screen capture is recording marks.")
             }
-            guard let target = recordedMarks.last(where: { !retractedMarkIDs.contains($0.id) })
-            else { return }
             let hostUs = nowUs()
             // A paused take has no source time now; its undo lands where the pause began.
-            guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs)
+            guard let sourceUs = clock.isPaused ? clock.openPauseSourceUs : clock.sourceTime(for: hostUs),
+                let mark = undoable.retraction(hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch),
+                let target = mark.retracts
             else { return }
-            let mark = JournalMark(
-                hostUs: hostUs, sourceUs: sourceUs, epoch: cursor.epoch,
-                id: UUID().uuidString, kind: target.kind, pin: target.pin, points: [], retracts: target.id)
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
-            retractedMarkIDs.insert(target.id)
-            onMarkUpdate?(.retracted(target.id))
+            undoable.retract(target)
+            onMarkUpdate?(.retracted(target))
         }
     }
 
@@ -382,7 +378,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 window: event.window)
             let written = record { try journal.recordMark(mark) }
             guard written else { return }
-            recordedMarks.append((mark.id, mark.kind, mark.pin))
+            undoable.record(mark)
             onMarkUpdate?(.committed(mark))
         }
     }
