@@ -1,0 +1,2 @@
+# Husky owns the hooks directory, so Git LFS runs from here.
+git lfs post-commit "$@"
