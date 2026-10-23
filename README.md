@@ -248,6 +248,12 @@ Releases are built, signed and published to GitHub from a local Apple Silicon Ma
 [build and release guide](scripts/README.md) explains version ownership, CI hooks and personal
 source installs.
 
+### Telemetry
+
+Yap collects minimal, anonymous telemetry (download counts and unique installs)
+to understand usage. See [TELEMETRY.md](TELEMETRY.md) for what's collected, why,
+and how to opt out with `YAP_NO_TELEMETRY=1`.
+
 ## Contributing
 
 ### Product boundary
