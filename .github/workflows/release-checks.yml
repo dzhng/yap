@@ -2,7 +2,7 @@ name: Release contract checks
 on:
   pull_request:
     paths:
-      - .github/workflows/**
+      - .github/workflows/release-checks.yml
       - .node-version
       - helpers/denoise/provenance.json
       - scripts/release*
@@ -16,23 +16,11 @@ on:
       - apps/macos/Sources/Yap/NodeRuntime.swift
       - apps/macos/tests/bundled-runtime.test.mjs
       - apps/cli/**
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/**
-      - .node-version
-      - helpers/denoise/provenance.json
-      - scripts/release*
-      - scripts/build-macos.mjs
-      - scripts/launcher/**
-      - scripts/launcher.test.mjs
-      - scripts/sparkle/**
-      - packages/core/src/catalog.ts
-      - apps/macos/package.json
-      - apps/macos/Sources/Yap/ServiceBundle.swift
-      - apps/macos/Sources/Yap/NodeRuntime.swift
-      - apps/macos/tests/bundled-runtime.test.mjs
-      - apps/cli/**
+  # Pull requests provide the merge gate; run this manually for post-merge verification.
+  workflow_dispatch:
+concurrency:
+  group: release-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
