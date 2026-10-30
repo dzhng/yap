@@ -400,7 +400,7 @@ final class RecordingControls: NSObject {
             }
             emptySourceMode = source
             switch source {
-            case .display: state.selection.source = state.sources.displays.first.map { .display($0) }
+            case .display: state.selection.source = state.sources.defaultDisplay.map { .display($0) }
             case .window: state.selection.source = state.sources.windows.first.map { .window($0) }
             case .area:
                 state.selection.source = nil
@@ -889,21 +889,7 @@ final class RecordingControls: NSObject {
         do throws(ServiceFailure) {
             let answer = try await service().call("capture.sources", as: SourcesAnswer.self)
             emptySourceMode = sourceMode
-            state.observeSources(
-                ControlsState.SourceCatalog(
-                    displays: answer.displays.map { source in
-                        ControlsState.Display(
-                            id: source.id, name: source.name, width: source.width, height: source.height,
-                            frame: NSScreen.screens.first { $0.captureDisplayID == source.id }?.frame)
-                    },
-                    windows: answer.windows.map {
-                        ControlsState.Window(id: $0.id, title: $0.title, application: $0.application)
-                    },
-                    microphones: answer.microphones.map {
-                        ControlsState.Microphone(id: $0.id, name: $0.name, isDefault: $0.isDefault)
-                    }, cameras: answer.cameras.map {
-                        ControlsState.Camera(id: $0.id, name: $0.name, isDefault: $0.isDefault ?? false)
-                    }))
+            state.observeSources(answer.catalog)
         } catch {
             state.sourcesUnavailable(description: error.localizedDescription)
         }

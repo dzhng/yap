@@ -2,6 +2,12 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.72
+
+When the selected monitor disconnects while Yap is idle, the recording menu now
+automatically selects the Mac’s main display. No unavailable-monitor warning or
+Dismiss button remains, and a temporarily empty display list recovers on its own.
+
 ## 0.1.71
 
 **Finishing a take copies its prompt.** Stop a recording with ⌥⇧S, the menu or the floating

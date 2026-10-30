@@ -1,3 +1,4 @@
+import AppKit
 import YapControls
 
 /// What the controls read back from the service's `capture.status` and `capture.sources`.
@@ -39,4 +40,19 @@ struct SourcesAnswer: Decodable {
     let windows: [Window]
     let microphones: [Microphone]
     let cameras: [Camera]
+}
+
+extension SourcesAnswer {
+    /// Join capture identities to the window server's geometry and main display.
+    @MainActor var catalog: ControlsState.SourceCatalog {
+        .init(
+            displays: displays.map { source in
+                .init(id: source.id, name: source.name, width: source.width, height: source.height,
+                      frame: NSScreen.screens.first { $0.captureDisplayID == source.id }?.frame,
+                      isDefault: source.id == Int(CGMainDisplayID()))
+            },
+            windows: windows.map { .init(id: $0.id, title: $0.title, application: $0.application) },
+            microphones: microphones.map { .init(id: $0.id, name: $0.name, isDefault: $0.isDefault) },
+            cameras: cameras.map { .init(id: $0.id, name: $0.name, isDefault: $0.isDefault ?? false) })
+    }
 }

@@ -76,6 +76,9 @@ alone. Every prompt, button, shortcut or finished take, is handed over by one
 [handoff](Sources/Yap/PromptHandoff.swift) through one [paster](Sources/YapControls/Paster.swift),
 and its text comes from the service's `recording.prompt`, so the app never writes a prompt of its
 own. A launch a check drives copies to a pasteboard of its own, never the person's.
+Idle display selection follows the system's main display when its selected monitor
+disconnects, without an error to dismiss. A running take keeps its original source;
+automatic selection only prepares the next recording.
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves

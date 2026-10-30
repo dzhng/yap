@@ -157,6 +157,39 @@ func runSelectionTests() {
     print("PASS a selection becomes exactly the take it describes")
 }
 
+func runDisplayFallbackTests() {
+    let builtIn = ControlsState.Display(id: 1, name: "Built-in Retina Display", width: 3024, height: 1964, isDefault: true)
+    let secondary = ControlsState.Display(id: 2, name: "Secondary", width: 1920, height: 1080)
+    var state = ready()
+    state.observeSources(.init(displays: [secondary, builtIn], microphones: [headset]))
+    precondition(state.start()?.source == .display(id: builtIn.id),
+                 "Unplugging the selected monitor uses the main display, regardless of list order")
+    precondition(state.failure == nil,
+                 "An idle monitor disconnect needs no error or dismissal")
+
+    state.observeSources(.init())
+    precondition(state.start() == nil && state.failure == nil,
+                 "With no displays, wait quietly rather than retaining a disconnected display")
+    state.observeSources(.init(displays: [builtIn]))
+    precondition(state.start()?.source == .display(id: builtIn.id) && state.failure == nil,
+                 "A display returning after a temporary empty listing becomes ready without intervention")
+    state.selection.source = .display(secondary)
+    state.observeSources(.init(displays: [builtIn, secondary]))
+    precondition(state.start()?.source == .display(id: secondary.id),
+                 "A connected display choice stays selected when the main display is also available")
+    state.failure = .init("Couldn't finish recording", request: "capture.stop")
+    state.observeSources(.init(displays: [builtIn]))
+    precondition(state.start()?.source == .display(id: builtIn.id)
+                 && state.failure?.message == "Couldn't finish recording",
+                 "Automatic display fallback preserves unrelated action failures")
+
+    var fresh = ControlsState()
+    fresh.observeSources(.init(displays: [secondary, builtIn]))
+    precondition(fresh.start()?.source == .display(id: builtIn.id),
+                 "Launch uses the same system main display as disconnect fallback")
+    print("PASS idle display selection follows available monitors without an error")
+}
+
 func runStartRoutingTests() {
     let menuDisplay = ControlsState.Display(
         id: 3, name: "Menu Display", width: 1000, height: 800,

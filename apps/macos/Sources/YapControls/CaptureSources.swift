@@ -3,12 +3,13 @@ import Foundation
 /// Device identities and available sources shared by capture selection and presentation.
 extension ControlsState {
     public struct Display: Equatable, Sendable {
-        public init(id: Int, name: String, width: Int, height: Int, frame: CGRect? = nil) {
+        public init(id: Int, name: String, width: Int, height: Int, frame: CGRect? = nil, isDefault: Bool = false) {
             self.id = id
             self.name = name
             self.width = width
             self.height = height
             self.frame = frame
+            self.isDefault = isDefault
         }
         public let id: Int
         public let name: String
@@ -18,6 +19,8 @@ extension ControlsState {
         /// discovery supplies identity and dimensions; the app adds this geometry for pointer
         /// routed starts, while controls tests can inject it deterministically.
         public let frame: CGRect?
+        /// The system's main display, independent of catalog order or the focused window.
+        public let isDefault: Bool
     }
 
     public struct Window: Equatable, Sendable {
@@ -72,6 +75,7 @@ extension ControlsState {
         public var windows: [Window]
         public var microphones: [Microphone]
         public var cameras: [Camera]
+        public var defaultDisplay: Display? { displays.first(where: \.isDefault) ?? displays.first }
     }
 
     /// A rectangle of one display, in that display's own points with a top-left origin: the same

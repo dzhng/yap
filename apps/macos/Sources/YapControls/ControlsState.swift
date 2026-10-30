@@ -83,8 +83,8 @@ public struct ControlsState: Equatable, Sendable {
     public var unavailableShortcuts: [String] = []
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
     public private(set) var unansweredStart: StartRequest?
-    /// Whether any source was ever selected. Only before then is a display offered by default.
-    private var sourceWasSelected = false
+    /// Offer a display at launch or after disconnect, including if discovery is briefly empty.
+    private var needsDefaultDisplay = true
     /// The start this app made for a take, under that take's ID.
     private var activeStart: ActiveStart?
 
@@ -506,24 +506,24 @@ extension ControlsState {
     }
 
     /// Refreshes labels by identity: a browser navigation changes a title without closing its
-    /// window. Until anything was ever selected, the first display is offered. A selected source
-    /// that disappears is dropped and said so, and never replaced by a guess, so a shortcut cannot
-    /// record something nobody chose.
+    /// window. A disconnected display falls back quietly to the system's main display. A closed
+    /// window or lost region still needs a new explicit selection.
     private mutating func reconcileSelection() -> String? {
-        if selection.source != nil { sourceWasSelected = true }
+        if selection.source != nil { needsDefaultDisplay = false }
         var failure: String?
         switch selection.source {
         case .display(let selected):
-            selection.source = sources.displays.first { $0.id == selected.id }.map { .display($0) }
-            if selection.source == nil { failure = "\(selected.name) is no longer available." }
+            selection.source = (sources.displays.first { $0.id == selected.id } ?? sources.defaultDisplay)
+                .map { .display($0) }
+            needsDefaultDisplay = selection.source == nil
         case .window(let selected):
             selection.source = sources.windows.first { $0.id == selected.id }.map { .window($0) }
             if selection.source == nil { failure = "That window has closed, so it is no longer selected." }
         case .region(let chosen) where !sources.displays.contains(where: { $0.id == chosen.displayId }):
             selection.source = nil
             failure = "\(chosen.displayName) is no longer available."
-        case nil where !sourceWasSelected:
-            selection.source = sources.displays.first.map { .display($0) }
+        case nil where needsDefaultDisplay:
+            selection.source = sources.defaultDisplay.map { .display($0) }
         default: break
         }
         if case .device(let id, _) = selection.microphone,
