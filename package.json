@@ -33,7 +33,7 @@
     "lab:exports": "bun run build && bun run --cwd packages/test-harness lab:exports",
     "lab:personal-release": "node packages/test-harness/personal-release.mjs",
     "test:tools": "node --test scripts/*.test.mjs presets/kit/*.test.mjs helpers/ffmpeg/*.test.mjs helpers/model-runtime/*.test.mjs helpers/speaker/*.test.mjs helpers/alignment/*.test.mjs && node scripts/presets-index.mjs --check",
-    "prepare": "husky"
+    "prepare": "node scripts/install-git-hooks.mjs"
   },
   "devDependencies": {
     "@types/node": "24.13.4",
@@ -43,7 +43,6 @@
     "typescript": "7.0.2",
     "vitest": "5.0.0",
     "linguist-languages": "9.5.0",
-    "husky": "9.1.7",
     "lint-staged": "17.6.0"
   },
   "engines": {
