@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updaterTermination = false
     private var updates: UpdateCoordinator?
     private var sparkle: SparkleDriver?
+    private var telemetry: Telemetry?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let environment = ProcessInfo.processInfo.environment
@@ -50,6 +51,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard let inApplications = admitLaunch(Array(arguments)) else { return }
         let preferences = Preferences(defaults: defaultsDomain())
+        telemetry = Telemetry(preferences: preferences)
+        telemetry?.sendFirstLaunchPingIfNeeded()
         controls = RecordingControls(
             home: personalRoot(), preferences: preferences, inApplications: inApplications
         ) { [weak self] in

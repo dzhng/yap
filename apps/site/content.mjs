@@ -21,6 +21,7 @@ export const links = {
   repo,
   releases: `${repo}/releases/latest`,
   kit: `${repo}/releases/latest/download/Yap-macos-arm64.zip`,
+  kitTracked: "/api/download?source=site",
   agentSetup: `${repo}#agent-setup`,
   installation: `${raw}/skills/yap/references/installation.md`,
   skill: `${raw}/skills/yap/SKILL.md`,
