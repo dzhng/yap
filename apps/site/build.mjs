@@ -66,8 +66,19 @@ const blob = (id) => `<svg class="blob" id="${id}" viewBox="0 0 120 130" aria-hi
 const copyButton = (label, source) =>
   `<button class="copy" type="button" data-copy="${source}"><span class="copy-label">${label}</span><span class="copy-done" aria-live="polite"></span></button>`;
 
+/** One direction column: numbered steps in the setup section's look (`.for-humans`). */
+function direction(item) {
+  const list = `<div class="for-humans"><ol>${item.items.map((entry) => `<li><strong>${prose(entry.title)}</strong><p>${prose(entry.body)}</p></li>`).join("")}</ol></div>`;
+  const fine = item.fine ? `<p class="fine">${prose(item.fine)}</p>` : "";
+  return `<div>
+        <h3><span class="hand">${escape(item.hand)}</span> ${escape(item.title)}</h3>
+        <p>${prose(item.body)}</p>
+        ${list}${fine}
+      </div>`;
+}
+
 function renderPage(siteUrl) {
-  const { meta, links, agentPrompt, requirements } = content;
+  const { meta, hero, links, agentPrompt, requirements } = content;
   const og = `${siteUrl}/og.png`;
   const structuredData = {
     "@context": "https://schema.org",
@@ -97,12 +108,12 @@ function renderPage(siteUrl) {
 <meta property="og:description" content="${escape(meta.description)}">
 <meta property="og:url" content="${siteUrl}/">
 <meta property="og:image" content="${og}">
-<meta property="og:image:alt" content="Yap — agent-assisted video editing on Mac">
+<meta property="og:image:alt" content="${escape(meta.imageAlt)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escape(meta.title)}">
 <meta name="twitter:description" content="${escape(meta.description)}">
 <meta name="twitter:image" content="${og}">
-<meta name="twitter:image:alt" content="Yap — agent-assisted video editing on Mac">
+<meta name="twitter:image:alt" content="${escape(meta.imageAlt)}">
 <meta name="theme-color" content="#fbf7ef">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -125,9 +136,9 @@ function renderPage(siteUrl) {
 
 <main class="human-view">
   <section class="hero">
-    <p class="kicker hand">for Claude Code, Codex &amp; any agent</p>
-    <h1>Just yap.<br><span>Your agent makes it a great video.</span></h1>
-    <p class="lede">Record your screen or camera and say it however it comes out. Yap gives your agent the eyes, ears and hands to turn it into what you meant.</p>
+    <p class="kicker hand">${escape(hero.kicker)}</p>
+    <h1>${escape(hero.headline)}<br><span>${escape(hero.subline)}</span></h1>
+    <p class="lede">${prose(hero.lede)}</p>
 
     <figure class="hero-art">${illustration(content.heroArt.image, content.heroArt.alt, { eager: true })}</figure>
 
@@ -142,6 +153,12 @@ function renderPage(siteUrl) {
         <p class="fine">The open buttons type the prompt into your agent without sending it.</p>
         <p class="fine req">${requirements} · Free</p>
       </div>
+    </div>
+  </section>
+
+  <section class="directions" aria-label="Two directions">
+    <div class="columns">
+      ${content.directions.map(direction).join("\n      ")}
     </div>
   </section>
 

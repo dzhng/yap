@@ -1,11 +1,13 @@
-import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { chmod, mkdtemp, readFile, rm, writeFile, open } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { mediaWorker } from "./worker.js";
+import { mediaWorker, PROCESS_START_ALLOWANCE_MS } from "./worker.js";
+import { operationError, operationSchema } from "@yap/protocol";
 
 const homes: string[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true });
 });
 
@@ -26,7 +28,9 @@ process.stdin.on('end', () => {
   if (request.operation === 'inherited') writeFileSync(3, 'owned bytes');
   if (request.params.ready) writeFileSync(request.params.ready, String(process.pid));
   if (request.operation === 'descriptor-map') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid,files:Array.from({length:request.params.count},(_,i)=>readFileSync(3+i,'utf8')),identity:{uid:process.getuid(),euid:process.geteuid(),gid:process.getgid(),egid:process.getegid(),groups:process.getgroups()}}})+'\\n');
+  if (request.operation === 'delayed-answer') setTimeout(() => process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid}})+'\\n'), 50);
   if (request.operation === 'answer') process.stdout.write(JSON.stringify({ok:true,data:{pid:process.pid}})+'\\n');
+  if (request.operation === 'refusal') process.stdout.write(JSON.stringify({ok:false,error:{code:'NOT_READY',message:'Still preparing',retryable:false,retryAfterMs:1,details:{retry:{operation:'job.get',params:{jobId:'missing'}}}}})+'\\n');
   setInterval(() => {}, 1000);
 });
 `,
@@ -43,6 +47,27 @@ async function fixture() {
   homes.push(home);
   return { home, run: mediaWorker({ YAP_NATIVE: executable }, 2000) };
 }
+
+it.each([1, () => 1])(
+  "explicit deadlines are total, including dynamically observed budgets (%s)",
+  async (timeoutMs) => {
+    const result = await mediaWorker({ YAP_NATIVE: executable })(
+      "delayed-answer",
+      {},
+      { timeoutMs },
+    );
+    expect(result).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
+  },
+);
+
+it("native refusal retry metadata comes from the ledger while its resolving request survives", async () => {
+  const { run } = await fixture();
+  const retry = { operation: "job.get", params: { jobId: "missing" } };
+  const result = await run("refusal", {});
+  expect(result).toEqual(operationError("NOT_READY", "Still preparing", { retry }));
+  if (result.ok) throw new Error("Expected refusal");
+  expect(operationSchema.parse(result.error.details.retry)).toEqual(retry);
+});
 
 async function readyPid(path: string) {
   const deadline = Date.now() + 1500;
@@ -82,8 +107,10 @@ it("cancellation waits for the acknowledged worker to exit", async () => {
 it("a deadline terminates work before reporting failure", async () => {
   const { home, run } = await fixture();
   const ready = join(home, "ready");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
   const pending = run("hold", { ready });
   const pid = await readyPid(ready);
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2001);
   expect(await pending).toMatchObject({
     ok: false,
     error: { code: "MEDIA_WORKER_TIMEOUT", retryable: true },
@@ -101,13 +128,13 @@ it("pre-canceled work never starts and spawn failure settles", async () => {
   });
   expect(await run("hold", {})).toMatchObject({
     ok: false,
-    error: { code: "MEDIA_WORKER_UNAVAILABLE" },
+    error: { code: "MEDIA_WORKER_NOT_RUNNABLE" },
   });
 });
 
 it("rejects invalid per-call deadlines before starting work", async () => {
   const run = mediaWorker({ YAP_NATIVE: "/nonexistent/worker" });
-  for (const timeoutMs of [0, -1, NaN, Infinity, 2_147_483_648]) {
+  for (const timeoutMs of [0, -1, NaN, Infinity]) {
     expect(await run("hold", {}, { timeoutMs })).toMatchObject({
       ok: false,
       error: { code: "INVALID_REQUEST" },
@@ -117,10 +144,14 @@ it("rejects invalid per-call deadlines before starting work", async () => {
 
 it("one short call deadline does not change later calls on the worker", async () => {
   const { run } = await fixture();
-  expect(await run("hold", {}, { timeoutMs: 1 })).toMatchObject({
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const pending = run("hold", {}, { timeoutMs: 1 });
+  await vi.advanceTimersByTimeAsync(PROCESS_START_ALLOWANCE_MS + 2);
+  expect(await pending).toMatchObject({
     ok: false,
     error: { code: "MEDIA_WORKER_TIMEOUT" },
   });
+  vi.useRealTimers();
   const result = await run("answer", {});
   expect(result.ok).toBe(true);
   if (result.ok) expectGone((result.data as { pid: number }).pid);
@@ -189,4 +220,37 @@ it("out-of-order inherited descriptors preserve stdin, byte identity and the ord
   } finally {
     await Promise.all(handles.map((handle) => handle.close()));
   }
+});
+
+it("worker accepts a work deadline beyond the timer representation without clamping it", async () => {
+  const { run } = await fixture();
+  expect((await run("answer", {}, { timeoutMs: 2_147_483_648 })).ok).toBe(true);
+});
+
+it("inventory cleanup can omit a time budget while retaining process ownership", async () => {
+  const run = mediaWorker({ YAP_NATIVE: executable }, 1);
+  const result = await run("delayed-answer", {}, { timeoutMs: null });
+  expect(result.ok).toBe(true);
+  if (result.ok) expectGone((result.data as { pid: number }).pid);
+});
+
+it("rejects invalid observed-work budgets", async () => {
+  const { run } = await fixture();
+  for (const budget of [NaN, Infinity, -1]) {
+    expect(await run("answer", {}, { timeoutMs: () => budget })).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_STORAGE" },
+    });
+  }
+});
+
+it("speech does not receive a hidden model-load allowance", async () => {
+  const { home, run } = await fixture();
+  const ready = join(home, "speech-ready");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+  const pending = run("speech.transcribe", { ready }, { timeoutMs: 1 });
+  const pid = await readyPid(ready);
+  await vi.advanceTimersByTimeAsync(2);
+  expect(await pending).toMatchObject({ ok: false, error: { code: "MEDIA_WORKER_TIMEOUT" } });
+  expectGone(pid);
 });

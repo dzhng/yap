@@ -140,7 +140,7 @@ package final class CameraWriter {
             let size = CMVideoFormatDescriptionGetDimensions(description)
             width = Int(size.width); height = Int(size.height)
             let journal = try CaptureJournal(directory: directory.path,
-                header: CaptureJournalHeader(schemaVersion: 1, sessionID: binding?.sourceId ?? UUID().uuidString,
+                header: CaptureJournalHeader(schemaVersion: JournalSchema.companion, sessionID: binding?.sourceId ?? UUID().uuidString,
                     source: CaptureSource(kind: binding == nil ? "probe-camera" : "camera"), width: width, height: height,
                     microphone: false, systemAudio: false, cameraBinding: binding))
             self.journal = journal

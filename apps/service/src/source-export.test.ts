@@ -6,7 +6,6 @@ import { chmod, mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileIdentity } from "@yap/core/files";
-import { MAX_MEDIA_TIMEOUT_MS } from "./worker.js";
 import { sourceExporter } from "./source-export.js";
 
 const roots: string[] = [];
@@ -35,16 +34,16 @@ test("source exporter preserves retryable access failures and definitive identit
     await chmod(path, 0o600);
   }
   // chmod changes ctime: an already admitted descriptor identity must still refuse it.
-  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: false });
+  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: true });
   const restored = await open(path);
   canonical.narration.identity = fileIdentity(await restored.stat({ bigint: true }));
   await restored.close();
   await expect(run()).resolves.toMatchObject({ marker: "verified" });
   await writeFile(path, "changed identity");
-  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: false });
+  await expect(run()).rejects.toMatchObject({ code: "SOURCE_CHANGED", retryable: true });
 });
 
-test("video-only capture authority receives bounded byte-scaled verification time", async () => {
+test("video-only capture authority receives byte- and duration-scaled verification time", async () => {
   const root = await mkdtemp(join(tmpdir(), "source-export-authority-"));
   roots.push(root);
   const directory = join(root, "source");
@@ -71,20 +70,12 @@ test("video-only capture authority receives bounded byte-scaled verification tim
   };
   const budgets: number[] = [];
   const exportSource = sourceExporter(async (_operation, params, options) => {
-    const budget = options?.timeoutMs ?? 30000;
-    // Simulated verification needs one minute. No wall-clock delay or throughput claim.
-    if (budget < 60000)
-      return {
-        ok: false,
-        error: {
-          code: "TIMEOUT",
-          message: "Verification work exhausted its budget",
-          details: {},
-          retryable: true,
-        },
-      };
+    const budget =
+      typeof options?.timeoutMs === "function"
+        ? options.timeoutMs()
+        : (options?.timeoutMs ?? 30000);
     if (params.sourceAuthority) budgets.push(budget);
-    expect(budget).toBeLessThanOrEqual(MAX_MEDIA_TIMEOUT_MS);
+    expect(budget).toBeGreaterThan(0);
     return { ok: true, data: { marker: "verified" } };
   });
   for (const bytes of [4096, 2 ** 30]) {
@@ -97,7 +88,7 @@ test("video-only capture authority receives bounded byte-scaled verification tim
     sourceAuthority.source.members["video.mov"].bytes = String(bytes);
     await expect(
       exportSource(directory, join(root, "legacy.jsonl"), new AbortController().signal, canonical),
-    ).rejects.toMatchObject({ code: "TIMEOUT" });
+    ).resolves.toMatchObject({ marker: "verified" });
     await expect(
       exportSource(
         directory,
@@ -169,12 +160,15 @@ test("canonical video metadata requires current alpha facts without inventing so
     });
   const oldStream = omit(actual.streams[0]!, "hasAlpha");
   await expect(run({ originUs: 0, streams: [oldStream] })).rejects.toMatchObject({
-    code: "NOT_READY",
-    retryable: false,
+    code: "PREREQUISITE_MISSING",
+    retryable: true,
   });
   await expect(run(actual)).resolves.toMatchObject({ marker: "verified" });
   emitAlpha = false;
-  await expect(run(actual)).rejects.toMatchObject({ code: "NOT_READY", retryable: false });
+  await expect(run(actual)).rejects.toMatchObject({
+    code: "PREREQUISITE_MISSING",
+    retryable: true,
+  });
   emitAlpha = true;
   await expect(
     run({ ...actual, streams: [{ ...actual.streams[0]!, hasAlpha: true }] }),

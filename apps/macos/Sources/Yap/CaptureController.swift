@@ -38,12 +38,19 @@ final class CaptureController {
     var updateProgress: (() -> Void)?
     /// Latest camera frame from the one capture session, delivered on its writer queue.
     nonisolated(unsafe) var onCameraFrame: (@Sendable (NativeCapture.CameraPreviewFrame) -> Void)?
+    /// What a screen take recognizes as the person draws, pins and undoes, on its writer queue.
+    nonisolated(unsafe) var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
 
     init(fixtureWindow: NSWindow?, capture: NativeCapture = NativeCapture()) {
         self.capture = capture
         self.fixtureWindow = fixtureWindow
         self.startHold = FixtureStartHold.inFixture(fixtureWindow)
         capture.onCameraFrame = { [weak self] frame in self?.onCameraFrame?(frame) }
+        capture.onMarkUpdate = { [weak self] update in self?.onMarkUpdate?(update) }
+        capture.onMaximumDuration = { [weak self] in
+            guard let self else { return }
+            Task { @MainActor in _ = try? await self.finish(reason: nil, notify: true) }
+        }
         capture.onInterruption = { [weak self] reason in
             guard let self, let interrupted = self.take ?? self.pendingStart else { return }
             let recordingId = interrupted.recordingId
@@ -66,6 +73,10 @@ final class CaptureController {
             } catch { diagnostic("capture publication report failed: \(error.localizedDescription)") }
         }
     }
+
+    /// Undo Mark: clears the newest stroke or pin still on screen; the take keeps it as evidence.
+    /// Without a take there is nothing on screen, so it does nothing.
+    func clearLatestMark() { capture.clearLatestMark() }
 
     func attach(to host: ServiceHost) {
         self.host = host
@@ -139,7 +150,7 @@ final class CaptureController {
             guard let on = params["on"] as? Bool else {
                 throw CaptureFailure("INVALID_REQUEST", "capture.setCamera states whether the camera is on.")
             }
-            // Native refusals, such as a missing camera or the toggle limit, pass through as codes.
+            // Native refusals, such as a missing camera, pass through as codes.
             try await capture.setCamera(on: on)
             return status()
         case "capture.stop":
@@ -330,8 +341,8 @@ final class CaptureController {
     /// display can be selected, and the ordinary service and controller path is unchanged.
     private func source(from selected: [String: Any]) throws -> CaptureSource {
         let kind = selected["kind"] as? String ?? ""
-        let windowID = (selected["windowId"] as? NSNumber)?.uint32Value
         if let fixtureWindow {
+            let windowID = (selected["id"] as? NSNumber)?.uint32Value
             guard kind == "window", windowID == UInt32(fixtureWindow.windowNumber) else {
                 throw CaptureFailure(
                     "SOURCE_UNAVAILABLE",
@@ -339,21 +350,20 @@ final class CaptureController {
             }
             return CaptureSource(kind: "window", windowID: windowID)
         }
-        let displayID = (selected["displayId"] as? NSNumber)?.uint32Value
         switch kind {
         case "camera":
-            guard Set(selected.keys) == ["kind", "deviceId"],
-                let deviceID = selected["deviceId"] as? String, !deviceID.isEmpty,
+            guard Set(selected.keys) == ["kind", "id"],
+                let deviceID = selected["id"] as? String, !deviceID.isEmpty,
                 deviceID.utf16.count <= 256 else { throw invalidSource }
             return CaptureSource(kind: "camera", deviceID: deviceID)
         case "window":
-            guard let windowID else { throw invalidSource }
+            guard let windowID = (selected["id"] as? NSNumber)?.uint32Value else { throw invalidSource }
             return CaptureSource(kind: "window", windowID: windowID)
         case "display":
-            guard let displayID else { throw invalidSource }
+            guard let displayID = (selected["id"] as? NSNumber)?.uint32Value else { throw invalidSource }
             return CaptureSource(kind: "display", displayID: displayID)
         case "region":
-            guard let displayID, let x = selected["x"] as? Double, let y = selected["y"] as? Double,
+            guard let displayID = (selected["displayId"] as? NSNumber)?.uint32Value, let x = selected["x"] as? Double, let y = selected["y"] as? Double,
                 let width = selected["width"] as? Double, let height = selected["height"] as? Double
             else { throw invalidSource }
             return CaptureSource(
@@ -458,6 +468,9 @@ final class CaptureController {
             report["publication"] = try publication.wireValue()
         }
         if let reason { report["reason"] = reason }
+        if state == "complete", let completionReason = capture.completionReason {
+            report["completionReason"] = completionReason
+        }
         if let message { report["message"] = String(decoding: message.utf16.prefix(4096), as: UTF16.self) }
         if state == "finalizing" {
             report["finalizationError"] = try finalizationError.map {

@@ -27,6 +27,7 @@ test("the count appears on the display a take would record", { timeout: 120_000 
   const home = temporary("/tmp/scr-countdown-display-");
   const domain = join(home, "scratch-preferences");
   setDefault(domain, "showSettingsAtLaunch", "-bool", "NO");
+  setDefault(domain, "countdownBeforeRecording", "-bool", "YES");
   const commands = join(home, "controls");
   mkdirSync(commands, { recursive: true });
   const { instance } = await launchReady(home, {

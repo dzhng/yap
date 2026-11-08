@@ -11,6 +11,20 @@ import type {
 export type IndexReadReference = { generation: string };
 export type IndexReadCursor<R> = R & { afterOrdinal: number };
 export type IndexCoverageCursor<R> = R & { afterSequence: number; candidateOrdinal: number | null };
+/** A continuation's selection is the caller's filter set; its generation and revision are the pin. */
+function checkContinuation<R extends IndexReadReference>(
+  reference: R,
+  cursor: object,
+  kind: string,
+) {
+  const pins = ["generation", "revisionId"];
+  const split = (value: object, pinned: boolean) =>
+    Object.fromEntries(Object.entries(value).filter(([key]) => pins.includes(key) === pinned));
+  if (!isDeepStrictEqual(split(reference, false), split(cursor, false)))
+    throw new CatalogError("INVALID_PARAMS", `${kind} continuation belongs to another selection`);
+  if (!isDeepStrictEqual(split(reference, true), split(cursor, true)))
+    throw new CatalogError("ARTIFACT_CHANGED", `${kind} continuation belongs to another index`);
+}
 type CoverageInput<R> = {
   candidateOrdinal?: number | undefined;
   cursor?: IndexCoverageCursor<R> | undefined;
@@ -31,14 +45,9 @@ export function validateIndexCoverageCursor<R extends IndexReadReference>(
   input: CoverageInput<R>,
 ): void {
   if (!input.cursor) return;
-  if (
-    !isDeepStrictEqual(reference, omit(input.cursor, "afterSequence", "candidateOrdinal")) ||
-    input.cursor.candidateOrdinal !== (input.candidateOrdinal ?? null)
-  )
-    throw new CatalogError(
-      "ARTIFACT_CHANGED",
-      "Coverage continuation belongs to another index or filter",
-    );
+  if (input.cursor.candidateOrdinal !== (input.candidateOrdinal ?? null))
+    throw new CatalogError("INVALID_PARAMS", "Coverage continuation used another filter");
+  checkContinuation(reference, omit(input.cursor, "afterSequence", "candidateOrdinal"), "Coverage");
 }
 
 /** Read-only formatting over an admitted retained generation; callers own target resolution/publication. */
@@ -67,13 +76,8 @@ export class RetainedIndexRead<
     this.reference = structuredClone(reference);
   }
   get(input: { cursor?: IndexReadCursor<R> | undefined; limit?: number | undefined } = {}) {
-    if (input.cursor) {
-      if (!isDeepStrictEqual(omit(input.cursor, "afterOrdinal"), this.reference))
-        throw new CatalogError(
-          "ARTIFACT_CHANGED",
-          "Index continuation belongs to another target or revision",
-        );
-    }
+    if (input.cursor)
+      checkContinuation(this.reference, omit(input.cursor, "afterOrdinal"), "Index");
     const page = this.reader.page({
       identity: this.metadata,
       ...(input.cursor ? { afterOrdinal: input.cursor.afterOrdinal } : {}),

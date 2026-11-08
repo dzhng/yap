@@ -38,11 +38,11 @@ enum PublicationOperation {
         }
     }
     private static func failure(_ code: String, _ message: String) -> NativeFailure {
-        NativeFailure(code, message, retryable: false)
+        NativeFailure(code, message)
     }
     private static func io(_ action: String) -> NativeFailure {
         NativeFailure(
-            "PUBLICATION_IO", "\(action): \(String(cString: strerror(errno)))", retryable: true)
+            "PUBLICATION_IO", "\(action): \(String(cString: strerror(errno)))")
     }
     private static func info(_ fd: Int32, directory: Bool = false) throws -> stat {
         var value = stat()
@@ -117,7 +117,7 @@ enum PublicationOperation {
     private static func lockDestination(_ fd: Int32) throws {
         _ = try info(fd, directory: true)
         guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
-            throw NativeFailure("PUBLICATION_BUSY", "Another publisher holds this destination.", retryable: true)
+            throw NativeFailure("PUBLICATION_BUSY", "Another publisher holds this destination.")
         }
     }
     private static func evidence(_ parent: Int32, _ name: String) throws -> FileEvidence? {

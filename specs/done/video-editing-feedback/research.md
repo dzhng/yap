@@ -45,7 +45,7 @@ Replication gate: use asymmetric color/edge controls and real white-wall/backlit
 
 The fetched [FFmpeg 9.0.2 filter source](assets/research/ffmpeg-filters.txt) matches [the bundled dependency recipe](../../../helpers/ffmpeg/provenance.json). Its loudnorm mode has target/statistical inputs, dynamic rate behavior and linear-mode fallback conditions; compressor supports explicit makeup. Documentation alone does not establish actual prepared-runtime behavior.
 
-Existing [audio preparation](../../../apps/service/src/audio-processing.ts), [measurement admission](../../../packages/core/src/audio-measurement.ts), and [independent audio recipe labs](../../../packages/test-harness/editing/audio-recipes/README.md) already retain strict before/after proof. Reuse these instead of inventing a new mastering engine.
+Existing [audio preparation](../../../apps/service/src/audio-processing.ts), [measurement admission](../../../packages/core/src/audio-measurement.ts), and [independent audio recipe labs](https://github.com/dzhng/yap/blob/4b4e708c/packages/test-harness/editing/audio-recipes/README.md) already retain strict before/after proof. Reuse these instead of inventing a new mastering engine.
 
 Replication gate: pin PCM, channel policy, meter identity, resampling and peaky mix; reproduce undershoot and compare bounded offset/target solving. Freeze tolerances already specified by Core. Strict targets remain strict; no silent gain-only→dynamic switch, relaxation or best-effort publication.
 

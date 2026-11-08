@@ -220,3 +220,63 @@ test("selected scene grids deliver all 52 clean color samples within inspection 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test(
+  "visual observations traverse more than 100,000 physical samples in one take",
+  { timeout: 120_000 },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), "source-visual-long-"));
+    try {
+      const source = join(dir, "long.mov");
+      run(
+        "ffmpeg",
+        [
+          "-v",
+          "error",
+          "-nostdin",
+          "-f",
+          "lavfi",
+          "-i",
+          "color=s=16x16:r=10000",
+          "-frames:v",
+          "100002",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "ultrafast",
+          "-g",
+          "300000",
+          "-pix_fmt",
+          "yuv420p",
+          source,
+        ],
+        { timeout: 60_000 },
+      );
+      const endUs = 10_000_200;
+      const response = JSON.parse(
+        run(native, [], {
+          input:
+            JSON.stringify({
+              id: "long",
+              operation: "media.sourceVisualSamples",
+              params: {
+                asset: { assetId: "long", streamId: "track:1", path: source, originUs: 0 },
+                available: [{ startUs: 0, endUs }],
+                atSourceUs: [0, 10_000_100],
+              },
+            }) + "\n",
+          encoding: "utf8",
+          timeout: 60_000,
+        }),
+      );
+      assert.equal(response.ok, true, JSON.stringify(response));
+      assert.deepEqual(
+        response.data.samples.map((sample) => sample.status),
+        ["available", "available"],
+      );
+      assert.ok(response.data.decodedSamples > 100_000, JSON.stringify(response.data));
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

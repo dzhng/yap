@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -15,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
+import { protocolLinkArguments } from "./fixtures/swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 const defaultFramework = fileURLToPath(
@@ -69,6 +71,11 @@ server.listen(0,'127.0.0.1',()=>writeFileSync(join(root,'feed-url'),'http://127.
     const contents = join(app, "Contents");
     const executable = join(contents, "MacOS", "SparkleCheck");
     mkdirSync(dirname(executable), { recursive: true });
+    mkdirSync(join(contents, "Resources/service"), { recursive: true });
+    copyFileSync(
+      new URL("../../../packages/protocol/src/refusal-ledger.json", import.meta.url),
+      join(contents, "Resources/service/refusal-ledger.json"),
+    );
     const metadata = {
       CFBundleIdentifier: identity,
       CFBundleName: "SparkleCheck",
@@ -128,7 +135,7 @@ func diagnostic(_ message: String) {}
                 if driver.canCheckForUpdates { break }
                 try? await Task.sleep(for: .milliseconds(10))
             }
-            _ = try! update("update.check")
+            _ = try! update("update.check", ["requestId": "manual-check"])
             if CommandLine.arguments.last == "manual-cancel" {
                 for _ in 0..<200 {
                     if FileManager.default.fileExists(atPath: ${JSON.stringify(join(scratch, "feed-received"))}) { break }
@@ -147,9 +154,7 @@ func diagnostic(_ message: String) {}
                 withExtendedLifetime(driver) {}
                 return
             }
-            var duplicateRejected = false
-            do { _ = try update("update.check") }
-            catch { duplicateRejected = error.code == "UPDATE_BUSY" && error.retryable }
+            let replay = try! update("update.check", ["requestId": "manual-check"])
             for _ in 0..<200 {
                 if owner.status.state == "failed" { break }
                 try? await Task.sleep(for: .milliseconds(10))
@@ -159,7 +164,7 @@ func diagnostic(_ message: String) {}
             print(String(decoding: try! JSONSerialization.data(withJSONObject: [
                 "enabled": owner.enabled, "state": owner.status.state,
                 "error": owner.status.error?.code as Any? ?? NSNull(),
-                "duplicateRejected": duplicateRejected]), as: UTF8.self))
+                "replayed": replay["enabled"] as? Bool == false]), as: UTF8.self))
             withExtendedLifetime(driver) {}
             return
         case "disable": owner.setEnabled(false)
@@ -212,6 +217,7 @@ func diagnostic(_ message: String) {}
         "-swift-version",
         "6",
         "-parse-as-library",
+        ...protocolLinkArguments(),
         "-F",
         dirname(framework),
         "-framework",
@@ -261,26 +267,42 @@ func diagnostic(_ message: String) {}
     assert.deepEqual(observe("enable"), { before: false, after: true, state: "idle" });
     assert.deepEqual(observe("observe"), { before: true, after: true, state: "idle" });
     assert.deepEqual(observe("no-update"), {
-      update: { state: "idle", availableVersion: null, blockers: [], error: null },
+      update: {
+        state: "idle",
+        jobId: null,
+        availability: "available",
+        availableVersion: null,
+        blockers: [],
+        error: null,
+      },
     });
     for (const mode of ["wrong-domain", "download-error"]) {
       assert.deepEqual(observe(mode), {
         update: {
           state: "failed",
+          jobId: null,
+          availability: "available",
           availableVersion: null,
           blockers: [],
-          error: { code: "UPDATE_FAILED", message: "Localized result", retryable: false },
+          error: { code: "UPDATE_FAILED", message: "Localized result", retryable: true },
         },
       });
     }
     assert.deepEqual(observe("recovered-no-update"), {
-      update: { state: "idle", availableVersion: null, blockers: [], error: null },
+      update: {
+        state: "idle",
+        jobId: null,
+        availability: "available",
+        availableVersion: null,
+        blockers: [],
+        error: null,
+      },
     });
     assert.deepEqual(observe("manual-check"), {
       enabled: false,
       state: "failed",
       error: "UPDATE_FAILED",
-      duplicateRejected: true,
+      replayed: true,
     });
     assert.deepEqual(observe("observe"), { before: false, after: false, state: "disabled" });
   },

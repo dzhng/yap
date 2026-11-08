@@ -30,13 +30,13 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   };
   const take = await call("capture.start", {
     requestId: randomUUID(),
-    source: { kind: "window", windowId: Number(window) },
+    source: { kind: "window", id: Number(window) },
     microphone: false,
     systemAudio: false,
   });
   await waitFor(async () => (await call("capture.status")).device.elapsedUs >= 1000000, 20000);
-  const finished = await finishCapture(call, take.recordingId);
-  const source = join(home, "library", "recordings", take.recordingId, "source", "video.mov");
+  const finished = await finishCapture(call, take.id);
+  const source = join(home, "library", "recordings", take.id, "source", "video.mov");
   const hash = async () =>
     createHash("sha256")
       .update(await readFile(source))
@@ -44,7 +44,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const originalHash = await hash();
   assert.deepEqual((await call("project.list", {})).projects, []);
   const admitted = await waitFor(async () => {
-    const facts = await call("recording.get", { recordingId: take.recordingId });
+    const facts = await call("recording.get", { recordingId: take.id });
     const primary = facts.sourceAdmissions.find((value) => value.kind === "primary");
     if (["failed", "canceled", "unavailable"].includes(primary?.job?.state))
       throw new Error(JSON.stringify(primary));
@@ -66,7 +66,7 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = await call("edit.apply", {
     projectId,
     expectedRevisionId: created.revision.id,
@@ -90,7 +90,12 @@ test("real clean frames retain edit identity and reach CLI files and MCP pixels"
   const clipId = authored.edit.labels.clip,
     trackId = authored.edit.labels.video;
   // Keep a full-size reference so the crop oracle compares preceding-image pixels.
-  const params = { projectId, revisionId: authored.revision.id, atUs: 400000, maxLongEdge: 8192 };
+  const params = {
+    projectId,
+    revisionId: authored.revision.id,
+    atUs: 400000,
+    maxLongEdge: 8192,
+  };
   const ready = await waitFor(async () => {
     const result = await call("frame.get", params);
     if (result.state === "failed" || result.state === "unavailable")

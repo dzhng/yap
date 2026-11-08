@@ -304,6 +304,7 @@ func runCursorGeometryProbe(configPath: String) async throws {
     samples.atCalibrations = Array(repeating: nil, count: calibrations.count)
     samples.calibrationDistanceUs = Array(repeating: nil, count: calibrations.count)
     samples.calibrationDriftPoints = Array(repeating: nil, count: calibrations.count)
+    let holds = summary.header.map { JournalSchema.cursorSampling($0).holds } ?? false
     for index in calibrations.indices {
         let target = sourceTime(
             forHostUs: calibrations[index].hostUs, origin: summary.originHostUs,
@@ -312,13 +313,16 @@ func runCursorGeometryProbe(configPath: String) async throws {
         // A calibration inside a pause has no source time at all, so no sample can be near it.
         if let target {
             let pointer = calibrations[index].pointerGlobal
-            for sample in recorded {
+            for (sampleIndex, sample) in recorded.enumerated() {
                 let distance = abs(sample.sourceUs - target)
-                if samples.calibrationDistanceUs[index].map({ distance < $0 }) ?? true {
+                if holds ? sample.sourceUs <= target
+                    : (samples.calibrationDistanceUs[index].map({ distance < $0 }) ?? true) {
                     samples.atCalibrations[index] = sample
                     samples.calibrationDistanceUs[index] = distance
                 }
-                if distance <= 150_000 {
+                let holdsIntoWindow = holds && sample.sourceUs <= target + 150_000
+                    && (sampleIndex + 1 == recorded.count || recorded[sampleIndex + 1].sourceUs > target - 150_000)
+                if holds ? holdsIntoWindow : distance <= 150_000 {
                     samples.calibrationDriftPoints[index] = max(
                         samples.calibrationDriftPoints[index] ?? 0,
                         hypot(sample.globalX - pointer.x, sample.globalY - pointer.y))

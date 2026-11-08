@@ -123,6 +123,16 @@ and portable storage retain their serialized result contract. Readiness means ad
 and published output, not merely a completed native call. Models and generated
 media share these owners rather than introducing separate queues or stores.
 
+Job retryability is read from the refusal ledger for the job's error code when the
+job is projected; the catalog's legacy retryable columns remain storage details and
+are not a second authority. Terminal jobs use `CANCELED` for explicit cancellation
+and `OWNER_DELETED` when their input owner was removed. Retrying a non-retryable
+job preserves that refusal code. A failed job stays failed until an explicit `job.retry`
+call, and reads, polling and waiting never retry it. Startup reconciliation resumes only a
+`JOB_INTERRUPTED` transcript attempt owed by the automatic backlog. A
+retryable job projection carries the exact resolving call in `details.retry`, so an
+agent can wait for any returned delay and then choose that call deliberately.
+
 A producer reports problems with its output as [issues](../composition/src/issues.ts).
 [Issue storage](src/issues.ts) is an additive table written in the publication's
 transaction and keyed by the publishing attempt, so it lands, rolls back and is
@@ -131,6 +141,10 @@ carry issues, and a publication without rows, including one from an older catalo
 Where evidence holds the facts, the issues are derived from it alone: a picture's or
 movie's font fallbacks become [text fallback issues](src/text-fallback.ts), and a
 project index publishes the issues of the frames it retained.
+
+A completed recording can report `completionReason: "maximumDuration"`. This
+closed lifecycle fact is independent of cleanup diagnostics and interruption codes;
+ordinary caller stops return `completionReason: null`. It survives catalog reopen.
 
 Capture recovery receipts cross this boundary once through
 [capture-publication.ts](src/capture-publication.ts): the bounded native receipt is

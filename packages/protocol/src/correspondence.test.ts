@@ -7,7 +7,7 @@ const endpoint = (assetId: string) => ({
   assetId,
   streamId: "audio-1",
   channel: 0,
-  range: { startUs: 0, endUs: 4_000_000 },
+  sourceRange: { startUs: 0, endUs: 4_000_000 },
 });
 const measurement = {
   verdict: "accepted" as const,
@@ -71,7 +71,7 @@ test("accepted evidence requires a complete mapping and selected anchors", () =>
   ).toBe(false);
   expect(
     correspondenceReceiptSchema.safeParse({
-      evidenceId: "e1",
+      id: "e1",
       generation: "g1",
       recipe: "temporal-correspondence-v1",
       left: endpoint("a"),

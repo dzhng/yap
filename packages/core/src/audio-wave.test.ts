@@ -201,7 +201,7 @@ test("late subset of a >1GiB published WAV uses only positioned bounded reads an
   try {
     const cache = new DerivedCache(catalog, home, () => {});
     await cache.reconcile();
-    const output = cache.reserve({ kind: "asset", assetId: "fixture" });
+    const output = cache.reserve({ kind: "asset", id: "fixture" });
     const f = fixture([[0, 0]]),
       frames = 144000000,
       total = 62 + frames * 8;

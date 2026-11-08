@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { protocolLinkArguments } from "./swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/Yap/", import.meta.url));
 const homeSources = [
@@ -43,7 +44,7 @@ export function compileHomeDriver(scratch) {
             let deadline = Date().addingTimeInterval(60)
             while true {
                 let answer = line(lifecycle.handle("skill.status"))
-                if !answer.contains("\"state\":\"updating\"") || Date() > deadline { return answer }
+                if (!answer.contains("\"state\":\"updating\"") && !answer.contains("\"state\":\"running\"")) || Date() > deadline { return answer }
                 Thread.sleep(forTimeInterval: 0.1)
             }
         }
@@ -63,7 +64,16 @@ export function compileHomeDriver(scratch) {
   const executable = join(scratch, "driver");
   execFileSync(
     "swiftc",
-    ["-swift-version", "6", "-parse-as-library", ...homeSources, driver, "-o", executable],
+    [
+      "-swift-version",
+      "6",
+      "-parse-as-library",
+      ...protocolLinkArguments(),
+      ...homeSources,
+      driver,
+      "-o",
+      executable,
+    ],
     { stdio: "pipe", timeout: 180_000 },
   );
   return executable;

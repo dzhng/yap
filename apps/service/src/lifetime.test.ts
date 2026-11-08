@@ -40,10 +40,13 @@ type Service = {
 };
 
 /** Starts the real packaged entrypoint as its own process, outside the repository. */
-async function startService(home: string): Promise<Service> {
+async function startService(
+  home: string,
+  environment: Record<string, string> = {},
+): Promise<Service> {
   const child = spawn(process.execPath, [entry], {
     cwd: "/",
-    env: { ...process.env, YAP_HOME: home, YAP_AUTO_PREPARE_MODELS: "0" },
+    env: { ...process.env, YAP_HOME: home, YAP_AUTO_PREPARE_MODELS: "0", ...environment },
     stdio: ["pipe", "pipe", "pipe"],
   });
   const messages: ControlMessage[] = [];
@@ -149,6 +152,27 @@ async function temporaryHome(): Promise<string> {
 function results(messages: ControlMessage[]) {
   return messages.flatMap((message) => (message.event === "result" ? [message.response] : []));
 }
+
+it("starts when automatic model preparation settles at once", async () => {
+  const home = await temporaryHome();
+  const first = await startService(home);
+  expect((await first.awaiting(1))[0]).toMatchObject({ event: "started" });
+  first.closeInput();
+  expect(await first.exit).toEqual({ code: 0, signal: null });
+  // A removed model is skipped, so preparing the automatic models settles within a few ticks,
+  // as it does on a Mac whose models are already installed.
+  const catalog = new DatabaseSync(join(home, "library/catalog.sqlite"));
+  catalog
+    .prepare(
+      "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs) VALUES('parakeet',?,0,0,0)",
+    )
+    .run(randomUUID());
+  catalog.close();
+  const service = await startService(home, { YAP_AUTO_PREPARE_MODELS: "1" });
+  expect((await service.awaiting(1))[0]).toMatchObject({ event: "started" });
+  service.request("health");
+  expect(await service.answered("health")).toMatchObject({ ok: true });
+});
 
 it("prepares a private replacement permit and reopens only for its current owner", async () => {
   const service = await startService(await temporaryHome());
@@ -307,7 +331,7 @@ it("startup reconciliation is a blocker while its existing native observation is
       id: "settled-report",
       operation: "capture.report",
       params: {
-        recordingId: take.recordingId,
+        recordingId: take.id,
         sourceId: take.sourceId,
         sequence: 1,
         state: "interrupted",
@@ -370,10 +394,9 @@ it("validates project composition requests at the canonical wire boundary", asyn
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const project = (created.data as { project: { projectId: string; currentRevisionId: string } })
-    .project;
+  const project = (created.data as { project: { id: string; currentRevisionId: string } }).project;
   const responses = {
-    project: await call("revision.get", { projectId: project.projectId }),
+    project: await call("revision.get", { projectId: project.id }),
     recording: await call("revision.get", { recordingId: "same-id" }),
     package: await call("preview.get", { packageHandle: "open" }),
     removed: await call("edit.cut", {
@@ -382,21 +405,21 @@ it("validates project composition requests at the canonical wire boundary", asyn
       expectedRevisionId: "r0",
       ranges: [{ startUs: 0, endUs: 1 }],
     }),
-    deletion: await call("recording.delete", { recordingId: "same-id" }),
+    deletion: await call("recording.delete", { requestId: "test-delete", recordingId: "same-id" }),
   };
   const output = process.env.YAP_CONTRACT_OUTPUT;
   if (output)
     await writeFile(output, JSON.stringify({ pid: service.pid, project, responses }, null, 2));
   expect(responses.project).toMatchObject({
     ok: true,
-    data: { projectId: project.projectId, revision: { id: project.currentRevisionId } },
+    data: { projectId: project.id, revision: { id: project.currentRevisionId } },
   });
   expect(responses.recording).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(responses.package).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(responses.removed).toMatchObject({ ok: false, error: { code: "UNKNOWN_OPERATION" } });
   expect(responses.deletion).toMatchObject({
     ok: true,
-    data: { recordingId: "same-id", deleted: true },
+    data: { id: "same-id", deleted: true },
   });
   service.closeInput();
   const exit = await service.exit;
@@ -527,7 +550,14 @@ it("announces its listener and answers health over both the pipe and the socket"
     version: JSON.parse(
       await readFile(new URL("../../macos/package.json", import.meta.url), "utf8"),
     ).version,
-    update: { state: "unavailable", availableVersion: null, blockers: [], error: null },
+    update: {
+      state: "unavailable",
+      jobId: null,
+      availability: "unavailable",
+      availableVersion: null,
+      blockers: [],
+      error: null,
+    },
   });
 });
 
@@ -776,6 +806,7 @@ it("reports an orphan-held render workspace as retryable before announcing readi
       code: "RENDER_WORKSPACE_BUSY",
       message: "Another render still owns this workspace",
       retryable: true,
+      retryAfterMs: 15000,
       details: {},
     },
   });

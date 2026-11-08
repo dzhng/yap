@@ -160,7 +160,7 @@ final class AppSocket: @unchecked Sendable {
         case .failure(let failure):
             let envelope: [String: Any] = [
                 "id": id, "ok": false,
-                "error": ["code": failure.code, "message": failure.message, "retryable": failure.retryable, "details": [String: Any]()],
+                "error": failure.envelope,
             ]
             line = (try? JSONSerialization.data(withJSONObject: envelope)) ?? Data()
         }

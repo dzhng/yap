@@ -18,7 +18,7 @@ test("bindings replace only the selected generation and retain explicit names", 
   });
   const labels = new SpeakerLabelStore(catalog);
   const identity = {
-    owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+    owner: { kind: "asset" as const, id: "a".repeat(64) },
     sourceId: "a".repeat(64),
     generation: "generation-a",
     policy: "speaker-v1" as const,

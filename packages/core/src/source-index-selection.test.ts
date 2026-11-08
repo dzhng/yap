@@ -44,9 +44,13 @@ function chunk(
     comparisons,
   };
 }
-async function collect(support: { startUs: number; endUs: number }[], chunks: SourceSceneChunk[]) {
+async function collect(
+  support: { startUs: number; endUs: number }[],
+  chunks: SourceSceneChunk[],
+  moments: { sourceUs: number; kind: "mark" | "pin" | "click"; markId: string }[] = [],
+) {
   const rows: SourceIndexRequest[] = [];
-  for await (const row of selectSourceIndex(support, chunks)) rows.push(row);
+  for await (const row of selectSourceIndex(support, chunks, moments)) rows.push(row);
   return rows;
 }
 const pictures = (rows: SourceIndexRequest[]) => rows.filter((r) => r.kind === "picture");
@@ -135,7 +139,72 @@ test("stillness suppresses redundant periodic frames while moving footage retain
       ],
     ),
   );
-  expect(moving.map((r) => r.requestedSourceUs)).toEqual([0, 5000000, 10000000, 12999999]);
+  expect(moving.map((r) => r.requestedSourceUs)).toEqual([0, 12999999]);
+});
+
+test("marks, pins and clicks become reasons at their source moments", async () => {
+  const rows = pictures(
+    await collect(
+      [{ startUs: 0, endUs: 2_000_001 }],
+      [chunk([point(0, 0, 2_000_000), point(2_000_000, 0, 2_000_000)])],
+      [
+        { sourceUs: 400_000, kind: "mark", markId: "m" },
+        { sourceUs: 900_000, kind: "pin", markId: "p" },
+        { sourceUs: 1_400_000, kind: "click", markId: "c" },
+      ],
+    ),
+  );
+  expect(rows.map((row) => row.requestedSourceUs)).toEqual([
+    0, 400_000, 900_000, 1_400_000, 2_000_000,
+  ]);
+  expect(rows.map((row) => row.reasons.at(-1))).toEqual([
+    { kind: "availability", eventSourceUs: 0 },
+    { kind: "mark", eventSourceUs: 400_000, markId: "m" },
+    { kind: "pin", eventSourceUs: 900_000, markId: "p" },
+    { kind: "click", eventSourceUs: 1_400_000, markId: "c" },
+    { kind: "last", eventSourceUs: 2_000_001 },
+  ]);
+});
+
+test("a static twenty minute narration has only edges, moments and scene changes", async () => {
+  const duration = 20 * 60 * 1_000_000;
+  const observed = Array.from({ length: 121 }, (_, i) => point(i * 10_000_000, 0, duration, 0));
+  const rows = pictures(
+    await collect(
+      [{ startUs: 0, endUs: duration }],
+      [chunk(observed)],
+      [
+        { sourceUs: 300_000_000, kind: "mark", markId: "m" },
+        { sourceUs: 900_000_000, kind: "click", markId: "c" },
+      ],
+    ),
+  );
+  expect(rows.map((row) => row.requestedSourceUs)).toEqual([
+    0,
+    300_000_000,
+    900_000_000,
+    duration - 1,
+  ]);
+});
+
+test("a changed picture after a thirty second gap gets one coverage reason", async () => {
+  const rows = pictures(
+    await collect(
+      [{ startUs: 0, endUs: 31_000_001 }],
+      [
+        chunk([
+          point(0, 0, 1, 0),
+          point(30_000_000, 1, 2, 30_000_000),
+          point(31_000_000, 1, 2, 30_000_000),
+        ]),
+      ],
+    ),
+  );
+  expect(
+    rows
+      .filter((row) => row.reasons.some((reason) => reason.kind === "coverage"))
+      .map((row) => row.requestedSourceUs),
+  ).toEqual([30_000_000]);
 });
 test("unavailable observations reset representative continuity without inventing an interval of missing pixels", async () => {
   const gap = {

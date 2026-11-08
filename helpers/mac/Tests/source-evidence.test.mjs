@@ -12,14 +12,31 @@ import {
   symlinkSync,
   linkSync,
   readdirSync,
-  truncateSync,
   realpathSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
+import { journalGoldenCases, exportJournalGolden } from "./fixtures/journal-goldens.mjs";
+import { retryable } from "./refusal.mjs";
 const executable =
   process.env.YAP_NATIVE ?? new URL("../.build/debug/yap-native", import.meta.url).pathname;
+
+for (const entry of journalGoldenCases)
+  test(`historical normalized bytes and receipt: ${entry.name}`, (t) => {
+    const root = mkdtempSync(join(tmpdir(), "journal-golden-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const { bytes, receipt } = exportJournalGolden(executable, entry, root);
+    assert.deepEqual(
+      bytes,
+      gunzipSync(readFileSync(new URL(`${entry.name}.jsonl.gz`, entry.goldens))),
+    );
+    assert.deepEqual(
+      receipt,
+      JSON.parse(readFileSync(new URL(`${entry.name}.receipt.json`, entry.goldens))),
+    );
+  });
 function request(directory, output, extra = {}) {
   const result = spawnSync(executable, [], {
     input:
@@ -56,6 +73,7 @@ function fixture(t, records, prefix = join(tmpdir(), "cursor-evidence-")) {
   writeFileSync(journal, text);
   return { root, directory, journal, text, output: join(root, "evidence.jsonl") };
 }
+
 test("worker exports display-space observations and preserves source", (t) => {
   const f = fixture(t, [
     { event: "displaySpace", data: { hostUs: 123, zeroOriginHeight: 900 } },
@@ -65,6 +83,7 @@ test("worker exports display-space observations and preserves source", (t) => {
   assert.equal(r.ok, true, JSON.stringify(r));
   assert.equal(r.data.finished, true);
   assert.equal(r.data.displaySpaces, 1);
+  assert.equal(r.data.markEvents, 0);
   assert.deepEqual(readFileSync(f.output, "utf8").trim().split("\n").map(JSON.parse), [
     { event: "displaySpace", data: { hostUs: 123, zeroOriginHeight: 900 } },
   ]);
@@ -234,14 +253,8 @@ test("large journal streams individual samples through the real worker with a sm
     data: { ...sample, sourceUs: batches * batchSize - 1 },
   });
 });
-test("budget and malformed-header failures publish nothing and clean staging", (t) => {
+test("malformed-header failures publish nothing and clean staging", (t) => {
   const f = fixture(t, []);
-  truncateSync(f.journal, 268435457);
-  assert.equal(request(f.directory, f.output).error.code, "EVIDENCE_LIMIT");
-  const oversized = JSON.parse(f.text);
-  oversized.data.sessionID = "s".repeat(17000);
-  writeFileSync(f.journal, JSON.stringify(oversized) + "\n");
-  assert.equal(request(f.directory, f.output).error.code, "EVIDENCE_LIMIT");
   writeFileSync(f.journal, "{bad}\n");
   assert.equal(request(f.directory, f.output).error.code, "INVALID_JOURNAL");
   assert.equal(existsSync(f.output), false);
@@ -518,15 +531,15 @@ test("source evidence retries actual journal access failures without changing so
       chmodSync(path, path === f.directory ? 0o700 : 0o600);
     }
     assert.equal(denied.ok, false);
-    assert.equal(denied.error.retryable, true, JSON.stringify(denied));
-    assert.equal(denied.error.code, "JOURNAL_UNAVAILABLE");
+    assert.equal(denied.error.code, "JOURNAL_UNAVAILABLE", JSON.stringify(denied));
+    assert.equal(retryable(denied.error), true);
     assert.equal(existsSync(f.output), false);
   }
   assert.equal(request(f.directory, f.output).ok, true);
   assert.deepEqual(readFileSync(f.journal), before);
 });
 
-test("a linked journal is invalid input rather than an operational retry", (t) => {
+test("a linked retained journal cannot establish immutable source authority", (t) => {
   const f = fixture(t, []);
   const original = join(f.root, "original.jsonl");
   writeFileSync(original, f.text);
@@ -534,8 +547,8 @@ test("a linked journal is invalid input rather than an operational retry", (t) =
   symlinkSync(original, f.journal);
   const refused = request(f.directory, f.output);
   assert.equal(refused.ok, false);
-  assert.equal(refused.error.retryable, false);
   assert.equal(refused.error.code, "INVALID_JOURNAL");
+  assert.equal(retryable(refused.error), false);
   assert.equal(readFileSync(original, "utf8"), f.text);
   assert.equal(existsSync(f.output), false);
 });

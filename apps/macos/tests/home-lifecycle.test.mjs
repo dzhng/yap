@@ -36,9 +36,12 @@ test("routes skill and cli by prefix", () => {
   assert.deepEqual(cli, {
     onPath: false,
     path: join(paths.home, ".local/bin/yap"),
-    state: "missing",
+    state: "unavailable",
+    installation: "missing",
+    jobId: null,
   });
-  assert.equal(skill.state, "missing");
+  assert.equal(skill.state, "unavailable");
+  assert.equal(skill.installation, "missing");
   assert.deepEqual(skill.paths, []);
   assert.deepEqual(unknown, { failure: "UNKNOWN_OPERATION" });
   assert.deepEqual(unknownSkill, { failure: "UNKNOWN_OPERATION" });
@@ -52,7 +55,8 @@ test("reconcile installs both when enabled", () => {
     "reconcile",
     "cli.status",
   );
-  assert.equal(skill.state, "installed", JSON.stringify(skill));
+  assert.equal(skill.state, "ready", JSON.stringify(skill));
+  assert.equal(skill.installation, "installed");
   assert.equal(
     readFileSync(join(paths.home, ".agents/skills/yap/SKILL.md"), "utf8"),
     "bundled skill\n",
@@ -62,7 +66,9 @@ test("reconcile installs both when enabled", () => {
     onPath: true,
     path: join(paths.home, ".local/bin/yap"),
     profile,
-    state: "installed",
+    state: "ready",
+    installation: "installed",
+    jobId: null,
   });
   assert.deepEqual(readFileSync(join(paths.home, ".local/bin/yap")), launcher);
   assert.equal(readFileSync(profile, "utf8"), block);

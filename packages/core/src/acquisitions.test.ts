@@ -31,7 +31,7 @@ async function fixture() {
   const acquisitions = new AcquisitionStore(catalog);
   const evidence = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw new CatalogError("NOT_FOUND", "Wrong domain");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const importer = new AcquisitionImporter(catalog, acquisitions, assets, evidence, root);
   await importer.recover(signal());
@@ -184,7 +184,7 @@ test("same media keeps explicit contexts through project replay, replacement, un
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const request = {
     requestId: "place",
     expectedRevisionId: created.revision.id,
@@ -299,14 +299,14 @@ test("changed frozen members refuse publication and canceled adoption releases p
   expect(() =>
     f.evidence.audio(
       {
-        owner: { kind: "acquisition", acquisitionId: fresh.acquisitionId },
+        owner: { kind: "acquisition", id: fresh.acquisitionId },
         sourceId: "capture-session",
         generation: "canceled",
       },
       "narration",
       { startUs: 0, endUs: 300 },
     ),
-  ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+  ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   await f.importer.recover(signal());
   const value = await f.importer.executeImport(fresh.acquisitionId, "retried", f.native, signal());
   expect(value.evidence.generation).toBe("retried");
@@ -578,7 +578,9 @@ test("portable acquisition adoption preserves source identities, evidence and bo
     signal(),
     native,
   );
-  expect(() => receiver.acquisitions.get(original.id)).toThrow(/not completed/);
+  expect(() => receiver.acquisitions.get(original.id)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
   expect(receiver.assets.list().assets).toEqual([]);
   receiver.catalog.transaction(() => {
     for (const asset of stagedAssets) asset.publish();
@@ -657,7 +659,9 @@ test("unpublished portable acquisitions recover and transactional failures leave
     }),
   ).toThrow("project revision failure");
   expect(receiver.assets.list().assets).toEqual([]);
-  expect(() => receiver.acquisitions.get(original.id)).toThrow(/not completed/);
+  expect(() => receiver.acquisitions.get(original.id)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
   await stage.close();
   for (const asset of assets) await asset.close();
   expect(() => receiver.acquisitions.intent(original.id)).toThrow(/does not exist/);
@@ -677,7 +681,9 @@ test("publication receipt absence is frozen before queued capture admission", as
     f.importer.executeImport(intent.acquisitionId, "changed-proof", f.native, signal()),
   ).rejects.toMatchObject({ code: "SOURCE_CHANGED" });
   expect(f.assets.list().assets).toEqual([]);
-  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(/not completed/);
+  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
 });
 
 test.each(["layout", "duplicate-role", "support"] as const)(
@@ -849,7 +855,9 @@ test.each([
     code: "INVALID_EVIDENCE",
     message: "Camera physical support differs from verified source support",
   });
-  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(/not completed/);
+  expect(() => f.acquisitions.get(intent.acquisitionId)).toThrow(
+    expect.objectContaining({ code: "NOT_READY" }),
+  );
 });
 
 test("a 0.1.33 camera proof admits unchanged", async () => {

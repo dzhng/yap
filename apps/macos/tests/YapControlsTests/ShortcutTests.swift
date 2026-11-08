@@ -2,42 +2,45 @@ import Foundation
 import YapControls
 
 func runShortcutTests() {
-    precondition(Shortcut(display: "⌘,") == Shortcut(command: true, key: ","),
-        "The standard Settings shortcut retains its binding")
-    let suggested = ShortcutDefaults.suggested
-    precondition(
-        suggested[.startOrStop]?.display == "⌃⌥⌘R" && suggested[.pauseOrResume]?.display == "⌃⌥⌘P"
-            && suggested[.cancel]?.display == "⌃⌥⌘X" && suggested[.restart]?.display == "⌃⌥⌘N",
-        "The suggested combinations are the ones the product asked for")
+    let defaults = ShortcutBindings.defaults
+    precondition(defaults[.startOrStop]?.shortcut == Shortcut(keyCode: 1, modifiers: 2560, label: "⌥⇧S"), "Start uses physical S")
+    precondition(defaults[.pastePrompt]?.shortcut.keyCode == 9, "Paste uses physical V")
+    precondition(defaults[.undoMark]?.shortcut.keyCode == 6, "Undo uses physical Z")
+    precondition(defaults[.cancel]?.shortcut.keyCode == 7, "Cancel uses physical X")
+    precondition(defaults[.pauseOrResume]?.shortcut.keyCode == 35, "Pause uses physical P")
+    precondition(defaults[.restart]?.shortcut.keyCode == 15, "Restart uses physical R")
+    precondition(defaults[.startOrStop]?.lifetime == .app && defaults[.pastePrompt]?.lifetime == .app, "Start and paste live for the app")
+    precondition(defaults[.undoMark]?.lifetime == .recording && defaults[.restart]?.lifetime == .recording, "In-take actions live for the recording")
 
-    let none = ShortcutDefaults(registered: [])
-    precondition(
-        none.display(of: .startOrStop) == nil,
-        "A combination this app does not hold is not advertised as if pressing it would work")
-    let held = ShortcutDefaults(registered: ["capture.startOrStop"])
-    precondition(held.display(of: .startOrStop) == "⌃⌥⌘R", "A held combination is shown where it acts")
-    precondition(held.display(of: .cancel) == nil, "Holding one combination says nothing about another")
+    let encoded = Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"}}}"#.utf8)
+    let decoded = try? ShortcutBindings.decode(encoded)
+    precondition(decoded?[.startOrStop]?.shortcut.keyCode == 1, "Version 2 stores a physical key code")
+    precondition((try? ShortcutBindings.decode(Data(#"{"version":1,"bindings":{"capture.startOrStop":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))) == defaults, "Version 1 overrides are ignored")
+    // A version 2 file with a bad entry is refused out loud, so the person learns why their
+    // bindings are not in effect before a later change overwrites the file.
+    do {
+        let accepted = try ShortcutBindings.decode(Data(#"{"version":2,"bindings":{"capture.startOrStop":{"keyCode":1,"modifiers":2560,"label":"⌥⇧S"},"capture.unknown":{"keyCode":2,"modifiers":2560,"label":"⌥⇧D"}}}"#.utf8))
+        preconditionFailure("A version 2 file with an invalid entry is adopted silently, got \(accepted)")
+    } catch {
+        precondition(!error.message.isEmpty, "The refused file says why")
+    }
+    print("PASS shortcut bindings carry D6 defaults and version 2 persistence")
+}
 
-    var contested = ready()
-    contested.unavailableShortcuts = ["⌃⌥⌘R"]
-    let notes = CapturePresentation.noticeLines(for: contested)
+func runShortcutPresentationTests() {
+    // Refusal is only what registration reported: a binding Settings released to record a key,
+    // or an in-take one while idle, is not refused.
+    precondition(ShortcutPresentation.state(unavailable: false) == .active,
+        "A binding macOS did not refuse is active")
+    precondition(ShortcutPresentation.state(unavailable: true) == .refusedByMacOS,
+        "An unavailable shortcut says macOS refused it")
+    precondition(ShortcutPresentation.state(unavailable: true, duplicate: true) == .duplicateInYap,
+        "A duplicate says so before anything else")
     precondition(
-        notes.contains { $0.contains("⌃⌥⌘R") && $0.contains("in use") },
-        "A combination another application owns is named rather than silently dropped")
-
-    let overridden = ShortcutDefaults.overridden(
-        by: Data(#"{"capture.startOrStop":"⇧⌘8","capture.cancel":""}"#.utf8))
-    precondition(overridden[.startOrStop]?.display == "⇧⌘8", "A stated combination replaces the default")
-    precondition(overridden[.cancel] == nil, "An empty combination asks for no binding at all")
-    precondition(overridden[.restart]?.display == "⌃⌥⌘N", "Unstated actions keep their default")
-    precondition(
-        ShortcutDefaults.overridden(by: Data("not json".utf8))[.startOrStop]?.display == "⌃⌥⌘R",
-        "An unreadable override leaves every suggested combination in place")
-    precondition(
-        ShortcutDefaults.overridden(by: Data(#"{"capture.restart":"F"}"#.utf8))[.restart]?.display
-            == "⌃⌥⌘N",
-        "A combination with no modifier is refused rather than claiming a bare key")
-    print("PASS shortcuts are advertised only where this app actually holds them")
+        ShortcutPresentation.statusTitle(.duplicateInYap) == "Duplicate in Yap"
+            && ShortcutPresentation.statusTitle(.refusedByMacOS) == "Refused by macOS",
+        "Rejected shortcut states use their Settings wording")
+    print("PASS shortcut presentation distinguishes active, refused and duplicate states")
 }
 
 /// What macOS itself holds, read the way it stores it.

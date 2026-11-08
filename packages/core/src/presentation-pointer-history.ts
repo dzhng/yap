@@ -26,38 +26,8 @@ type Event = { at: PresentationTime } & (
   | { kind: "geometry"; epoch: number }
 );
 
-/** A render attempt shares this budget across every selected source and backward replay. */
-export function pointerHistoryBudget(limits: { maxEvents: number; maxSamples: number }) {
-  if (
-    !Number.isSafeInteger(limits.maxEvents) ||
-    limits.maxEvents < 1 ||
-    !Number.isSafeInteger(limits.maxSamples) ||
-    limits.maxSamples < 0
-  )
-    throw new CatalogError(
-      "INVALID_RANGE",
-      "Pointer history requires bounded event and sample work",
-    );
-  const { maxEvents, maxSamples } = limits;
-  let events = 0,
-    samples = 0;
-  return Object.freeze({
-    event() {
-      if (++events > maxEvents)
-        throw new CatalogError("LIMIT_EXCEEDED", "Pointer schedule exceeds its input-event budget");
-    },
-    sample() {
-      if (++samples > maxSamples)
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Pointer history exceeds its sampled-occurrence budget",
-        );
-    },
-  });
-}
-
 /** One exact event/reset owner for legacy schedules and sampled project pointers.
- * Backward requests reopen forward readers; the aggregate attempt budgets never reset. */
+ * Backward requests reopen forward readers; cancellation remains shared across the attempt. */
 export class PresentationPointerHistory {
   private streams: AsyncGenerator<Event>[] = [];
   private heads: IteratorResult<Event>[] = [];
@@ -72,7 +42,6 @@ export class PresentationPointerHistory {
   constructor(
     private readonly input: Input,
     private readonly signal: AbortSignal,
-    private readonly budget: ReturnType<typeof pointerHistoryBudget>,
   ) {
     this.pointer = this.inspector();
   }
@@ -153,8 +122,14 @@ export class PresentationPointerHistory {
     reason: PointerResetFloor["reason"],
     allowAtBoundary = true,
   ) {
-    const next = { atSourceUs: ceilMicroseconds(at), reason, allowAtBoundary };
+    const atSourceUs = ceilMicroseconds(at);
+    const pointerAtSourceUs =
+      reason === "scene" || reason === "kept_start"
+        ? (this.reset.pointerAtSourceUs ?? 0)
+        : Math.max(this.reset.pointerAtSourceUs ?? 0, atSourceUs + (allowAtBoundary ? 0 : 1));
+    const next = { atSourceUs, pointerAtSourceUs, reason, allowAtBoundary };
     if (
+      next.pointerAtSourceUs > (this.reset.pointerAtSourceUs ?? 0) ||
       next.atSourceUs > this.reset.atSourceUs ||
       (next.atSourceUs === this.reset.atSourceUs && !allowAtBoundary)
     )
@@ -174,7 +149,6 @@ export class PresentationPointerHistory {
     this.last = at;
     let selected = this.first();
     do {
-      this.budget.event();
       this.count++;
       this.signal.throwIfAborted();
       const event = this.heads[selected]!.value;
@@ -234,7 +208,6 @@ export class PresentationPointerHistory {
           "INVALID_RANGE",
           "Pointer sample requires a retained source instant and bounded explicit trail",
         );
-      this.budget.sample();
       if (this.last && compare(at, this.last) < 0) await this.restart();
       for (;;) {
         const next = await this.peek();

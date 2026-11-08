@@ -21,40 +21,46 @@ export async function writeArchive(
 ) {
   const limits = options.limits ?? archiveLimits;
   validateArchiveLimits(limits);
-  if (!Number.isSafeInteger(input.bytes) || input.bytes < 0 || input.bytes > limits.expandedBytes)
-    throw new CatalogError("LIMIT_EXCEEDED", "ZIP input byte total exceeds its limit");
+  if (!Number.isSafeInteger(input.bytes) || input.bytes < 0)
+    throw new CatalogError("INVALID_PARAMS", "ZIP input byte total must be a nonnegative integer");
   const stage = await workspace.handle.stat({ bigint: true }),
     source = await input.handle.stat({ bigint: true }),
     plan = await input.plan.stat({ bigint: true });
   const identity = { dev: String(stage.dev), ino: String(stage.ino) };
   const nativeOptions = {
     descriptors: [workspace.handle.fd],
-    timeoutMs: options.timeoutMs ?? publicationDeadlineMs(input.bytes),
   };
-  nativeConfirmed(
-    await worker(
-      "archive.prepare",
-      { identity },
-      { ...nativeOptions, ...(options.signal ? { signal: options.signal } : {}) },
-    ),
-    "empty",
-    "ZIP workspace admission was not confirmed",
-  );
+  try {
+    nativeConfirmed(
+      await worker(
+        "archive.prepare",
+        { identity },
+        { ...nativeOptions, ...(options.signal ? { signal: options.signal } : {}) },
+      ),
+      "empty",
+      "ZIP workspace admission was not confirmed",
+    );
+  } catch (error) {
+    if (error instanceof CatalogError && error.code === "INVALID_STORAGE")
+      throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", error.message, error.details);
+    throw error;
+  }
   let files: IdentifiedFiles | undefined;
   let closed = false;
   const close = async () => {
     if (closed) return;
     files?.close();
     nativeConfirmed(
-      await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: 30_000 }),
+      await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: null }),
       "removed",
       "ZIP workspace cleanup was not confirmed",
     );
     closed = true;
   };
   try {
-    const receipt = verifyArchiveWriteReceipt(
-      nativeResult(
+    let nativeReceipt: unknown;
+    try {
+      nativeReceipt = nativeResult(
         await worker(
           "archive.write",
           {
@@ -67,12 +73,17 @@ export async function writeArchive(
           {
             ...nativeOptions,
             descriptors: [workspace.handle.fd, input.handle.fd, input.plan.fd],
+            timeoutMs: options.timeoutMs ?? publicationDeadlineMs(input.bytes),
             ...(options.signal ? { signal: options.signal } : {}),
           },
         ),
-      ),
-      limits,
-    );
+      );
+    } catch (error) {
+      if (error instanceof CatalogError && error.code === "INVALID_STORAGE")
+        throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", error.message, error.details);
+      throw error;
+    }
+    const receipt = verifyArchiveWriteReceipt(nativeReceipt, limits);
     if (receipt.expandedBytes !== input.bytes)
       throw new CatalogError(
         "INVALID_NATIVE_RESPONSE",
@@ -92,7 +103,6 @@ export async function writeArchive(
           operationError: String(failure),
           cleanupError: String(cleanup),
         },
-        true,
       );
     }
     throw failure;

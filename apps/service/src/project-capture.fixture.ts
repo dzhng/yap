@@ -16,6 +16,7 @@ export async function captureFixture(
   silentOperation?: string,
   /** The control channel's default per-call deadline; production uses the protocol's. */
   controlTimeoutMs?: number,
+  autoTranscribe = false,
 ) {
   if (!home) {
     home = await mkdtemp("/tmp/project-capture-");
@@ -193,6 +194,7 @@ export async function captureFixture(
   });
   const service = await startProjectService({
     home,
+    autoTranscribe,
     control: {
       input,
       output,
@@ -229,8 +231,9 @@ export async function captureFixture(
     },
     call: (operation: string, params: Record<string, unknown> = {}) =>
       callLocal(service.socketPath, { id: randomUUID(), operation, params }),
-    report: async (params: Record<string, unknown>) => {
-      params = (await publicationReport(params)) as Record<string, unknown>;
+    report: async (params: Record<string, unknown>, publicationFilesWritten = false) => {
+      if (!publicationFilesWritten)
+        params = (await publicationReport(params)) as Record<string, unknown>;
       return new Promise<OperationResult>((resolve) => {
         if (
           ["complete", "interrupted"].includes(String(params.state)) &&
@@ -337,5 +340,39 @@ export const filesWorker: MediaWorker = async (operation, params, options) => {
     });
     return { ok: true, data: { removed: true } };
   }
+  if (operation === "storage.removeCacheFiles") return { ok: true, data: { removed: true } };
   throw new Error(`Unexpected worker operation: ${operation}`);
 };
+
+/** Starts, stops and completes one display take whose source the service then admits. */
+export async function settleCapture(
+  f: Awaited<ReturnType<typeof captureFixture>>,
+  requestId: string,
+) {
+  const started = await f.call("capture.start", {
+    requestId,
+    source: { kind: "display", id: 1 },
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(f.home, "library", "recordings", recordingId, "source");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFile(
+    join(directory, "capture.journal.jsonl"),
+    JSON.stringify({ sessionID: sourceId }),
+  );
+  await writeFile(join(directory, "video.mov"), "borrowed source bytes");
+  await f.call("capture.stop", { recordingId });
+  const reported = await f.report({
+    recordingId,
+    sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: 100,
+  });
+  if (!reported.ok) throw new Error(JSON.stringify(reported));
+  const { acquisitionId, job } = (
+    reported.data as { sourceAdmissions: { acquisitionId: string; job: { id: string } }[] }
+  ).sourceAdmissions[0]!;
+  return { recordingId, sourceId, directory, acquisitionId, job };
+}

@@ -101,6 +101,51 @@ test("face observation requests reach project index frame materialization", asyn
   ).toMatchObject({ status: "available", faces: [{ id: "face-0" }] });
 });
 
+test("a project face index retained before the noun-ID cutover is refused by generation and regenerates on request", async () => {
+  const f = await fixture();
+  videos(f);
+  const faceObservations = { recipe: "vision-face-rectangles-v1" as const };
+  f.index.requestProject({ projectId: f.projectId, faceObservations });
+  await f.jobs.idle();
+  f.index.requestProject({ projectId: f.projectId, faceObservations });
+  await f.jobs.idle();
+  const before = f.index.getProject({ projectId: f.projectId, faceObservations, limit: 1 });
+  const reference = before.page!.entries[0]!.reference;
+  // 0.1.61 retained faces named `faceId` under its own renderer pin.
+  const rows = f.catalog.catalog
+    .prepare("SELECT rowid,frame FROM screenshot_index_entries")
+    .all() as { rowid: number; frame: string }[];
+  for (const row of rows)
+    f.catalog.catalog
+      .prepare("UPDATE screenshot_index_entries SET frame=? WHERE rowid=?")
+      .run(row.frame.replaceAll('"id":"face-', '"faceId":"face-'), row.rowid);
+  expect(rows.some((row) => row.frame.includes('"id":"face-'))).toBe(true);
+  await f.restart("renderer-after-cutover");
+
+  const stale = (read: () => unknown) => {
+    try {
+      read();
+    } catch (error) {
+      expect(error).toBeInstanceOf(CatalogError);
+      expect(error).toMatchObject({ code: "ARTIFACT_CHANGED" });
+      return;
+    }
+    throw new Error("Pre-cutover evidence was projected under the current names");
+  };
+  stale(() => f.index.frameProject(reference));
+  stale(() =>
+    f.index.getProject({ projectId: f.projectId, cursor: before.page!.nextCursor!, limit: 1 }),
+  );
+  const fresh = f.index.requestProject({ projectId: f.projectId, faceObservations });
+  expect(fresh.published).toBeNull();
+  await f.jobs.idle();
+  const ready = f.index.getProject({ projectId: f.projectId, faceObservations, limit: 1 });
+  expect(ready.page!.metadata.generation).not.toBe(reference.generation);
+  expect(ready.page!.entries[0]!.frame.faceObservations).toMatchObject({
+    faces: [{ id: "face-0" }],
+  });
+});
+
 test("a project index over text that fell back to another face publishes the frames' font issues", async () => {
   const f = await fixture({ textFallback: { face: "AppleColorEmoji", codePoint: 0x1f600 } });
   videos(f);
@@ -177,7 +222,7 @@ test("project recipes pin both selected scene generations while queued and retai
   expect(pending.dependencies.map((d) => d.streamId)).toEqual(["v", "w"]);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     lane: "heavy",
     input: "hold",
@@ -229,7 +274,7 @@ test("project recipes pin both selected scene generations while queued and retai
 test("failed project frames keep both scene inputs until an explicit retry succeeds", async () => {
   const f = await fixture({
     beforeFrame: async (call) => {
-      if (call === 1) throw new CatalogError("TEMPORARY", "fixture decoder failed", {}, true);
+      if (call === 1) throw new CatalogError("MEDIA_WORKER_FAILED", "fixture decoder failed", {});
     },
   });
   videos(f);
@@ -318,7 +363,7 @@ test("an overloaded single-frame reason row refuses before any project picture w
     state: "failed",
     errorCode: "LIMIT_EXCEEDED",
     errorDetails: { limitKind: "index-record-bytes", maximum: 262144 },
-    retryable: false,
+    retryable: true,
   });
   expect(f.calls).toBe(0);
   expect(
@@ -330,7 +375,7 @@ test("an overloaded single-frame reason row refuses before any project picture w
       "scene-generation",
       sceneGenerationResource(recipe.scenes[0]),
     ),
-  ).toEqual([]);
+  ).toEqual([{ kind: "job-input", id: pending.jobId }]);
 });
 
 test("coordinator restart preserves interrupted index inputs and retries its interrupted frame child", async () => {

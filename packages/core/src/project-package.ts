@@ -1,7 +1,10 @@
+import { jsonChunks } from "./json-stream.js";
 import { textSeedResources } from "./text-seeds.js";
 import { portablePreparedAudioSchema, preparedAudioResource } from "./prepared-audio.js";
 import { portableProjectIndexMetadataSchema } from "./project-index.js";
+import { projectIndexPolicy } from "./project-index-selection.js";
 import { portableSourceIndexMetadataSchema } from "./source-index.js";
+import { sourceIndexPolicy } from "./source-index-selection.js";
 import { indexGenerationResource } from "./screenshot-index.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -15,6 +18,7 @@ import {
 } from "@yap/composition";
 import { CatalogError } from "./catalog.js";
 import { hdrConversionEvidenceMatchesMetadata } from "./asset-origins.js";
+import { packageMemberFromVersion6 } from "./record-identity-migration.js";
 import { compositionAsset, portableAssetSchema } from "./assets.js";
 import { sourcePublicationFiles } from "./source-admission.js";
 import {
@@ -32,11 +36,8 @@ import {
 import { retainedPublicationSchema } from "./jobs.js";
 import { acquisitionContext, portableAcquisitionSchema } from "./acquisitions.js";
 import { resourceKinds, type ResourceReference } from "./references.js";
-import { checkProjectJsonBytes, type ArchiveLimits } from "./package-archive.js";
-import {
-  importedTranscriptGenerationResource,
-  type PortableImportedTranscript,
-} from "./imported-transcript.js";
+import { type ArchiveLimits } from "./package-archive.js";
+import { importedTranscriptGenerationResource } from "./imported-transcript.js";
 
 import {
   speakerEvidenceMetadataSchema,
@@ -61,20 +62,16 @@ const member = z.strictObject({
 });
 const indexMembersSchema = z.strictObject({
   publication: retainedPublicationSchema.nullable(),
-  records: z
-    .array(z.strictObject({ bytes: z.int().nonnegative().max(262144), sha256: digest }))
-    .max(25000),
-  images: z
-    .array(
-      z.strictObject({
-        bytes: z
-          .int()
-          .positive()
-          .max(32 * 1024 * 1024),
-        sha256: digest,
-      }),
-    )
-    .max(25000),
+  records: z.array(z.strictObject({ bytes: z.int().nonnegative().max(262144), sha256: digest })),
+  images: z.array(
+    z.strictObject({
+      bytes: z
+        .int()
+        .positive()
+        .max(32 * 1024 * 1024),
+      sha256: digest,
+    }),
+  ),
 });
 const resourceSchema = z.discriminatedUnion("kind", [
   portableAssetSchema.extend({ kind: z.literal("asset") }),
@@ -112,8 +109,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
           sha256: digest,
         }),
       )
-      .min(1)
-      .max(25000),
+      .min(1),
   }),
   indexMembersSchema.extend({
     kind: z.literal("index-generation"),
@@ -126,13 +122,10 @@ const resourceSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     kind: z.literal("transcript-generation"),
     metadata: portableTranscriptSchema,
-    available: z.array(selectionRangeSchema).max(100000),
+    available: z.array(selectionRangeSchema),
     publication: retainedPublicationSchema.nullable(),
     receipt: z.strictObject({
-      bytes: z
-        .int()
-        .nonnegative()
-        .max(8 * 1024 * 1024),
+      bytes: z.int().nonnegative(),
       sha256: digest,
     }),
   }),
@@ -149,10 +142,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
       parser: z.strictObject({ name: z.string(), version: z.string() }),
       timingBasis: z.literal("supplied"),
       raw: z.strictObject({
-        bytes: z
-          .int()
-          .nonnegative()
-          .max(256 * 1024 * 1024),
+        bytes: z.int().nonnegative(),
         sha256: digest,
       }),
       metadata: z.record(z.string(), z.unknown()),
@@ -161,7 +151,7 @@ const resourceSchema = z.discriminatedUnion("kind", [
     alignment: z
       .strictObject({ modelId: z.string().min(1), channel: z.int().nonnegative() })
       .optional(),
-    cues: z.array(z.unknown()).max(100000),
+    cues: z.array(z.unknown()),
   }),
 ]);
 const serializedResourceSchema = z.strictObject({
@@ -172,16 +162,21 @@ export function resourceMetadataPath(identity: ResourceReference): string {
   return `resources/${createHash("sha256").update(key(identity)).digest("hex")}.json`;
 }
 export function resourceMetadataMember(resource: PortableResource) {
-  const body = JSON.stringify(resource),
-    identity = resourceIdentity(resource);
+  const identity = resourceIdentity(resource),
+    hash = createHash("sha256");
+  let bytes = 0;
+  for (const chunk of jsonChunks(resource)) {
+    bytes += Buffer.byteLength(chunk);
+    hash.update(chunk);
+  }
   return {
-    body,
+    chunks: () => jsonChunks(resource),
     reference: {
       identity,
       metadata: {
         path: resourceMetadataPath(identity),
-        bytes: Buffer.byteLength(body),
-        sha256: createHash("sha256").update(body).digest("hex"),
+        bytes,
+        sha256: hash.digest("hex"),
       },
     },
   };
@@ -215,7 +210,7 @@ export function resourceIdentity(resource: PortableDependency): ResourceReferenc
       return {
         kind: "index-generation",
         id: indexGenerationResource(
-          { kind: "project", projectId: resource.metadata.projectId },
+          { kind: "project", id: resource.metadata.projectId },
           resource.metadata.generation,
         ),
       };
@@ -223,7 +218,7 @@ export function resourceIdentity(resource: PortableDependency): ResourceReferenc
       return {
         kind: "index-generation",
         id: indexGenerationResource(
-          { kind: "asset", assetId: resource.metadata.assetId },
+          { kind: "asset", id: resource.metadata.assetId },
           resource.metadata.generation,
         ),
       };
@@ -276,7 +271,7 @@ export function resourceDependencies(resource: PortableDependency): ResourceRefe
     case "scene-generation":
     case "transcript-generation":
       return [
-        { kind: "asset", id: resource.metadata.owner.assetId },
+        { kind: "asset", id: resource.metadata.owner.id },
         ...(resource.metadata.source.acquisitionId
           ? [{ kind: "acquisition" as const, id: resource.metadata.source.acquisitionId }]
           : []),
@@ -391,16 +386,17 @@ export function importedTranscriptMemberPath(
     .digest("hex");
   return `transcripts/imported/${id}/source.${resource.origin.format}`;
 }
-const projectPackageVersion = 6;
+const projectPackageVersion = 7;
 const manifestSchema = z.strictObject({
   format: z.literal("yap-project"),
-  version: z.literal(projectPackageVersion),
+  // Version 6 is read through `packageMemberFromVersion6`; this build writes version 7.
+  version: z.union([z.literal(6), z.literal(projectPackageVersion)]),
   project: z.unknown(),
   undo: z.array(z.string()).max(1000),
   references: projectSnapshotReferencesSchema,
   revisions: z.array(z.string()).min(1).max(1000),
-  resources: z.array(serializedResourceSchema).max(25_000),
-  inventory: z.array(member).max(25_000),
+  resources: z.array(serializedResourceSchema),
+  inventory: z.array(member),
 });
 export type ProjectPackageManifest = z.infer<typeof manifestSchema>;
 export type ValidatedProjectPackage = Omit<ProjectPackageManifest, "resources"> & {
@@ -417,15 +413,12 @@ function invalid(message: string): never {
 export function collectPortableResources<T extends PortableDependency>(
   roots: readonly ResourceReference[],
   read: (identity: ResourceReference) => T,
-  limit = 25_000,
 ): T[] {
   const found = new Map<string, T>(),
     queued = new Set<string>(),
     pending: ResourceReference[] = [];
   const enqueue = (identity: ResourceReference) => {
     if (queued.has(key(identity))) return;
-    if (queued.size >= limit)
-      throw new CatalogError("LIMIT_EXCEEDED", "Portable dependency inventory exceeds its limit");
     queued.add(key(identity));
     pending.push(identity);
   };
@@ -472,31 +465,26 @@ export function projectPackageManifest(
 }
 /** Compact shape/inventory admission precedes any external metadata reads. */
 export function parseProjectPackageManifest(
-  body: string,
+  body: unknown,
   limits: ArchiveLimits,
 ): ProjectPackageManifest {
-  if (Buffer.byteLength(body) > limits.manifestBytes) invalid("Project manifest exceeds its limit");
-  let value: unknown;
-  try {
-    value = JSON.parse(body);
-  } catch {
-    invalid("Invalid project manifest JSON");
-  }
+  let value = body;
   if (
     value &&
     typeof value === "object" &&
     "format" in value &&
     value.format === "yap-project" &&
-    (!("version" in value) || value.version !== projectPackageVersion)
+    (!("version" in value) || (value.version !== 6 && value.version !== projectPackageVersion))
   )
     throw new CatalogError("INVALID_PACKAGE", "Unsupported project package version", {
       supportedVersion: projectPackageVersion,
     });
+  if (value && typeof value === "object" && "version" in value && value.version === 6)
+    value = packageMemberFromVersion6("manifest", value);
   const parsed = manifestSchema.safeParse(value);
   if (!parsed.success) invalid("Invalid project manifest");
   const manifest = parsed.data;
-  if (manifest.inventory.length > limits.entries - 1 || manifest.revisions.length > limits.history)
-    invalid("Project inventory exceeds its limit");
+  if (manifest.revisions.length > limits.history) invalid("Project inventory exceeds its limit");
   const inventory = new Map<string, z.infer<typeof member>>(),
     folded = new Set<string>();
   let bytes = 0;
@@ -510,17 +498,14 @@ export function parseProjectPackageManifest(
       parts.length > limits.depth ||
       entry.path.length > limits.pathBytes ||
       folded.has(entry.path.toLowerCase()) ||
-      entry.bytes > limits.memberBytes ||
       entry.path === "manifest.json"
     )
       invalid("Invalid project inventory member");
     folded.add(entry.path.toLowerCase());
     inventory.set(entry.path, entry);
     bytes += entry.bytes;
-    if (!Number.isSafeInteger(bytes) || bytes > limits.expandedBytes)
-      invalid("Project inventory exceeds byte limit");
+    if (!Number.isSafeInteger(bytes)) invalid("Project inventory exceeds byte limit");
   }
-  let aggregate = 0;
   const metadata = new Set<string>();
   for (const resource of manifest.resources) {
     const ref = resource.metadata,
@@ -534,24 +519,23 @@ export function parseProjectPackageManifest(
     )
       invalid("Resource metadata reference differs from inventory");
     metadata.add(ref.path);
-    aggregate += ref.bytes;
   }
   for (const [ordinal, path] of manifest.revisions.entries()) {
     const entry = inventory.get(path);
     if (path !== `revisions/${ordinal}.json` || !entry)
       invalid("Project revision inventory is incomplete");
-    aggregate += entry.bytes;
   }
-  checkProjectJsonBytes(aggregate);
   return manifest;
 }
+
+export type ProjectJsonMember = { value: unknown; bytes: number; sha256: string };
 
 /** Complete editable meaning is checked after admitted member hydration, before readiness. */
 export function resolveProjectPackage(
   manifest: ProjectPackageManifest,
   revisions: ReadonlyMap<string, string>,
   limits: ArchiveLimits,
-  metadata: ReadonlyMap<string, string>,
+  metadata: ReadonlyMap<string, ProjectJsonMember>,
 ): ValidatedProjectPackage {
   const inventory = new Map(manifest.inventory.map((entry) => [entry.path, entry]));
   const consumed = new Set<string>();
@@ -567,11 +551,13 @@ export function resolveProjectPackage(
     )
       invalid("Project revision hash or size differs");
     consumed.add(path);
+    let document: unknown;
     try {
-      return JSON.parse(text);
+      document = JSON.parse(text);
     } catch {
       invalid("Invalid project revision JSON");
     }
+    return manifest.version === 6 ? packageMemberFromVersion6("revision", document) : document;
   });
   if (revisions.size !== documents.length) invalid("Unexpected project revision member");
   const snapshot = validateProjectSnapshot({
@@ -586,24 +572,25 @@ export function resolveProjectPackage(
   for (const serialized of manifest.resources) {
     const ref = serialized.metadata,
       body = metadata.get(ref.path);
-    if (
-      body === undefined ||
-      Buffer.byteLength(body) !== ref.bytes ||
-      createHash("sha256").update(body).digest("hex") !== ref.sha256
-    )
+    if (body === undefined || body.bytes !== ref.bytes || body.sha256 !== ref.sha256)
       invalid("Resource metadata member hash or size differs");
-    let value: unknown;
-    try {
-      value = JSON.parse(body);
-    } catch {
-      invalid("Invalid resource metadata JSON");
-    }
+    let value = body.value;
+    if (manifest.version === 6) value = packageMemberFromVersion6("metadata", value);
     const parsed = resourceSchema.safeParse(value);
     if (!parsed.success || key(resourceIdentity(parsed.data)) !== key(serialized.identity))
       invalid("Invalid portable resource metadata identity or schema");
     const resource = parsed.data;
     consumed.add(ref.path);
     metadataCount++;
+    const foreignIndex =
+      (resource.kind === "index-generation" &&
+        resource.metadata.selectionPolicy !== sourceIndexPolicy.id) ||
+      (resource.kind === "project-index-generation" &&
+        resource.metadata.selectionPolicy !== projectIndexPolicy.id);
+    if (foreignIndex) {
+      for (const member of resourceMembers(resource)) consumed.add(member.path);
+      continue;
+    }
     resolved.push(resource);
     if (
       (resource.kind === "index-generation" || resource.kind === "project-index-generation") &&
@@ -614,13 +601,13 @@ export function resolveProjectPackage(
       invalid("Screenshot index members differ from its counts");
     if (
       resource.kind === "project-index-generation" &&
-      (resource.metadata.projectId !== snapshot.project.projectId ||
+      (resource.metadata.projectId !== snapshot.project.id ||
         !snapshot.revisions.some((revision) => revision.id === resource.metadata.revisionId))
     )
       invalid("Project screenshot index belongs to another history");
     if (
       resource.kind === "prepared-audio" &&
-      (resource.projectId !== snapshot.project.projectId ||
+      (resource.projectId !== snapshot.project.id ||
         !snapshot.revisions.some((revision) => revision.id === resource.revisionId))
     )
       invalid("Prepared audio belongs to another project history");
@@ -641,11 +628,10 @@ export function resolveProjectPackage(
     resources.set(identity, resource);
   }
   if (metadata.size !== metadataCount) invalid("Unexpected resource metadata member");
-  const roots = projectResourceRoots(snapshot);
+  const roots = projectResourceRoots(snapshot).filter((identity) => resources.has(key(identity)));
   const closure = collectPortableResources(
     roots,
     (identity) => resources.get(key(identity)) ?? invalid("Missing transitive project dependency"),
-    limits.entries,
   );
   if (closure.length !== resources.size || consumed.size !== inventory.size)
     invalid("Unreferenced project inventory member");
@@ -747,19 +733,5 @@ export function staleTranscriptIssues(stale: readonly ResourceReference[]): Issu
       message: "A transcript from an older recipe was left out; the recipient regenerates it",
       evidence: { kind: "transcript-generation" as const, id: resource.id },
     })),
-  );
-}
-
-export function validateProjectPackage(
-  body: string,
-  revisions: ReadonlyMap<string, string>,
-  limits: ArchiveLimits,
-  metadata: ReadonlyMap<string, string> = new Map(),
-): ValidatedProjectPackage {
-  return resolveProjectPackage(
-    parseProjectPackageManifest(body, limits),
-    revisions,
-    limits,
-    metadata,
   );
 }

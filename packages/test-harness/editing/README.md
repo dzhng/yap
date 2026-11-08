@@ -1,10 +1,10 @@
 # Editing verification
 
 This directory checks source and editing primitives through authored fixtures,
-compiled requests and public service journeys. Start with the contract that could
-have changed. Filenames name the subject; a runner's imports identify its shared
-setup and observers. Case selection and invocation belong to that source, not a
-second scenario catalog here.
+independent references and replays of retained evidence. Start with the contract
+that could have changed. Filenames name the subject; a runner's imports identify
+its shared setup and observers. Case selection and invocation belong to that
+source, not a second scenario catalog here.
 
 ## Source facts and project meaning
 
@@ -15,240 +15,52 @@ both byte identity and the evidence interval that authorizes those bytes.
 
 Project checks ask how explicit edits map those sources into a revision. The
 [composition owner](../../composition/README.md) defines that meaning; the harness
-must not invent a second edit model. Compiled-plan probes isolate lowering, while
-public journeys also test admission, delivery and persistent ownership. Passing
-one boundary does not prove the others.
+must not invent a second edit model. Passing one boundary (lowering, admission,
+delivery, ownership) does not prove the others.
 
-Preservation and cutover journeys carry existing guarantees across an owner or
-contract change. Match the original operands and observable outcome instead of
-recreating the old implementation. The [preservation registry](../../../specs/done/agent-editing/assets/23-owner-fixture-ports/README.md)
-locates those scoped results and their producing code.
+## Independent references
 
-Speech journeys explicitly prepare source dependencies before reading them.
-Historical raw responses remain frozen; the reference-only admission port adds
-required execution/ownership provenance to a derived artifact. Short whole-support
-recognition comparisons validate new ownership and candidate fields before comparing
-every original raw operand except measured processing time. Context or multi-window
-results have different inference topology and cannot use that historical comparison.
-
-[Rendered speech](rendered-speech-public.mjs) compares projected source words with
-fresh recognition of retained revision PCM through CLI/MCP. Independent audio
-landmarks check the selected sample clock; restart reads prove that retained evidence
-needs neither rendering nor inference. Its [accepted evidence](../../../specs/done/video-editing-feedback/assets/11-rendered-speech/README.md)
-keeps the planted edge-cut limitation separate from fresh-observation proof.
-
-## Pictures, audio and processing
-
-Picture checks separate source-frame membership, sampled project time, geometry
-and encoded appearance. Layer, pointer, caption and scalar-motion fixtures belong
-here because a structurally valid plan can still draw the wrong result. A decoded
-image comparison needs matched input, output time and color interpretation;
-encoding loss must not be mistaken for a composition or color-management error.
-
-[Timed captions](caption-timed-motion.mjs) separate word-to-display mapping from
-entrance motion. Declared synthetic observations isolate those contracts from
-speech-model accuracy; independent numeric frame recipes check actual public
-stills and encoded movies, including a preview beginning inside the motion.
-
-[Blend arithmetic](blend-sheet.mjs) compares authored color/alpha surfaces and a smooth
-vignette against an independent linear-light reference through the public compiler and
-native still/movie operations. Its [retained evidence](../../../specs/done/video-editing-feedback/assets/24-blend-sheet/README.md)
-keeps full-raster still proof separate from movie patch-interior codec tolerance.
-The [public blend journey](blend-public.mjs) adds CLI/MCP admission, delivered bytes,
-exact sample support and export publication over those same frozen operands.
-The [encoded blend reference](blend-encoding.mjs) compares every movie pixel against
-the independent arithmetic image delivered through the same declared codec. Raw
-edge preservation and declared-codec reproducibility are separate claims; retain
-the former failure rather than letting an interior mask certify the latter.
-
-[Loudness references](loudness/README.md) separate independent BS.1770 arithmetic
-from the exact signal/coverage reported by public operations. Meter agreement is
-scoped to its signal families; abrupt resampler boundaries remain separate evidence.
+A reference states the expected result without importing the mechanism it judges.
+[Blend arithmetic](blend-reference.mjs) and the [player picture reference](FrameColorReference.swift)
+are examples: matched input, output time and color interpretation come first, so
+encoding loss is not mistaken for a composition or color-management error.
+[Learned routing](denoise-routing.mjs) checks that a processor's state domain
+matches the requested graph, not just the delivered tap.
 
 Audio checks separate source addresses, placement and gain from conversion and
 encoding. Authored nonzero samples and distinguishable channels expose errors
 that silence or a symmetric fixture would hide. Exact retained PCM and lossy
-encoded output require different expectations. A/V checks compare both clocks
-against the same authored landmarks rather than merely comparing total duration.
+encoded output require different expectations.
 
-Prepared processing adds state and ownership. An output window can be short while
-a learned processor requires context from a larger connected domain. The
-[learned routing fixture](denoise-topology.mjs) anchors this distinction: the
-reference state domain must match the requested graph, not just the delivered tap.
-[Time/pitch references](stretch/README.md) explain their independent recipe role.
+## Public journeys
 
-[Speech timing](speech/README.md) needs independent audible labels;
-[generated-voice experiments](voice/README.md) distinguish runtime observations
-from lexical, identity and splice-quality evidence. Their measurement boundaries
-remain separate from caller edit intent.
-
-[Optional runtime assembly](../../../helpers/model-runtime/README.md) preserves
-explicit dependency precedence for local inference experiments. It produces an
-artifact for the existing preparation owner, never another installer.
-
-[Conditional alignment](../../../helpers/alignment/README.md) separates controlled
-provider-response parity, native correspondence arithmetic and actual prepared
-runtime inference. A matching forced path does not establish that the supplied
-word was spoken; physical admission and interpretation retain separate proof.
-
-## Delivery, lifetime and work
-
-Public journeys exercise the complete request, readiness, delivery and publication
-contract. The [shared service fixture](source-evidence-fixture.mjs) owns real
-CLI/MCP transport and process lifetime. Follow its consumers before writing
-another startup, result receiver or shutdown loop. The [preview/export journey](first-preview.mjs)
-uses that owner while retaining publication-specific fault barriers.
+The [shared service fixture](source-evidence-fixture.mjs) owns real CLI/MCP
+transport and process lifetime. Follow its consumers before writing another
+startup, result receiver or shutdown loop. [Pause audio](pause-audio.mjs) uses it
+to check native audio around authored ambience and pauses; it is the
+`lab:pause-audio` entry, and its source owns the native worker and output arguments.
 
 A held operation or crash is useful only when its timing isolates the failure
-being claimed. Cancellation, stale replies, lease revocation and publication
-before/after a commit protect different outcomes. Scale and budget probes vary
-work that can grow independently, such as timeline duration, fragmentation and
-metadata cardinality; a small output alone does not establish bounded work.
+being claimed. Cancellation, stale replies and publication before/after a commit
+protect different outcomes.
 
-## Fixture and reference authority
+## Replays of retained evidence
 
-The [corpus generator](fixtures.mjs) owns deterministic media construction.
-Its [authored oracle](expected.json) is independent so the generator cannot certify
-its own timing mistake. Frozen media keeps source hashes and encoder identity;
-a toolchain change can alter bytes without altering decoded meaning.
+Most runners here replay receipts frozen under `specs/done/**/assets` without
+starting a service, rendering or loading a model. They check that the retained
+bytes still match their recorded identities and keep known refusals executable;
+each focused test also proves that a mutated receipt is refused. A replay is
+structural evidence only. It cannot stand in for a fresh run of the behavior
+the receipt describes.
 
-Portable lossy picture fixtures have an explicit codec tolerance. Separate PCM
-inputs let audio membership be checked without codec delay. Declared acquisition
-holes and native empty edits remain separate inputs: a black frame or silence
-cannot establish which condition caused it.
+The real-media corpus verifiers ([video](video-corpus.mjs), [behavior](corpus-behavior.mjs),
+[controls](corpus-controls.mjs), [multicam](multicam-corpus.mjs)) certify retained
+inputs and scope. A green coverage report does not promote synchronization,
+speaker continuity, camera selection or editorial quality. Its
+[authorized inputs](../../../fixtures/video-editing-feedback/README.md) keep
+reduction fidelity distinct from current recognition and picture behavior.
 
-[Acceptance inputs](acceptance-inputs.mjs) bind retained marks to the original
-source identity and clock. Reuse original narration rather than making another
-copy or requesting another capture. A missing independent label leaves that
-perceptual claim unverified; it does not stop unrelated primitive verification.
-
-The [real-video corpus tool](video-corpus.mjs) derives selected source-decoder
-operands and verifies retained bytes, sample support and exact clock mappings.
-Its [authorized inputs](../../../fixtures/video-editing-feedback/README.md) keep
-reduction fidelity distinct from current recognition/picture behavior.
-
-The [scoped behavior ledger](corpus-behavior.mjs) binds each physically certified
-real case to an existing replayable recognition/timing or picture receipt. It
-keeps the evidence scope explicit; multicamera synchronization, speaker
-continuity and editorial quality remain separate contracts.
-
-The [independent control verifier](corpus-controls.mjs) rechecks the canonical
-small synthetic operands that real-media certification cannot provide: rational
-24fps boundaries, known offset/drift, unrelated tones, rotated asymmetric
-picture, alpha/flat patches, edge landmarks, wrong supplied text, blank input
-and an explicit transition gap. Its feature manifest hashes the existing
-canonical bytes and hand-authored oracles; it does not duplicate media or claim
-that synthetic controls replace the retained real recordings.
-
-## Platform reproductions
-
-[The decoded-picture runner](decoded-picture-replication.mjs) freezes player-oriented
-SDR comparisons against public unchanged source/project delivery, including exact
-physical clocks and actual profiles. Its [retained reference](../../../specs/done/video-editing-feedback/assets/13-decoded-picture/README.md)
-separates sampled acceptance from broader rendering claims.
-
-[Native rendering](RENDER-REPRODUCTION.md) explains temporal sample support;
-[color and encoding](COLOR-REPRODUCTION.md) explains appearance interpretation.
-These isolate platform behavior with matched operands. They are reference
-experiments, not competing product executors or evidence of general release
-acceptance. Frozen measurements and detailed outcomes live with their evidence.
-
-The [HDR transform reproduction](hdr-conversion.mjs) uses independently authored
-PQ/HLG charts and a supplied pinned runtime to isolate conversion from encoding.
-Its [clock probe](hdr-clock.py) separately checks sparse final support, exact common
-origin and rotation. Neither selects an implicit source interpretation or supplies
-a production publication path.
-
-The same reproduction's `encoded` mode checks dedicated three-frame 10-bit
-HEVC PQ/HLG controls through the fresh reader and retained FFprobe/interpretation
-owners. It preserves unstripped encoder refusals, then independently authors
-plain controls for numerical source-to-derivative proof. Explicit interpretation
-pins must reproduce the frozen recipe's raw and ProRes bytes exactly. The
-fixture's exact movie clock is a control, not a production clock default.
-Its optional `producer` mode exercises the actual private held whole-video producer,
-including padded-support refusal and explicit exclusion of auxiliary chapter and
-timecode tracks. It compares delivered RGB against the same retained numerical
-operand; managed publication is a separate boundary.
-Its selected-audio controls retain actual native decoded PCM before and after
-stream copying, including an independently authored relative video offset. Audio
-not selected by the request must remain absent from the derivative. This proves
-sample/clock preservation; it makes no listening or managed-publication claim.
-
-[Audio recipe reproduction](audio-recipes/README.md) retains numerical
-normalization, limiter and compressor evidence before production admission.
-
-[Picture observation verification](picture-observations.mjs) reuses public journey
-lifetime and the independent delivered-PNG observer. It checks explicit region
-operands, alpha coverage and read-only pixel identity, including scratch-authored
-exposure controls and retained index receipts. Its help owns selected inputs and
-invocation. [Accepted observations](../../../specs/done/video-editing-feedback/assets/14-picture-statistics/README.md)
-retain measured scopes without turning camera histograms into grade targets.
-
-[Physical empty-edit delivery](empty-edit-delivery.mjs) imports the frozen
-AVFoundation empty-edit fixture through the public source/project/export path.
-It keeps physical support coverage, refused source reads, black gap pixels and
-available neighbors as separate observations; a black output without physical
-support evidence is not accepted as an empty edit. The retained receipt lives at
-[`30-delivered-scenes/native/empty-edit`](../../../specs/done/video-editing-feedback/assets/30-delivered-scenes/native/empty-edit/README.md).
-
-[Dialogue matching](dialogue-matching.mjs) drives the public CLI and pure consumer
-helper with two identified real-speaker controls. It verifies independent
-processed-clip matching, ordered explicit gains and complete strict mastering;
-its usage owns case inputs. It reuses the existing journey/process owners.
-
-[Alignment evidence parity](alignment-evidence-parity.mjs) reuses existing controlled
-provider outputs and complete frozen word operands through the native correspondence,
-core publication and retained-read boundaries. It checks every possible pairing,
-conditional frame bound and physical refusal; it neither reruns inference nor treats
-supplied text as independent lexical truth.
-
-[Acoustic synchronization research](synchronization/README.md) separates planted
-offsets, retained unlike-microphone PCM and competing-anchor refusals from declared
-source relationships. Its runner owns acquisition and replay; no clock is inferred
-from equal duration or one correlation peak.
-
-The [multicam corpus verifier](multicam-corpus.mjs) certifies the retained
-three-source physical window bank and immutable WAV/PCM identities. A green
-coverage report does not promote synchronization or camera selection.
-
-[Switched-angle delivery](switched-angle-delivery.mjs) imports three caller-authored
-camera controls through CLI/MCP, declares source-bound accepted angle evidence, and
-checks native frame and preview delivery for an explicit sequential switch. It does
-not infer synchronization, speakers or camera selection.
-
-[Retained multicam delivery](multicam-native-delivery.mjs) replays the canonical
-three-source picture recipe through public import, sequential placement and native
-frame/preview delivery. Its verifier reuses the corpus and source-choice owners,
-then checks the retained PNG/MP4 bytes and decoded RGB measurements; it remains
-explicitly caller-authored and unsynchronized.
-
-[Immutable LUT checkpoint](lut-assets.mjs) exercises explicit import, public
-processing, delivered pixels and project-package replay using isolated managed
-state. Its usage owns required executable inputs. The retained
-[evidence](../../../specs/done/video-editing-feedback/assets/26-immutable-luts/README.md)
-distinguishes numerical response from editorial grade quality.
-
-[Tone controls](tone-controls.mjs) compares actual public PNG/movie delivery with
-an independent provider reference over a chart and retained bright-wall picture.
-It freezes treatment before delivery, observes caller-declared regions and
-separates matched codec response from lossless reference fidelity. Its usage owns
-invocation; [accepted evidence](../../../specs/done/video-editing-feedback/assets/25-tone-controls/README.md)
-records the narrow visual scope.
-[Public split-tone delivery](split-tone-public.mjs) runs the immutable LUT through
-CLI/MCP import, project authoring and native frame delivery against an independent
-linear-sRGB curve. It retains neutral, shadow-color and highlight-neutral masks in
-its receipt; [the feature evidence](../../../specs/done/video-editing-feedback/assets/25-tone-controls/split-tone/public/README.md)
-records the scoped response.
-
-[Transition delivery](transition-delivery.mjs) runs caller-authored crossfade, dip
-and flash picture recipes through public import, edit authoring, native frame reads
-and preview export with solid-color controls. Its midpoint proves both explicit
-sources reach a crossfade, while dip and flash prove the source reaches the black
-canvas and returns; [the feature evidence](../../../specs/done/video-editing-feedback/assets/27-29-transitions/crossfade/README.md)
-keeps audio and visual-reference gates separate.
-
-[Motion delivery replay](motion-delivery-replay.mjs) replays the retained moved/split
-zoom receipt without rerendering. It checks the frozen worker identities, picture
-membership counts and preview/export hashes; its focused test also proves a mutated
-receipt is refused. This is structural evidence only, so it does not stand in for
-reference-conditioned trajectory or blur appearance parity.
+[Speech timing](../speech/protocol.md) needs independent audible labels, and
+[conditional alignment](../../../helpers/alignment/README.md) keeps a matching
+forced path separate from proof that the word was spoken. These measurement
+boundaries remain separate from caller edit intent.

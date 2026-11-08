@@ -1,4 +1,5 @@
 import { omit, type Issue } from "@yap/composition";
+import { refusalRetryable, workState } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ResourceReferences, type ResourceKind } from "./references.js";
@@ -8,6 +9,7 @@ import { createOutputIssues, outputIssues, writeOutputIssues } from "./issues.js
 
 /** What an attempt occupies while it runs. Frame work is small and parallel; heavy work is not. */
 export type JobLane = "heavy" | "frame";
+export type JobPriority = "interactive" | "background";
 export type JobState =
   | "waiting"
   | "queued"
@@ -33,25 +35,27 @@ const laneLimits: Readonly<Record<JobLane, number>> = { heavy: 1, frame: 2 };
  */
 const queuedLimit = 32;
 const waitingLimit = 32;
+/** Background work is durable but intentionally kept separate from interactive admission pressure. */
+const backgroundLimit = 256;
 export type JobAdmission = (
   job: Job,
 ) => { state: "ready" } | { state: "waiting"; dependency: string };
 
 /** A preparation request exists before its result asset; revisions name immutable project/take inputs. */
-export type JobOwner =
-  | Readonly<{ kind: "import"; importId: string }>
-  | Readonly<{ kind: "asset"; assetId: string }>
-  | Readonly<{ kind: "acquisition"; acquisitionId: string }>
-  | Readonly<{ kind: "project"; projectId: string }>
-  | Readonly<{ kind: "recording"; recordingId: string }>;
+type OwnerKind = "import" | "asset" | "acquisition" | "project" | "recording";
+/** A reference to one owner of each named kind; checking `kind` narrows it. */
+export type Owner<Kind extends OwnerKind> = Kind extends OwnerKind
+  ? Readonly<{ kind: Kind; id: string }>
+  : never;
+export type JobOwner = Owner<OwnerKind>;
 /** Recording work selects settled source lifetime; only projects carry edit revisions. */
 export type JobTarget =
-  | Extract<JobOwner, { kind: "import" | "asset" | "acquisition" }>
-  | (Extract<JobOwner, { kind: "project" }> & Readonly<{ revisionId: string }>)
-  | (Extract<JobOwner, { kind: "recording" }> & Readonly<{ revisionId: null }>);
+  | Owner<"import" | "asset" | "acquisition">
+  | (Owner<"project"> & Readonly<{ revisionId: string }>)
+  | (Owner<"recording"> & Readonly<{ revisionId: null }>);
 export type JobRequestTarget =
   | Exclude<JobTarget, { kind: "recording" }>
-  | (Extract<JobOwner, { kind: "recording" }> & Readonly<{ revisionId?: string | null }>);
+  | (Owner<"recording"> & Readonly<{ revisionId?: string | null }>);
 
 /** Domain owners validate existence and deletion intent in the same catalog transaction as admission. */
 export type JobTargets = {
@@ -66,6 +70,8 @@ export type JobRequest = Readonly<{
   /** Which artifact this work produces, named by its owning adapter. */
   artifact: string;
   lane: JobLane;
+  /** Interactive work is the default for existing callers; background work never waits on dependencies. */
+  priority?: JobPriority;
   /** Canonical identity of the work's inputs. The queue only compares it; its meaning is the caller's. */
   input: string;
 }>;
@@ -81,6 +87,7 @@ export type Job = Readonly<{
   target: JobTarget;
   artifact: string;
   lane: JobLane;
+  priority: JobPriority;
   input: string;
   state: JobState;
   reason: string | null;
@@ -150,7 +157,7 @@ export class JobDependencyLost extends Error {}
 declare const contextBrand: unique symbol;
 /** Queue-issued lifetime authority. The embedded recording ID is never a scheduling owner. */
 export type JobContext = Readonly<{ contextId: string; [contextBrand]: true }>;
-export type ContextJobRequest = Pick<JobRequest, "artifact" | "lane" | "input">;
+export type ContextJobRequest = Pick<JobRequest, "artifact" | "lane" | "input" | "priority">;
 export type ContextJob = Omit<Job, "target" | "state"> & {
   state: Exclude<JobState, "waiting">;
   contextId: string;
@@ -160,7 +167,7 @@ export type ContextJobExecutor = (execution: {
   job: ContextJob;
   signal: AbortSignal;
 }) => Promise<string>;
-type ContextRow = ContextJob & { queuedSequence: number };
+type ContextRow = Omit<ContextJob, "retryable"> & { queuedSequence: number };
 type ContextState = {
   id: string;
   execute?: ContextJobExecutor;
@@ -170,17 +177,26 @@ type ContextState = {
 };
 type ClaimedJob = { job: Job; context?: never } | { job: ContextJob; context: ContextState };
 function contextValue(row: ContextRow): ContextJob {
-  return omit(row, "queuedSequence");
+  return { ...omit(row, "queuedSequence"), retryable: refusalRetryable(row.errorCode ?? "") };
 }
 const contextLimit = 4;
 const contextJobLimit = 32;
 const contextValueBytes = 64 * 1024;
 
-const summaryColumns =
-  "jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,retryable,generation,errorCode,errorDetails";
+// Historical rows have no code. Interpret their outcome without rewriting the catalog.
+const jobErrorCode = `COALESCE(errorCode, CASE state
+  WHEN 'canceled' THEN CASE WHEN reason GLOB '*_unavailable' THEN 'OWNER_DELETED' ELSE 'CANCELED' END
+  WHEN 'failed' THEN CASE WHEN reason='interrupted' THEN 'JOB_INTERRUPTED' ELSE 'JOB_FAILED' END
+  WHEN 'unavailable' THEN 'UNAVAILABLE' END)`;
+const summaryColumns = `jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,priority,state,reason,generation,${jobErrorCode} AS errorCode,errorDetails`;
 const jobColumns = `${summaryColumns},input`;
 function inputDigest(input: string): string {
   return createHash("sha256").update(input).digest("hex");
+}
+function requestPriority(priority: JobRequest["priority"]): JobPriority {
+  if (priority === undefined) return "interactive";
+  if (priority === "interactive" || priority === "background") return priority;
+  throw new CatalogError("INVALID_REQUEST", "Unknown job priority", { priority });
 }
 function requireExactInput(actual: string, expected: string): void {
   if (actual !== expected)
@@ -188,43 +204,22 @@ function requireExactInput(actual: string, expected: string): void {
 }
 type TargetRow = { targetKind: JobOwner["kind"]; targetId: string; revisionId: string };
 type JobRow = Omit<Job, "target" | "retryable" | "errorDetails"> &
-  TargetRow & { retryable: number; errorDetails: string | null };
+  TargetRow & { errorDetails: string | null };
 type ArtifactRow = Omit<Artifact, "target"> & TargetRow;
+/** An owner's catalog key, as its `kind`/`id` column pair. */
 export function ownerIdentity(owner: JobOwner): [JobOwner["kind"], string] {
-  switch (owner.kind) {
-    case "import":
-      return [owner.kind, owner.importId];
-    case "asset":
-      return [owner.kind, owner.assetId];
-    case "acquisition":
-      return [owner.kind, owner.acquisitionId];
-    case "project":
-      return [owner.kind, owner.projectId];
-    case "recording":
-      return [owner.kind, owner.recordingId];
-  }
-}
-function targetValues(target: JobTarget): [JobOwner["kind"], string, string] {
-  return [...ownerIdentity(target), "revisionId" in target ? (target.revisionId ?? "") : ""];
+  return [owner.kind, owner.id];
 }
 export function ownerFromIdentity(kind: JobOwner["kind"], id: string): JobOwner {
-  switch (kind) {
-    case "import":
-      return { kind, importId: id };
-    case "asset":
-      return { kind, assetId: id };
-    case "acquisition":
-      return { kind, acquisitionId: id };
-    case "project":
-      return { kind, projectId: id };
-    case "recording":
-      return { kind, recordingId: id };
-  }
+  return { kind, id };
+}
+function targetValues(target: JobTarget): [JobOwner["kind"], string, string] {
+  return [target.kind, target.id, "revisionId" in target ? (target.revisionId ?? "") : ""];
 }
 function targetFrom({ targetKind, targetId, revisionId }: TargetRow): JobTarget {
-  const owner = ownerFromIdentity(targetKind, targetId);
-  if (owner.kind === "recording") return { ...owner, revisionId: null };
-  return owner.kind === "project" ? { ...owner, revisionId } : owner;
+  if (targetKind === "recording") return { kind: targetKind, id: targetId, revisionId: null };
+  if (targetKind === "project") return { kind: targetKind, id: targetId, revisionId };
+  return { kind: targetKind, id: targetId };
 }
 function toArtifact(stored: ArtifactRow & { attemptId?: string }): Artifact {
   const { targetKind, targetId, revisionId, ...row } = omit(stored, "attemptId");
@@ -235,14 +230,11 @@ function toJob({ targetKind, targetId, revisionId, ...row }: JobRow): Job {
     ...row,
     target: targetFrom({ targetKind, targetId, revisionId }),
     errorDetails: row.errorDetails === null ? null : JSON.parse(row.errorDetails),
-    retryable: row.retryable === 1,
+    retryable: refusalRetryable(row.errorCode ?? ""),
   };
 }
 function sameOwner(first: JobOwner | undefined, second: JobOwner): boolean {
-  return (
-    first !== undefined &&
-    ownerIdentity(first).every((value, index) => value === ownerIdentity(second)[index])
-  );
+  return first !== undefined && first.kind === second.kind && first.id === second.id;
 }
 
 /** Copy only bounded JSON data; never execute diagnostic getters or toJSON hooks. */
@@ -291,19 +283,25 @@ function failureDetails(details: Record<string, unknown>): Record<string, unknow
   }
 }
 
-/** An absent artifact is unavailable; anything else fails, retryable unless a CatalogError says not. */
+/** An absent artifact is unavailable; every other failure keeps its code and ledger verdict. */
 function failure(error: unknown): Pick<
   Job,
   "reason" | "retryable" | "errorCode" | "errorDetails"
 > & {
   state: "failed" | "unavailable";
 } {
+  const errorCode =
+    error instanceof JobDependencyLost
+      ? "DEPENDENCY_LOST"
+      : error instanceof CatalogError
+        ? error.code
+        : "JOB_FAILED";
   return {
     state: error instanceof CatalogError && error.code === "UNAVAILABLE" ? "unavailable" : "failed",
-    errorCode: error instanceof CatalogError ? error.code : "JOB_FAILED",
+    errorCode,
     errorDetails: error instanceof CatalogError ? failureDetails(error.details) : null,
     reason: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-    retryable: !(error instanceof CatalogError) || error.retryable,
+    retryable: refusalRetryable(errorCode),
   };
 }
 
@@ -328,20 +326,31 @@ export class JobQueue {
       target?: JobOwner;
       context?: ContextState;
       lane: JobLane;
+      priority: JobPriority;
       controller: AbortController;
       done: Promise<void>;
     }
   >();
   get updateBlocked(): boolean {
-    if (this.attempts.size || this.admissionScheduled || this.admitting) return true;
+    if (
+      [...this.attempts.values()].some((attempt) => attempt.priority === "interactive") ||
+      this.admissionScheduled ||
+      this.admitting
+    )
+      return true;
     if (
       this.store.catalog
-        .prepare("SELECT 1 FROM jobs WHERE state IN ('waiting','queued','running') LIMIT 1")
+        .prepare(
+          "SELECT 1 FROM jobs WHERE priority='interactive' AND state IN ('waiting','queued','running') LIMIT 1",
+        )
         .get()
     )
       return true;
     return [...this.activeContexts].some((context) =>
-      [...context.jobs.values()].some((job) => job.state === "queued" || job.state === "running"),
+      [...context.jobs.values()].some(
+        (job) =>
+          job.priority === "interactive" && (job.state === "queued" || job.state === "running"),
+      ),
     );
   }
 
@@ -371,6 +380,9 @@ export class JobQueue {
       if (typeof input !== "string") throw new TypeError("Job input must be text");
       return inputDigest(input);
     });
+    this.store.catalog.function("ledger_retryable", { deterministic: true }, (code) =>
+      typeof code === "string" && refusalRetryable(code) ? 1 : 0,
+    );
     this.references = new ResourceReferences(this.store);
     this.targets = options.targets;
     this.execute = options.execute;
@@ -379,7 +391,7 @@ export class JobQueue {
     this.store.catalog.exec(`
    CREATE TABLE IF NOT EXISTS jobs (
     jobId TEXT PRIMARY KEY,attemptId TEXT NOT NULL,targetKind TEXT NOT NULL,targetId TEXT NOT NULL,revisionId TEXT NOT NULL,
-    artifact TEXT NOT NULL,lane TEXT NOT NULL,state TEXT NOT NULL,
+    artifact TEXT NOT NULL,lane TEXT NOT NULL,priority TEXT NOT NULL DEFAULT 'interactive' CHECK(priority IN ('interactive','background')),state TEXT NOT NULL,
     reason TEXT,errorCode TEXT,errorDetails TEXT,retryable INTEGER NOT NULL,generation INTEGER NOT NULL,queuedSequence INTEGER NOT NULL,
     deferred INTEGER NOT NULL DEFAULT 0 CHECK(deferred IN (0,1)),
     readmitted INTEGER NOT NULL DEFAULT 0 CHECK(readmitted IN (0,1)),
@@ -425,7 +437,7 @@ export class JobQueue {
   createContext(execute: ContextJobExecutor): JobContext {
     this.requireOpen();
     if (this.activeContexts.size >= contextLimit)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many package contexts are open", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many package contexts are open", {});
     const context = Object.freeze({ contextId: this.newId() }) as JobContext;
     const state: ContextState = { id: context.contextId, execute, jobs: new Map(), closed: false };
     this.contexts.set(context, state);
@@ -440,6 +452,7 @@ export class JobQueue {
   }
   submitContext(context: JobContext, request: ContextJobRequest): ContextJob {
     this.requireOpen();
+    const priority = requestPriority(request.priority);
     const state = this.context(context);
     if (
       !request.artifact ||
@@ -453,12 +466,19 @@ export class JobQueue {
     if (existing) {
       if (existing.lane !== request.lane)
         throw new CatalogError("INVALID_REQUEST", "An existing job cannot change execution lane");
+      if (priority === "interactive" && existing.priority === "background") {
+        Object.assign(existing, { priority });
+        const attempt = [...this.attempts.values()].find(
+          (candidate) => candidate.jobId === existing.jobId,
+        );
+        if (attempt) attempt.priority = "interactive";
+      }
       this.runQueued();
       return this.contextJob(context, existing.jobId);
     }
     if (state.jobs.size >= contextJobLimit)
       throw new CatalogError("LIMIT_EXCEEDED", "Package context job metadata limit exceeded");
-    this.admit();
+    this.admit(priority);
     const job: ContextRow = {
       jobId: this.newId(),
       attemptId: this.newId(),
@@ -466,11 +486,11 @@ export class JobQueue {
       artifact: request.artifact,
       input: request.input,
       lane: request.lane,
+      priority,
       state: "queued",
       reason: null,
       errorCode: null,
       errorDetails: null,
-      retryable: false,
       generation: 1,
       result: null,
       queuedSequence: ++this.sequence,
@@ -499,10 +519,11 @@ export class JobQueue {
       this.runQueued();
       return this.contextJob(context, jobId);
     }
-    if (!current.retryable) throw new CatalogError("UNAVAILABLE", "Package job cannot be retried");
-    this.admit();
+    if (!current.retryable)
+      throw new CatalogError(current.errorCode!, "Package job cannot be retried");
+    this.admit(current.priority);
     state.jobs.set(jobId, {
-      ...current,
+      ...omit(current, "retryable"),
       attemptId: this.newId(),
       generation: current.generation + 1,
       queuedSequence: ++this.sequence,
@@ -510,7 +531,6 @@ export class JobQueue {
       reason: null,
       errorCode: null,
       errorDetails: null,
-      retryable: false,
       result: null,
     });
     this.runQueued();
@@ -524,9 +544,8 @@ export class JobQueue {
       Object.assign(state.jobs.get(jobId)!, {
         state: "canceled",
         reason: "canceled",
-        errorCode: null,
+        errorCode: "CANCELED",
         errorDetails: null,
-        retryable: true,
       });
       this.attempts.get(job.attemptId)?.controller.abort();
       this.capacityAvailable();
@@ -542,7 +561,7 @@ export class JobQueue {
       job.state === "running" ||
       [...this.attempts.values()].some((attempt) => attempt.jobId === jobId)
     )
-      throw new CatalogError("PROCESSING_BUSY", "Package job is still active", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Package job is still active", {});
     state.jobs.delete(jobId);
   }
   closeContext(context: JobContext): Promise<void> {
@@ -554,9 +573,8 @@ export class JobQueue {
           Object.assign(job, {
             state: "canceled",
             reason: "context_closed",
-            errorCode: null,
+            errorCode: "CONTEXT_CLOSED",
             errorDetails: null,
-            retryable: false,
           });
       const attempts = [...this.attempts.values()].filter((attempt) => attempt.context === state);
       for (const attempt of attempts) attempt.controller.abort();
@@ -593,22 +611,34 @@ export class JobQueue {
       this.requireOpen();
       // Domain ownership and queue admission commit together; execution starts after commit.
       const request = typeof input === "function" ? input() : input;
+      const priority = requestPriority(request.priority);
+      if (deferred && priority === "background")
+        throw new CatalogError("INVALID_REQUEST", "Background jobs cannot enter waiting", {});
       const target = this.targets.pin(request.target);
       const existing = this.existing({ ...request, target });
       if (existing) {
         if (existing.lane !== request.lane)
           throw new CatalogError("INVALID_REQUEST", "An existing job cannot change execution lane");
+        if (priority === "interactive" && existing.priority === "background") {
+          this.store.catalog
+            .prepare("UPDATE jobs SET priority='interactive' WHERE jobId=?")
+            .run(existing.jobId);
+          const attempt = [...this.attempts.values()].find(
+            (candidate) => candidate.jobId === existing.jobId,
+          );
+          if (attempt) attempt.priority = "interactive";
+        }
         admitted?.(this.job(existing.jobId));
         return existing.jobId;
       }
       if (deferred) this.admitWaiting();
-      else this.admit();
+      else this.admit(priority);
       created = true;
       const admittedId = this.newId();
       this.store.catalog
         .prepare(
-          `INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,input,state,reason,retryable,generation,errorCode,errorDetails,queuedSequence,deferred,inputSha256)
-           VALUES (?,?,?,?,?,?,?,?,?,NULL,0,?,NULL,NULL,?,?,?)`,
+          `INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,priority,input,state,reason,retryable,generation,errorCode,errorDetails,queuedSequence,deferred,inputSha256)
+           VALUES (?,?,?,?,?,?,?,?,?,?,NULL,0,?,NULL,NULL,?,?,?)`,
         )
         .run(
           admittedId,
@@ -616,6 +646,7 @@ export class JobQueue {
           ...targetValues(target),
           request.artifact,
           request.lane,
+          priority,
           request.input,
           deferred ? "waiting" : "queued",
           this.nextGeneration({ target, artifact: request.artifact, input: request.input }),
@@ -653,7 +684,7 @@ export class JobQueue {
       )
         return current.jobId;
       if (!current.retryable)
-        throw new CatalogError("UNAVAILABLE", "This job cannot be retried", {
+        throw new CatalogError(current.errorCode!, "This job cannot be retried", {
           state: current.state,
           reason: current.reason,
           errorCode: current.errorCode,
@@ -701,7 +732,7 @@ export class JobQueue {
       .prepare("SELECT deferred FROM jobs WHERE jobId=?")
       .get(current.jobId) as { deferred: number };
     if (deferred) this.admitWaiting();
-    else this.admit();
+    else this.admit(current.priority);
     this.store.catalog
       .prepare(
         `UPDATE jobs SET state=?,attemptId=?,reason=NULL,errorCode=NULL,errorDetails=NULL,retryable=0,generation=generation+1,
@@ -727,7 +758,7 @@ export class JobQueue {
       const current = this.job(jobId);
       if (current.state !== "waiting" && current.state !== "queued" && current.state !== "running")
         return null;
-      this.discard(jobId, "canceled");
+      this.discard(jobId, "canceled", "CANCELED");
       return current.attemptId;
     });
     if (stopped !== null) {
@@ -738,7 +769,7 @@ export class JobQueue {
   }
 
   private requireOpen(): void {
-    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "The job queue is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "The job queue is closed", {});
   }
 
   private existing(identity: Pick<Job, "target" | "artifact" | "input">): Job | null {
@@ -792,13 +823,25 @@ export class JobQueue {
     return generation;
   }
 
-  /** Inspect durable state without decoding or rehashing the execution recipe. */
+  /**
+   * A job's public record: its own `id`, its state in the public vocabulary, and its published
+   * output. Durable state is read without decoding or rehashing the execution recipe.
+   */
   inspect(jobId: string) {
     const row = this.store.catalog
       .prepare(`SELECT ${summaryColumns},inputSha256 FROM jobs WHERE jobId=?`)
       .get(jobId) as (Omit<JobRow, "input"> & { inputSha256: string }) | undefined;
     if (!row) throw new CatalogError("NOT_FOUND", "Job does not exist", { jobId });
-    const { targetKind, targetId, revisionId, retryable, errorDetails, ...summary } = row;
+    const {
+      jobId: id,
+      state,
+      generation,
+      targetKind,
+      targetId,
+      revisionId,
+      errorDetails,
+      ...summary
+    } = row;
     const target = targetFrom(row);
     const publication = this.targets.isAvailable(target)
       ? (this.store.catalog
@@ -809,20 +852,65 @@ export class JobQueue {
           | { generation: number; attemptId: string; result: string }
           | undefined)
       : undefined;
+    const details = errorDetails === null ? null : JSON.parse(errorDetails);
+    const retryable = refusalRetryable(row.errorCode ?? "");
     return {
+      id,
+      state: workState(state),
       ...summary,
+      attemptGeneration: generation,
       target,
-      retryable: Boolean(retryable),
-      errorDetails: errorDetails ? JSON.parse(errorDetails) : null,
+      retryable,
+      errorDetails: details,
+      ...(retryable
+        ? {
+            details: {
+              retry: { operation: "job.retry", params: { jobId: id } },
+            },
+          }
+        : {}),
       published: publication
         ? {
-            generation: publication.generation,
+            generation: String(publication.generation),
             attemptId: publication.attemptId,
             output: JSON.parse(publication.result) as unknown,
             issues: this.issues(publication),
           }
         : null,
     };
+  }
+
+  /**
+   * The status of the work a job runs, for the operation that started it: what it works on, its
+   * state, and the job that runs it.
+   */
+  work(jobId: string) {
+    const { id, target, state, reason, retryable, attemptId, attemptGeneration, published } =
+      this.inspect(jobId);
+    return { target, state, jobId: id, attemptId, attemptGeneration, reason, retryable, published };
+  }
+
+  /** Whether a running job's input pins this model content digest, as every model consumer does. */
+  runsModel(modelDigest: string): boolean {
+    const rows = this.store.catalog
+      .prepare("SELECT input FROM jobs WHERE state='running'")
+      .all() as { input: string }[];
+    const namesModel = (value: unknown): boolean => {
+      if (Array.isArray(value)) return value.some(namesModel);
+      if (!value || typeof value !== "object") return false;
+      for (const [key, child] of Object.entries(value)) {
+        if (key === "modelDigest" && child === modelDigest) return true;
+        if (namesModel(child)) return true;
+      }
+      return false;
+    };
+    return rows.some((row) => {
+      try {
+        return namesModel(JSON.parse(row.input));
+      } catch {
+        return false;
+      }
+    });
   }
 
   retainedArtifact(owner: JobOwner, artifact: string, attemptId: string): RetainedArtifact | null {
@@ -862,7 +950,6 @@ export class JobQueue {
           "PROCESSING_BUSY",
           "Local work already owns this publication identity",
           {},
-          true,
         );
       throw new CatalogError(
         "INVALID_PACKAGE",
@@ -991,7 +1078,7 @@ export class JobQueue {
         ["waiting", "queued", "running"].includes(job.state) ||
         [...this.attempts.values()].some((attempt) => attempt.jobId === jobId)
       )
-        throw new CatalogError("PROCESSING_BUSY", "Job is still active", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Job is still active", {});
       this.store.catalog
         .prepare(
           "DELETE FROM artifacts WHERE targetKind=? AND targetId=? AND revisionId=? AND artifact=? AND inputSha256=? AND input=?",
@@ -1040,9 +1127,9 @@ export class JobQueue {
     if (!this.targets.isDeleting(owner))
       throw new CatalogError("INVALID_STATE", "Target deletion has not been requested");
     this.store.catalog
-      .prepare(`UPDATE jobs SET state='canceled',reason=?,errorCode=NULL,errorDetails=NULL,retryable=0
+      .prepare(`UPDATE jobs SET state='canceled',reason=?,errorCode='OWNER_DELETED',errorDetails=?,retryable=0
       WHERE targetKind=? AND targetId=? AND state IN ('waiting','queued','running')`)
-      .run(`${owner.kind}_unavailable`, ...ownerIdentity(owner));
+      .run(`${owner.kind}_unavailable`, JSON.stringify({ owner }), ...ownerIdentity(owner));
     const active = [...this.attempts.values()].filter((attempt) =>
       sameOwner(attempt.target, owner),
     );
@@ -1063,7 +1150,7 @@ export class JobQueue {
         )
         .get(...ownerIdentity(owner))
     )
-      throw new CatalogError("PROCESSING_BUSY", "Target jobs have not finished closing", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Target jobs have not finished closing", {});
     for (;;) {
       const jobs = this.store.catalog
         .prepare("SELECT jobId FROM jobs WHERE targetKind=? AND targetId=? LIMIT 256")
@@ -1130,9 +1217,13 @@ export class JobQueue {
 
   /** Called within admission's transaction; published replays no longer need preparation inputs. */
   retainInputs(jobId: string, kind: ResourceKind, ids: readonly string[]): void {
-    const job = this.job(jobId);
-    if (!["waiting", "queued", "running"].includes(job.state) && !job.retryable) return;
-    this.references.retain(kind, { kind: "job-input", id: jobId }, ids);
+    const row = this.store.catalog
+      .prepare(`SELECT
+      (state IN ('waiting','queued','running') OR ledger_retryable(${jobErrorCode})=1) AS retained
+      FROM jobs WHERE jobId=?`)
+      .get(jobId) as { retained: number } | undefined;
+    if (!row) throw new CatalogError("NOT_FOUND", "Job does not exist", { jobId });
+    if (row.retained) this.references.retain(kind, { kind: "job-input", id: jobId }, ids);
   }
 
   /** Normalized resource-first lookup, independent of recipe shape and scene count. */
@@ -1142,7 +1233,7 @@ export class JobQueue {
         .prepare(`SELECT 1 FROM resource_references AS ref
       JOIN jobs ON jobs.jobId=ref.ownerId
       WHERE ref.resourceKind=? AND ref.resourceId=? AND ref.ownerKind='job-input'
-      AND (jobs.state IN ('waiting','queued','running') OR jobs.retryable=1) LIMIT 1`)
+      AND (jobs.state IN ('waiting','queued','running') OR ledger_retryable(${jobErrorCode})=1) LIMIT 1`)
         .get(kind, id)
     )
       return true;
@@ -1168,7 +1259,7 @@ export class JobQueue {
     this.store.catalog
       .prepare(`DELETE FROM resource_references
       WHERE ownerKind='job-input' AND ownerId=? AND EXISTS
-      (SELECT 1 FROM jobs WHERE jobId=? AND state NOT IN ('waiting','queued','running') AND retryable=0)`)
+      (SELECT 1 FROM jobs WHERE jobId=? AND state NOT IN ('waiting','queued','running') AND ledger_retryable(${jobErrorCode})=0)`)
       .run(jobId, jobId);
   }
 
@@ -1229,7 +1320,9 @@ export class JobQueue {
         if (this.closed) break;
         if (this.job(row.jobId).state !== "waiting") continue;
         if (this.targets.isDeleting(targetFrom(row))) {
-          this.store.transaction(() => this.discard(row.jobId, `${row.targetKind}_unavailable`));
+          this.store.transaction(() =>
+            this.discard(row.jobId, `${row.targetKind}_unavailable`, "OWNER_DELETED"),
+          );
           this.scheduleAdmission();
           continue;
         }
@@ -1248,8 +1341,7 @@ export class JobQueue {
               .run(++this.sequence, row.jobId);
           }
         } catch (error) {
-          if (error instanceof CatalogError && error.code === "LIMIT_EXCEEDED" && error.retryable)
-            continue;
+          if (error instanceof CatalogError && error.code === "CAPACITY_EXCEEDED") continue;
           if (this.job(row.jobId).state !== "waiting") continue;
           this.store.transaction(() => this.fail(row.jobId, error));
           this.scheduleAdmission();
@@ -1267,28 +1359,40 @@ export class JobQueue {
       .get() as { count: number };
     if (row.count >= waitingLimit)
       throw new CatalogError(
-        "LIMIT_EXCEEDED",
+        "CAPACITY_EXCEEDED",
         "Too much dependency work is already waiting",
         {},
-        true,
       );
   }
 
-  private admit(): void {
+  private admit(priority: JobPriority = "interactive"): void {
     const { queued } = this.store.catalog
-      .prepare("SELECT COUNT(*) AS queued FROM jobs WHERE state='queued'")
+      .prepare(
+        "SELECT COUNT(*) AS queued FROM jobs WHERE priority='interactive' AND state='queued'",
+      )
       .get() as { queued: number };
     const contextQueued = [...this.activeContexts].reduce(
       (count, context) =>
         count + [...context.jobs.values()].filter((job) => job.state === "queued").length,
       0,
     );
+    if (priority === "background") {
+      const { count } = this.store.catalog
+        .prepare(
+          "SELECT COUNT(*) AS count FROM jobs WHERE priority='background' AND state IN ('queued','running')",
+        )
+        .get() as { count: number };
+      if (count >= backgroundLimit)
+        throw new CatalogError("CAPACITY_EXCEEDED", "Too much background work is already queued", {
+          background: count,
+        });
+      return;
+    }
     if (queued + contextQueued >= queuedLimit)
       throw new CatalogError(
-        "LIMIT_EXCEEDED",
+        "CAPACITY_EXCEEDED",
         "Too much work is already waiting; retry once the queue drains",
         { queued: queued + contextQueued },
-        true,
       );
   }
 
@@ -1309,12 +1413,21 @@ export class JobQueue {
     this.releaseFinishedInputs(jobId, completedAttempt);
   }
 
-  private discard(jobId: string, reason: string): void {
+  private discard(jobId: string, reason: string, code: "CANCELED" | "OWNER_DELETED"): void {
+    const target = this.job(jobId).target;
+    const owner: JobOwner = { kind: target.kind, id: target.id };
+    // Only a vanished owner is permanent; every other cancellation can be requested again.
     this.store.catalog
       .prepare(
-        "UPDATE jobs SET state='canceled',reason=?,errorCode=NULL,errorDetails=NULL,retryable=? WHERE jobId=?",
+        "UPDATE jobs SET state='canceled',reason=?,errorCode=?,errorDetails=?,retryable=? WHERE jobId=?",
       )
-      .run(reason, reason === "canceled" ? 1 : 0, jobId);
+      .run(
+        reason,
+        code,
+        code === "OWNER_DELETED" ? JSON.stringify({ owner }) : null,
+        Number(refusalRetryable(code)),
+        jobId,
+      );
     this.releaseFinishedInputs(jobId);
   }
 
@@ -1325,9 +1438,11 @@ export class JobQueue {
         const row = this.store.catalog
           .prepare(
             `SELECT ${jobColumns},queuedSequence FROM jobs
-             WHERE lane=? AND state='queued' ORDER BY queuedSequence LIMIT 1`,
+             WHERE lane=? AND state='queued'
+             ORDER BY CASE WHEN ?='heavy' AND priority='interactive' THEN 0 ELSE 1 END,
+                      queuedSequence LIMIT 1`,
           )
-          .get(lane) as (JobRow & { queuedSequence: number }) | undefined;
+          .get(lane, lane) as (JobRow & { queuedSequence: number }) | undefined;
         const eligible = [...this.activeContexts]
           .filter(
             (context) =>
@@ -1339,8 +1454,23 @@ export class JobQueue {
               .filter((job) => job.state === "queued" && job.lane === lane)
               .map((job) => ({ context, job })),
           )
-          .sort((a, b) => a.job.queuedSequence - b.job.queuedSequence)[0];
-        if (eligible && (!row || eligible.job.queuedSequence < row.queuedSequence)) {
+          .sort(
+            (a, b) =>
+              (lane === "heavy"
+                ? Number(b.job.priority === "interactive") -
+                  Number(a.job.priority === "interactive")
+                : 0) || a.job.queuedSequence - b.job.queuedSequence,
+          )[0];
+        const eligiblePriority = eligible?.job.priority ?? "background";
+        const rowPriority = row?.priority ?? "background";
+        if (
+          eligible &&
+          (!row ||
+            (lane === "heavy" &&
+              eligiblePriority === "interactive" &&
+              rowPriority !== "interactive") ||
+            (eligiblePriority === rowPriority && eligible.job.queuedSequence < row.queuedSequence))
+        ) {
           return {
             context: eligible.context,
             job: { ...contextValue(eligible.job), state: "running" },
@@ -1349,7 +1479,7 @@ export class JobQueue {
         if (!row) return null;
         const fields = omit(row, "queuedSequence");
         if (!this.targets.isAvailable(targetFrom(fields))) {
-          this.discard(row.jobId, `${row.targetKind}_unavailable`);
+          this.discard(row.jobId, `${row.targetKind}_unavailable`, "OWNER_DELETED");
           continue;
         }
         this.store.catalog.prepare("UPDATE jobs SET state='running' WHERE jobId=?").run(row.jobId);
@@ -1400,7 +1530,7 @@ export class JobQueue {
     );
   }
   private startAttempt(
-    job: Pick<Job, "jobId" | "attemptId" | "lane" | "artifact">,
+    job: Pick<Job, "jobId" | "attemptId" | "lane" | "artifact" | "priority"> | ContextJob,
     owner: { target: JobOwner } | { context: ContextState },
     execute: (signal: AbortSignal) => Promise<string | StagedJobResult>,
     settle: (outcome: Settlement) => void,
@@ -1434,6 +1564,7 @@ export class JobQueue {
       ...owner,
       jobId: job.jobId,
       lane: job.lane,
+      priority: "priority" in job ? job.priority : "interactive",
       controller,
       done,
     });
@@ -1461,7 +1592,7 @@ export class JobQueue {
       if (!current || current.attemptId !== job.attemptId || current.state !== "running") return;
       // An answer that outlived its owner, or its owner's discard, is dropped rather than resurrecting it.
       if (!this.targets.isAvailable(job.target)) {
-        this.discard(job.jobId, `${job.target.kind}_unavailable`);
+        this.discard(job.jobId, `${job.target.kind}_unavailable`, "OWNER_DELETED");
         return;
       }
       if ("error" in outcome) {

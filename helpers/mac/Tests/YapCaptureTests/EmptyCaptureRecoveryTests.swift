@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import YapMedia
+import YapProtocol
 import YapWire
 
 @MainActor
@@ -71,8 +72,12 @@ private func emptyRecoveryRefusals(root: URL, source: URL, params: [String: Any]
         let response = try await emptyRecoveryWire(params, root: root, name: name)
         precondition(response["ok"] as? Bool == false && response["data"] == nil,
             "\(name) cannot infer closure or source outcome: \(response)")
+        let error = response["error"] as! [String: Any]
+        // Retryability belongs to the shared refusal ledger; native carries only the code.
+        precondition(error["retryable"] == nil, "\(name) must not state its own retryability: \(response)")
         if let retryable {
-            precondition((response["error"] as! [String: Any])["retryable"] as? Bool == retryable)
+            guard let code = error["code"] as? String else { preconditionFailure("Missing refusal code") }
+            precondition(RefusalLedger.retryable(code) == retryable, "\(name) must retain its cause's verdict: \(response)")
         }
     }
     for name in ["unknown.bin", "camera.raw.mov", "camera.mapping.jsonl"] {

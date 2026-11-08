@@ -1,15 +1,10 @@
 import Foundation
+import YapProtocol
 
 /// Capture labels and action applicability; observations supply lifecycle and time.
 public enum CapturePresentation {
     public static let screenSelectionPermissionNotice = "Allow Screen Recording access to choose a display, window, or area."
 
-    /// Camera-only mode needs a prompt only until a usable camera has been selected. Once a
-    /// choice is visible, repeating “Required” beside it adds noise and makes the chooser look
-    /// like it is still waiting for input.
-    public static func cameraIsRequired(cameraOnly: Bool, selectedCameraIndex: Int) -> Bool {
-        cameraOnly && selectedCameraIndex == 0
-    }
     public static func statusTitle(for state: ControlsState) -> String {
         if case .unavailable(let message) = state.service { return "Unavailable — \(message)" }
         if state.take?.state == "finalizing" {
@@ -62,6 +57,7 @@ public enum CapturePresentation {
         let ready = state.service == .ready
         let live = state.isLive
         let recovering = state.take?.state == "finalizing" && state.device?.state == .idle
+        let mayRetryFinalization = state.take?.finalizationError?.retryable != false
         let availableCamera = state.selection.source != .camera || state.sources.cameras.contains { $0.id == state.selection.cameraDeviceId }
         let replay = state.unansweredStart?.start == state.start()
         return [
@@ -71,18 +67,33 @@ public enum CapturePresentation {
                   enabled: ready && (state.device?.state == .recording || state.device?.state == .paused)),
             .init(.cancel, recovering ? "Cancel Finalization" : "Cancel Take", enabled: live && ready),
             .init(.restart, "Restart Take", enabled: live && ready && !recovering),
-        ]
+        ].filter { $0.action != .startOrStop || !live || mayRetryFinalization }
+    }
+
+    public static func failureAction(for state: ControlsState) -> PresentedControlsAction? {
+        guard let failure = state.failure, failure.scope == .capture, let action = failure.action else { return nil }
+        switch action {
+        case .start: return .init(.retryFailure, "Retry", enabled: state.service == .ready && !state.isLive && !state.counting)
+        case .copyPrompt: return .init(.retryFailure, "Copy", enabled: state.service == .ready)
+        }
     }
 
     public static func noticeLines(for state: ControlsState) -> [String] {
         var lines: [String] = []
-        if let failure = state.failure { lines.append(failure) }
-        if let failure = state.take?.finalizationError { lines.append("Finalization failed — \(failure.code): \(failure.message)") }
+        if let failure = state.take?.finalizationError { lines.append("Finalization failed — \(RefusalLedger.cause(failure.code) ?? failure.message)") }
         if let take = state.take, take.state == "interrupted", !state.isLive {
-            let detail = take.interruptionMessage.map { ": \($0)" } ?? ""
-            lines.append("Last take interrupted — \(take.interruptionReason ?? "reason unavailable")\(detail)")
+            let cause = take.interruptionReason.flatMap(RefusalLedger.cause) ?? take.interruptionMessage ?? "The reason is unavailable."
+            lines.append("Last take interrupted — \(cause)")
         }
-        if !state.unavailableShortcuts.isEmpty { lines.append("\(state.unavailableShortcuts.joined(separator: " and ")) is already in use elsewhere.") }
+        if state.take?.state == "complete", state.take?.completionReason == "maximumDuration" {
+            let hours = Requirements.maximumTakeUs / 3_600_000_000
+            lines.append("Take complete — reached \(hours) hours.")
+        }
+        let refused = ShortcutBindings.catalog.filter { state.unavailableShortcuts.contains($0.action.id) }
+        if !refused.isEmpty {
+            let names = refused.map(\.name).joined(separator: " and ")
+            lines.append("The \(names) shortcut\(refused.count == 1 ? " was" : "s were") refused by macOS.")
+        }
         return lines
     }
 }

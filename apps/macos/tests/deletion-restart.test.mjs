@@ -53,25 +53,25 @@ test(
     }));
     const cache = new DerivedCache(store, library, (owner) => {
       assert.equal(owner.kind, "asset");
-      assets.get(owner.assetId);
+      assets.get(owner.id);
     });
     await cache.reconcile();
     async function seed(label) {
       const take = store.allocate().recording;
-      store.ingestLifecycle(take.recordingId, {
+      store.ingestLifecycle(take.id, {
         sourceId: take.sourceId,
         sequence: 1,
         state: "interrupted",
         reason: "generated leftover fixture",
         sourceDurationUs: 1_000_000,
       });
-      const directory = join(library, "recordings", take.recordingId);
+      const directory = join(library, "recordings", take.id);
       const source = file(
         join(directory, "source", "video.mov"),
         `${label}: generated source leftover`,
       );
       if (label !== "sibling") return { ...take, directory, source };
-      const cached = cache.reserve({ kind: "asset", assetId: asset.id });
+      const cached = cache.reserve({ kind: "asset", id: asset.id });
       writeFileSync(cached.path, `${label}: derivative`);
       await cache.publish(cached.id);
       return { ...take, directory, source, cached };
@@ -80,7 +80,7 @@ test(
     try {
       target = await seed("target");
       sibling = await seed("sibling");
-      store.markDeleting(target.recordingId);
+      store.markDeleting(target.id);
     } finally {
       store.close();
     }
@@ -117,7 +117,7 @@ test(
           () =>
             !catalog
               .prepare("SELECT recordingId FROM recordings WHERE recordingId=?")
-              .get(target.recordingId),
+              .get(target.id),
           5_000,
           () => instance.diagnostics,
         );
@@ -127,28 +127,27 @@ test(
               .prepare(
                 `SELECT * FROM ${table} WHERE ${table === "recording_deletions" ? "recordingId=?" : "targetKind='recording' AND targetId=?"}`,
               )
-              .all(target.recordingId),
+              .all(target.id),
             [],
           );
       } finally {
         catalog.close();
       }
-      assert.equal(
-        (await call("recording.get", { recordingId: sibling.recordingId })).recordingId,
-        sibling.recordingId,
-      );
+      assert.equal((await call("recording.get", { recordingId: sibling.id })).id, sibling.id);
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
-      for (const recordingId of [target.recordingId, missingId])
-        assert.deepEqual(await call("recording.delete", { recordingId }), {
-          recordingId,
+      for (const recordingId of [target.id, missingId])
+        assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
+          id: recordingId,
           deleted: true,
+          freedBytes: recordingId === missingId ? 16 : 0,
         });
       assert.deepEqual(await instance.reap(), []);
       ({ instance } = await launchReady(home));
-      for (const recordingId of [target.recordingId, missingId])
-        assert.deepEqual(await call("recording.delete", { recordingId }), {
-          recordingId,
+      for (const recordingId of [target.id, missingId])
+        assert.deepEqual(await call("recording.delete", { recordingId, requestId: randomUUID() }), {
+          id: recordingId,
           deleted: true,
+          freedBytes: recordingId === missingId ? 16 : 0,
         });
       for (const [file, bytes] of preserved) assert.deepEqual(readFileSync(file), bytes, file);
     } finally {

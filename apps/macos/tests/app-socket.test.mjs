@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createConnection, createServer } from "node:net";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { callLocal } from "../../../packages/client/dist/index.js";
+import { operationSchema } from "../../../packages/protocol/dist/index.js";
+
+import { protocolLinkArguments } from "./fixtures/swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../Sources/Yap/", import.meta.url));
 
@@ -18,14 +29,28 @@ function build(t) {
     main,
     `
 import Foundation
+final class Box: @unchecked Sendable { var data: Data; init(_ data: Data) { self.data = data } }
 @main struct Check {
     static func main() {
+        if CommandLine.arguments[1] == "--check-ledger" {
+            print(String(decoding: try! JSONSerialization.data(withJSONObject: ServiceFailure(code: "NOT_READY", message: "Ledger check").envelope), as: UTF8.self))
+            return
+        }
         signal(SIGPIPE, SIG_IGN) // as the app does at launch
+        let shortcuts = Box(Data(#"{"version":2,"bindings":{}}"#.utf8))
         let socket = AppSocket(path: CommandLine.arguments[1], maxRequestBytes: 1 << 20) { operation, params, answer in
             switch operation {
             case "update.status": answer(.success(Data(#"{"state":"idle"}"#.utf8)))
+            case "shortcuts.get": answer(.success(shortcuts.data))
+            case "shortcuts.set":
+                let object = try! JSONSerialization.jsonObject(with: params) as! [String: Any]
+                shortcuts.data = try! JSONSerialization.data(withJSONObject: ["version": 2, "bindings": object["bindings"]!])
+                answer(.success(shortcuts.data))
             case "login.setEnabled":
                 answer(.failure(ServiceFailure(code: "INVALID_PARAMS", message: "login.setEnabled requires enabled.")))
+            case "service.health":
+                answer(.failure(ServiceFailure(code: "NOT_READY", message: "Still preparing",
+                    details: Data(#"{"retry":{"operation":"job.get","params":{"jobId":"missing"}}}"#.utf8))))
             default: answer(.success(params))
             }
         }
@@ -46,6 +71,7 @@ import Foundation
       "-swift-version",
       "6",
       "-parse-as-library",
+      ...protocolLinkArguments(),
       ...["AppSocket", "ServiceBundle", "NodeRuntime"].map((name) =>
         join(sources, `${name}.swift`),
       ),
@@ -67,6 +93,80 @@ function serve(t, executable, path) {
   });
 }
 
+test("an unbundled app reads checkout verdicts without staging a ledger beside its executable", (t) => {
+  const { scratch, executable } = build(t);
+  assert.equal(existsSync(join(scratch, "service/refusal-ledger.json")), false);
+  const result = spawnSync(executable, ["--check-ledger"], {
+    cwd: "/",
+    encoding: "utf8",
+    timeout: 10000,
+    env: { ...process.env, SWIFT_BACKTRACE: "enable=no" },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    code: "NOT_READY",
+    message: "Ledger check",
+    retryable: true,
+    retryAfterMs: 15000,
+    details: {},
+  });
+});
+
+function packageProbe(scratch, executable) {
+  const contents = join(scratch, "LedgerCheck.app/Contents");
+  mkdirSync(join(contents, "MacOS"), { recursive: true });
+  mkdirSync(join(contents, "Resources/service"), { recursive: true });
+  writeFileSync(
+    join(contents, "Info.plist"),
+    `<?xml version="1.0"?><plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>check</string>
+<key>CFBundlePackageType</key><string>APPL</string></dict></plist>`,
+  );
+  const packaged = join(contents, "MacOS/check");
+  copyFileSync(executable, packaged);
+  return { contents, packaged };
+}
+
+test("a packaged app takes its verdict and delay from its bundled service ledger", (t) => {
+  const { scratch, executable } = build(t);
+  const { contents, packaged } = packageProbe(scratch, executable);
+  writeFileSync(
+    join(contents, "Resources/service/refusal-ledger.json"),
+    JSON.stringify({
+      codes: { NOT_READY: { retryable: true, retryAfterMs: 1234 } },
+    }),
+  );
+  const result = spawnSync(packaged, ["--check-ledger"], {
+    cwd: "/",
+    encoding: "utf8",
+    timeout: 10000,
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), {
+    code: "NOT_READY",
+    message: "Ledger check",
+    retryable: true,
+    retryAfterMs: 1234,
+    details: {},
+  });
+});
+
+test("a packaged app fails loudly when its bundled refusal ledger is missing", (t) => {
+  const { scratch, executable } = build(t);
+  const { packaged } = packageProbe(scratch, executable);
+  const result = spawnSync(packaged, ["--check-ledger"], {
+    encoding: "utf8",
+    timeout: 10000,
+    env: { ...process.env, SWIFT_BACKTRACE: "enable=no" },
+  });
+  assert.notEqual(
+    result.status,
+    0,
+    "a missing ledger must not use checkout verdicts or default to false",
+  );
+  assert.match(result.stderr, /bundled refusal ledger/i);
+});
+
 test("the app answers its own operations on its socket, framed like the service", async (t) => {
   const { scratch, executable } = build(t);
   const path = join(scratch, "app.sock");
@@ -77,6 +177,15 @@ test("the app answers its own operations on its socket, framed like the service"
   writeFileSync(join(scratch, "marker"), "");
   const { child, line } = await serve(t, executable, path);
   assert.equal(line, "listening");
+
+  const refusal = await callLocal(path, { id: "retry", operation: "service.health", params: {} });
+  assert.equal(refusal.ok, false);
+  assert.equal(refusal.error.retryable, true);
+  assert.equal(refusal.error.retryAfterMs, 15000);
+  assert.deepEqual(refusal.error.details, {
+    retry: { operation: "job.get", params: { jobId: "missing" } },
+  });
+  operationSchema.parse(refusal.error.details.retry);
 
   assert.deepEqual(await callLocal(path, { id: "a", operation: "update.status", params: {} }), {
     id: "a",
@@ -93,6 +202,42 @@ test("the app answers its own operations on its socket, framed like the service"
       details: {},
     },
   });
+  assert.deepEqual(
+    await callLocal(path, { id: "shortcut-get", operation: "shortcuts.get", params: {} }),
+    {
+      id: "shortcut-get",
+      ok: true,
+      data: { version: 2, bindings: {} },
+    },
+  );
+  assert.deepEqual(
+    await callLocal(path, {
+      id: "shortcut-set",
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": "option+shift+s" },
+      },
+    }),
+    {
+      id: "shortcut-set",
+      ok: true,
+      data: {
+        version: 2,
+        bindings: { "capture.startOrStop": "option+shift+s" },
+      },
+    },
+  );
+  assert.deepEqual(
+    await callLocal(path, { id: "shortcut-get-2", operation: "shortcuts.get", params: {} }),
+    {
+      id: "shortcut-get-2",
+      ok: true,
+      data: {
+        version: 2,
+        bindings: { "capture.startOrStop": "option+shift+s" },
+      },
+    },
+  );
   assert.deepEqual(
     await callLocal(path, { id: "c", operation: "skill.status", params: { echoed: [1, "two"] } }),
     { id: "c", ok: true, data: { echoed: [1, "two"] } },

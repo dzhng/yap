@@ -1,20 +1,19 @@
 import { createReadStream } from "node:fs";
+import { JOURNAL_RECORD_BYTES, JsonLineStream } from "@yap/protocol";
 import { setImmediate } from "node:timers/promises";
 import type { CaptureStore } from "./capture-store.js";
 import { CatalogError, type Catalog } from "./catalog.js";
 import { SourceEvidenceReader, type RecordQuery, type EvidenceIndex } from "./evidence-read.js";
 import { compare, fromTime, selectionRangeSchema, type SelectionRange } from "@yap/composition";
 
-export type EvidenceOwner =
-  | Readonly<{ kind: "recording"; recordingId: string }>
-  | Readonly<{ kind: "acquisition"; acquisitionId: string }>;
+export type EvidenceOwner = Readonly<{ kind: "recording" | "acquisition"; id: string }>;
 export function evidenceOwnerKey(owner: EvidenceOwner): [EvidenceOwner["kind"], string] {
-  return [owner.kind, owner.kind === "recording" ? owner.recordingId : owner.acquisitionId];
+  return [owner.kind, owner.id];
 }
 export function recordingEvidenceOwner(store: CaptureStore): (identity: EvidenceIdentity) => void {
   return ({ owner, sourceId }) => {
     if (owner.kind !== "recording") invalid("Recording evidence requires a recording owner");
-    const recording = store.get(owner.recordingId);
+    const recording = store.get(owner.id);
     if (recording.state === "canceled" || recording.sourceId !== sourceId)
       invalid("Recording identity no longer accepts evidence");
   };
@@ -22,7 +21,7 @@ export function recordingEvidenceOwner(store: CaptureStore): (identity: Evidence
 /** Recording-domain readers must reject evidence owned by an acquisition. */
 export function evidenceRecordingId(identity: EvidenceIdentity): string {
   if (identity.owner.kind !== "recording") invalid("Evidence requires a recording owner");
-  return identity.owner.recordingId;
+  return identity.owner.id;
 }
 export type EvidenceIdentity = Readonly<{
   owner: EvidenceOwner;
@@ -42,9 +41,6 @@ export type CameraPublicationProof = SourcePublicationProof &
     gaps?: readonly SelectionRange[];
     representedFrames: number;
   }>;
-// A take turns its camera on at most 500 times (the 501st is refused, CAMERA_TOGGLE_LIMIT); each
-// turn-on starts at most one run, so at most 499 gaps.
-const maxCameraGaps = 499;
 /** The only TypeScript reading of camera availability: support minus gaps, as a fresh list. */
 export function cameraProofIntervals(proof: CameraPublicationProof): SelectionRange[] {
   const intervals: SelectionRange[] = [];
@@ -58,7 +54,7 @@ export function cameraProofIntervals(proof: CameraPublicationProof): SelectionRa
 }
 function validCameraGaps(support: SelectionRange, gaps: unknown): boolean {
   if (gaps === undefined) return true;
-  if (!Array.isArray(gaps) || gaps.length === 0 || gaps.length > maxCameraGaps) return false;
+  if (!Array.isArray(gaps) || gaps.length === 0) return false;
   let previousEnd = support.startUs;
   for (const gap of gaps) {
     const parsed = selectionRangeSchema.safeParse(gap);
@@ -79,6 +75,7 @@ export type SourceEvidenceReceipt = Readonly<{
   displaySpaces: number;
   pauseEvents: number;
   audioIntervals: number;
+  markEvents?: number;
   openPauseHostUs?: number | null;
   firstCursorSourceUs?: number | null;
   lastCursorSourceUs?: number | null;
@@ -103,6 +100,13 @@ export type SourceEvidenceReceipt = Readonly<{
   bytes: number;
 }>;
 export type SourceEvidenceMetadata = EvidenceIdentity & { receipt: SourceEvidenceReceipt };
+export const DEFAULT_CURSOR_SAMPLING: { intervalUs: number; holds: boolean } = Object.freeze({
+  intervalUs: 16_667,
+  holds: false,
+});
+export function receiptCursorSampling(receipt: Pick<SourceEvidenceReceipt, "header">) {
+  return journalCapabilities(receipt.header ?? {})!.cursorSampling;
+}
 export type RawCursorSample = Record<string, unknown> & {
   sourceUs: number;
   x?: number | null;
@@ -126,16 +130,15 @@ export type RecordRow = {
   sourceUs: number | null;
   content: string;
 };
-const maxBytes = 268_435_456;
-function invalid(message: string): never {
-  throw new CatalogError("INVALID_EVIDENCE", message);
+function invalid(message: string, code = "INVALID_EVIDENCE"): never {
+  throw new CatalogError(code, message);
 }
 function integer(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
-function object(value: unknown): Record<string, unknown> {
+function object(value: unknown, code = "INVALID_EVIDENCE"): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
-    invalid("Expected evidence object");
+    invalid("Expected evidence object", code);
   return value as Record<string, unknown>;
 }
 function finite(value: unknown): boolean {
@@ -188,14 +191,110 @@ export function validateRecord(event: string, data: Record<string, unknown>): vo
       data.endUs <= data.startUs
     )
       invalid("Invalid audio acquisition timing");
+  } else if (event === "mark") {
+    if (
+      !integer(data.hostUs) ||
+      !integer(data.sourceUs) ||
+      !integer(data.epoch) ||
+      typeof data.id !== "string" ||
+      !data.id ||
+      !["stroke", "pin", "click"].includes(data.kind as string) ||
+      !Array.isArray(data.points) ||
+      (data.retracts == null && data.points.length === 0) ||
+      (data.retracts != null &&
+        (typeof data.retracts !== "string" || !data.retracts || data.points.length !== 0)) ||
+      (data.kind === "pin"
+        ? !integer(data.pin) || (data.pin as number) < 1
+        : data.pin !== undefined)
+    )
+      invalid("Invalid normalized mark");
+    if (data.onScreen != null) {
+      const screen = object(data.onScreen);
+      if (
+        data.kind === "click" ||
+        data.retracts != null ||
+        !integer(screen.fadeHostUs) ||
+        !integer(screen.untilHostUs) ||
+        screen.untilHostUs <= Math.max(screen.fadeHostUs, data.hostUs as number)
+      )
+        invalid("Invalid normalized mark screen window");
+    }
+    for (const point of data.points) {
+      const value = object(point);
+      if (
+        !integer(value.hostUs) ||
+        !finite(value.globalX) ||
+        !finite(value.globalY) ||
+        (value.x != null && !finite(value.x)) ||
+        (value.y != null && !finite(value.y)) ||
+        (value.x == null) !== (value.y == null)
+      )
+        invalid("Invalid normalized mark point");
+    }
+    if (data.window != null) {
+      const window = object(data.window);
+      const bounds = object(window.bounds);
+      if (
+        typeof window.app !== "string" ||
+        !window.app ||
+        typeof window.title !== "string" ||
+        ![bounds.x, bounds.y, bounds.width, bounds.height].every(finite)
+      )
+        invalid("Invalid normalized mark window");
+    }
   } else invalid("Unknown normalized evidence event");
 }
 
+// Journal version literals belong only in this capability table.
+const journalSchemas = {
+  1: { isPacked: false, carriesMarks: false, holdsCursor: false },
+  2: { isPacked: true, carriesMarks: false, holdsCursor: false },
+  3: { isPacked: true, carriesMarks: true, holdsCursor: false },
+  4: { isPacked: true, carriesMarks: true, holdsCursor: true },
+} as const;
+export function journalCapabilities(
+  header: { schemaVersion?: unknown; cursorSampling?: unknown },
+  code = "INVALID_EVIDENCE",
+) {
+  const version = header.schemaVersion === undefined ? 1 : header.schemaVersion;
+  if (
+    typeof version !== "number" ||
+    !Number.isInteger(version) ||
+    !Object.hasOwn(journalSchemas, version)
+  )
+    return undefined;
+  let cursorSampling = { ...DEFAULT_CURSOR_SAMPLING };
+  if (header.cursorSampling !== undefined) {
+    const sampling = object(header.cursorSampling, code);
+    const { intervalUs, holds } = sampling;
+    if (!integer(intervalUs) || intervalUs === 0 || typeof holds !== "boolean")
+      invalid("Invalid journal cursor sampling", code);
+    cursorSampling = { intervalUs, holds };
+  }
+  const capabilities = journalSchemas[version as keyof typeof journalSchemas];
+  cursorSampling.holds &&= capabilities.holdsCursor;
+  return { ...capabilities, cursorSampling };
+}
+
 /** Receipt shape is shared by native ingest and portable evidence inspection. */
-export function validateSourceReceipt(value: unknown, sourceId: string): SourceEvidenceReceipt {
+export function validateSourceReceipt(
+  value: unknown,
+  sourceId: string,
+  code = "INVALID_EVIDENCE",
+): SourceEvidenceReceipt {
+  function invalid(message: string): never {
+    throw new CatalogError(code, message);
+  }
+  const object = (value: unknown): Record<string, unknown> => {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      invalid("Expected evidence object");
+    return value as Record<string, unknown>;
+  };
   const receipt = object(value);
   const header = object(receipt.header);
   if (header.sessionID !== sourceId) invalid("Evidence identity does not match its recording");
+  const capabilities = journalCapabilities(header, code);
+  if (!capabilities) invalid(`Unsupported evidence journal schema ${header.schemaVersion}`);
   if (
     typeof receipt.file !== "string" ||
     !receipt.file ||
@@ -206,11 +305,11 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       receipt.displaySpaces,
       receipt.pauseEvents,
       receipt.audioIntervals,
+      receipt.markEvents ?? 0,
       receipt.lastSequence,
     ].every(integer) ||
     !integer(receipt.bytes) ||
     (receipt.normalizationVersion !== undefined && receipt.normalizationVersion !== 2) ||
-    receipt.bytes > maxBytes ||
     typeof receipt.incompleteTail !== "boolean" ||
     typeof receipt.finished !== "boolean" ||
     [
@@ -219,8 +318,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       receipt.firstCursorSourceUs,
       receipt.lastCursorSourceUs,
       receipt.invalidAtSequence,
-    ].some((v) => v != null && !integer(v)) ||
-    Buffer.byteLength(JSON.stringify(receipt)) > 32768
+    ].some((v) => v != null && !integer(v))
   )
     invalid("Invalid evidence receipt");
   if (receipt.lastLifecycle != null) {
@@ -254,7 +352,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
   if (receipt.publications !== undefined) {
     for (const [role, proof] of Object.entries(object(receipt.publications))) {
       if (!["video", "narration", "system"].includes(role)) invalid("Invalid publication role");
-      if (role !== "video" && header.schemaVersion !== 2)
+      if (role !== "video" && !capabilities.isPacked)
         invalid("Audio publication proof requires the packed journal layout");
       const identity = object(proof);
       for (const kind of role === "video"
@@ -264,10 +362,7 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
         if (
           typeof file.bytes !== "string" ||
           !/^[1-9][0-9]*$/.test(file.bytes) ||
-          BigInt(file.bytes) >
-            BigInt(
-              kind === "receipt" ? 65536 : kind === "mapping" ? maxBytes : Number.MAX_SAFE_INTEGER,
-            ) ||
+          BigInt(file.bytes) > BigInt(Number.MAX_SAFE_INTEGER) ||
           typeof file.sha256 !== "string" ||
           !/^[a-f0-9]{64}$/.test(file.sha256)
         )
@@ -283,13 +378,13 @@ export function validateSourceReceipt(value: unknown, sourceId: string): SourceE
       if (role === "video" && !validCameraGaps(identity.support as SelectionRange, identity.gaps))
         invalid("Invalid verified camera gaps");
     }
-  } else if (header.schemaVersion === 2) invalid("Packed evidence requires verified publications");
+  } else if (capabilities.isPacked) invalid("Packed evidence requires verified publications");
   const camera = header.source != null && object(header.source).kind === "camera";
-  if ((camera && header.schemaVersion !== 2) || header.cameraBinding !== undefined) {
+  if ((camera && !capabilities.isPacked) || header.cameraBinding !== undefined) {
     const binding = object(header.cameraBinding);
     if (
       !camera ||
-      header.schemaVersion !== 1 ||
+      capabilities.isPacked ||
       binding.sourceId !== sourceId ||
       ![binding.recordingId, binding.sourceId, binding.deviceId].every(
         (id) => typeof id === "string" && id.length > 0 && id.length <= 256,
@@ -314,29 +409,30 @@ export async function* sourceEvidenceRecords(
     geometries = 0,
     displays = 0,
     pauses = 0,
-    audio = 0;
+    audio = 0,
+    marks = 0;
+  const carriesMarks = journalCapabilities(receipt.header ?? {})!.carriesMarks;
   const audioEnds = new Map<string, number>();
   let first: number | null = null,
     last: number | null = null;
-  let pending = Buffer.alloc(0);
+  // Protocol framing counts the terminator; the record bound counts JSON bytes.
+  const lines = new JsonLineStream(JOURNAL_RECORD_BYTES + 1);
   for await (const chunk of createReadStream(file, { highWaterMark: 65536, signal })) {
     bytes += chunk.length;
-    if (bytes > maxBytes || bytes > receipt.bytes) invalid("Evidence exceeds its byte receipt");
-    pending = Buffer.concat([pending, chunk]);
-    let newline: number;
-    while ((newline = pending.indexOf(10)) >= 0) {
-      if (newline > 65536) invalid("Evidence record exceeds read budget");
-      const line = pending.subarray(0, newline);
-      let record: Record<string, unknown>;
-      try {
-        record = object(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(line)));
-      } catch {
-        invalid("Malformed normalized evidence JSON");
-      }
-      pending = pending.subarray(newline + 1);
+    if (bytes > receipt.bytes) invalid("Evidence exceeds its byte receipt");
+    for (const line of lines.push(chunk)) {
+      if (!line.ok)
+        invalid(
+          line.error.code === "FRAME_TOO_LARGE"
+            ? "Evidence record exceeds read budget"
+            : "Malformed normalized evidence JSON",
+        );
+      const record = object(line.value);
       const event = record.event as string,
         data = object(record.data);
       validateRecord(event, data);
+      if (event === "mark" && !carriesMarks)
+        invalid("Marks require a journal schema that carries marks");
       if (event === "cursorSample") {
         cursors++;
         first ??= data.sourceUs as number;
@@ -344,6 +440,7 @@ export async function* sourceEvidenceRecords(
       } else if (event === "geometry") geometries++;
       else if (event === "displaySpace") displays++;
       else if (event === "pause") pauses++;
+      else if (event === "mark") marks++;
       else {
         audio++;
         const role = data.role as string;
@@ -363,16 +460,16 @@ export async function* sourceEvidenceRecords(
         content: JSON.stringify(data),
       };
     }
-    if (pending.length > 65536) invalid("Evidence record exceeds read budget");
   }
   if (
-    pending.length ||
+    lines.finish() ||
     bytes !== receipt.bytes ||
     cursors !== receipt.cursorSamples ||
     geometries !== receipt.geometryRecords ||
     displays !== receipt.displaySpaces ||
     pauses !== receipt.pauseEvents ||
     audio !== receipt.audioIntervals ||
+    marks !== (receipt.markEvents ?? 0) ||
     first !== (receipt.firstCursorSourceUs ?? null) ||
     last !== (receipt.lastCursorSourceUs ?? null)
   )
@@ -400,6 +497,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='cursorSample';
       CREATE INDEX IF NOT EXISTS source_evidence_pauses ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='pause';
+      CREATE INDEX IF NOT EXISTS source_evidence_marks ON source_evidence_records
+        (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='mark';
       CREATE INDEX IF NOT EXISTS source_evidence_geometry ON source_evidence_records
         (ownerKind,ownerId,sourceId,generation,sourceUs,sequence) WHERE event='geometry';
       CREATE INDEX IF NOT EXISTS source_evidence_audio ON source_evidence_records
@@ -512,6 +611,18 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       .run(ownerKind, ownerId, sourceId, generation);
   }
 
+  cursorSampling(identity: EvidenceIdentity) {
+    this.requireComplete(identity);
+    const row = this.store.catalog
+      .prepare(
+        "SELECT receipt FROM source_evidence_generations WHERE ownerKind=? AND ownerId=? AND sourceId=? AND generation=?",
+      )
+      .get(...evidenceOwnerKey(identity.owner), identity.sourceId, identity.generation) as {
+      receipt: string;
+    };
+    return receiptCursorSampling(JSON.parse(row.receipt));
+  }
+
   protected requireComplete({ owner, sourceId, generation }: EvidenceIdentity): void {
     const [ownerKind, ownerId] = evidenceOwnerKey(owner);
     if (
@@ -521,7 +632,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
         )
         .get(ownerKind, ownerId, sourceId, generation)
     )
-      throw new CatalogError("NOT_READY", "Evidence generation is not indexed");
+      throw new CatalogError("PREREQUISITE_MISSING", "Evidence generation is not indexed");
   }
 
   protected records(identity: EvidenceIdentity, query: RecordQuery): RecordRow[] {
@@ -534,6 +645,7 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       },
       unplaced: { condition: "event='geometry' AND sourceUs IS NULL", keys: ["sequence"] },
       pauses: { condition: "event='pause'", keys: ["sourceUs", "sequence"] },
+      marks: { condition: "event='mark'", keys: ["sourceUs", "sequence"] },
       narration: {
         condition: "event='audioAcquired' AND json_extract(content,'$.role')='narration'",
         keys: ["sourceUs", "sequence"],
@@ -562,9 +674,28 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
       args.push(...bound.key);
     }
     args.push(query.limit);
+    const order = index.keys.map((key) => `${key} ${query.reverse ? "DESC" : "ASC"}`).join(",");
+    const selection = `FROM source_evidence_records ${query.index === "unplaced" ? "INDEXED BY source_evidence_geometry" : ""}
+      WHERE ${clauses.join(" AND ")} ORDER BY ${order} LIMIT ?`;
+    // Window only the next bounded set of keys and byte counts. Load content after
+    // cutting the prefix, so neither SQL's temporary rows nor JS hold 256 large records.
+    if (query.maxBytes !== undefined) {
+      return this.store.catalog
+        .prepare(`WITH candidates AS (
+          SELECT rowid AS recordId,sourceUs,sequence,length(CAST(content AS BLOB)) AS contentBytes ${selection}
+        ), ranked AS (
+          SELECT recordId,
+            SUM(contentBytes) OVER (ORDER BY ${order} ROWS UNBOUNDED PRECEDING) AS bytes,
+            ROW_NUMBER() OVER (ORDER BY ${order}) AS ordinal
+          FROM candidates
+        )
+        SELECT sequence,event,sourceUs,content FROM source_evidence_records
+        WHERE rowid IN (SELECT recordId FROM ranked WHERE bytes <= ? OR ordinal = 1)
+        ORDER BY ${order}`)
+        .all(...args, query.maxBytes) as RecordRow[];
+    }
     return this.store.catalog
-      .prepare(`SELECT sequence,event,sourceUs,content FROM source_evidence_records ${query.index === "unplaced" ? "INDEXED BY source_evidence_geometry" : ""}
-      WHERE ${clauses.join(" AND ")} ORDER BY ${index.keys.map((k) => `${k} ${query.reverse ? "DESC" : "ASC"}`).join(",")} LIMIT ?`)
+      .prepare(`SELECT sequence,event,sourceUs,content ${selection}`)
       .all(...args) as RecordRow[];
   }
 
@@ -590,6 +721,8 @@ export class SourceEvidenceStore extends SourceEvidenceReader {
 export type SourceTrailRead = Pick<
   SourceEvidenceStore,
   | "page"
+  | "exportRecords"
+  | "cursorSampling"
   | "latestCursor"
   | "timedGeometryAt"
   | "nextTimedGeometry"

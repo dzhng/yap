@@ -56,7 +56,7 @@ it("lets a complete inspection outlive the read deadline using the caller's time
   expect(
     await callLocal(
       listener.socketPath,
-      { id: "slow", operation: "inspect", params: {} },
+      { id: "slow", operation: "inspect.open", params: {} },
       { timeoutMs: 500 },
     ),
   ).toEqual({ id: "slow", ok: true, data: "inspection" });
@@ -86,7 +86,7 @@ it("closing the listener disconnects pending calls and signals their handlers", 
   cleanup.push(listener.close);
   const result = callLocal(listener.socketPath, {
     id: "pending",
-    operation: "inspect",
+    operation: "inspect.open",
     params: {},
   }).catch((error) => error);
   expect(await entered).toEqual(["pending"]);
@@ -154,13 +154,13 @@ it("keeps abandoned work in the admission bound until its handler actually finis
     });
   expect(await rejected()).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   cancel.abort();
   expect(await held).toMatchObject({ code: "ABORTED" });
   expect(await rejected()).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   events.emit("release");
   // Yield through the handler's completion before asking for its released slot.

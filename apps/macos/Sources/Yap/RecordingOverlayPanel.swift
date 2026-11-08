@@ -13,6 +13,9 @@ import SwiftUI
  A take that records a camera also carries its live picture above the row. Minimizing the picture
  hides it without stopping the camera; the camera button in the row turns a reserved camera on or
  off, and a camera that is off has no picture at all.
+
+ No capture sees the controls, so they never appear in the take they run, nor in screenshots or
+ screen sharing.
  */
 @MainActor
 final class RecordingOverlayPanel {
@@ -46,6 +49,11 @@ final class RecordingOverlayPanel {
     }
 
     func updatePreview(_ image: NSImage?) { model.preview = image }
+
+    /// Settings' choice of glass, which a running take picks up as soon as it changes.
+    func updateGlass(_ glass: ControlsGlass) {
+        if model.glass != glass { model.glass = glass }
+    }
 
     private func show() {
         guard panel == nil else { return }
@@ -136,6 +144,7 @@ final class RecordingOverlayModel: ObservableObject {
     }
     /// Whether that picture is shown or minimized; the camera records either way.
     @Published var previewShown = true
+    @Published var glass = ControlsGlass.clear
     /// The camera's latest picture. A camera that is off has none, so no held picture is shown
     /// and turning it back on waits for a new one.
     @Published var preview: NSImage? {
@@ -196,10 +205,22 @@ struct RecordingOverlayView: View {
     }
 
     private var controls: some View {
+        Glass(kind: model.glass, content: row())
+            .overlay {
+                row(lit: true)
+                    .environment(\.colorScheme, model.glass == .dark ? .dark : .light)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+    }
+
+    /// The controls, or with `lit` the copy that draws only their glow.
+    private func row(lit: Bool = false) -> some View {
         HStack(spacing: 10) {
             Image(systemName: model.presentation.symbol)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(paused ? AnyShapeStyle(.primary) : AnyShapeStyle(Color.red))
+                .glow(paused ? .primary : .red)
                 .frame(width: 15)
                 .accessibilityLabel(paused ? "Paused" : "Recording")
             // The clock keeps the width of the longest one a take shows, so the row does not change
@@ -213,6 +234,7 @@ struct RecordingOverlayView: View {
             .monospacedDigit()
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
+            .unlit()
             separator
             HStack(spacing: 2) {
                 button(paused ? "play.fill" : "pause.fill",
@@ -222,7 +244,7 @@ struct RecordingOverlayView: View {
             if case .companion(let on) = model.camera {
                 separator
                 HStack(spacing: 2) {
-                    cameraSwitch(on)
+                    cameraSwitch(on, lit: lit)
                     if on && !model.previewShown { restore }
                 }
             } else if model.camera.recording && !model.previewShown {
@@ -237,19 +259,20 @@ struct RecordingOverlayView: View {
         .padding(.leading, 16)
         .padding(.trailing, 6)
         .padding(.vertical, 5)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.separator, lineWidth: 0.5))
+        .environment(\.glowLayer, lit)
     }
 
     /// The camera's state twice over, so neither colour nor a thin slash has to carry it alone: on
     /// is an engaged toggle showing a camera, off a plain one showing the camera struck through.
     /// Off keeps full contrast: it is a state to change, not an unavailable control.
-    private func cameraSwitch(_ on: Bool) -> some View {
+    private func cameraSwitch(_ on: Bool, lit: Bool = false) -> some View {
         let name = on ? "Turn Camera Off" : "Turn Camera On"
-        return Toggle(isOn: Binding(get: { on }, set: { perform(.setCamera($0)) })) {
+        // The engaged toggle's backing is drawn once, by the controls, not again by their glow.
+        return Toggle(isOn: Binding(get: { on && !lit }, set: { perform(.setCamera($0)) })) {
             Image(systemName: on ? "video.fill" : "video.slash.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
+                .glow(.primary)
                 .frame(width: 30, height: 30)
                 .contentShape(Circle())
         }
@@ -265,7 +288,7 @@ struct RecordingOverlayView: View {
     }
 
     private var separator: some View {
-        Rectangle().fill(.separator).frame(width: 1, height: 20)
+        Rectangle().fill(.separator).frame(width: 1, height: 20).unlit()
     }
 
     private func button(
@@ -275,6 +298,7 @@ struct RecordingOverlayView: View {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(tint ?? .primary)
+                .glow(tint ?? .primary)
                 .frame(width: 30, height: 30)
                 .contentShape(Circle())
         }
@@ -282,6 +306,169 @@ struct RecordingOverlayView: View {
         .clipShape(Circle())
         .help(name)
         .accessibilityLabel(name)
+    }
+}
+
+/// Whether this copy of the row draws only the glow. A blur among the marks costs the whole row
+/// the glass's automatic contrast, so the glow is a copy of the row in a layer of its own over the
+/// glass.
+private struct GlowLayerKey: EnvironmentKey { static let defaultValue = false }
+private extension EnvironmentValues {
+    var glowLayer: Bool {
+        get { self[GlowLayerKey.self] }
+        set { self[GlowLayerKey.self] = newValue }
+    }
+}
+
+private struct Glow: ViewModifier {
+    @Environment(\.glowLayer) private var glowLayer
+    @Environment(\.colorScheme) private var scheme
+    let color: Color
+    func body(content: Content) -> some View {
+        // Coloured marks always glow, and plain marks only on dark glass, where they are light. On
+        // light glass they are dark, and clear glass turns them dark or light to suit what is behind
+        // without saying which, so there they don't glow.
+        if glowLayer {
+            content.foregroundStyle(color).blur(radius: 5).opacity(color == .primary && scheme == .light ? 0 : 1)
+        } else {
+            content
+        }
+    }
+}
+
+/// What the glow layer leaves out: everything but the glows themselves.
+private struct Unlit: ViewModifier {
+    @Environment(\.glowLayer) private var glowLayer
+    func body(content: Content) -> some View { content.opacity(glowLayer ? 0 : 1) }
+}
+
+private extension View {
+    /// A mark lit in its own colour.
+    func glow(_ color: Color) -> some View { modifier(Glow(color: color)) }
+    func unlit() -> some View { modifier(Unlit()) }
+}
+
+/// The system's Liquid Glass behind the controls: frosted, light or dark, or in its clearest form.
+/// Frosted glass normally follows what is behind it, turning light over a light page; light and
+/// dark hold their appearance wherever the controls are, and it reaches the controls inside the
+/// glass, so their marks are dark on light glass and light on dark glass. Clear has no frosting,
+/// just the rim and the bend at the edge, so whatever is behind the controls shows through. The
+/// public styles stop at a frosted clear and always follow the backdrop, so the clearer material
+/// and the held appearance are chosen through the glass's private settings; if a later macOS drops
+/// them, the controls keep the public glass. The controls sit inside the glass, which keeps their
+/// marks legible over a light page as well as a dark one.
+private struct Glass<Content: View>: NSViewRepresentable {
+    /// The see-through lens AppKit draws for bubbles: a bright rim and refraction at the edge.
+    fileprivate static var clearVariant: Int { 11 }
+    /// Glass that keeps its own appearance instead of following its backdrop's.
+    fileprivate static var heldAppearance: Int { 1 }
+    let kind: ControlsGlass
+    let content: Content
+
+    func makeNSView(context: Context) -> NSGlassEffectView {
+        let glass = CapsuleGlass()
+        glass.followingAppearance = glass.privateValue("_adaptiveAppearance")
+        glass.show(kind)
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = [.intrinsicContentSize]
+        glass.contentView = host
+        return glass
+    }
+
+    func updateNSView(_ glass: NSGlassEffectView, context: Context) {
+        if let glass = glass as? CapsuleGlass, glass.kind != kind { glass.show(kind) }
+        (glass.contentView as? NSHostingView<Content>)?.rootView = content
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView glass: NSGlassEffectView, context: Context) -> CGSize? {
+        glass.contentView?.fittingSize
+    }
+
+    /// Round ends at whatever height the row lays itself out to.
+    private final class CapsuleGlass: NSGlassEffectView {
+        private(set) var kind: ControlsGlass?
+        /// The appearance setting the glass starts with, which follows its backdrop.
+        var followingAppearance: Int?
+
+        /// Choosing a public style resets the variant, so clear sets its lens after the style.
+        func show(_ kind: ControlsGlass) {
+            self.kind = kind
+            switch kind {
+            case .light, .dark:
+                style = .regular
+                appearance = NSAppearance(named: kind == .light ? .aqua : .darkAqua)
+                setPrivate("set_adaptiveAppearance:", Glass.heldAppearance)
+            case .clear:
+                style = .clear
+                appearance = nil
+                if let followingAppearance { setPrivate("set_adaptiveAppearance:", followingAppearance) }
+                setPrivate("set_variant:", Glass.clearVariant)
+            }
+        }
+
+        private var windowChanges: [NSObjectProtocol] = []
+
+        /// Glass given its look before it is in a window can stay dark on screen, while
+        /// screenshots show it right; choosing the look again in Settings puts it right. So once
+        /// the glass is on screen, its look is chosen again by way of another one, as Settings does.
+        /// The window can be drawn anew after that, and clear glass has still been seen black
+        /// mid-take, so the look is chosen again each time: when the window resizes (a camera
+        /// picture arriving grows it), comes back on screen or moves to another display. Whether
+        /// that cures every black capsule is not yet confirmed on a real display.
+        /// This is a workaround, confirmed on a real display in v0.1.57; screenshots can't show the
+        /// bug, so no check here catches it. Removing it brings back clear glass that opens black.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            windowChanges.forEach(NotificationCenter.default.removeObserver)
+            windowChanges = []
+            guard let window else { return }
+            let redrawn: [Notification.Name] = [
+                NSWindow.didResizeNotification, NSWindow.didChangeOcclusionStateNotification,
+                NSWindow.didChangeScreenNotification,
+            ]
+            windowChanges = redrawn.map {
+                NotificationCenter.default.addObserver(forName: $0, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated {
+                        guard let self, self.window?.occlusionState.contains(.visible) == true else { return }
+                        self.chooseLookAgain()
+                    }
+                }
+            }
+            chooseLookAgain()
+        }
+
+        private func chooseLookAgain() {
+            guard window != nil, let kind else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.window != nil, self.kind == kind else { return }
+                let other: ControlsGlass = kind == .clear ? .dark : .clear
+                self.show(other)
+                // Settings may have chosen another look in between; that one stands.
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.window != nil, self.kind == other else { return }
+                    self.show(kind)
+                }
+            }
+        }
+
+        func setPrivate(_ name: String, _ value: Int) {
+            let select = NSSelectorFromString(name)
+            guard responds(to: select) else { return }
+            typealias Setter = @convention(c) (AnyObject, Selector, Int) -> Void
+            unsafeBitCast(method(for: select), to: Setter.self)(self, select, value)
+        }
+
+        func privateValue(_ name: String) -> Int? {
+            let select = NSSelectorFromString(name)
+            guard responds(to: select) else { return nil }
+            typealias Getter = @convention(c) (AnyObject, Selector) -> Int
+            return unsafeBitCast(method(for: select), to: Getter.self)(self, select)
+        }
+
+        override func layout() {
+            super.layout()
+            cornerRadius = bounds.height / 2
+        }
     }
 }
 

@@ -19,7 +19,7 @@ import { listenLocal, DerivativeDelivery } from ${JSON.stringify(serviceEntry)};
 const home = process.argv[2], attempt = join(home, "attempt"), joined = join(home, "joined");
 if (!existsSync(attempt)) {
   writeFileSync(attempt, "first");
-  process.send({error: {code: "RENDER_WORKSPACE_BUSY", retryable: ${retryable}}});
+  process.send({error: {code: ${JSON.stringify(retryable ? "RENDER_WORKSPACE_BUSY" : "INVALID_PARAMS")}, retryable: ${retryable}}});
   process.once("exit", () => writeFileSync(joined, "closed"));
   setTimeout(() => { process.exitCode = 1; process.disconnect(); }, 50);
 } else {
@@ -64,7 +64,7 @@ if (!existsSync(attempt)) {
       await assert.rejects(service.stop(), (error) => error === closeFailure);
       assert.equal(service.child.exitCode, 0);
     } else {
-      await assert.rejects(service.start(), /RENDER_WORKSPACE_BUSY/);
+      await assert.rejects(service.start(), /INVALID_PARAMS/);
       assert.equal(await readFile(join(home, "attempt"), "utf8"), "first");
       assert.equal(service.child.exitCode, 1);
     }
@@ -72,7 +72,7 @@ if (!existsSync(attempt)) {
 });
 
 test("MCP complete results preserve values, reject corrupt delivery and close without replay", async () => {
-  const failure = { code: "NOT_READY", message: "Retained failure", retryable: false, details: {} };
+  const failure = { code: "NOT_READY", message: "Retained failure", retryable: true, details: {} };
   for (const mode of [
     "success",
     "failure",
@@ -105,9 +105,10 @@ test("MCP complete results preserve values, reject corrupt delivery and close wi
       ok: mode === "ok" ? false : complete.ok,
       resultDelivery: {
         token: "lease",
-        bytes: mode === "limit" ? RESPONSE_FRAME_BYTES : bytes.length + (mode === "length" ? 1 : 0),
+        sizeBytes:
+          mode === "limit" ? RESPONSE_FRAME_BYTES : bytes.length + (mode === "length" ? 1 : 0),
         sha256: mode === "hash" ? "0".repeat(64) : hash(bytes),
-        expiresAt: Date.now() + 30000,
+        expiresAtMs: Date.now() + 30000,
         mediaType: "application/json",
       },
     };
@@ -128,17 +129,17 @@ test("MCP complete results preserve values, reject corrupt delivery and close wi
         }
         assert.equal(request.name, "artifact.read");
         if (["read", "read-and-close"].includes(mode)) throw readFailure;
-        const offset = request.arguments.offset;
-        const part = bytes.subarray(offset, offset + 17);
+        const offsetBytes = request.arguments.offsetBytes;
+        const part = bytes.subarray(offsetBytes, offsetBytes + 17);
         return {
           structuredContent: {
             id: "chunk",
             ok: true,
             data: {
               data: part.toString("base64"),
-              offset: mode === "offset" ? offset + 1 : offset,
-              nextOffset: mode === "progress" ? offset : offset + part.length,
-              eof: mode === "eof" ? true : offset + part.length === bytes.length,
+              offsetBytes: mode === "offset" ? offsetBytes + 1 : offsetBytes,
+              nextOffsetBytes: mode === "progress" ? offsetBytes : offsetBytes + part.length,
+              eof: mode === "eof" ? true : offsetBytes + part.length === bytes.length,
             },
           },
         };

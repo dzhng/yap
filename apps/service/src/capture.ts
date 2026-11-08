@@ -13,23 +13,23 @@ import {
   type LifecycleEvent,
   type Recording,
   type CaptureStore,
-  type FinalizationError,
 } from "@yap/core/capture-store";
 import { CatalogError } from "@yap/core/catalog";
 import {
-  NATIVE_SEQUENCE_LIMIT,
+  MAXIMUM_TAKE_US,
   captureDeviceSchema,
   captureReportSchema,
   captureSourcesSchema,
   nativeStartSchema,
   operationWaitMs,
+  refusalRetryable,
   type CaptureReport,
   type CaptureSelection,
   type OperationResult,
 } from "@yap/protocol";
 import type { ControlChannel } from "./control.js";
-import { MAX_MEDIA_TIMEOUT_MS, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs } from "./publication.js";
+import { type MediaWorker } from "./worker.js";
+import { captureWorkDeadlineMs } from "./publication.js";
 
 /**
  * The only outcomes this service states on its own behalf: a take it discarded, and a take whose
@@ -37,7 +37,7 @@ import { publicationDeadlineMs } from "./publication.js";
  */
 type AuthoredOutcome = (
   | { state: "canceled" }
-  | { state: "finalizing"; finalizationError: FinalizationError | null }
+  | { state: "finalizing"; finalizationError: { code: string; message: string } | null }
   | {
       state: "interrupted";
       reason: string;
@@ -63,6 +63,13 @@ export function sourceDirectory(
  * permissions and media belong to native; nothing here re-derives a transition, a duration or a
  * device state machine of its own.
  */
+/** A recorded failure waits for an explicit retry; a shutdown that cut recovery short does not. */
+function failedFinalization(recording: Recording): boolean {
+  return (
+    recording.finalizationError !== null && recording.finalizationError.code !== "RECOVERY_CANCELED"
+  );
+}
+
 export class CaptureService {
   onUpdateProgress: (() => void) | undefined;
   get updateBlocked(): boolean {
@@ -70,6 +77,7 @@ export class CaptureService {
   }
   private queue: Promise<unknown> = Promise.resolve();
   private stopping = false;
+  private readonly authoredTerminal = new Set<string>();
   private readonly lifetime = new AbortController();
   private recovery:
     | { recordingId: string; controller: AbortController; work: Promise<void> }
@@ -93,7 +101,7 @@ export class CaptureService {
    */
   private serialize<T>(run: () => Promise<T>): Promise<T> {
     const next = this.queue.then(() => {
-      if (this.stopping) throw new CatalogError("SERVICE_STOPPED", "Capture service is closing");
+      if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
       return run();
     });
     this.queue = next.catch(() => undefined);
@@ -176,8 +184,7 @@ export class CaptureService {
           throw new CatalogError(
             "CAPTURE_RECOVERY_PENDING",
             "The previous take is still finalizing; inspect it before restarting",
-            { recordingId: discarded.recordingId },
-            true,
+            { recordingId: discarded.id },
           );
       } catch (error) {
         // The take this restart named could not be discarded, so its replacement never reached
@@ -201,8 +208,7 @@ export class CaptureService {
       throw new CatalogError(
         "UNRESOLVED_START",
         "This take's start is still unproved; retry the same request",
-        { recordingId: settled.recordingId, state: settled.state },
-        true,
+        { recordingId: settled.id, state: settled.state },
       );
     return settled;
   }
@@ -254,7 +260,7 @@ export class CaptureService {
       if (answer.ok) return this.apply(recording, answer.data);
       if (answer.error.code !== "INVALID_STATE") throw fromNative(answer);
       // Native is not holding this take, so its own durable media is the only truth left.
-      return this.reconcile(recording);
+      return this.reconcile(recording, { retryFailure: true });
     });
   }
 
@@ -282,7 +288,6 @@ export class CaptureService {
           "CAPTURE_NOT_QUIET",
           "Native capture has not proved this take stopped",
           { recordingId },
-          true,
         );
       this.observed(this.store.settleDeletingCapture(recordingId));
     });
@@ -290,15 +295,18 @@ export class CaptureService {
 
   /** Applies one transition native reported on its own, without this service asking for it. */
   report(report: CaptureReport): Recording {
+    const current = this.store.get(report.recordingId);
+    this.checkReportIdentity(current, report);
+    if (this.authoredTerminal.has(current.id)) return current;
     return this.observed(this.store.ingestLifecycle(report.recordingId, lifecycleEvent(report)));
   }
 
   /** Reconcile takes in order while releasing control between owned recovery attempts. */
   async reconcileStranded(): Promise<void> {
-    if (this.stopping) throw new CatalogError("SERVICE_STOPPED", "Capture service is closing");
+    if (this.stopping) throw new CatalogError("OWNER_CLOSED", "Capture service is closing");
     for (const recording of this.store.unsettled()) {
       if (this.stopping) break;
-      if (this.store.isDeleting(recording.recordingId)) continue;
+      if (this.store.isDeleting(recording.id) || failedFinalization(recording)) continue;
       try {
         const started = await this.serialize(async () => {
           await this.reconcile(recording);
@@ -306,7 +314,7 @@ export class CaptureService {
         });
         await started.work;
       } catch (error) {
-        this.log(`reconcile failed for ${recording.recordingId}: ${(error as Error).message}`);
+        this.log(`reconcile failed for ${recording.id}: ${(error as Error).message}`);
       }
     }
   }
@@ -316,7 +324,7 @@ export class CaptureService {
       const kinds =
         recording.camera === null ? (["primary"] as const) : (["primary", "camera"] as const);
       for (const kind of kinds) {
-        await mkdir(sourceDirectory(this.home, recording.recordingId, kind), {
+        await mkdir(sourceDirectory(this.home, recording.id, kind), {
           recursive: true,
           mode: 0o700,
         });
@@ -324,32 +332,30 @@ export class CaptureService {
     } catch (error) {
       throw this.refused(recording, error);
     }
-    this.store.get(recording.recordingId);
+    this.store.get(recording.id);
     const answer = await this.native(
       "capture.start",
       nativeStartSchema.parse({
         ...selection,
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         ...(recording.camera === null
           ? {}
           : {
               cameraSourceId: recording.camera.sourceId,
               cameraDeviceId: recording.camera.deviceId,
-              cameraDirectory: sourceDirectory(this.home, recording.recordingId, "camera"),
+              cameraDirectory: sourceDirectory(this.home, recording.id, "camera"),
             }),
-        outputDirectory: sourceDirectory(this.home, recording.recordingId),
+        outputDirectory: sourceDirectory(this.home, recording.id),
       }),
     );
     if (answer.ok) return this.apply(recording, answer.data);
     if (!unanswered(answer.error.code)) throw this.refused(recording, fromNative(answer));
     const failed = await this.abandon(recording);
-    throw new CatalogError(
-      answer.error.code,
-      answer.error.message,
-      { recordingId: failed.recordingId, state: failed.state },
-      answer.error.retryable,
-    );
+    throw new CatalogError(answer.error.code, answer.error.message, {
+      recordingId: failed.id,
+      state: failed.state,
+    });
   }
 
   /**
@@ -367,12 +373,10 @@ export class CaptureService {
       message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
       sourceDurationUs: null,
     });
-    return new CatalogError(
-      code,
-      (error as Error).message,
-      { recordingId: failed.recordingId, state: failed.state },
-      refusal?.retryable ?? false,
-    );
+    return new CatalogError(code, (error as Error).message, {
+      recordingId: failed.id,
+      state: failed.state,
+    });
   }
 
   /**
@@ -382,7 +386,7 @@ export class CaptureService {
    * session's own reports and by the next startup's recovery.
    */
   private async abandon(recording: Recording): Promise<Recording> {
-    const stopped = await this.native("capture.stop", { recordingId: recording.recordingId });
+    const stopped = await this.native("capture.stop", { recordingId: recording.id });
     if (stopped.ok) {
       const report = this.readReport(recording, stopped.data);
       // A finalizing acknowledgment still owns live media; only its later terminal report
@@ -395,12 +399,12 @@ export class CaptureService {
       try {
         return await this.reconcile(recording);
       } catch (error) {
-        this.log(`recovery failed for ${recording.recordingId}: ${(error as Error).message}`);
+        this.log(`recovery failed for ${recording.id}: ${(error as Error).message}`);
       }
     }
-    const current = this.store.get(recording.recordingId);
+    const current = this.store.get(recording.id);
     if (!isSettled(current.state))
-      this.log(`unsettled start for ${recording.recordingId}: capture may still be running`);
+      this.log(`unsettled start for ${recording.id}: capture may still be running`);
     return current;
   }
 
@@ -452,7 +456,7 @@ export class CaptureService {
       if (current.state !== "canceled") {
         const report = await this.endNativeCapture(current);
         if (report) current = this.report(report);
-        else return this.reconcile(current, true);
+        else return this.reconcile(current, { discardIfEmpty: true });
         // A joined finalization can win; the terminal rule preserves that take for explicit deletion.
         current = this.author(current, { state: "canceled" });
       }
@@ -473,7 +477,7 @@ export class CaptureService {
   }
 
   private async endNativeCapture(recording: Recording): Promise<CaptureReport | null> {
-    const answer = await this.native("capture.cancel", { recordingId: recording.recordingId });
+    const answer = await this.native("capture.cancel", { recordingId: recording.id });
     if (answer.ok) return this.readReport(recording, answer.data);
     if (answer.error.code === "INVALID_STATE") return null;
     throw fromNative(answer);
@@ -485,13 +489,14 @@ export class CaptureService {
         "CAPTURE_RECOVERY_PENDING",
         "A take is still finalizing; inspect its status before starting another",
         { recordingId: this.recovery.recordingId },
-        true,
       );
   }
 
-  private async reconcile(recording: Recording, discardIfEmpty = false): Promise<Recording> {
-    if (this.recovery?.recordingId === recording.recordingId)
-      return this.store.get(recording.recordingId);
+  private async reconcile(
+    recording: Recording,
+    { discardIfEmpty = false, retryFailure = false } = {},
+  ): Promise<Recording> {
+    if (this.recovery?.recordingId === recording.id) return this.store.get(recording.id);
     this.requireRecoveryQuiet();
     // The app can outlive its service. Never fence its native sequence merely because this service restarted.
     const device = captureDeviceSchema.parse(await this.ask("capture.status", {}));
@@ -499,11 +504,10 @@ export class CaptureService {
       throw new CatalogError(
         "CAPTURE_NOT_QUIET",
         "Native capture has not proved recovery can begin",
-        { recordingId: recording.recordingId, deviceRecordingId: device.recordingId },
-        true,
+        { recordingId: recording.id, deviceRecordingId: device.recordingId },
       );
-    const current = this.store.get(recording.recordingId);
-    if (isSettled(current.state)) return current;
+    const current = this.store.get(recording.id);
+    if (isSettled(current.state) || (failedFinalization(current) && !retryFailure)) return current;
     const finalizing = this.author(current, {
       state: "finalizing",
       finalizationError: null,
@@ -516,7 +520,7 @@ export class CaptureService {
       },
     });
     const controller = new AbortController();
-    const attempt = { recordingId: current.recordingId, controller, work: Promise.resolve() };
+    const attempt = { recordingId: current.id, controller, work: Promise.resolve() };
     this.recovery = attempt;
     attempt.work = Promise.resolve()
       .then(async () => {
@@ -524,8 +528,8 @@ export class CaptureService {
           current,
           AbortSignal.any([controller.signal, this.lifetime.signal]),
         );
-        if (this.store.isDeleting(current.recordingId)) return;
-        const selected = this.store.get(current.recordingId);
+        if (this.store.isDeleting(current.id)) return;
+        const selected = this.store.get(current.id);
         if (isSettled(selected.state)) return;
         if (
           discardIfEmpty &&
@@ -533,7 +537,7 @@ export class CaptureService {
           recovered.durationUs === 0 &&
           selected.publication?.camera?.state !== "published"
         ) {
-          const entries = await readdir(sourceDirectory(this.home, current.recordingId)).catch(
+          const entries = await readdir(sourceDirectory(this.home, current.id)).catch(
             (error: NodeJS.ErrnoException) => {
               if (error.code === "ENOENT") return [];
               throw error;
@@ -543,18 +547,17 @@ export class CaptureService {
             throw new CatalogError(
               "CAPTURE_RECOVERY_UNRESOLVED",
               "Source bytes remain but recovery could not prove their outcome",
-              { recordingId: current.recordingId },
-              true,
+              { recordingId: current.id },
             );
           const canceled = this.author(selected, { state: "canceled" });
           if (this.sourceLifetime)
             await this.sourceLifetime.discard(
-              current.recordingId,
+              current.id,
               this.lifetime.signal,
               async () => canceled,
             );
           else
-            await rm(recordingDirectory(this.home, current.recordingId), {
+            await rm(recordingDirectory(this.home, current.id), {
               recursive: true,
               force: true,
             });
@@ -563,27 +566,23 @@ export class CaptureService {
         }
       })
       .catch((error: unknown) => {
-        if (this.store.isDeleting(current.recordingId)) return;
-        const selected = this.store.get(current.recordingId);
+        if (this.store.isDeleting(current.id)) return;
+        const selected = this.store.get(current.id);
         if (isSettled(selected.state)) return;
+        let code =
+          controller.signal.aborted || this.lifetime.signal.aborted
+            ? "RECOVERY_CANCELED"
+            : error instanceof CatalogError
+              ? error.code
+              : "RECOVERY_FAILED";
+        if (code.length > 128) code = "RECOVERY_FAILED";
         const finalizationError = {
-          code:
-            controller.signal.aborted || this.lifetime.signal.aborted
-              ? "RECOVERY_CANCELED"
-              : error instanceof CatalogError
-                ? error.code
-                : "RECOVERY_FAILED",
+          code,
           message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-          retryable:
-            controller.signal.aborted ||
-            this.lifetime.signal.aborted ||
-            !(error instanceof CatalogError) ||
-            error.retryable,
         };
-        if (finalizationError.code.length > 128) finalizationError.code = "RECOVERY_FAILED";
         this.author(selected, { state: "finalizing", finalizationError });
         this.log(
-          `recovery failed for ${selected.recordingId}: ${finalizationError.code}: ${finalizationError.message}`,
+          `recovery failed for ${selected.id}: ${finalizationError.code}: ${finalizationError.message}`,
         );
       })
       .finally(() => {
@@ -604,8 +603,8 @@ export class CaptureService {
       { inputsClosed: boolean; outcome: CaptureSourceOutcome | null }
     >();
     const publish = () => {
-      if (this.store.isDeleting(recording.recordingId)) return;
-      const current = this.store.get(recording.recordingId);
+      if (this.store.isDeleting(recording.id)) return;
+      const current = this.store.get(recording.id);
       if (isSettled(current.state)) return;
       const previous = current.publication!;
       const inputsClosed =
@@ -634,12 +633,12 @@ export class CaptureService {
               : {
                   kind,
                   sourceId: recording.camera!.sourceId,
-                  binding: { recordingId: recording.recordingId, ...recording.camera! },
+                  binding: { recordingId: recording.id, ...recording.camera! },
                 };
           const recovered = await this.worker(
             "media.recover",
             {
-              directory: sourceDirectory(this.home, recording.recordingId, kind),
+              directory: sourceDirectory(this.home, recording.id, kind),
               sourceAuthority,
             },
             { signal, timeoutMs },
@@ -651,12 +650,13 @@ export class CaptureService {
           publish();
           if (result.cleanupFailure)
             this.log(
-              `cleanup pending for ${recording.recordingId}/${kind}: ${result.cleanupFailure.code}: ${result.cleanupFailure.message}`,
+              `cleanup pending for ${recording.id}/${kind}: ${result.cleanupFailure.code}: ${result.cleanupFailure.message}`,
             );
           return result;
         } catch (error) {
           // An outer media refusal does not establish invalid provenance. Keep it retry-visible;
           // a sibling's exclusive closure proof can still admit that independently verified source.
+          // Recovery refuses with its classified code.
           const code =
             error instanceof CatalogError && error.code.length <= 128
               ? error.code
@@ -668,7 +668,6 @@ export class CaptureService {
               error: {
                 code,
                 message: (error instanceof Error ? error.message : String(error)).slice(0, 4096),
-                retryable: !(error instanceof CatalogError) || error.retryable,
               },
             },
           });
@@ -682,16 +681,11 @@ export class CaptureService {
     for (const [kind, value] of outcomes) {
       if (!value.inputsClosed || value.outcome === null)
         throw new CatalogError(
-          "MEDIA_WORKER_FAILED",
+          "INVALID_RESPONSE",
           `Recovery did not establish ${kind} source authority`,
         );
       if (value.outcome.state === "pending")
-        throw new CatalogError(
-          value.outcome.error.code,
-          value.outcome.error.message,
-          { kind },
-          value.outcome.error.retryable,
-        );
+        throw new CatalogError(value.outcome.error.code, value.outcome.error.message, { kind });
     }
     return (results[0] as PromiseFulfilledResult<ReturnType<typeof readRecoveryReceipt>>).value;
   }
@@ -700,7 +694,7 @@ export class CaptureService {
     recording: Recording,
     kind: "primary" | "camera",
   ): Promise<number> {
-    const directory = sourceDirectory(this.home, recording.recordingId, kind);
+    const directory = sourceDirectory(this.home, recording.id, kind);
     const names = [
       "capture.journal.jsonl",
       "video.mov",
@@ -737,13 +731,29 @@ export class CaptureService {
           member.name.includes(".publication.") ||
           member.name.startsWith(".capture-publication-")),
     );
-    // Two roles can each materialize and verify repeatedly for publication and cleanup.
-    // Fragmentation dominates measured 100k-run work; byte passes also scale with recording size.
-    return Math.min(
-      MAX_MEDIA_TIMEOUT_MS,
-      (canonicalWork ? 1_200_000 : 0) +
-        publicationDeadlineMs(members.reduce((bytes, member) => bytes + member.bytes, 0)),
-    );
+    const journalBytes =
+      members.find((member) => member.name === "capture.journal.jsonl")?.bytes ?? 0;
+    // Closed sources carry their actual duration. An unclosed crash prefix can be any length
+    // up to the take requirement; reserve that duration until recovery proves its endpoint.
+    const durationUs = recording.sourceDurationUs ?? MAXIMUM_TAKE_US;
+    const roles = new Set(
+      members.flatMap((member) => {
+        const role = /^(?:\.capture-publication-)?(narration|system)(?:\.|\/)/.exec(
+          member.name,
+        )?.[1];
+        return member.exists && role ? [role] : [];
+      }),
+    ).size;
+    // Each audio role: raw decode, canonical write, verification decode and support proof.
+    // Primary pictures need one traversal; camera mapping/canonicalization/proof need three.
+    // A noncanonical recovery only probes existing physical support once.
+    return captureWorkDeadlineMs({
+      journalBytes,
+      bytes: members.reduce((bytes, member) => bytes + member.bytes, 0),
+      audioRoles: canonicalWork ? roles : 0,
+      extraTraversals: canonicalWork ? (kind === "camera" ? 3 : 1) : 1,
+      durationUs,
+    });
   }
 
   private settleRecovered(
@@ -778,27 +788,31 @@ export class CaptureService {
 
   private readReport(recording: Recording, data: unknown): CaptureReport {
     const report = captureReportSchema.parse(data);
-    if (report.recordingId !== recording.recordingId || report.sourceId !== recording.sourceId)
-      throw new CatalogError("INVALID_STATE", "Native reported another take", {
-        recordingId: recording.recordingId,
-        reportedRecordingId: report.recordingId,
-      });
+    this.checkReportIdentity(recording, report);
     return report;
   }
 
-  /**
-   * Numbers an event this service authors itself. Native journal sequences stay below
-   * `NATIVE_SEQUENCE_LIMIT`, so a service-authored outcome is always the later word and can never
-   * be mistaken for, or silently overwritten by, a number the journal produced.
-   */
+  private checkReportIdentity(recording: Recording, report: CaptureReport): void {
+    if (report.recordingId !== recording.id || report.sourceId !== recording.sourceId)
+      throw new CatalogError("INVALID_STATE", "Native reported another take", {
+        recordingId: recording.id,
+        reportedRecordingId: report.recordingId,
+      });
+  }
+
+  /** Service outcomes continue the last observed sequence; terminal state owns finality. */
   private author(recording: Recording, outcome: AuthoredOutcome): Recording {
-    return this.observed(
-      this.store.ingestLifecycle(recording.recordingId, {
+    const result = this.observed(
+      this.store.ingestLifecycle(recording.id, {
         ...outcome,
         sourceId: recording.sourceId,
-        sequence: Math.max(recording.lifecycleSequence + 1, NATIVE_SEQUENCE_LIMIT + 1),
+        sequence: recording.lifecycleSequence + 1,
       }),
     );
+    // Once this service proves a terminal outcome, in-flight reports from its old controller
+    // cannot supersede it. A new service has no old controller, so the fence is process-owned.
+    if (isSettled(outcome.state)) this.authoredTerminal.add(recording.id);
+    return result;
   }
 
   private observed(recording: Recording): Recording {
@@ -806,9 +820,7 @@ export class CaptureService {
     try {
       this.changed(recording);
     } catch (error) {
-      this.log(
-        `processing admission failed for ${recording.recordingId}: ${(error as Error).message}`,
-      );
+      this.log(`processing admission failed for ${recording.id}: ${(error as Error).message}`);
     }
     return recording;
   }
@@ -834,11 +846,7 @@ function allocationArguments(
     operation,
     selection.recordingId ?? null,
     source.kind,
-    source.kind === "camera"
-      ? source.deviceId
-      : source.kind === "window"
-        ? source.windowId
-        : source.displayId,
+    source.kind === "region" ? source.displayId : source.id,
     source.kind === "region" ? [source.x, source.y, source.width, source.height] : null,
     selection.microphone,
     selection.systemAudio,
@@ -854,16 +862,11 @@ function allocationArguments(
  * Every other code is native's own answer, and so is proof of what it did.
  */
 function unanswered(code: string): boolean {
-  return code === "TIMEOUT" || code === "SERVICE_STOPPED" || code === "INVALID_RESPONSE";
+  return code === "TIMEOUT" || code === "SERVICE_STOPPED" || code === "CONTROL_RESPONSE_INVALID";
 }
 
 function fromNative(result: OperationResult & { ok: false }): CatalogError {
-  return new CatalogError(
-    result.error.code,
-    result.error.message,
-    result.error.details,
-    result.error.retryable,
-  );
+  return new CatalogError(result.error.code, result.error.message, result.error.details);
 }
 
 /** Recovery may begin only when native proves that no capture or source is still active. */
@@ -893,7 +896,12 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
   if (report.state === "complete") {
     if (typeof report.sourceDurationUs !== "number")
       throw new CatalogError("INVALID_STATE", "A finalized take must report its source duration");
-    return { ...identity, state: "complete", sourceDurationUs: report.sourceDurationUs };
+    return {
+      ...identity,
+      state: "complete",
+      sourceDurationUs: report.sourceDurationUs,
+      ...(report.completionReason == null ? {} : { completionReason: report.completionReason }),
+    };
   }
   if (report.state === "interrupted")
     return {
@@ -909,7 +917,15 @@ function lifecycleEvent(report: CaptureReport): LifecycleEvent {
       state: "finalizing",
       ...(report.finalizationError === undefined
         ? {}
-        : { finalizationError: report.finalizationError }),
+        : {
+            finalizationError:
+              report.finalizationError === null
+                ? null
+                : {
+                    code: report.finalizationError.code,
+                    message: report.finalizationError.message,
+                  },
+          }),
     };
   return { ...identity, state: report.state };
 }

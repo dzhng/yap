@@ -1021,7 +1021,7 @@ test("processing includes only audio occurrences with requested output samples",
       ...request,
       tap: { target: { kind: "clip", id: "short" }, point: { kind: "processed" } },
     }),
-  ).toThrowError(expect.objectContaining({ code: "NOT_READY" }));
+  ).toThrowError(expect.objectContaining({ code: "INVALID_RANGE" }));
 });
 
 test("execution window owns exact sample endpoints and readiness requires every bound implementation", () => {

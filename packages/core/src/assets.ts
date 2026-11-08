@@ -5,7 +5,6 @@ import {
   fromTime,
   compare,
   type SelectionRange,
-  omit,
 } from "@yap/composition";
 import {
   assetOriginSchema,
@@ -17,11 +16,12 @@ import { isDeepStrictEqual } from "node:util";
 import { ResourceReferences, resourceKinds, type ResourceOwner } from "./references.js";
 import type { Asset as CompositionAsset } from "@yap/composition";
 import { randomUUID } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, unlinkSync } from "node:fs";
 import { mkdir, open, link, unlink, opendir, rm, lstat } from "node:fs/promises";
 import { extname, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { Catalog, CatalogError } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 import {
   copyImportedFile,
   fileIdentity,
@@ -46,11 +46,7 @@ const stream = z.object({
   decodable: z.boolean(),
   startUs: timeValueSchema.optional(),
   endUs: timeValueSchema.optional(),
-  // Up to 100,000 occupied runs plus inter-run, leading and trailing empty segments.
-  segments: z
-    .array(segment)
-    .max(2 * 100_000 + 1)
-    .optional(),
+  segments: z.array(segment).optional(),
   width: positive.optional(),
   height: positive.optional(),
   orientedWidth: z.number().finite().positive().optional(),
@@ -273,7 +269,12 @@ export class AssetStore {
     if (!row) return null;
     if (row.path !== path)
       throw new CatalogError("REQUEST_CONFLICT", "Import request ID already names another path");
-    return this.intent(row.importId as string);
+    const intent = this.intent(row.importId as string);
+    if (intent.assetId !== null && !this.has(intent.assetId))
+      throw new CatalogError("ASSET_DELETED", "The imported asset has been deleted", {
+        assetId: intent.assetId,
+      });
+    return intent;
   }
   intent(importId: string): ImportIntent {
     const row = this.store.catalog
@@ -293,9 +294,14 @@ export class AssetStore {
     probe: AssetProbe,
     signal: AbortSignal,
     owner?: ResourceOwner,
+    published?: (asset: Asset) => void,
   ): Promise<Asset> {
     const intent = this.intent(importId);
     if (intent.assetId) {
+      if (!this.has(intent.assetId))
+        throw new CatalogError("ASSET_DELETED", "The imported asset has been deleted", {
+          assetId: intent.assetId,
+        });
       const asset = this.get(intent.assetId);
       if (owner) this.retain(owner, [asset.id]);
       return asset;
@@ -310,6 +316,7 @@ export class AssetStore {
           .prepare("UPDATE asset_imports SET assetId=? WHERE importId=?")
           .run(asset.id, importId);
         if (owner) this.retain(owner, [asset.id]);
+        published?.(asset);
       },
       intent.source,
     );
@@ -385,8 +392,8 @@ export class AssetStore {
     );
     return {
       ...asset,
-      streams: asset.streams.map((stream) => ({
-        ...omit(stream, "segments"),
+      streams: asset.streams.map(({ segments: _segments, ...stream }) => ({
+        ...stream,
         segmentCount: count.get(id, stream.id)!.count as number,
       })),
     };
@@ -395,24 +402,28 @@ export class AssetStore {
     id: string,
     streamId: string,
     input: {
-      cursor?: { assetId: string; streamId: string; afterOrdinal: number };
+      cursor?: string;
       limit?: number;
     } = {},
   ): {
     assetId: string;
     streamId: string;
     segments: (z.infer<typeof segment> & { ordinal: number })[];
-    nextCursor: { assetId: string; streamId: string; afterOrdinal: number } | null;
+    nextCursor: string | null;
   } {
-    const limit = input.limit ?? 250,
-      after = input.cursor?.afterOrdinal ?? -1;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("asset.segments", input.cursor, { assetId: id, streamId }),
+      decoded = position as { ordinal?: unknown } | undefined,
+      after = (decoded?.ordinal ?? -1) as number;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
       !Number.isSafeInteger(after) ||
-      after < -1 ||
-      (input.cursor && (input.cursor.assetId !== id || input.cursor.streamId !== streamId))
+      after < -1
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid asset segment cursor or page bounds");
     const asset = this.header(id);
@@ -438,25 +449,34 @@ export class AssetStore {
         .map((row) => ({ ordinal: row.ordinal as number, ...JSON.parse(row.value as string) })),
       nextCursor:
         rows.length > limit
-          ? { assetId: id, streamId, afterOrdinal: rows[limit - 1]!.ordinal as number }
+          ? pageCursor.encode(
+              "asset.segments",
+              { ordinal: rows[limit - 1]!.ordinal as number },
+              { assetId: id, streamId },
+            )
           : null,
     };
   }
   path(id: string): string {
     return join(this.directory, this.header(id).fileName);
   }
-  list(input: { afterSequence?: number; limit?: number } = {}): {
+  /** Assets have no tombstone column in the current catalog; an admitted row is listable. */
+  listable(id: string): boolean {
+    return Boolean(this.store.catalog.prepare("SELECT 1 FROM assets WHERE id=?").get(id));
+  }
+  list(input: { cursor?: string; limit?: number } = {}): {
     assets: AssetSummary[];
-    nextCursor: { afterSequence: number } | null;
+    nextCursor: string | null;
   } {
-    const limit = input.limit ?? 250,
-      after = input.afterSequence ?? 0;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined ? undefined : pageCursor.decode("asset.list", input.cursor, {}),
+      after = position === undefined ? undefined : (position as { sequence?: unknown }).sequence;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
-      !Number.isSafeInteger(after) ||
-      after < 0
+      (after !== undefined && (!Number.isSafeInteger(after) || (after as number) < 0))
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid asset page bounds");
     const rows = this.store.catalog
@@ -470,47 +490,66 @@ export class AssetStore {
           SELECT DISTINCT json_extract(value,'$.kind') AS kind
           FROM json_each(assets.metadata,'$.streams') ORDER BY kind
         )) AS mediaKinds
-        FROM assets WHERE sequence>? ORDER BY sequence LIMIT ?`)
-      .all(after, limit + 1);
+        FROM assets WHERE sequence < coalesce(?, 9223372036854775807) ORDER BY sequence DESC LIMIT ?`)
+      .all((after as number | undefined) ?? null, limit + 1);
     return {
       assets: rows.slice(0, limit).map(
         (row) =>
           ({
-            ...omit(row, "sequence", "mediaKinds"),
+            id: row.id as string,
+            bytes: row.bytes as number,
+            createdAt: row.createdAt as string,
+            fileName: row.fileName as string,
+            streamCount: row.streamCount as number,
+            fontFaceCount: row.fontFaceCount as number,
             mediaKinds: JSON.parse(row.mediaKinds as string),
           }) as AssetSummary,
       ),
       nextCursor:
-        rows.length > limit ? { afterSequence: rows[limit - 1]!.sequence as number } : null,
+        rows.length > limit
+          ? pageCursor.encode("asset.list", { sequence: rows[limit - 1]!.sequence as number }, {})
+          : null,
     };
   }
   origins(
     id: string,
-    input: { afterProvenance?: string; limit?: number } = {},
+    input: { cursor?: string; limit?: number } = {},
   ): {
     origins: AssetProvenance[];
-    nextCursor: { afterProvenance: string } | null;
+    nextCursor: string | null;
   } {
     this.header(id);
-    const limit = input.limit ?? 250;
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("asset.origins", input.cursor, { assetId: id }),
+      decodedOrigin = position as { provenance?: unknown } | undefined,
+      afterProvenance = decodedOrigin?.provenance;
     if (
       !Number.isSafeInteger(limit) ||
       limit < 1 ||
       limit > 1000 ||
-      (input.afterProvenance !== undefined && typeof input.afterProvenance !== "string")
+      (afterProvenance !== undefined && typeof afterProvenance !== "string")
     )
       throw new CatalogError("INVALID_PARAMS", "Invalid provenance page bounds");
     const rows = this.store.catalog
       .prepare(
         "SELECT provenance FROM asset_origins WHERE assetId=? AND provenance>? ORDER BY provenance LIMIT ?",
       )
-      .all(id, input.afterProvenance ?? "", limit + 1);
+      .all(id, afterProvenance ?? "", limit + 1);
     return {
       origins: rows
         .slice(0, limit)
         .map((row) => JSON.parse(row.provenance as string) as AssetProvenance),
       nextCursor:
-        rows.length > limit ? { afterProvenance: rows[limit - 1]!.provenance as string } : null,
+        rows.length > limit
+          ? pageCursor.encode(
+              "asset.origins",
+              { provenance: rows[limit - 1]!.provenance as string },
+              { assetId: id },
+            )
+          : null,
     };
   }
   /** Call inside the revision/job transaction when references must commit with that owner. */
@@ -608,6 +647,10 @@ export class AssetStore {
       await this.publishFile(candidate.id, async () => {
         try {
           signal.throwIfAborted();
+          if (this.dependencies.isTombstoned("asset", candidate.id))
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: candidate.id,
+            });
           await link(staging, join(this.directory, publishedName)).catch(async (error) => {
             if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
             const existing = await open(
@@ -645,6 +688,17 @@ export class AssetStore {
           const prior = this.store.catalog
             .prepare("SELECT metadata FROM assets WHERE id=?")
             .get(candidate.id);
+          if (this.dependencies.isTombstoned("asset", candidate.id)) {
+            if (!prior)
+              try {
+                unlinkSync(join(this.directory, publishedName));
+              } catch (error) {
+                if (!absent(error)) throw error;
+              }
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: candidate.id,
+            });
+          }
           if (prior) {
             const existing = this.get(candidate.id);
             if (pinnedFile && existing.fileName !== publishedName)
@@ -652,7 +706,6 @@ export class AssetStore {
                 "STORAGE_BUSY",
                 "Asset publication changed during staging; retry publication",
                 {},
-                true,
               );
             if (
               existing.bytes !== candidate.bytes ||
@@ -700,6 +753,15 @@ export class AssetStore {
     } finally {
       if (this.publications.get(id) === settled) this.publications.delete(id);
     }
+  }
+  /** Internal deletion step: remove an asset's managed file under the publication lock. */
+  async unlinkFile(id: string): Promise<void> {
+    await this.publishFile(id, async () => {
+      const asset = this.get(id);
+      await unlink(join(this.directory, asset.fileName)).catch((error) => {
+        if (!absent(error)) throw error;
+      });
+    });
   }
   /** Stage immutable bytes without publishing outside the caller's attempt fence. */
   async stage(

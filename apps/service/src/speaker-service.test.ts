@@ -50,7 +50,7 @@ test("public speaker source requests report missing optional preparation without
   };
   const preparation = await f.call("speaker.observe", input);
   const { sourceRange, ...selection } = input;
-  const read = await f.call("speaker.get", { ...selection, observationRange: sourceRange });
+  const read = await f.call("speaker.get", { ...selection, sourceRange: sourceRange });
   await writeFile(
     join(f.home, "public-speaker-operands.json"),
     JSON.stringify({ input, preparation, read, requests }),
@@ -61,7 +61,7 @@ test("public speaker source requests report missing optional preparation without
   });
   expect(read).toMatchObject({
     ok: true,
-    data: { state: "unavailable", reason: "model_not_prepared", page: null },
+    data: { state: "unavailable", reason: "model_not_prepared" },
   });
   expect(requests).toEqual(["media.probe"]);
 });
@@ -103,13 +103,12 @@ test("public retained speaker pages survive service restart without runtime byte
   const { sourceRange, ...selection } = input;
   const query = {
     ...selection,
-    observationRange: sourceRange,
-    sourceRange: { startUs: 1500000, endUs: 1750000 },
+    sourceRange: speakerSource.observationRange,
     limit: 1,
   };
   const first = await f.call("speaker.get", query);
   if (!first.ok) throw new Error(JSON.stringify(first));
-  const cursor = (first.data as { page: { nextCursor: string } }).page.nextCursor;
+  const cursor = (first.data as { nextCursor: string }).nextCursor;
   const second = await f.call("speaker.get", { ...query, cursor });
   await f.service.close();
   const restarted = await projectServiceFixture(
@@ -130,36 +129,48 @@ test("public retained speaker pages survive service restart without runtime byte
     data: {
       state: "ready",
       generation: published.generation,
-      page: { rows: [], nextCursor: expect.any(String) },
+      rows: [
+        {
+          ordinal: 0,
+          slot: 0,
+          identity: "unknown",
+          sourceRange: {
+            startUs: { numerator: 125, denominator: 2 },
+            endUs: { numerator: 2000125, denominator: 2 },
+          },
+        },
+      ],
+      nextCursor: expect.any(String),
     },
   });
   expect(second).toMatchObject({
     ok: true,
     data: {
-      page: {
-        rows: [
-          {
-            ordinal: 1,
-            slot: 1,
-            identity: "unknown",
-            sourceRange: {
-              startUs: { numerator: 1000125, denominator: 2 },
-              endUs: { numerator: 4000125, denominator: 2 },
-            },
+      rows: [
+        {
+          ordinal: 1,
+          slot: 1,
+          identity: "unknown",
+          sourceRange: {
+            startUs: { numerator: 1000125, denominator: 2 },
+            endUs: { numerator: 4000125, denominator: 2 },
           },
-        ],
-        nextCursor: null,
-      },
+        },
+      ],
+      nextCursor: null,
     },
   });
   expect(resumed).toEqual(second);
   expect(prepared).toMatchObject({
     ok: true,
-    data: { state: "ready", published: { output: published } },
+    data: {
+      state: "ready",
+      published: { output: { source: { pcm: { frameCount: 480000 } } } },
+    },
   });
   expect(await restarted.call("speaker.get", { ...query, view: "scores", cursor })).toMatchObject({
     ok: false,
-    error: { code: "ARTIFACT_CHANGED" },
+    error: { code: "INVALID_PARAMS" },
   });
 });
 
@@ -199,32 +210,44 @@ test("public speaker bindings are pinned to one retained generation and decorate
   const metadata = await publishControlledObservation(f.home, input);
   const { sourceRange, ...selection } = input;
   const bound = await f.call("speaker.bind", {
+    requestId: "speaker-bind-test",
+    expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     ...selection,
-    observationRange: sourceRange,
+    sourceRange: sourceRange,
     generation: metadata.generation,
     bindings: [{ slot: 1, displayName: "Ada" }],
   });
-  const read = await f.call("speaker.get", { ...selection, observationRange: sourceRange });
+  const read = await f.call("speaker.get", { ...selection, sourceRange: sourceRange });
   expect(bound).toMatchObject({ ok: true, data: { bindings: [{ slot: 1, displayName: "Ada" }] } });
+  expect(
+    await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      ...selection,
+      sourceRange,
+      generation: metadata.generation,
+      bindings: [{ slot: 1, displayName: "Ada" }],
+    }),
+  ).toEqual(bound);
   expect(read).toMatchObject({ ok: true });
   if (read.ok) {
-    const rows = (read.data as { page: { rows: { slot: number; label?: string }[] } }).page.rows;
+    const rows = (read.data as { rows: { slot: number; label?: string }[] }).rows;
     expect(rows.find((row) => row.slot === 1)).toMatchObject({ slot: 1, label: "Ada" });
     expect(rows.find((row) => row.slot === 0)).not.toHaveProperty("label");
     const paged = await f.call("speaker.get", {
       ...selection,
-      observationRange: sourceRange,
+      sourceRange: sourceRange,
       limit: 1,
     });
     expect(paged).toMatchObject({ ok: true });
-    const nextCursor = paged.ok
-      ? (paged.data as { page: { nextCursor: string | null } }).page.nextCursor
-      : null;
+    const nextCursor = paged.ok ? (paged.data as { nextCursor: string | null }).nextCursor : null;
     if (nextCursor) {
       expect(
         await f.call("speaker.bind", {
+          requestId: "speaker-bind-rebind",
+          expectedBindingDigest: "10cd50a5442973a6b4d7e8ad52cd4a49fcb98ad0793b7adf06fa912f4b3c22f9",
           ...selection,
-          observationRange: sourceRange,
+          sourceRange: sourceRange,
           generation: metadata.generation,
           bindings: [{ slot: 1, displayName: "Grace" }],
         }),
@@ -232,7 +255,7 @@ test("public speaker bindings are pinned to one retained generation and decorate
       expect(
         await f.call("speaker.get", {
           ...selection,
-          observationRange: sourceRange,
+          sourceRange: sourceRange,
           cursor: nextCursor,
         }),
       ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
@@ -240,9 +263,11 @@ test("public speaker bindings are pinned to one retained generation and decorate
   }
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-stale",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       ...selection,
-      observationRange: sourceRange,
-      generation: "another-generation",
+      sourceRange: sourceRange,
+      generation: metadata.generation,
       bindings: [],
     }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
@@ -284,11 +309,13 @@ test("project speaker rows carry caller labels for their retained generation", a
   const metadata = await publishControlledObservation(f.home, input);
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       assetId: input.assetId,
       streamId: input.streamId,
       channel: input.channel,
       modelId: input.modelId,
-      observationRange: input.sourceRange,
+      sourceRange: input.sourceRange,
       generation: metadata.generation,
       bindings: [{ slot: 1, displayName: "Ada" }],
     }),
@@ -304,11 +331,11 @@ test("project speaker rows carry caller labels for their retained generation", a
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   const edited = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "project-labels-place",
     expectedRevisionId: revision.id,
     operations: [
@@ -328,7 +355,7 @@ test("project speaker rows carry caller labels for their retained generation", a
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const editedData = edited.data as { revision: { id: string } };
   const query = {
-    projectId: project.projectId,
+    projectId: project.id,
     revisionId: editedData.revision.id,
     range: { startUs: 0, endUs: 3000000 },
     channel: input.channel,
@@ -337,13 +364,13 @@ test("project speaker rows carry caller labels for their retained generation", a
   let read;
   for (;;) {
     read = await f.call("speaker.get", query);
-    if (!read.ok || (read.data as { page: unknown }).page !== null) break;
+    if (!read.ok || (read.data as { state?: string }).state === "ready") break;
     await delay(10);
   }
   expect(read).toMatchObject({ ok: true });
   if (read.ok) {
-    const data = read.data as { page: { rows: { slot: number; label?: string }[] } };
-    const rows = data.page.rows;
+    const data = read.data as { rows: { slot: number; label?: string }[] };
+    const rows = data.rows;
     expect(rows.find((row) => row.slot === 1)).toMatchObject({ slot: 1, label: "Ada" });
     expect(rows.find((row) => row.slot === 0)).not.toHaveProperty("label");
   }
@@ -392,12 +419,14 @@ test.runIf(process.platform === "darwin")(
     };
     await publishControlledObservation(f.home, input);
     const { sourceRange, ...selection } = input;
-    const query = { ...selection, observationRange: sourceRange, view: "scores", limit: 1000 };
+    const query = { ...selection, sourceRange: sourceRange, view: "scores", limit: 1000 };
     const unlabeled = await f.call("speaker.get", query);
     if (!unlabeled.ok) throw Error(JSON.stringify(unlabeled));
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       ...selection,
-      observationRange: sourceRange,
+      sourceRange: sourceRange,
       generation: (unlabeled.data as { generation: string }).generation,
       bindings: [{ slot: 0, displayName: "Ada" }],
     });
@@ -413,12 +442,12 @@ test.runIf(process.platform === "darwin")(
     });
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
+      project: { id: string };
       revision: { id: string };
     };
     expect(
       await f.call("edit.apply", {
-        projectId: project.projectId,
+        projectId: project.id,
         requestId: "portable-place",
         expectedRevisionId: revision.id,
         operations: [
@@ -438,8 +467,8 @@ test.runIf(process.platform === "darwin")(
     ).toMatchObject({ ok: true });
     const exportId = randomUUID();
     const exporting = await f.call("export.create", {
-      projectId: project.projectId,
-      exportId,
+      projectId: project.id,
+      requestId: exportId,
       kind: "processed-package",
       directory: f.home,
       leaf: "speakers.zip",
@@ -462,7 +491,7 @@ test.runIf(process.platform === "darwin")(
       }
     };
     const projectQuery = {
-      projectId: project.projectId,
+      projectId: project.id,
       channel: input.channel,
       modelId: input.modelId,
       range: { startUs: 750000, endUs: 1250000 },
@@ -470,14 +499,12 @@ test.runIf(process.platform === "darwin")(
     };
     const projected = await ready("speaker.get", projectQuery, "ready");
     expect(projected).toMatchObject({
-      page: {
-        rows: [
-          { ordinal: 0, slot: 0, partial: false },
-          { ordinal: 1, slot: 1, partial: false },
-        ],
-      },
+      rows: [
+        { ordinal: 0, slot: 0, partial: false },
+        { ordinal: 1, slot: 1, partial: false },
+      ],
     });
-    await ready("export.status", { exportId }, "committed");
+    await ready("export.status", { exportId }, "ready");
     const target = await projectServiceFixture(cleanup, async (operation, params, options) => {
       if (operation.startsWith("media."))
         throw Error(`Package preservation cannot execute media: ${operation}`);
@@ -485,10 +512,23 @@ test.runIf(process.platform === "darwin")(
     });
     active = target;
     const opened = await target.call("package.open", {
+      requestId: "package-open-test",
       path: await realpath(join(f.home, "speakers.zip")),
     });
     if (!opened.ok) throw Error(JSON.stringify(opened));
     const admissionId = (opened.data as { id: string }).id;
+    expect(
+      await target.call("package.open", {
+        requestId: "package-open-test",
+        path: await realpath(join(f.home, "speakers.zip")),
+      }),
+    ).toEqual(opened);
+    expect(
+      await target.call("package.open", {
+        requestId: "package-open-test",
+        path: join(f.home, "different-speakers.zip"),
+      }),
+    ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
     const admitted = await ready("package.status", { admissionId }, "ready");
     const packageHandle = admitted.packageHandle;
     const portableProjection = await ready(
@@ -497,12 +537,12 @@ test.runIf(process.platform === "darwin")(
       "ready",
     );
     expect(
-      (portableProjection.page as { rows: { slot: number; label?: string }[] }).rows.find(
+      (portableProjection as { rows: { slot: number; label?: string }[] }).rows.find(
         (row) => row.slot === 0,
       ),
     ).toMatchObject({ slot: 0, label: "Ada" });
-    expect((portableProjection.page as { rows: unknown }).rows).toEqual(
-      (projected.page as { rows: unknown }).rows,
+    expect((portableProjection as { rows: unknown }).rows).toEqual(
+      (projected as { rows: unknown }).rows,
     );
     expect(portableProjection.issues).toEqual([]);
     // A range past the project's end reads the clamped range in both owners.
@@ -526,12 +566,10 @@ test.runIf(process.platform === "darwin")(
     expect((await ready("speaker.get", pastEnd, "ready")).issues).toEqual(clamp);
     active = target;
     expect(projected).toMatchObject({
-      page: {
-        rows: [
-          { fragments: [{ project: { startUs: 125, endUs: 2000125 } }] },
-          { fragments: [{ project: { startUs: 1000125, endUs: 4000125 } }] },
-        ],
-      },
+      rows: [
+        { fragments: [{ project: { startUs: 125, endUs: 2000125 } }] },
+        { fragments: [{ project: { startUs: 1000125, endUs: 4000125 } }] },
+      ],
     });
     const packaged = await target.call("speaker.get", { ...query, packageHandle });
     expect(packaged).toMatchObject(original);
@@ -542,9 +580,9 @@ test.runIf(process.platform === "darwin")(
     });
     if (!packagedIntervals.ok) throw Error(JSON.stringify(packagedIntervals));
     expect(
-      (
-        packagedIntervals.data as { page: { rows: { slot: number; label?: string }[] } }
-      ).page.rows.find((row) => row.slot === 0),
+      (packagedIntervals.data as { rows: { slot: number; label?: string }[] }).rows.find(
+        (row) => row.slot === 0,
+      ),
     ).toMatchObject({ slot: 0, label: "Ada" });
     const adopted = await ready(
       "package.adopt",
@@ -602,7 +640,7 @@ test("public continuity operations preserve explicit unavailable and refusal sta
         streamId: common.streamId,
         channel: common.channel,
         modelId: common.modelId,
-        observationRange: common.sourceRange,
+        sourceRange: common.sourceRange,
         generation: "attempt-1",
       }),
     ).toMatchObject({
@@ -635,8 +673,8 @@ test("continuity receipts remain readable after a quality refusal", async () => 
       metrics: {
         inputFrames: 9_600_000,
         scoredFrames: 9_600_000,
-        durationSeconds: 600,
-        inferenceSeconds: 10,
+        durationUs: 600_000_000,
+        inferenceUs: 10_000_000,
         peakRssBytes: 2_000_000_000,
         expectedSpeakerCount: 4,
         observedSpeakerCount: 4,
@@ -667,7 +705,7 @@ test("continuity receipts remain readable after a quality refusal", async () => 
       streamId: common.streamId,
       channel: common.channel,
       modelId: common.modelId,
-      observationRange: common.sourceRange,
+      sourceRange: common.sourceRange,
       generation: candidate.identity.generation,
     });
     expect(read).toMatchObject({

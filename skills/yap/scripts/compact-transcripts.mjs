@@ -75,7 +75,7 @@ function selectionParams(selection) {
 function entryFor(selection, response, retained) {
   const params = selectionParams(selection);
   const project = "projectId" in params;
-  const transcript = response.page?.transcript;
+  const transcript = response.transcript;
   return {
     label: selection.label ?? params.assetId ?? params.projectId,
     selection: params,
@@ -130,7 +130,7 @@ export async function compactTranscripts(request, invoke) {
   const digest = createHash("sha256").update(JSON.stringify(request.selections)).digest("hex");
   const resume = request.continuation;
   if (resume && resume.selectionDigest !== digest)
-    throw failure("ARTIFACT_CHANGED", "Continuation belongs to different selections");
+    throw failure("INVALID_PARAMS", "Continuation belongs to different selections");
   if (resume) pageRows = integer(resume.pageRows, pageRows, 1, 1000, "continuation.pageRows");
   let selections = [];
   let index = integer(resume?.index, 0, 0, request.selections.length - 1, "continuation.index");
@@ -156,15 +156,16 @@ export async function compactTranscripts(request, invoke) {
   while (index < request.selections.length && pagesRead < maxPages) {
     const selection = request.selections[index];
     const params = selectionParams(selection);
-    if (retained?.identity.revisionId) params.revisionId = retained.identity.revisionId;
+    // A continuation repeats the first page's parameters; its cursor already pins the revision.
     if (cursor) params.cursor = cursor;
+    else if (retained?.identity.revisionId) params.revisionId = retained.identity.revisionId;
     params.limit = pageRows;
     const response = await invoke("transcript.get", params);
     pagesRead++;
     if (
       response.state === "ready" &&
-      (!Array.isArray(response.page?.rows) ||
-        !("projectId" in selection ? response.revisionId : response.page?.transcript?.source))
+      (!Array.isArray(response.rows) ||
+        !("projectId" in selection ? response.revisionId : response.transcript?.source))
     )
       throw failure("INVALID_RESPONSE", "Ready transcript response lacks pinned page metadata");
     const entry = entryFor(selection, response, retained);
@@ -175,12 +176,12 @@ export async function compactTranscripts(request, invoke) {
       (expectedRevision && expectedRevision !== response.revisionId)
     )
       throw failure("ARTIFACT_CHANGED", "Transcript generation or project revision changed");
-    const following = response.state === "ready" ? response.page?.nextCursor : null;
+    const following = response.state === "ready" ? response.nextCursor : null;
     const prior = selections.at(-1);
     entry.selectionIndex = index;
     entry.rows = [
       ...(prior?.selectionIndex === index ? prior.rows : []),
-      ...(response.page?.rows ?? []),
+      ...(response.rows ?? []),
     ];
     entry.phrases = phrases(entry.rows, pauseUs);
     entry.complete = response.state === "ready" && !following;

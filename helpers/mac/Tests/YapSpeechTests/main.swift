@@ -9,6 +9,14 @@ if CommandLine.arguments.contains("--help") {
     exit(0)
 }
 
+// Many short physical runs are valid even in a short take; window count is not a product limit.
+let fragmented = (0..<10_002).map { n in
+    ExactRange(startUs: ExactTime(Int128(n * 2)), endUs: ExactTime(Int128(n * 2 + 1)))
+}
+let fragmentedWindows = try SpeechWindows.plan(available: fragmented, execution: SpeechExecution())
+precondition(fragmentedWindows.map(\.owned) == fragmented)
+print("PASS all 10002 physical speech runs are retained")
+
 /// The engine's tokens, grouped into words the way the evaluated CLI groups them, and timed by the
 /// speech-bearing tokens while retaining overlapping estimates.
 

@@ -32,12 +32,12 @@ test("join review refuses a foreign prepared tap without inference or authoring 
   });
   if (!result.ok) throw Error(JSON.stringify(result));
   const { project, revision } = result.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   expect(
     await f.call("join.verify", {
-      projectId: project.projectId,
+      projectId: project.id,
       revisionId: revision.id,
       preparedResourceId: "foreign",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
@@ -48,7 +48,7 @@ test("join review refuses a foreign prepared tap without inference or authoring 
     }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
-    await f.call("revision.get", { projectId: project.projectId, revisionId: revision.id }),
+    await f.call("revision.get", { projectId: project.id, revisionId: revision.id }),
   ).toMatchObject({ ok: true, data: { revision: { id: revision.id } } });
 });
 
@@ -87,19 +87,19 @@ test.runIf(process.platform === "darwin")(
       if (!reply.ok) throw Error(JSON.stringify(reply));
       return reply.data as T;
     }
-    const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-      "project.create",
-      {
-        requestId: "prepared-join-project",
-        canvas: {
-          width: 16,
-          height: 16,
-          fps: { numerator: 30, denominator: 1 },
-          background: "#000000ff",
-        },
+    const created = await call<{
+      project: { id: string };
+      revision: { id: string };
+    }>("project.create", {
+      requestId: "prepared-join-project",
+      canvas: {
+        width: 16,
+        height: 16,
+        fps: { numerator: 30, denominator: 1 },
+        background: "#000000ff",
       },
-    );
-    const projectId = created.project.projectId;
+    });
+    const projectId = created.project.id;
     const edited = await call<{ revision: { id: string } }>("edit.apply", {
       projectId,
       expectedRevisionId: created.revision.id,
@@ -150,7 +150,7 @@ test.runIf(process.platform === "darwin")(
         source: { before: { state: "not_applicable" }, after: { state: "not_applicable" } },
         rendered: { alignment: { state: "missing" }, recognition: { state: "missing" } },
         audio: {
-          dimensions: { sampleRate: 48000, channels: 2, frames: 48000 },
+          dimensions: { sampleRate: 48000, channels: 2, frameCount: 48000 },
           waveform: { buckets: expect.any(Array) },
           spectrum: { columns: expect.any(Array) },
         },
@@ -201,7 +201,7 @@ test.runIf(process.platform === "darwin")(
     });
     const records = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
     const staged = records.stage(
-      { owner: { kind: "asset", assetId }, generation: "join-g1", policy: "alignment-v1" },
+      { owner: { kind: "asset", id: assetId }, generation: "join-g1", policy: "alignment-v1" },
       { ...alignmentSource, streamId, durationUs: 1000000, supportDigest: selected.supportDigest },
       alignmentOutput(),
     );

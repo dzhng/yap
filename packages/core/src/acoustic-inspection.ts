@@ -19,9 +19,11 @@ import type { JobQueue, JobExecution, Job } from "./jobs.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
 import {
   MediaAudioInspection,
+  parsePublicAudioArtifact,
   type MediaAudioInput,
   type SourceAudioArtifact,
   type ProjectAudioArtifact,
+  selectedRange,
 } from "./audio-inspection.js";
 import { pauseIntervals, waveformBuckets, sampleGrid, validateAudioWave } from "./audio-wave.js";
 import { spectralLayout, spectralWindows } from "./audio-spectrum.js";
@@ -128,6 +130,63 @@ function metadata(audio: AudioArtifact) {
         supportDigest: audio.supportDigest,
       };
 }
+function publicAcousticArtifact(value: AcousticArtifact) {
+  const { bytes, range, sampleRange, context, ...rest } = value as any;
+  return {
+    ...rest,
+    sizeBytes: bytes,
+    ...("projectId" in value ? { range } : { sourceRange: range }),
+    sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
+    ...(context
+      ? {
+          context: {
+            ...context,
+            sampleRange: {
+              startSamples: context.sampleRange.start,
+              endSamples: context.sampleRange.end,
+            },
+          },
+        }
+      : {}),
+  };
+}
+function parsePublicAcousticArtifact(value: unknown): AcousticArtifact {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt is unavailable");
+  const record = value as Record<string, any>;
+  if (
+    "bytes" in record ||
+    !Number.isSafeInteger(record.sizeBytes) ||
+    !record.sampleRange ||
+    !Number.isSafeInteger(record.sampleRange.startSamples) ||
+    !Number.isSafeInteger(record.sampleRange.endSamples)
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt uses an obsolete shape");
+  const { sizeBytes, sourceRange, sampleRange, context, ...rest } = record;
+  const project = "projectId" in record;
+  if (
+    (project && (sourceRange !== undefined || rest.range === undefined)) ||
+    (!project && (sourceRange === undefined || rest.range !== undefined))
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Acoustic receipt uses an obsolete shape");
+  return {
+    ...rest,
+    bytes: sizeBytes,
+    range: project ? rest.range : sourceRange,
+    sampleRange: { start: sampleRange.startSamples, end: sampleRange.endSamples },
+    ...(context
+      ? {
+          context: {
+            ...context,
+            sampleRange: {
+              start: context.sampleRange.startSamples,
+              end: context.sampleRange.endSamples,
+            },
+          },
+        }
+      : {}),
+  } as AcousticArtifact;
+}
 export type AcousticArtifact = ReturnType<typeof metadata> & {
   file: string;
   bytes: number;
@@ -193,7 +252,7 @@ export type AcousticRenderer = {
   implementationId: string;
   render(request: AcousticImageRequest, signal: AbortSignal): Promise<unknown>;
 };
-const lost = (message: string) => new CatalogError("ARTIFACT_CHANGED", message, {}, true);
+const lost = (message: string) => new CatalogError("DEPENDENCY_LOST", message);
 function audioUnavailableSamples(audio: AudioArtifact) {
   return "projectId" in audio
     ? audio.unavailable.flatMap((entry) => entry.ranges)
@@ -224,7 +283,7 @@ export class AcousticInspection {
         );
       const analyzer = this.owners.loudness;
       if (!analyzer)
-        throw new CatalogError("NOT_READY", "Loudness analyzer is unavailable", {}, true);
+        throw new CatalogError("PREREQUISITE_MISSING", "Loudness analyzer is unavailable", {});
       const recipe = this.owners.audio.recipe(selection);
       if (channelInterpretation === "dual-mono" && recipe.channels !== 1)
         throw new CatalogError("INVALID_PARAMS", "Dual-mono interpretation requires a mono signal");
@@ -254,7 +313,7 @@ export class AcousticInspection {
                 : null,
             processingSha256: "processingSha256" in recipe ? recipe.processingSha256 : null,
           },
-          scope: isDeepStrictEqual(recipe.selection.range, recipe.fullRange)
+          scope: isDeepStrictEqual(selectedRange(recipe.selection), recipe.fullRange)
             ? ("full-signal" as const)
             : ("excerpt" as const),
         },
@@ -324,7 +383,7 @@ export class AcousticInspection {
         parameters: {
           fftFrames,
           hopFrames,
-          range: display.selection.range,
+          range: selectedRange(display.selection),
           sampleRange: clock.sampleRange,
           policy: "spectrum-density-v1" as const,
         },
@@ -383,7 +442,7 @@ export class AcousticInspection {
         published: null,
       };
     if (artifact === "loudness") {
-      const audio = JSON.parse(dependency.status.published.result) as AudioArtifact;
+      const audio = parsePublicAudioArtifact(JSON.parse(dependency.status.published.result));
       assertLoudnessCoverage(audio);
     }
     const identity = {
@@ -431,7 +490,7 @@ export class AcousticInspection {
   private async image(input: AcousticInput) {
     const renderer = this.owners.renderer;
     if (!renderer)
-      throw new CatalogError("NOT_READY", "Acoustic image renderer is unavailable", {}, true);
+      throw new CatalogError("PREREQUISITE_MISSING", "Acoustic image renderer is unavailable", {});
     const measurement = await this.measurements(input, false);
     if (!measurement.published) return measurement;
     const source = this.owners.jobs.job(measurement.jobId!);
@@ -487,7 +546,7 @@ export class AcousticInspection {
       source.generation !== options.audioGeneration
     )
       throw lost("Pinned audio generation is no longer available");
-    return JSON.parse(status.published.result) as AudioArtifact;
+    return parsePublicAudioArtifact(JSON.parse(status.published.result));
   }
   private measurement(job: Job, options: z.infer<typeof imageOptions>) {
     const source = this.owners.jobs.job(options.measurementJobId);
@@ -502,14 +561,18 @@ export class AcousticInspection {
       throw lost("Pinned acoustic measurements are no longer available");
     return {
       kind: source.artifact,
-      value: JSON.parse(status.published.result) as AcousticArtifact,
+      value: parsePublicAcousticArtifact(JSON.parse(status.published.result)),
     };
   }
   private async executeImage({ job, signal }: JobExecution, raw: unknown) {
     const options = imageOptions.parse(raw),
       renderer = this.owners.renderer;
     if (!renderer || renderer.implementationId !== options.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned acoustic renderer is unavailable", {}, true);
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned acoustic renderer is unavailable",
+        {},
+      );
     const measurement = this.measurement(job, options),
       lease = this.owners.cache.acquire(measurement.value.cacheId);
     if (!lease)
@@ -517,15 +580,15 @@ export class AcousticInspection {
         "ARTIFACT_EXPIRED",
         "Acoustic measurements were evicted; retry image preparation",
         {},
-        true,
       );
     let output: ReturnType<DerivedCache["reserve"]> | undefined;
     try {
       if (lease.bytes > 16 * 1024 * 1024)
         throw new CatalogError("LIMIT_EXCEEDED", "Acoustic measurements exceed 16 MiB");
-      const bytes = Buffer.alloc(lease.bytes);
-      if (lease.read(bytes, 0) !== bytes.length) throw lost("Acoustic measurements are incomplete");
-      const document = JSON.parse(bytes.toString("utf8"));
+      const documentBytes = Buffer.alloc(lease.bytes);
+      if (lease.read(documentBytes, 0) !== documentBytes.length)
+        throw lost("Acoustic measurements are incomplete");
+      const document = JSON.parse(documentBytes.toString("utf8"));
       const evidence =
         measurement.kind === "waveform"
           ? {
@@ -554,9 +617,11 @@ export class AcousticInspection {
         throw lost("Acoustic image byte count differs from its receipt");
       signal.throwIfAborted();
       this.measurement(job, options);
+      const { bytes, ...publicReceipt } = receipt;
       return JSON.stringify({
-        ...measurement.value,
-        ...receipt,
+        ...publicAcousticArtifact(measurement.value),
+        ...publicReceipt,
+        sizeBytes: bytes,
         cacheId: output.id,
         measurements: {
           jobId: options.measurementJobId,
@@ -595,7 +660,6 @@ export class AcousticInspection {
         "ARTIFACT_EXPIRED",
         "Pinned PCM bytes were evicted; retry acoustic preparation",
         {},
-        true,
       );
     let output: ReturnType<DerivedCache["reserve"]> | undefined;
     try {
@@ -706,10 +770,9 @@ export class AcousticInspection {
         const analyzer = this.owners.loudness;
         if (!analyzer || analyzer.implementationId !== options.implementationId)
           throw new CatalogError(
-            "NOT_READY",
+            "PINNED_IMPLEMENTATION_UNAVAILABLE",
             "Pinned loudness implementation is unavailable",
             {},
-            true,
           );
         validateAudioWave(lease, audio);
         const measurement = loudnessMeasurementSchema.parse(
@@ -765,19 +828,21 @@ export class AcousticInspection {
       const published = await this.owners.cache.publish(output.id);
       signal.throwIfAborted();
       this.pinned(job, options);
-      return JSON.stringify({
-        ...description,
-        ...(context ? { context } : {}),
-        file: output.path,
-        bytes: published.bytes,
-        mediaType: "application/json",
-        cacheId: output.id,
-        analysis,
-        ...(analysis.kind === "waveform"
-          ? { bucketFrames: analysis.bucketFrames, bucketCount: analysis.bucketCount }
-          : {}),
-        audio: provenance,
-      } satisfies AcousticArtifact);
+      return JSON.stringify(
+        publicAcousticArtifact({
+          ...description,
+          ...(context ? { context } : {}),
+          file: output.path,
+          bytes: published.bytes,
+          mediaType: "application/json",
+          cacheId: output.id,
+          analysis,
+          ...(analysis.kind === "waveform"
+            ? { bucketFrames: analysis.bucketFrames, bucketCount: analysis.bucketCount }
+            : {}),
+          audio: provenance,
+        } as AcousticArtifact),
+      );
     } catch (error) {
       if (output) this.owners.cache.remove(output.id);
       throw error;

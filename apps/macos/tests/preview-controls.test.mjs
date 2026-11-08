@@ -26,9 +26,21 @@ test(
       );
       // Preserve archived receipts; project their payload at this current decoder input boundary.
       for (const receipt of retained) {
+        if (receipt.state === "processing") receipt.state = "running";
+        if (receipt.state === "ready") receipt.jobId = receipt.jobId ?? "job-preview";
+        if (receipt.delivery) {
+          receipt.delivery = {
+            token: receipt.delivery.token,
+            sizeBytes: receipt.delivery.sizeBytes ?? receipt.delivery.bytes,
+            expiresAtMs: Date.now() + 60_000,
+          };
+        }
         if (receipt.published) {
           const { preview, ...identity } = receipt.published;
-          receipt.published = { ...identity, output: preview };
+          receipt.published = {
+            ...identity,
+            output: preview,
+          };
         }
       }
       const fixture = join(scratch, "receipts.json");
@@ -61,7 +73,7 @@ import YapControls
 }
 struct Refused: LocalizedError { let message: String; var errorDescription: String? { message } }
 @MainActor final class Clock { var date: Date; init(_ date: Date) { self.date = date } }
-@MainActor final class Failures { var values: [String] = [] }
+@MainActor final class Failures { var values: [String] = []; var state = ControlsState() }
 @MainActor final class Script {
     var replies: [String: [Result<Data, Refused>]] = [:]
     var calls: [(String, [String: Any])] = []
@@ -101,7 +113,10 @@ struct Refused: LocalizedError { let message: String; var errorDescription: Stri
     init(_ date: Date) {
         let service = Script(), view = Presentation(), clock = Clock(date), failures = Failures()
         self.service = service; self.view = view; self.clock = clock; self.failures = failures
-        owner = PreviewController(call: service.call, presentation: view, now: { clock.date }, failure: { failures.values.append($0) })
+        owner = PreviewController(call: service.call, presentation: view, now: { clock.date }, failure: { action, message in
+            failures.state.observeAction(action, failure: message, on: .library)
+            if let message { failures.values.append(message) }
+        })
     }
     func ready(_ target: MediaTarget, _ receipt: [String: Any]) async {
         service.answer("preview.get", receipt)
@@ -134,10 +149,21 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         let waiting = receipts[0], ready = receipts[1]
         let id = waiting["projectId"] as! String, revision = waiting["revisionId"] as! String
         let target = MediaTarget.project(id), delivery = ready["delivery"] as! [String: Any]
-        let token = delivery["token"] as! String, bytes = delivery["bytes"] as! Int
-        let expiry = delivery["expiresAt"] as! Double
+        let token = delivery["token"] as! String, bytes = delivery["sizeBytes"] as! Int
+        let expiry = delivery["expiresAtMs"] as! Double
         let start = Date(timeIntervalSince1970: expiry / 1000 - 20)
         let originalMovie = (ready["published"] as! [String: Any])["output"] as! [String: Any]
+
+        let recovered = Rig(start)
+        recovered.service.refuse("preview.get", "Preview could not be read.")
+        recovered.owner.open(id)
+        await until { recovered.failures.state.failure != nil }
+        precondition(recovered.failures.state.failure?.request == ControlsAction.previewProject(id).id)
+        recovered.service.answer("preview.get", ready)
+        recovered.owner.open(id)
+        await until { !recovered.view.movies.isEmpty }
+        precondition(recovered.failures.state.failure == nil, "A successful reattempt resolves only its own preview failure")
+        recovered.owner.close()
 
         let pinned = Rig(start)
         pinned.service.answer("preview.get", waiting)
@@ -159,7 +185,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         pinned.owner.close(target: .recording(id))
         precondition(pinned.view.active && pinned.service.closed.isEmpty, "Same-ID recording deletion must not close a project")
         pinned.clock.date = start.addingTimeInterval(11)
-        pinned.service.answer("artifact.renew", ["token": token, "bytes": bytes, "expiresAt": expiry + 30_000])
+        pinned.service.answer("artifact.renew", ["token": token, "sizeBytes": bytes, "expiresAtMs": expiry + 30_000])
         pinned.owner.tick()
         await until { pinned.service.count("artifact.renew") == 1 }
         let lookupCount = pinned.service.count("project.get")
@@ -168,7 +194,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         pinned.owner.tick()
         await until { pinned.service.count("project.get") > lookupCount + 1 || !pinned.failures.values.isEmpty }
         precondition(pinned.failures.values.isEmpty && pinned.view.active && pinned.view.movies.count == 1)
-        precondition(pinned.service.calls.filter { $0.0 == "artifact.renew" }.allSatisfy { NSDictionary(dictionary: $0.1).isEqual(to: ["token": token]) })
+        precondition(pinned.service.calls.filter { $0.0 == "artifact.renew" }.allSatisfy { Set($0.1.keys) == ["token", "requestId"] && $0.1["token"] as? String == token && ($0.1["requestId"] as? String)?.isEmpty == false })
         pinned.owner.close(target: target)
         await until { pinned.service.closed == [token] }
 
@@ -192,11 +218,13 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             await until { !retry.view.messages.isEmpty }
             precondition(retry.view.messages.last!.1 == !dependency)
             if !dependency {
-                retry.service.answer("preview.retry", ready)
+                // job.retry answers with the job itself; the preview is read back as usual.
+                retry.service.answer("job.retry", ["id": "preview-job", "state": "queued"])
+                retry.service.answer("preview.get", ready)
                 retry.view.retry?()
                 await until { !retry.view.movies.isEmpty }
-                let request = retry.service.calls.first { $0.0 == "preview.retry" }!.1
-                precondition(NSDictionary(dictionary: request).isEqual(to: ["projectId": id, "revisionId": revision, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]))
+                let request = retry.service.calls.first { $0.0 == "job.retry" }!.1
+                precondition(request["jobId"] as? String != nil, "retry request=\(request)")
             }
             retry.owner.close()
             if !dependency { await until { retry.service.closed == [token] } }
@@ -243,11 +271,11 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             precondition(rig.service.calls[0].1["revisionId"] as? String == revision)
         }
 
-        for invalid in ["token", "bytes", "expiry"] {
+        for invalid in ["token", "sizeBytes", "expiry"] {
             let rig = Rig(start); await rig.ready(target, ready)
             rig.clock.date = start.addingTimeInterval(11)
-            var renewed: [String: Any] = ["token": token, "bytes": bytes, "expiresAt": expiry + 30_000]
-            if invalid == "expiry" { renewed["expiresAt"] = 0 }
+            var renewed: [String: Any] = ["token": token, "sizeBytes": bytes, "expiresAtMs": expiry + 30_000]
+            if invalid == "expiry" { renewed["expiresAtMs"] = 0 }
             else { renewed[invalid] = invalid == "token" ? "other-token" : bytes + 1 }
             rig.service.answer("artifact.renew", renewed); rig.owner.tick()
             await until { !rig.failures.values.isEmpty && rig.service.closed == [token] }
@@ -267,7 +295,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         replacement.owner.open("replacement")
         await until { replacement.view.movies.count == 2 && replacement.service.closed == [token] }
         oldClose(); oldRetry(); oldFailure("late decoder failure")
-        precondition(replacement.view.active && replacement.failures.values.isEmpty && replacement.service.count("preview.retry") == 0)
+        precondition(replacement.view.active && replacement.failures.values.isEmpty && replacement.service.count("job.retry") == 0)
         replacement.owner.close(); await until { replacement.service.closed == [token, "replacement-token"] }
 
         let replacedRenewal = Rig(start); await replacedRenewal.ready(target, ready)
@@ -277,7 +305,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
         replacedRenewal.service.answer("preview.get", selecting(.project("replacement"), ready, token: "renewal-replacement"))
         replacedRenewal.owner.open("replacement")
         await until { replacedRenewal.view.movies.count == 2 && replacedRenewal.service.closed == [token] }
-        replacedRenewal.service.resume(["token": token, "bytes": bytes, "expiresAt": expiry + 30_000])
+        replacedRenewal.service.resume(["token": token, "sizeBytes": bytes, "expiresAtMs": expiry + 30_000])
         await Task.yield()
         await until { replacedRenewal.owner.tick(); return replacedRenewal.service.count("project.get") > 0 }
         replacedRenewal.owner.close()
@@ -291,7 +319,7 @@ func selecting(_ target: MediaTarget, _ receipt: [String: Any], token: String) -
             await until { renewal.service.held != nil }
             if expireWhileWaiting { renewal.clock.date = start.addingTimeInterval(20.1); renewal.owner.tick() }
             else { renewal.owner.close() }
-            renewal.service.resume(["token": token, "bytes": bytes, "expiresAt": expiry + 30_000])
+            renewal.service.resume(["token": token, "sizeBytes": bytes, "expiresAtMs": expiry + 30_000])
             await until { renewal.service.closed == [token] }
             precondition(!renewal.view.active && renewal.view.movies.count == 1)
         }
@@ -416,7 +444,7 @@ struct Refused: Error {}
         var owner: PreviewController?
         var observations: [Bool] = []
         let preview = PreviewController(call: { _, _ in throw Refused() }, presentation: Presentation(),
-            changed: { observations.append(owner?.isOpen == true) }, failure: { _ in })
+            changed: { observations.append(owner?.isOpen == true) }, failure: { _, _ in })
         owner = preview
         preview.open("first")
         preview.open("second")

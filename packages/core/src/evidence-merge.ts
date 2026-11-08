@@ -30,6 +30,7 @@ export function mergeHeads(
   fillNext: (index: number) => boolean,
   key: (index: number) => EvidenceKey | null | undefined,
   emit: (index: number) => void,
+  canEmit: (index: number) => boolean = () => true,
 ) {
   const less = (a: number, b: number) => compareKey(key(a)!, key(b)!) < 0;
   const push = (index: number) => {
@@ -81,6 +82,7 @@ export function mergeHeads(
       continue;
     }
     if (!state.heap.length) break;
+    if (!canEmit(state.heap[0]!)) break;
     const index = pop(),
       currentKey = key(index)!;
     if (state.last && compareKey(currentKey, state.last) <= 0)

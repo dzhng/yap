@@ -31,6 +31,7 @@ package struct SourceEvidenceExport: Encodable {
     package let geometryRecords: Int
     package let pauseEvents: Int
     package let audioIntervals: Int
+    package let markEvents: Int
     package let openPauseHostUs: Int64?
     package let displaySpaces: Int
     package let firstCursorSourceUs: Int64?
@@ -67,9 +68,6 @@ package struct SourceEvidenceExport: Encodable {
         guard (info.st_mode & S_IFMT) == S_IFREG else {
             throw CaptureFailure("INVALID_JOURNAL", "Evidence requires a regular journal file.")
         }
-        guard info.st_size <= 268_435_456 else {
-            throw CaptureFailure("EVIDENCE_LIMIT", "Journal exceeds the evidence read budget.")
-        }
         let layout = try CaptureJournal.layout(directory: source.path)
         if let canonical, !Set(canonical.keys).isSubset(of: ["video", "narration", "system"]) {
             throw CaptureFailure("INVALID_REQUEST", "Unexpected canonical source role.")
@@ -79,7 +77,7 @@ package struct SourceEvidenceExport: Encodable {
         // Staged imports supply a closed set of immutable descriptor locators. Recording-owned
         // reads resolve canonical members under the existing journal lease.
         let hasCameraProof = FileManager.default.fileExists(atPath: source.appendingPathComponent("camera.publication.json").path)
-        let lease = layout == 2 || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
+        let lease = JournalSchema.isPacked(layout) || hasCameraProof || sourceAuthority != nil ? try CaptureJournalLease(directory: source.path) : nil
         defer { lease?.release() }
         let verifiedSourceAuthority: CapturePublishedSource?
         if let sourceAuthority {
@@ -87,7 +85,7 @@ package struct SourceEvidenceExport: Encodable {
             verifiedSourceAuthority = try await CaptureSourcePublication.verifyStaged(sourceAuthority, lease: lease, canonical: canonical)
         } else { verifiedSourceAuthority = nil }
         if let lease {
-            for role in layout == 2 ? ["narration", "system"] : [] {
+            for role in JournalSchema.isPacked(layout) ? ["narration", "system"] : [] {
                 let receipt = source.appendingPathComponent("\(role).publication.json")
                 let audio = canonical.map { $0[role] } ??
                     (FileManager.default.fileExists(atPath: source.appendingPathComponent("\(role).mov").path)
@@ -113,18 +111,16 @@ package struct SourceEvidenceExport: Encodable {
         var displaySpaces = 0
         var pauseEvents = 0
         var audioIntervals = 0
+        var markEvents = 0
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         func emit<T: Encodable>(_ event: String, _ data: T) throws {
             let line = try encoder.encode(EvidenceRecord(event: event, data: data)) + Data([10])
-            guard bytes <= 268_435_456 - line.count else {
-                throw CaptureFailure("EVIDENCE_LIMIT", "Evidence exceeds the output budget.")
-            }
             try handle.write(contentsOf: line)
             bytes += line.count
         }
         let summary = try CaptureJournal.readEvidence(
-            directory: source.path, maximumBytes: 268_435_456, retainTiming: false,
+            directory: source.path, retainTiming: false,
             geometry: {
                 try emit("geometry", $0)
                 geometryRecords += 1
@@ -141,7 +137,12 @@ package struct SourceEvidenceExport: Encodable {
             audioAcquired: {
                 try emit("audioAcquired", $0)
                 audioIntervals += 1
-            }, pcmAppend: layout == 2 ? { _ in } : nil,
+            },
+            mark: {
+                try emit("mark", $0)
+                markEvents += 1
+            },
+            pcmAppend: JournalSchema.isPacked(layout) ? { _ in } : nil,
             descriptor: lease?.descriptor, layout: layout)
         for interval in acquired {
             try emit("audioAcquired", interval)
@@ -151,7 +152,7 @@ package struct SourceEvidenceExport: Encodable {
         guard summary.header != nil else {
             throw CaptureFailure("INVALID_JOURNAL", "Evidence requires a readable journal header.")
         }
-        if hasCameraProof || (layout == 1 && summary.header?.source.kind == "camera") || summary.header?.cameraBinding != nil {
+        if hasCameraProof || (JournalSchema.isCompanion(layout) && summary.header?.source.kind == "camera") || summary.header?.cameraBinding != nil {
             let selected = canonical == nil ? source.appendingPathComponent("video.mov").path : canonical?["video"]
             guard let lease, hasCameraProof, let video = selected
             else { throw CaptureFailure("INVALID_CAMERA_MAPPING", "Declared camera requires verified camera publication.") }
@@ -173,13 +174,13 @@ package struct SourceEvidenceExport: Encodable {
         return Self(
             file: output, header: summary.header, originHostUs: summary.originHostUs,
             cursorSamples: summary.cursorSamples, geometryRecords: geometryRecords,
-            pauseEvents: pauseEvents, audioIntervals: audioIntervals,
+            pauseEvents: pauseEvents, audioIntervals: audioIntervals, markEvents: markEvents,
             openPauseHostUs: summary.openPauseHostUs, displaySpaces: displaySpaces,
             firstCursorSourceUs: summary.firstCursorSourceUs,
             lastCursorSourceUs: summary.lastCursorSourceUs, lastSequence: summary.lastSequence,
             incompleteTail: summary.incompleteTail, invalidAtSequence: summary.invalidAtSequence,
             finished: summary.finished, lastLifecycle: summary.lastLifecycle,
-            completion: summary.completion, publications: layout == 2 || hasCameraProof ? publications : nil, bytes: bytes,
+            completion: summary.completion, publications: JournalSchema.isPacked(layout) || hasCameraProof ? publications : nil, bytes: bytes,
             verifiedSourceAuthority: verifiedSourceAuthority)
     }
 }

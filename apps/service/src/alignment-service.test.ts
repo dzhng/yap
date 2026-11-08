@@ -14,7 +14,12 @@ import {
   alignmentGenerationResource,
 } from "@yap/core/alignment-evidence";
 import { selectAlignmentSource } from "@yap/core/source-alignment";
-import { alignmentSource, alignmentOutput } from "./alignment.fixture.js";
+import {
+  alignmentProbe as probe,
+  alignmentSource,
+  alignmentOutput,
+  publishRetainedAlignment,
+} from "./alignment.fixture.js";
 import { projectServiceFixture } from "./project-service.fixture.js";
 import { jsonWorker } from "./worker.js";
 
@@ -57,7 +62,8 @@ test.runIf(process.platform === "darwin")(
     const source = {
         ...alignmentSource,
         supportDigest: selected.supportDigest,
-        engine: new Models(library).alignment("nemo-ctc110").engine,
+        engine: new Models(library, globalThis.fetch, undefined, catalog).alignment("nemo-ctc110")
+          .engine,
       },
       operands = alignmentOutput();
     for (const field of ["nativeReceipt", "report"] as const) {
@@ -68,7 +74,11 @@ test.runIf(process.platform === "darwin")(
     operands.report += "\n";
     const records = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions)),
       staged = records.stage(
-        { owner: { kind: "asset", assetId }, generation: "portable-g1", policy: "alignment-v1" },
+        {
+          owner: { kind: "asset", id: assetId },
+          generation: "portable-g1",
+          policy: "alignment-v1",
+        },
         source,
         operands,
       );
@@ -93,12 +103,12 @@ test.runIf(process.platform === "darwin")(
     });
     if (!created.ok) throw Error(JSON.stringify(created));
     const { project, revision } = created.data as {
-      project: { projectId: string };
+      project: { id: string };
       revision: { id: string };
     };
     expect(
       await f.call("edit.apply", {
-        projectId: project.projectId,
+        projectId: project.id,
         requestId: "place",
         expectedRevisionId: revision.id,
         operations: [
@@ -118,7 +128,7 @@ test.runIf(process.platform === "darwin")(
     ).toMatchObject({ ok: true });
     expect(
       await f.call("alignment.get", {
-        projectId: project.projectId,
+        projectId: project.id,
         revisionId: revision.id,
         preparedResourceId: "prepared-project-tap",
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
@@ -153,14 +163,14 @@ test.runIf(process.platform === "darwin")(
     const exportId = randomUUID();
     expect(
       await f.call("export.create", {
-        projectId: project.projectId,
-        exportId,
+        projectId: project.id,
+        requestId: exportId,
         kind: "processed-package",
         directory: f.home,
         leaf: "alignment.zip",
       }),
     ).toMatchObject({ ok: true });
-    await wait(f, "export.status", { exportId }, "committed");
+    await wait(f, "export.status", { exportId }, "ready");
     const target = await projectServiceFixture(cleanup, async (operation, params, options) => {
       if (operation.startsWith("media."))
         throw Error(`Unexpected package inference/decoder ${operation}`);
@@ -175,8 +185,8 @@ test.runIf(process.platform === "darwin")(
         .packageHandle;
     const packaged = await target.call("alignment.get", { ...query, packageHandle });
     if (!original.ok || !packaged.ok) throw Error(JSON.stringify({ original, packaged }));
-    const originalPage = (original.data as { page: { rows: unknown[]; nextCursor: string } }).page,
-      portablePage = (packaged.data as { page: { rows: unknown[]; nextCursor: string } }).page;
+    const originalPage = original.data as { rows: unknown[]; nextCursor: string },
+      portablePage = packaged.data as { rows: unknown[]; nextCursor: string };
     expect(portablePage.rows).toEqual(originalPage.rows);
     expect(
       await target.call("alignment.get", {
@@ -184,7 +194,7 @@ test.runIf(process.platform === "darwin")(
         packageHandle,
         cursor: originalPage.nextCursor,
       }),
-    ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
+    ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
     const continued = await target.call("alignment.get", {
       ...query,
       packageHandle,
@@ -193,7 +203,7 @@ test.runIf(process.platform === "darwin")(
     expect(continued).toMatchObject({
       ok: true,
       data: {
-        page: { rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "active" }] },
+        rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "active" }],
       },
     });
     const raw = await target.call("alignment.get", {
@@ -205,7 +215,7 @@ test.runIf(process.platform === "darwin")(
     });
     expect(raw).toMatchObject({
       ok: true,
-      data: { page: { bytesBase64: Buffer.from(operands.report).toString("base64") } },
+      data: { bytesBase64: Buffer.from(operands.report).toString("base64") },
     });
     const adopted = await wait(
       target,
@@ -229,22 +239,6 @@ test.runIf(process.platform === "darwin")(
   },
   30000,
 );
-const probe = {
-  originUs: 0,
-  streams: [
-    {
-      id: "a1",
-      kind: "audio",
-      codec: "control",
-      decodable: true,
-      channels: 2,
-      sampleRate: 16000,
-      startUs: 0,
-      endUs: 2000000,
-      segments: [{ startUs: 0, endUs: 2000000, empty: false }],
-    },
-  ],
-};
 test("public alignment preparation refuses unavailable runtime and incomplete support without inference", async () => {
   const requests: string[] = [];
   const f = await projectServiceFixture(cleanup, async (operation) => {
@@ -283,7 +277,7 @@ test("project alignment preparation resolves the project-owned tap before source
     revisionId: "missing-revision",
     preparedResourceId: "prepared-project-tap",
     tap: { target: { kind: "output" }, point: { kind: "processed" } },
-    range: { startUs: 0, endUs: 1_000_000 },
+    sourceRange: { startUs: 0, endUs: 1_000_000 },
     channel: 0,
     text: "hello world",
     modelId: "nemo-ctc110",
@@ -311,11 +305,11 @@ test("a project alignment range past the revision is admitted clamped; one wholl
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   const placed = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "place",
     expectedRevisionId: revision.id,
     operations: [
@@ -335,10 +329,10 @@ test("a project alignment range past the revision is admitted clamped; one wholl
   if (!placed.ok) throw new Error(JSON.stringify(placed));
   const request = (range: { startUs: number; endUs: number }) =>
     f.call("alignment.observe", {
-      projectId: project.projectId,
+      projectId: project.id,
       preparedResourceId: "prepared-project-tap",
       tap: { target: { kind: "output" }, point: { kind: "processed" } },
-      range,
+      sourceRange: range,
       channel: 0,
       text: "hello world",
       modelId: "nemo-ctc110",
@@ -364,41 +358,11 @@ test("public pinned pages, thresholds and original bytes survive restart without
     assetId = job.published!.output.assetId;
   const library = join(f.home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
-  const assets = new AssetStore(catalog, library),
-    acquisitions = new AcquisitionStore(catalog),
-    models = new Models(library);
-  const selected = selectAlignmentSource(assets, acquisitions, {
+  const { evidence, source, values, identity } = publishRetainedAlignment(
+    catalog,
+    library,
     assetId,
-    streamId: "a1",
-    channel: 0,
-    sourceRange: alignmentSource.observationRange,
-    text: alignmentSource.text,
-    modelId: "nemo-ctc110",
-  });
-  const evidence = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
-  const source = {
-    ...alignmentSource,
-    supportDigest: selected.supportDigest,
-    engine: models.alignment("nemo-ctc110").engine,
-  };
-  const values = alignmentOutput();
-  for (const field of ["nativeReceipt", "report"] as const) {
-    const value = JSON.parse(values[field]);
-    value.modelSha256 = source.engine.modelSha256;
-    values[field] = JSON.stringify(value);
-  }
-  const identity = {
-    owner: { kind: "asset" as const, assetId },
-    generation: "retained-alignment-g1",
-    policy: "alignment-v1" as const,
-  };
-  const staged = evidence.stage(identity, source, values);
-  catalog.transaction(() => {
-    staged.publish();
-    new ResourceReferences(catalog).retain("alignment-generation", { kind: "asset", id: assetId }, [
-      alignmentGenerationResource(identity),
-    ]);
-  });
+  );
   const failedIdentity = { ...identity, generation: "retained-alignment-failed" };
   const failedOperands = { ...values, report: "{}", correspondence: "" };
   evidence.capture(failedIdentity, source, failedOperands);
@@ -419,7 +383,8 @@ test("public pinned pages, thresholds and original bytes survive restart without
     ok: true,
     data: {
       state: "captured",
-      page: { evidence: { verified: false }, bytesBase64: Buffer.from("{}").toString("base64") },
+      evidence: { verified: false },
+      bytesBase64: Buffer.from("{}").toString("base64"),
     },
   });
   expect(
@@ -438,14 +403,12 @@ test("public pinned pages, thresholds and original bytes survive restart without
     data: {
       state: "ready",
       generation: identity.generation,
-      page: {
-        rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "quiet" }],
-        nextCursor: expect.any(String),
-      },
+      rows: [{ activity: "quiet" }, { activity: "quiet" }, { activity: "quiet" }],
+      nextCursor: expect.any(String),
     },
   });
   if (!first.ok) throw new Error(JSON.stringify(first));
-  const cursor = (first.data as { page: { nextCursor: string } }).page.nextCursor;
+  const cursor = (first.data as { nextCursor: string }).nextCursor;
   const next = await f.call("alignment.get", { ...query, cursor });
   await f.service.close();
   const restarted = await projectServiceFixture(
@@ -458,7 +421,7 @@ test("public pinned pages, thresholds and original bytes survive restart without
   expect(await restarted.call("alignment.get", { ...query, cursor })).toEqual(next);
   expect(
     await restarted.call("alignment.get", { ...query, cursor, thresholdRMS: 0.2 }),
-  ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await restarted.call("alignment.get", {
       assetId,
@@ -468,7 +431,7 @@ test("public pinned pages, thresholds and original bytes survive restart without
     }),
   ).toMatchObject({
     ok: true,
-    data: { page: { bytesBase64: Buffer.from(values.report).toString("base64") } },
+    data: { bytesBase64: Buffer.from(values.report).toString("base64") },
   });
   expect(await restarted.call("alignment.get", { assetId, generation: "other" })).toMatchObject({
     ok: false,

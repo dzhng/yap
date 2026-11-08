@@ -32,7 +32,7 @@ export const speakerEvidenceSourceSchema = z.strictObject({
   pcm: z.strictObject({
     sha256,
     sampleRate: z.literal(16000),
-    frames: z
+    frameCount: z
       .int()
       .min(1280)
       .max(480000)
@@ -61,12 +61,12 @@ const observationExpression = "json_remove(json_extract(metadata,'$.source'),'$.
 
 const speakerIdentitySchema = z
   .strictObject({
-    owner: z.strictObject({ kind: z.literal("asset"), assetId: sha256 }),
+    owner: z.strictObject({ kind: z.literal("asset"), id: sha256 }),
     sourceId: sha256,
     generation: z.string().min(1).max(256),
     policy: z.literal("speaker-v1"),
   })
-  .refine((v) => v.owner.assetId === v.sourceId);
+  .refine((v) => v.owner.id === v.sourceId);
 export type SpeakerEvidenceIdentity = z.infer<typeof speakerIdentitySchema>;
 export type SpeakerObservation = {
   ordinal: number;
@@ -143,7 +143,7 @@ function seconds(v: string) {
 function normalized(source: SpeakerEvidenceSource, operands: SpeakerOperands) {
   const start = fromTime(source.observationRange.startUs),
     end = fromTime(source.observationRange.endUs);
-  const frames = source.pcm.frames;
+  const frames = source.pcm.frameCount;
   if (compare(subtract(end, start), rational(BigInt(frames) * 1_000_000n, 16_000n)) !== 0)
     invalid("Native speaker observation range differs from its PCM extent");
   const native = nativeSchema.safeParse(decodeJSON(operands.nativeReceipt));
@@ -292,7 +292,7 @@ function speakerPageBounds(after: number, limit: number) {
     throw new CatalogError("INVALID_PARAMS", "Invalid speaker evidence page");
 }
 const key = (identity: SpeakerEvidenceIdentity) => [
-  identity.owner.assetId,
+  identity.owner.id,
   identity.sourceId,
   identity.generation,
   identity.policy,
@@ -302,7 +302,7 @@ type Generation = { metadata: string; nativeReceipt: string; report: string; com
 export function speakerGenerationResource(
   identity: Pick<SpeakerEvidenceIdentity, "owner" | "generation">,
 ): string {
-  return JSON.stringify([identity.owner.kind, identity.owner.assetId, identity.generation]);
+  return JSON.stringify([identity.owner.kind, identity.owner.id, identity.generation]);
 }
 export function assetSpeakerOwner(
   assets: Pick<AssetStore, "get" | "path">,
@@ -311,7 +311,7 @@ export function assetSpeakerOwner(
   return (identity: SpeakerEvidenceIdentity, source: SpeakerEvidenceSource): void => {
     speakerIdentitySchema.parse(identity);
     const selected = selectSpeakerSource(assets, acquisitions, {
-      assetId: identity.owner.assetId,
+      assetId: identity.owner.id,
       streamId: source.streamId,
       ...(source.acquisitionId === null ? {} : { acquisitionId: source.acquisitionId }),
       channel: source.channel,
@@ -443,7 +443,7 @@ export class SpeakerEvidenceStore {
       validateOwner,
     );
     if (!owned && this.row(identity)?.complete !== 1)
-      throw new CatalogError("PROCESSING_BUSY", "Speaker generation is being prepared", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Speaker generation is being prepared", {});
     let result: ReturnType<typeof normalized>;
     try {
       result = normalized(source, operands);
@@ -563,7 +563,7 @@ export class SpeakerEvidenceStore {
   metadata(identity: SpeakerEvidenceIdentity): SpeakerEvidenceMetadata {
     const row = this.row(identity);
     if (!row || row.complete !== 1)
-      throw new CatalogError("NOT_READY", "Speaker evidence is not ready", {}, true);
+      throw new CatalogError("NOT_READY", "Speaker evidence is not ready", {});
     return JSON.parse(row.metadata) as SpeakerEvidenceMetadata;
   }
   operands(identity: SpeakerEvidenceIdentity): SpeakerOperands {
@@ -664,7 +664,7 @@ export class SpeakerEvidenceStore {
       for (const row of rows) {
         signal?.throwIfAborted();
         const identity: SpeakerEvidenceIdentity = {
-          owner: { kind: "asset", assetId },
+          owner: { kind: "asset", id: assetId },
           sourceId: row.sourceId,
           generation: row.generation,
           policy: row.policy,
@@ -678,6 +678,19 @@ export class SpeakerEvidenceStore {
         await setImmediate();
       }
       if (rows.length < 100) return;
+    }
+  }
+  /** Force removal for owner retirement; retained references cannot outlive the asset. */
+  async purge(assetId: string, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT sourceId,generation,policy FROM speaker_evidence_generations WHERE ownerId=? ORDER BY rowid LIMIT 1",
+        )
+        .get(assetId) as { sourceId: string; generation: string; policy: "speaker-v1" } | undefined;
+      if (!row) return;
+      this.remove({ owner: { kind: "asset", id: assetId }, ...row });
     }
   }
   private row(identity: SpeakerEvidenceIdentity): Generation | undefined {

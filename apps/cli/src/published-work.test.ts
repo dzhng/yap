@@ -91,7 +91,12 @@ test("CLI and MCP preserve pending, failed and canceled production work without 
   await entered;
   const running = await cli("job.get", { jobId: accepted.jobId });
   expect(running.state).toBe("running");
-  expect(await mcp("asset.import", params)).toEqual(running);
+  // A replayed import reports the status of the same work, referring to the same job.
+  expect(await mcp("asset.import", params)).toMatchObject({
+    state: "running",
+    jobId: accepted.jobId,
+    attemptId: running.attemptId,
+  });
   release();
   let failed = await cli("job.get", { jobId: accepted.jobId });
   for (let attempt = 0; attempt < 20 && failed.state === "running"; attempt++)

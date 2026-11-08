@@ -2,7 +2,6 @@ import { constants, fstatSync, openSync } from "node:fs";
 import { CatalogError } from "@yap/core/catalog";
 import { openedFile, type OpenedFile, type FileIdentity, fileIdentity } from "@yap/core/files";
 import { O_NOFOLLOW_ANY } from "@yap/core/open-flags";
-import { archiveLimits } from "@yap/core/package-archive";
 
 export type AdmittedArchive = OpenedFile &
   Readonly<{
@@ -23,8 +22,11 @@ export function admitArchive(path: string): AdmittedArchive {
   }
   try {
     const stat = fstatSync(file.fd, { bigint: true });
-    if (!stat.isFile() || stat.size < 1n || stat.size > BigInt(archiveLimits.compressedBytes))
-      throw new CatalogError("INVALID_PACKAGE", "Archive must be a bounded regular file");
+    if (!stat.isFile() || stat.size < 1n || stat.size > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new CatalogError(
+        "INVALID_PACKAGE",
+        "Archive must be a regular file with an exact byte identity",
+      );
     const { device, inode, modifiedNs } = fileIdentity(stat);
     return Object.freeze({
       get fd() {

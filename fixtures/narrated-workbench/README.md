@@ -7,8 +7,7 @@ is the captured reference surface.
 
 Reuse this source for explicit fixture operations and independently judged speech
 boundaries. A transcript or screenshot selection is a derived observation, not an
-original truth or editorial instruction. The [fixture loader](../../packages/test-harness/load-fixture.mjs)
-admits it into an isolated library and reports the resulting source bindings.
+original truth or editorial instruction.
 
 [Fixture ownership](../README.md) explains original preservation, large-file
 acquisition and personal-content handling. The recording is not an editing project

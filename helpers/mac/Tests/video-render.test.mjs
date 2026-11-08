@@ -92,7 +92,7 @@ test("presentation evidence and source grids agree on the displayed physical sup
       JSON.stringify({
         id: "support",
         operation: "media.presentationEvidence",
-        params: { source, output, plan, maxBytes: 1048576 },
+        params: { source, output, plan },
       }) + "\n",
     ),
   );
@@ -154,7 +154,7 @@ test("presentation evidence and source grids agree on the displayed physical sup
   );
 });
 
-function supportRequest(sourceName, name, ranges, maxBytes = 16 * 1024 * 1024) {
+function supportRequest(sourceName, name, ranges) {
   const source = join(directory, sourceName + ".mov"),
     output = join(directory, name + ".jsonl");
   const plan = renderPlan({ spans: ranges.map(([startUs, endUs]) => ({ startUs, endUs })) });
@@ -167,7 +167,7 @@ function supportRequest(sourceName, name, ranges, maxBytes = 16 * 1024 * 1024) {
         JSON.stringify({
           id: name,
           operation: "media.presentationEvidence",
-          params: { source, output, plan, maxBytes },
+          params: { source, output, plan },
         }) + "\n",
       ),
     ),
@@ -213,7 +213,7 @@ test("presentation evidence clips exact rational supports across cuts and empty 
   assert.equal(black.sampleTime, undefined);
 });
 
-test("presentation evidence refuses unsupported video tail and partial byte-budget output", () => {
+test("presentation evidence refuses unsupported video tail without partial output", () => {
   run("ffmpeg", [
     "-v",
     "error",
@@ -234,10 +234,6 @@ test("presentation evidence refuses unsupported video tail and partial byte-budg
   assert.equal(unsupported.result.error.code, "UNAVAILABLE");
   assert.match(unsupported.result.error.message, /support/);
   assert.equal(existsSync(unsupported.output), false);
-  const limited = supportRequest("sparse", "limited-evidence", [[0, 2000000]], 1000);
-  assert.equal(limited.result.ok, false);
-  assert.equal(limited.result.error.code, "LIMIT_EXCEEDED");
-  assert.equal(existsSync(limited.output), false);
   assert.ok(!readdirSync(directory).some((name) => name.startsWith(".yap-output-")));
 });
 
@@ -261,7 +257,7 @@ test("presentation evidence memory stays bounded while streamed output grows", a
         JSON.stringify({
           id: "stream",
           operation: "media.presentationEvidence",
-          params: { source, output, plan, maxBytes: 128 * 1024 * 1024 },
+          params: { source, output, plan },
         }) + "\n",
       ),
     );

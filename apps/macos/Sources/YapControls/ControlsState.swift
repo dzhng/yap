@@ -22,13 +22,17 @@ public struct ControlsState: Equatable, Sendable {
         }
     }
     /// What the capture device reports about itself, once a status answer has arrived.
-    public var device: DeviceStatus?
+    public var device: DeviceStatus? {
+        didSet { if let id = device?.recordingId { deviceReportedTake = id } }
+    }
+    /// The last take the device itself reported. Until it reports a take, the start's answer is
+    /// all that says that take is live.
+    private var deviceReportedTake: String?
     /// The take native or service recovery is finalizing, as the library holds it.
     public var take: TakeStatus?
     /// Read from native capture in this process, so it is known before the service is.
     public var permissions: Permissions?
     public var sources = SourceCatalog()
-    public var libraryFailure: String?
     public var selection = CaptureSelection()
     public var library = LibraryState()
     public var updates = UpdateControls()
@@ -41,16 +45,53 @@ public struct ControlsState: Equatable, Sendable {
     public var storage: StorageObservation?
     public var storageRefreshing = false
     public var storageFailure: String?
-    /// The last failure a person's own action produced, kept visible until the next action.
-    public var failure: String?
-    /// Shortcuts whose key combination this app could not claim, so nothing was stolen.
+    /// A failure belongs to its surface and request; only that request's success resolves it.
+    public var failure: Failure?
+    public struct Failure: Equatable, Sendable {
+        public enum Scope: Equatable, Sendable { case capture, library }
+        public enum Action: Equatable, Sendable {
+            case start(StartRequest)
+            case copyPrompt(MediaTarget?)
+        }
+        public let message: String
+        public let scope: Scope
+        public let request: String?
+        public let action: Action?
+        public init(_ message: String, scope: Scope = .capture, request: String? = nil, action: Action? = nil, operation: String? = nil) {
+            let task: String? = switch operation {
+            case "capture.start": "start recording"
+            case "capture.stop": "finish recording"
+            case "capture.pause": "pause recording"
+            case "capture.resume": "resume recording"
+            case "capture.cancel": "cancel recording"
+            case "capture.restart": "restart recording"
+            case "capture.setCamera": "change the camera"
+            default: nil
+            }
+            self.message = task.map { "Couldn't \($0): \(message)" } ?? message
+            self.scope = scope; self.request = request; self.action = action
+        }
+    }
+    public mutating func observeAction(_ action: ControlsAction, failure message: String?, on scope: Failure.Scope) {
+        if let message { failure = .init(message, scope: scope, request: action.id) }
+        else { resolveFailure(request: action.id) }
+    }
+    public mutating func resolveFailure(request: String) {
+        if failure?.request == request { failure = nil }
+    }
+    /// The action ids whose key combination this app could not claim, so nothing was stolen.
     public var unavailableShortcuts: [String] = []
-    /// Where a person can state their own key combinations when a default is taken.
-    public var shortcutOverridePath: String?
     /// The start whose answer has not arrived: still in flight, or lost to a deadline.
     public private(set) var unansweredStart: StartRequest?
-    /// Whether any source was ever selected. Only before then is a display offered by default.
-    private var sourceWasSelected = false
+    /// Offer a display at launch or after disconnect, including if discovery is briefly empty.
+    private var needsDefaultDisplay = true
+    /// The start this app made for a take, under that take's ID.
+    private var activeStart: ActiveStart?
+
+    private struct ActiveStart: Equatable, Sendable {
+        let recordingId: String
+        let start: CaptureSelection.Start
+    }
 
     public enum ServiceState: Equatable, Sendable {
         case starting
@@ -105,124 +146,24 @@ public struct ControlsState: Equatable, Sendable {
 
     public struct TakeStatus: Equatable, Sendable, Decodable {
         public init(
-            recordingId: String, state: String, interruptionReason: String?, sourceDurationUs: Int64?,
-            finalizationError: FinalizationError? = nil, interruptionMessage: String? = nil
+            id: String, state: String, interruptionReason: String?, sourceDurationUs: Int64?,
+            finalizationError: FinalizationError? = nil, interruptionMessage: String? = nil, completionReason: String? = nil
         ) {
-            self.recordingId = recordingId
+            self.id = id
             self.state = state
             self.interruptionReason = interruptionReason
+            self.completionReason = completionReason
             self.interruptionMessage = interruptionMessage
             self.sourceDurationUs = sourceDurationUs
             self.finalizationError = finalizationError
         }
-        public let recordingId: String
+        public let id: String
         public let state: String
         public let interruptionReason: String?
+        public let completionReason: String?
         public let interruptionMessage: String?
         public let sourceDurationUs: Int64?
         public let finalizationError: FinalizationError?
-    }
-
-    public struct Display: Equatable, Sendable {
-        public init(id: Int, name: String, width: Int, height: Int) {
-            self.id = id
-            self.name = name
-            self.width = width
-            self.height = height
-        }
-        public let id: Int
-        public let name: String
-        public let width: Int
-        public let height: Int
-    }
-
-    public struct Window: Equatable, Sendable {
-        public init(id: Int, title: String, application: String) {
-            self.id = id
-            self.title = title
-            self.application = application
-        }
-        public let id: Int
-        public let title: String
-        public let application: String
-        /// What the chooser calls this window: its app, and its title when it has one.
-        public var label: String {
-            let named = title.trimmingCharacters(in: .whitespaces)
-            if application.isEmpty { return named }
-            return named.isEmpty ? application : "\(application) — \(named)"
-        }
-    }
-
-    public struct Microphone: Equatable, Sendable {
-        public init(id: String, name: String, isDefault: Bool) {
-            self.id = id
-            self.name = name
-            self.isDefault = isDefault
-        }
-        public let id: String
-        public let name: String
-        public let isDefault: Bool
-    }
-
-    public struct Camera: Equatable, Sendable {
-        public init(id: String, name: String, isDefault: Bool = false) {
-            self.id = id
-            self.name = name
-            self.isDefault = isDefault
-        }
-        public let id: String
-        public let name: String
-        public let isDefault: Bool
-    }
-
-    public struct SourceCatalog: Equatable, Sendable {
-        public init(
-            displays: [Display] = [], windows: [Window] = [], microphones: [Microphone] = [], cameras: [Camera] = []
-        ) {
-            self.displays = displays
-            self.windows = windows
-            self.microphones = microphones
-            self.cameras = cameras
-        }
-        public var displays: [Display]
-        public var windows: [Window]
-        public var microphones: [Microphone]
-        public var cameras: [Camera]
-    }
-
-    /// A rectangle of one display, in that display's own points with a top-left origin: the same
-    /// coordinates a capture start carries, so nothing converts them a second time.
-    public struct Region: Equatable, Sendable {
-        public init(displayId: Int, displayName: String, x: Double, y: Double, width: Double, height: Double) {
-            self.displayId = displayId
-            self.displayName = displayName
-            self.x = x
-            self.y = y
-            self.width = width
-            self.height = height
-        }
-        public let displayId: Int
-        public let displayName: String
-        public let x: Double
-        public let y: Double
-        public let width: Double
-        public let height: Double
-    }
-
-    public enum SelectedSource: Equatable, Sendable {
-        case display(Display)
-        case window(Window)
-        case region(Region)
-        /// Camera mode requires a selected device.
-        case camera
-    }
-
-    /// These takes are narrated, so a fresh launch has the microphone on and the machine's own
-    /// sound off. `.systemDefault` follows whatever the person's default input is at start time.
-    public enum MicrophoneChoice: Equatable, Sendable {
-        case off
-        case systemDefault
-        case device(id: String, name: String)
     }
 
     public struct CaptureSelection: Equatable, Sendable {
@@ -244,20 +185,20 @@ public struct ControlsState: Equatable, Sendable {
 
     public struct RecentTake: Equatable, Sendable, Decodable {
         public init(
-            recordingId: String, createdAt: String, state: String, sourceDurationUs: Int64?,
+            id: String, createdAt: String, state: String, sourceDurationUs: Int64?,
             interruptionReason: String?, finalizationError: FinalizationError? = nil,
             sourceId: String? = nil, sourceAdmissions: [LibraryState.SourceAdmission]? = nil
         ) {
             self.sourceAdmissions = sourceAdmissions
             self.sourceId = sourceId
-            self.recordingId = recordingId
+            self.id = id
             self.createdAt = createdAt
             self.state = state
             self.sourceDurationUs = sourceDurationUs
             self.interruptionReason = interruptionReason
             self.finalizationError = finalizationError
         }
-        public let recordingId: String
+        public let id: String
         public let createdAt: String
         public let sourceId: String?
         public let sourceAdmissions: [LibraryState.SourceAdmission]?
@@ -265,37 +206,24 @@ public struct ControlsState: Equatable, Sendable {
         public let sourceDurationUs: Int64?
         public let interruptionReason: String?
         public let finalizationError: FinalizationError?
-        private enum Keys: String, CodingKey {
-            case createdAt, sourceId, sourceAdmissions, state, sourceDurationUs,
-                interruptionReason, finalizationError
-        }
-        public init(from decoder: Decoder) throws {
-            guard case .recording(let id) = try MediaTarget(from: decoder) else {
-                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Expected a recording owner"))
-            }
-            let fields = try decoder.container(keyedBy: Keys.self)
-            self.init(recordingId: id, createdAt: try fields.decode(String.self, forKey: .createdAt),
-                state: try fields.decode(String.self, forKey: .state), sourceDurationUs: try fields.decodeIfPresent(Int64.self, forKey: .sourceDurationUs),
-                interruptionReason: try fields.decodeIfPresent(String.self, forKey: .interruptionReason),
-                finalizationError: try fields.decodeIfPresent(FinalizationError.self, forKey: .finalizationError),
-                sourceId: try fields.decodeIfPresent(String.self, forKey: .sourceId),
-                sourceAdmissions: try fields.decodeIfPresent([LibraryState.SourceAdmission].self, forKey: .sourceAdmissions))
-        }
     }
 
     public struct StorageObservation: Equatable, Sendable, Decodable {
-        public init(totalBytes: Int64, observedAt: String) {
+        public init(totalBytes: Int64, modelBytes: Int64, observedAt: String) {
             self.totalBytes = totalBytes
+            self.modelBytes = modelBytes
             self.observedAt = observedAt
         }
         public let totalBytes: Int64
+        /// The part of the total that is prepared models, so media and models read apart.
+        public let modelBytes: Int64
         public let observedAt: String
     }
 
     /// The take whose closed inputs no longer appear in capture status.
     public var takeNeedingResolution: String? {
         guard let take, !["complete", "interrupted", "canceled"].contains(take.state) else { return nil }
-        return take.recordingId
+        return take.id
     }
 
     /// Returns whether a newly observed interruption needs the person's attention.
@@ -303,14 +231,14 @@ public struct ControlsState: Equatable, Sendable {
     public mutating func observeTake(_ observed: TakeStatus?) -> Bool {
         guard let observed else { return false }
         let newlyInterrupted = observed.state == "interrupted"
-            && (take?.recordingId != observed.recordingId || take?.state != "interrupted")
+            && (take?.id != observed.id || take?.state != "interrupted")
         take = observed
         return newlyInterrupted
     }
 
     /// A confirmed deletion cannot keep controls attached to the missing take.
     public mutating func takeWasDeleted(_ recordingId: String) {
-        if take?.recordingId == recordingId { take = nil }
+        if take?.id == recordingId { take = nil }
     }
 
     /// Native acquisition and service recovery both retain a take until finalization settles.
@@ -318,6 +246,24 @@ public struct ControlsState: Equatable, Sendable {
         if take?.state == "finalizing" { return true }
         guard let device else { return false }
         return device.state == .recording || device.state == .paused || device.state == .selecting || device.state == .finalizing
+    }
+
+    /// Whether the ink is up: while the device records or pauses, and from the moment a start
+    /// answers that its take is live, since marks come straight from the capture and can arrive
+    /// before a status read says the device is recording. Once the device has reported a take it
+    /// alone decides, so a stopped take's ink comes down while the stored take still says recording.
+    public var showsInk: Bool {
+        if device?.state == .recording || device?.state == .paused { return true }
+        guard let take, take.id != deviceReportedTake else { return false }
+        return take.state == "recording" || take.state == "paused"
+    }
+
+    /// The source owned by the live take, retained before the next catalog poll can refresh the
+    /// menu selection. A restart must use this identity when a hotkey chose another display. It
+    /// belongs to one take: a later take, however it was started, restarts on its own selection.
+    public var restartStart: CaptureSelection.Start? {
+        if let activeStart, activeStart.recordingId == device?.recordingId { return activeStart.start }
+        return start()
     }
 }
 
@@ -351,18 +297,18 @@ extension ControlsState.CaptureSelection {
             case display(id: Int)
             case window(id: Int)
             case region(displayId: Int, x: Double, y: Double, width: Double, height: Double)
-            case camera(deviceId: String)
+            case camera(id: String)
 
             private enum CodingKeys: String, CodingKey {
-                case kind, displayId, windowId, deviceId, x, y, width, height
+                case kind, id, displayId, x, y, width, height
             }
 
             public init(from decoder: Decoder) throws {
                 let fields = try decoder.container(keyedBy: CodingKeys.self)
                 switch try fields.decode(String.self, forKey: .kind) {
-                case "display": self = .display(id: try fields.decode(Int.self, forKey: .displayId))
-                case "window": self = .window(id: try fields.decode(Int.self, forKey: .windowId))
-                case "camera": self = .camera(deviceId: try fields.decode(String.self, forKey: .deviceId))
+                case "display": self = .display(id: try fields.decode(Int.self, forKey: .id))
+                case "window": self = .window(id: try fields.decode(Int.self, forKey: .id))
+                case "camera": self = .camera(id: try fields.decode(String.self, forKey: .id))
                 case "region":
                     self = .region(
                         displayId: try fields.decode(Int.self, forKey: .displayId),
@@ -381,13 +327,13 @@ extension ControlsState.CaptureSelection {
                 switch self {
                 case .display(let id):
                     try fields.encode("display", forKey: .kind)
-                    try fields.encode(id, forKey: .displayId)
+                    try fields.encode(id, forKey: .id)
                 case .window(let id):
                     try fields.encode("window", forKey: .kind)
-                    try fields.encode(id, forKey: .windowId)
-                case .camera(let deviceId):
+                    try fields.encode(id, forKey: .id)
+                case .camera(let id):
                     try fields.encode("camera", forKey: .kind)
-                    try fields.encode(deviceId, forKey: .deviceId)
+                    try fields.encode(id, forKey: .id)
                 case .region(let displayId, let x, let y, let width, let height):
                     try fields.encode("region", forKey: .kind)
                     try fields.encode(displayId, forKey: .displayId)
@@ -403,33 +349,67 @@ extension ControlsState.CaptureSelection {
 }
 
 extension ControlsState {
+    public enum StartOrigin: Equatable, Sendable {
+        case menu
+        case hotkey(pointer: CGPoint)
+    }
+
     /// What a start of the current selection asks for; nil until a source is selected.
     ///
     /// A screen take reserves a companion camera whenever camera access is granted: the picked
     /// camera, or the system default. It starts on or off as the switch says, and can be turned
     /// on later either way. Without access nothing is reserved, unless the switch is on: a camera
     /// a person asked for is still asked for, so the refusal names the missing permission.
-    public func start() -> CaptureSelection.Start? {
-        guard let source = selection.source else { return nil }
+    public func start(origin: StartOrigin = .menu) -> CaptureSelection.Start? {
+        let selectedSource: SelectedSource?
+        switch origin {
+        case .menu:
+            selectedSource = selection.source
+        case .hotkey(let pointer):
+            selectedSource = display(under: pointer).map { .display($0) }
+        }
+        guard let source = selectedSource else { return nil }
         let chosen: CaptureSelection.Start.Source
         switch source {
         case .display(let display): chosen = .display(id: display.id)
         case .window(let window): chosen = .window(id: window.id)
         case .camera:
             guard let deviceId = selection.cameraDeviceId, !deviceId.isEmpty else { return nil }
-            chosen = .camera(deviceId: deviceId)
+            chosen = .camera(id: deviceId)
         case .region(let region):
             chosen = .region(displayId: region.displayId, x: region.x, y: region.y,
                 width: region.width, height: region.height)
         }
-        let reserves = source != .camera && (permissions?.camera == .granted || selection.cameraOn)
+        let reserves = source != .camera && cameraAvailable && (permissions?.camera == .granted || selection.cameraOn)
         let companion = reserves ? selection.cameraDeviceId ?? defaultCamera : nil
         let cameraAtStart: CameraSwitch? = companion == nil ? nil : selection.cameraOn ? .on : .off
         let microphoneDeviceId: String?
         if case .device(let id, _) = selection.microphone { microphoneDeviceId = id } else { microphoneDeviceId = nil }
         return .init(
-            source: chosen, microphone: selection.microphone != .off, microphoneDeviceId: microphoneDeviceId,
+            source: chosen, microphone: selection.microphone != .off && microphoneAvailable,
+            microphoneDeviceId: microphoneAvailable ? microphoneDeviceId : nil,
             systemAudio: selection.systemAudio, cameraDeviceId: companion, cameraAtStart: cameraAtStart)
+    }
+
+    /// Picks the display containing a pointer, falling back to the nearest display when the
+    /// pointer is on a boundary or in the gap between displays. Catalog order is the final tie
+    /// break, keeping an injected catalog deterministic.
+    private func display(under pointer: CGPoint) -> Display? {
+        sources.displays.enumerated().min { left, right in
+            let leftContains = left.element.frame?.contains(pointer) == true
+            let rightContains = right.element.frame?.contains(pointer) == true
+            if leftContains != rightContains { return leftContains }
+            let leftDistance = left.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            let rightDistance = right.element.frame.map { distance(from: pointer, to: $0) } ?? .greatestFiniteMagnitude
+            if leftDistance != rightDistance { return leftDistance < rightDistance }
+            return left.offset < right.offset
+        }?.element
+    }
+
+    private func distance(from point: CGPoint, to rect: CGRect) -> CGFloat {
+        let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
+        let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
+        return hypot(dx, dy)
     }
 
     /// The camera the system prefers, or the first listed.
@@ -453,14 +433,13 @@ extension ControlsState {
     public mutating func setCamera(_ on: Bool) -> SetCamera? {
         if isLive {
             guard device?.camera != nil, let recordingId = device?.recordingId else {
-                failure = "This take has no camera to turn on or off."
+                failure = .init("This take has no camera to turn on or off.")
                 return nil
             }
             return .init(recordingId: recordingId, on: on)
         }
         guard !counting, selection.source != .camera else { return nil }
         selection.cameraOn = on
-        selectDefaultCameraIfNeeded(enabled: on)
         return nil
     }
 }
@@ -497,42 +476,54 @@ extension ControlsState {
     /// Takes a fresh catalog, keeping the selection to what still exists.
     public mutating func observeSources(_ catalog: SourceCatalog) {
         sources = catalog
-        if let lost = reconcileSelection() { failure = lost }
+        if let lost = reconcileSelection(), failure == nil { failure = .init(lost) }
+        // Until a person picks a camera, the system's preferred one is picked. Picking never turns
+        // the camera on: the switch alone does that.
+        if selection.cameraDeviceId == nil, let preferred = defaultCamera { selection.cameraDeviceId = preferred }
     }
 
-    /// Offers the system's preferred camera only when the caller has enabled camera capture.
-    /// A disabled companion camera must remain disabled.
-    public mutating func selectDefaultCameraIfNeeded(enabled: Bool) {
-        guard enabled, selection.cameraDeviceId == nil, !sources.cameras.isEmpty else { return }
-        selection.cameraDeviceId = (sources.cameras.first(where: \.isDefault) ?? sources.cameras[0]).id
+    /// Picks which camera the switch turns on, leaving the switch as it is.
+    public mutating func chooseCamera(_ id: String) {
+        guard sources.cameras.contains(where: { $0.id == id }) else { return }
+        selection.cameraDeviceId = id
     }
+
+    /// A Mac with no camera, or no microphone, has nothing for that switch to turn on: it shows
+    /// off and disabled, and a take records without it.
+    public var cameraAvailable: Bool { !sources.cameras.isEmpty }
+    public var microphoneAvailable: Bool { !sources.microphones.isEmpty }
+
+    /// A camera-only take needs a camera to record; a screen take never waits for one.
+    public var cameraBlocksStart: Bool { selection.source == .camera && selection.cameraDeviceId == nil }
 
     /// A catalog read that failed says nothing about which sources exist, so the last catalog and
     /// the selection stand. Absent screen authorization is a successful catalog with empty
     /// screen choices; cameras and microphones are discovered independently.
     public mutating func sourcesUnavailable(description: String) {
-        failure = description
+        if failure == nil || failure?.request == "capture.sources" {
+            failure = .init(description, request: "capture.sources")
+        }
     }
 
     /// Refreshes labels by identity: a browser navigation changes a title without closing its
-    /// window. Until anything was ever selected, the first display is offered. A selected source
-    /// that disappears is dropped and said so, and never replaced by a guess, so a shortcut cannot
-    /// record something nobody chose.
+    /// window. A disconnected display falls back quietly to the system's main display. A closed
+    /// window or lost region still needs a new explicit selection.
     private mutating func reconcileSelection() -> String? {
-        if selection.source != nil { sourceWasSelected = true }
+        if selection.source != nil { needsDefaultDisplay = false }
         var failure: String?
         switch selection.source {
         case .display(let selected):
-            selection.source = sources.displays.first { $0.id == selected.id }.map { .display($0) }
-            if selection.source == nil { failure = "\(selected.name) is no longer available." }
+            selection.source = (sources.displays.first { $0.id == selected.id } ?? sources.defaultDisplay)
+                .map { .display($0) }
+            needsDefaultDisplay = selection.source == nil
         case .window(let selected):
             selection.source = sources.windows.first { $0.id == selected.id }.map { .window($0) }
             if selection.source == nil { failure = "That window has closed, so it is no longer selected." }
         case .region(let chosen) where !sources.displays.contains(where: { $0.id == chosen.displayId }):
             selection.source = nil
             failure = "\(chosen.displayName) is no longer available."
-        case nil where !sourceWasSelected:
-            selection.source = sources.displays.first.map { .display($0) }
+        case nil where needsDefaultDisplay:
+            selection.source = sources.defaultDisplay.map { .display($0) }
         default: break
         }
         if case .device(let id, _) = selection.microphone,
@@ -555,6 +546,7 @@ extension ControlsState {
     public struct StartRequest: Equatable, Sendable {
         public let requestId: String
         public let start: CaptureSelection.Start
+        public let origin: StartOrigin
         /// Whether this asks again for a start whose answer had not arrived.
         public let repeatsUnanswered: Bool
     }
@@ -583,24 +575,28 @@ extension ControlsState {
     /// The request for a start of the current selection, or nil with the reason when there is none.
     /// A start whose answer has not arrived is asked for again under its own request ID, so the
     /// service resolves the take it already allocated instead of allocating another.
-    public mutating func beginStart(newRequestId: String) -> StartRequest? {
-        guard let start = self.start() else {
-            failure = "Choose a source before recording."
+    public mutating func beginStart(
+        newRequestId: String, origin: StartOrigin = .menu, retrying: StartRequest? = nil
+    ) -> StartRequest? {
+        guard let start = retrying?.start ?? self.start(origin: origin) else {
+            failure = .init("Choose a source before recording.")
             return nil
         }
         if let unansweredStart, unansweredStart.start == start {
-            let replay = StartRequest(requestId: unansweredStart.requestId, start: start, repeatsUnanswered: true)
+            let replay = StartRequest(
+                requestId: unansweredStart.requestId, start: start, origin: unansweredStart.origin,
+                repeatsUnanswered: true)
             self.unansweredStart = replay
             return replay
         }
-        if selection.source == .camera {
-            guard let selected = selection.cameraDeviceId,
-                sources.cameras.contains(where: { $0.id == selected }) else {
-                failure = "Choose an available camera before recording."
+        if case .camera(let selected) = start.source {
+            guard sources.cameras.contains(where: { $0.id == selected }) else {
+                failure = .init("Choose an available camera before recording.")
                 return nil
             }
         }
-        let request = StartRequest(requestId: newRequestId, start: start, repeatsUnanswered: false)
+        let request = StartRequest(
+            requestId: newRequestId, start: start, origin: retrying?.origin ?? origin, repeatsUnanswered: false)
         unansweredStart = request
         return request
     }
@@ -611,7 +607,17 @@ extension ControlsState {
     public mutating func finishStart(_ request: StartRequest, _ answer: StartAnswer) -> Bool {
         guard answer != .unanswered else { return false }
         if unansweredStart?.requestId == request.requestId { unansweredStart = nil }
+        if answer == .live || answer == .ended, failure?.scope == .capture,
+            case .start = failure?.action { failure = nil }
+        // The answer's take has just been observed, so it names the take this start made.
+        if answer == .live, let recordingId = take?.id { activeStart = ActiveStart(recordingId: recordingId, start: request.start) }
+        else if answer == .refused || (answer == .ended && request.repeatsUnanswered) { activeStart = nil }
         return answer == .ended && request.repeatsUnanswered
+    }
+
+    /// A restart replaces the take under a new ID; the start it was made from moves to that take.
+    public mutating func restarted(recordingId: String, start: CaptureSelection.Start) {
+        activeStart = ActiveStart(recordingId: recordingId, start: start)
     }
 }
 

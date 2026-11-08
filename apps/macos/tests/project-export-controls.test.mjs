@@ -48,15 +48,15 @@ let otherFolder = CommandLine.arguments[3]
         let answer: [String: Any]
         switch operation {
         case "recording.get", "project.get":
-            var owner: [String: Any] = params
-            if wrongOwner { owner = ["projectId": "another-owner"] }
+            var owner: [String: Any] = ["id": params["projectId"] ?? params["recordingId"]!]
+            if wrongOwner { owner = ["id": "another-owner"] }
             owner["createdAt"] = "2026-09-17T10:11:12.345Z"
             owner["title"] = "Named / project: test\nsecond line"
             owner["currentRevisionId"] = revision
             answer = owner
         case "export.create":
-            let id = params["exportId"] as! String
-            var receipt: [String: Any] = ["exportId": id, "kind": params["kind"]!,
+            let id = params["requestId"] as! String
+            var receipt: [String: Any] = ["id": id, "kind": params["kind"]!,
                 "snapshot": ["revisionId": params["revisionId"]!], "state": "queued",
                 "destination": ["directory": params["directory"]!, "leaf": params["leaf"]!],
                 "abandoning": false, "cleanupPending": false, "retryable": false]
@@ -109,7 +109,7 @@ let otherFolder = CommandLine.arguments[3]
 @MainActor func controller(_ script: Script, _ chooser: Chooser, _ failures: Failures) -> ExportController {
     ExportController(call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
         choose: { kind, name in script.revision = "r-after"; return await chooser.choose(kind, name) },
-        reveal: { _ in }, changed: {}, failure: { failures.values.append($0) })
+        reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.values.append(message) } })
 }
 @main struct Check {
     @MainActor static func until(line: Int = #line, _ ready: () -> Bool) async {
@@ -128,7 +128,7 @@ let otherFolder = CommandLine.arguments[3]
         precondition(request["revisionId"] as? String == "r-before" && request["kind"] as? String == "processed-package")
         precondition(request["directory"] as? String == canonicalFolder && request["leaf"] as? String == "requested.zip", "Chosen directory mismatch: \(request["directory"]!) vs \(canonicalFolder)")
         precondition(chooser.names == ["Project Named - project- test second line r-before.zip"])
-        let id = request["exportId"] as! String
+        let id = request["requestId"] as! String
         precondition(id == id.lowercased() && UUID(uuidString: id) != nil)
         try! FileManager.default.removeItem(atPath: selectedFolder)
         try! FileManager.default.createSymbolicLink(atPath: selectedFolder, withDestinationPath: otherFolder)
@@ -208,7 +208,7 @@ let otherFolder = CommandLine.arguments[3]
         let discovered = Script(), discoveryChooser = Chooser(), discoveryErrors = Failures()
         let discovery = controller(discovered, discoveryChooser, discoveryErrors)
         discovered.receipts = script.receipts
-        discovered.pages = [["exports": [["exportId": id]], "nextCursor": NSNull()]]
+        discovered.pages = [["exports": [["id": id]], "nextCursor": NSNull()]]
         discovered.hold = "export.status"
         discovery.discover()
         await until { discovered.held != nil }

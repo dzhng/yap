@@ -5,9 +5,18 @@ framing. App, socket, CLI and MCP consumers agree on one operation meaning. The
 [operation declarations](src/operations.ts) are the canonical schema catalog;
 adapters derive validation and help instead of maintaining another list.
 
+Operation replies use one envelope: `id`, `ok`, and either `data` or `error`, with
+optional wait metadata. Adapters preserve that contract; they do not translate a
+service refusal into a second error shape.
+
 Composition schemas come from their [pure owner](../composition/README.md).
 Serializable admission is not execution readiness: supported native capabilities,
 prepared dependencies and actual media availability are separate evidence.
+
+The [requirements JSON](src/requirements.json) owns take and stroke durations and
+record-growth inputs. TypeScript imports it and Swift loads the same checkout or
+bundled resource; the [development rule](../../DEVELOPMENT.md#limits-come-from-requirements)
+explains how other bounds derive from it.
 
 ## Published work
 
@@ -37,6 +46,18 @@ and message; `admitOperation` is that one admission for the CLI and service. The
 codes, so they never collide with UPPER_SNAKE refusal codes, each with typed
 evidence that names what was requested and what was produced. Issues are not
 ranked; ordering problems is an editorial call left to the caller.
+
+Each refusal code has one category, retryability, optional retry delay and plain
+cause in the [refusal ledger](src/refusal-ledger.json); every builder of a refusal,
+in any language, reads it there and nothing else states it. Retryable means an
+identical request can succeed later. The shared error constructor derives the
+ledger's retry metadata by code, and transports preserve it. Request-specific
+diagnostics remain in `details` beside the ledger cause. When one code would need
+two answers, it is two conditions with two codes.
+
+A resolving `details.retry` must pass its named operation's admission schema. The
+service may name the refused request itself only when its refusal is retryable and
+the request is a read or a write carrying durable request identity.
 
 Every publication envelope carries `issues`, empty when the output is clean, and
 export status carries the issues of its export. An output is bounded to 1000
@@ -94,6 +115,16 @@ A transport request ID correlates one exchange. A durable mutation request ID
 identifies an explicitly replayable domain write; changing correlation cannot
 turn an uncertain mutation into a new safe request. Structured failures preserve
 that distinction rather than implying a disconnected request was rolled back.
+A mutation request ID stays replayable for the life of the library: replay records
+are never pruned, including those of a deleted subject, so repeating a delete or a
+model removal still returns its first result. Each record is one small row per
+request, so the tables need no retention rule.
+
+A record names its own identity `id`; a reference to another record is `<noun>Id`,
+and a reference that can point at several kinds is `{kind, id}`. Parameters name
+what they act on by reference, so `asset.get {assetId}` returns `{id, …}`. An
+operation that starts work reports that work's status with its `jobId`; `job.get`
+returns the job itself. Producers own these names; no edge renames them.
 
 [Framing](src/framing.ts) owns byte and time bounds. Measure encoded UTF-8, not
 character count, and keep diagnostics outside the response channel. Complete

@@ -1,5 +1,6 @@
 import AppKit
 import YapControls
+import YapProtocol
 
 @main struct CaptureViewCheck {
     @MainActor static func main() {
@@ -21,6 +22,12 @@ import YapControls
         let input = fixture()
         let appIcon = NSImage(contentsOfFile: CommandLine.arguments[2])!
         let view = CaptureView(appIcon: appIcon, input: input) { recorded.append($0) }
+        // AppKit puts a scroll view back on the system's preferred scrollers whenever that
+        // preference changes, as it does while a mouse is connected. A reserved scroller would
+        // narrow the menu and clip its right edge.
+        view.scrollView.scrollerStyle = .legacy
+        precondition(view.scrollView.scrollerStyle == .overlay,
+                     "The capture menu keeps overlay scrollers whatever the system prefers")
         var withLastRecording = input
         withLastRecording.lastRecording = .init(recordingId: "fixture-recording", title: "Today — 0:12", canPlay: true, canCopyPrompt: true)
         let recent = CaptureView(appIcon: appIcon, input: withLastRecording) { recorded.append($0) }
@@ -34,6 +41,14 @@ import YapControls
         (recent.control(identifier: "recording.copyPrompt.fixture-recording") as! NSButton).performClick(nil)
         precondition(recorded.last == .controls(.copyRecordingPrompt("fixture-recording")),
                      "The capture menu dispatches the same prompt action as Library")
+        let failed = CaptureView(appIcon: appIcon, input: failureFixture()) { recorded.append($0) }
+        let retry = failed.control(identifier: ControlsAction.retryFailure.id)!
+        let dismiss = failed.control(identifier: ControlsAction.dismissFailure.id)!
+        let start = failed.control(identifier: "capture.start")!
+        precondition(retry.frame.minY == dismiss.frame.minY && retry.frame.maxX < dismiss.frame.minX,
+                     "Retry and Dismiss must share one row, with Retry first")
+        precondition(retry.frame.width < start.frame.width / 2 && retry.frame.height < start.frame.height,
+                     "Failure actions stay compact beside the primary recording action")
         func pixels(_ button: NSButton) -> Data {
             let bitmap = button.bitmapImageRepForCachingDisplay(in: button.bounds)!
             button.cacheDisplay(in: button.bounds, to: bitmap)
@@ -98,11 +113,19 @@ import YapControls
         precondition(microphone.state == .on, "Assistive clients can read the supplied microphone on state")
         microphone.performClick(nil)
         let camera = view.control(identifier: "camera.device") as! NSPopUpButton
-        camera.selectItem(at: 1)
+        camera.selectItem(at: 0)
         _ = camera.sendAction(camera.action!, to: camera.target)
         precondition(recorded == [.chooseSource(.cameraOnly), .controls(.disableMicrophone), .camera("fixture-camera")])
         window.orderOut(nil)
         window.close()
+        // A Mac with no camera or microphone shows both rows disabled and off.
+        let bare = CaptureView(appIcon: appIcon, input: fixture(noDevices: true)) { recorded.append($0) }
+        for id in ["camera.device", "camera.toggle", "microphone.device", "microphone.toggle"] {
+            precondition(bare.control(identifier: id)?.isEnabled == false, "\(id) is disabled when the Mac has no such device")
+        }
+        for id in ["camera.toggle", "microphone.toggle"] {
+            precondition((bare.control(identifier: id) as? NSSwitch)?.state == .off, "\(id) is off when the Mac has no such device")
+        }
         let selectedSource = CaptureView(appIcon: appIcon, input: fixture(secondSource: true)) { recorded.append($0) }
         let sourcePopup = selectedSource.control(identifier: "source.device") as! SourcePickerButton
         precondition(sourcePopup.title == "Studio Display", "Rebuilding preserves the owner-selected source device")
@@ -274,10 +297,13 @@ import YapControls
         let labelled = CommandLine.arguments[3] != "omit"
         var observations: [[String: Any]] = []
         for (name, facts, limit) in [
+            ("failure", failureFixture(), CGFloat(0)),
             ("idle", fixture(), CGFloat(0)),
             ("camera-only", fixture(cameraOnly: true), CGFloat(0)),
             ("recording", recordingFixture(), CGFloat(0)),
             ("last-recording", fixture(lastRecording: true), CGFloat(0)),
+            ("maximum-duration", maximumDurationFixture(), CGFloat(0)),
+            ("finalization-refused", finalizationFixture(), CGFloat(0)),
             ("paused", recordingFixture(paused: true), CGFloat(0)),
             ("admin-notice", adminNoticeFixture(), CGFloat(0)),
             ("admin-notice-dark", adminNoticeFixture(), CGFloat(0)),
@@ -285,6 +311,7 @@ import YapControls
             ("permissions-dark", permissionFixture(), CGFloat(0)),
             ("dark", fixture(), CGFloat(0)),
             ("long-names", fixture(longNames: true), CGFloat(0)),
+            ("no-devices", fixture(noDevices: true), CGFloat(0)),
             ("short-screen", fixture(longNames: true), CGFloat(440)),
         ] {
             let capture = CaptureView(appIcon: appIcon, input: facts) { recorded.append($0) }
@@ -309,7 +336,10 @@ import YapControls
             shotWindow.orderBack(nil)
             RunLoop.current.run(until: Date().addingTimeInterval(0.15))
             capture.layoutSubtreeIfNeeded()
-            if limit == 0 {
+            if name == "finalization-refused" {
+                precondition(capture.control(identifier: "capture.start") == nil,
+                    "A non-retryable finalization shows status without a retry control")
+            } else if limit == 0 {
                 let start = capture.control(identifier: "capture.start")!
                 let rect = start.convert(start.bounds, to: capture.scrollView.documentView!)
                 precondition(capture.scrollView.contentView.bounds.contains(rect), "The full-height view must show the complete Start button without scrolling")
@@ -324,7 +354,8 @@ import YapControls
             let doc = scroll.documentView!
             let quit = capture.control(identifier: "app.quit")!
             let anchoredQuit = quit.convert(quit.bounds, to: capture)
-            let ids = ["header.library", "header.settings", "source.display", "source.window", "source.area", "source.cameraOnly", "camera.device", "microphone.device", "microphone.toggle", "systemAudio.toggle", "countdown.toggle", "capture.start", "app.quit"] + (facts.selectedSource == .cameraOnly ? [] : ["source.device", "camera.toggle"])
+            let baseIDs = ["header.library", "header.settings", "source.display", "source.window", "source.area", "source.cameraOnly", "camera.device", "microphone.device", "microphone.toggle", "systemAudio.toggle", "countdown.toggle", "capture.start", "app.quit"] + (facts.selectedSource == .cameraOnly ? [] : ["source.device", "camera.toggle"])
+            let ids = baseIDs.filter { $0 != "capture.start" || facts.startTitle != nil }
             var frames: [String: [Double]] = [:]
             for id in ids {
                 let control = capture.control(identifier: id)!
@@ -374,6 +405,27 @@ import YapControls
 
     }
 
+    @MainActor static func finalizationFixture() -> CaptureViewInput {
+        var state = ControlsState(); state.service = .ready
+        state.device = .init(state: .idle, recordingId: nil, elapsedUs: nil)
+        state.take = .init(id: "unrecoverable", state: "finalizing", interruptionReason: nil, sourceDurationUs: nil,
+            finalizationError: .init(code: "INVALID_SOURCE", message: "Cannot finalize", retryable: false))
+        var input = fixture(locked: true, startEnabled: false, status: CapturePresentation.statusTitle(for: state))
+        input.startTitle = nil
+        input.notices = CapturePresentation.noticeLines(for: state)
+        input.transport = CapturePresentation.transport(for: state).filter { $0.action != .startOrStop }
+        return input
+    }
+
+    @MainActor static func maximumDurationFixture() -> CaptureViewInput {
+        var state = ControlsState()
+        state.take = .init(id: "twelve-hour-take", state: "complete", interruptionReason: nil,
+            sourceDurationUs: 43_200_000_000, completionReason: "maximumDuration")
+        var input = fixture(lastRecording: true)
+        input.notices = CapturePresentation.noticeLines(for: state)
+        return input
+    }
+
     @MainActor static func adminNoticeFixture() -> CaptureViewInput {
         var input = fixture()
         input.adminMessage = "Yap 0.1.41 cannot update itself. Back up ~/.yap, then reinstall Yap from justyap.io."
@@ -400,7 +452,19 @@ import YapControls
         return input
     }
 
-    @MainActor static func fixture(locked: Bool = false, cameraOnly: Bool = false, longNames: Bool = false, duplicateNames: Bool = false, microphoneOn: Bool = true, secondSource: Bool = false, startEnabled: Bool? = nil, status: String = "Ready to record", lastRecording: Bool = false, previews: Bool = true) -> CaptureViewInput {
+    @MainActor static func failureFixture() -> CaptureViewInput {
+        var input = fixture()
+        var state = ControlsState()
+        state.service = .ready
+        state.selection.source = .display(.init(id: 1, name: "Studio Display", width: 2560, height: 1440))
+        let request = state.beginStart(newRequestId: "fixture-start")!
+        state.failure = .init(RefusalLedger.cause("TIMEOUT")!, request: "fixture-start", action: .start(request), operation: "capture.start")
+        input.failureMessage = state.failure?.message
+        input.notices = CapturePresentation.noticeLines(for: state)
+        input.failureAction = CapturePresentation.failureAction(for: state)
+        return input
+    }
+    @MainActor static func fixture(locked: Bool = false, cameraOnly: Bool = false, longNames: Bool = false, duplicateNames: Bool = false, microphoneOn: Bool = true, secondSource: Bool = false, startEnabled: Bool? = nil, status: String = "Ready to record", lastRecording: Bool = false, previews: Bool = true, noDevices: Bool = false) -> CaptureViewInput {
         let preview = !previews ? nil : NSImage(size: NSSize(width: 160, height: 90), flipped: false) { rect in
             NSColor(calibratedWhite: 0.12, alpha: 1).setFill(); rect.fill()
             NSColor(calibratedRed: 0.24, green: 0.48, blue: 0.78, alpha: 1).setFill()
@@ -411,10 +475,10 @@ import YapControls
             return true
         }
         var input = CaptureViewInput(selectedSource: cameraOnly ? .cameraOnly : .display, selectedSourceChoice: secondSource ? 1 : 0, sourceChoices: [.init(title: longNames ? "A very long external display name for a conference studio · 5120 × 2880" : "Built-in Retina Display · 3024 × 1964", intent: .controls(.selectDisplay(1)), preview: preview)] + (secondSource ? [.init(title: "Studio Display", intent: .controls(.selectDisplay(2)), preview: preview)] : []),
-            cameraChoices: (cameraOnly ? [] : [.init(title: "No camera", intent: .camera(nil))]) + [.init(title: longNames ? "Conference room camera with an unusually long name" : "FaceTime HD Camera", intent: .camera("fixture-camera"))] + (duplicateNames ? [.init(title: "FaceTime HD Camera", intent: .camera("fixture-camera-second")), .init(title: "Another camera", intent: .camera("fixture-camera-third"))] : []),
-            selectedCamera: cameraOnly ? 0 : longNames ? 1 : 0, cameraOn: cameraOnly || longNames,
-            microphoneChoices: [.init(title: longNames ? "Conference room microphone with an unusually long name" : "MacBook Pro Microphone", intent: .controls(.selectMicrophone("fixture-mic")))],
-            selectedMicrophone: 0, microphoneOn: microphoneOn, systemAudio: true, countdown: true,
+            cameraChoices: noDevices ? [.init(title: "No camera", intent: .controls(.setCamera(false)))] : [.init(title: longNames ? "Conference room camera with an unusually long name" : "FaceTime HD Camera", intent: .camera("fixture-camera"))] + (duplicateNames ? [.init(title: "FaceTime HD Camera", intent: .camera("fixture-camera-second")), .init(title: "Another camera", intent: .camera("fixture-camera-third"))] : []),
+            selectedCamera: 0, cameraOn: !noDevices && (cameraOnly || longNames), cameraAvailable: !noDevices,
+            microphoneChoices: noDevices ? [.init(title: "No microphone", intent: .controls(.disableMicrophone))] : [.init(title: longNames ? "Conference room microphone with an unusually long name" : "MacBook Pro Microphone", intent: .controls(.selectMicrophone("fixture-mic")))],
+            selectedMicrophone: 0, microphoneOn: microphoneOn && !noDevices, microphoneAvailable: !noDevices, systemAudio: true, countdown: true,
             inputsEnabled: !locked, startEnabled: startEnabled ?? !locked, status: status)
         if lastRecording { input.lastRecording = .init(recordingId: "fixture-recording", title: "Today — 0:12", canPlay: true, canCopyPrompt: true) }
         return input

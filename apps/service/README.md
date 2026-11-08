@@ -74,6 +74,15 @@ plans; [native workers](../../helpers/mac/README.md) execute physical media work
 Authoring support and execution readiness are separate. Capability discovery
 must report actual prepared/native requirements rather than inventing a fallback.
 
+Work someone asked for always comes first. Jobs carry a priority: on the single heavy lane an
+interactive job starts before any background job, a running job is never preempted, and
+background work has its own bound outside the interactive limits and never waits on a
+dependency, so it cannot hold an update. The one background producer today is the
+[transcript backlog](../../packages/core/src/transcript-backlog.ts): every published recording
+and real import records its audio streams, and the backlog submits them once the speech model
+is ready, at startup or after preparation. Nothing waits on the model; an explicit request for
+the same transcript joins the queued job and promotes it.
+
 `service.health` remains a cheap listener-readiness check. Its model readiness comes
 from preparation receipts; hashing a prepared runtime grows with its size, so that
 stays with preparation, explicit `model.status` and execution. Startup preparation
@@ -88,9 +97,18 @@ Capture admission and donor retirement share one [source coordinator](src/captur
 A ready acquisition owns its media independently of its recording donor. Deletion
 joins borrowers and unfinished native work before donor removal; a mutable path
 or alias cannot replace the frozen authority already admitted.
+A recording deletion checks project users before fencing the take. It refuses with
+`IN_USE` details when a capture-origin copy is retained by a project; `cascade: true`
+retires those projects, the capture copies, their assets and evidence, and the donor
+directory as one durable deletion plan. An import made from inside the donor folder
+is an independent acquisition and survives the recording deletion.
 An idle device report proves closure only when it carries no take or source
 identity. Contradictory or pending native evidence keeps deletion fenced and
 source bytes retained rather than interpreting a shutdown request as completion.
+
+Service-authored terminal outcomes take precedence over late reports from the same
+native controller after source identity is checked; cleanup diagnostics cannot
+replace the [completion fact](../../packages/core/README.md#transactions-replay-and-lifetime).
 
 [Export coordination](src/exports.ts) executes a pinned durable intent. Video,
 standalone audio, plain caption sidecars and portable packages use the same

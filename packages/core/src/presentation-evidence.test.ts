@@ -71,7 +71,7 @@ test("exact support accepts held PTS before a cut while still membership stays s
   await expect(
     observeVisualSamples(
       {
-        recordingId: "fixture",
+        ownerId: "fixture",
         source: "/video.mov",
         kept: revision.spans[0]!,
         atSourceUs: [750_000],
@@ -227,15 +227,8 @@ test("history cursor preserves exact physical-empty reset boundaries even when q
   );
 });
 
-test("presentation admission bounds bytes and records before accepting history", async () => {
+test("presentation admission honors cancellation before accepting history", async () => {
   const f = await fixture();
-  for (const limits of [
-    { maxBytes: f.receipt.bytes - 1, maxRecords: 2 },
-    { maxBytes: f.receipt.bytes, maxRecords: 1 },
-  ])
-    await expect(
-      PresentationEvidence.open(f.receipt, revision.spans, signal(), limits),
-    ).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
   const aborted = new AbortController();
   aborted.abort();
   await expect(

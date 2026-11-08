@@ -47,7 +47,7 @@ export const speakerSource: SpeakerEvidenceSource = {
     startUs: { numerator: 125, denominator: 2 },
     endUs: { numerator: 60000125, denominator: 2 },
   },
-  pcm: { sha256: "c".repeat(64), sampleRate: 16000, frames: 480000 },
+  pcm: { sha256: "c".repeat(64), sampleRate: 16000, frameCount: 480000 },
   decoder: {
     recipe: "source-selected-span-avfoundation-f32-16k-v1",
     workerSha256: "d".repeat(64),

@@ -166,13 +166,14 @@ private func recoveryRefusalControls(root: URL, folder: URL, authority: [String:
     }
     let busy = try CaptureJournalLease(directory: folder.path)
     let response = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": authority], root: root, name: "\(kind)-busy", successful: false)
-    precondition((response["error"] as? [String: Any])?["code"] as? String == "CAPTURE_BUSY")
+    let busyError = response["error"] as? [String: Any]
+    precondition(busyError?["code"] as? String == "CAPTURE_BUSY")
     busy.release()
     let journalPath = folder.appendingPathComponent("capture.journal.jsonl").path
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: journalPath)
     let inaccessible = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": authority], root: root, name: "\(kind)-unreadable-journal", successful: false)
     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: journalPath)
-    precondition(inaccessible["ok"] as? Bool == false && (inaccessible["error"] as? [String: Any])?["retryable"] as? Bool == true)
+    precondition(inaccessible["ok"] as? Bool == false && (inaccessible["error"] as? [String: Any])?["code"] as? String == "JOURNAL_UNAVAILABLE")
     let canceled = Task {
         withUnsafeCurrentTask { $0?.cancel() }
         return try await MediaRecovery.recover(directory: folder.path, sourceAuthority: .init(kind: kind == "camera" ? .camera : .primary,
@@ -181,8 +182,12 @@ private func recoveryRefusalControls(root: URL, folder: URL, authority: [String:
     do { _ = try await canceled.value; preconditionFailure("Canceled authority recovery cannot classify a source") }
     catch is CancellationError {}
     var changed = authority; changed["sourceId"] = "wrong-source"
-    let mismatch = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": changed], root: root, name: "\(kind)-changed-binding", successful: false)
-    precondition(((mismatch["data"] as! [String: Any])["sourcePublication"] as! [String: Any])["state"] as? String == "unavailable")
+    let mismatch = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": changed], root: root, name: "\(kind)-changed-binding")
+    let data = mismatch["data"] as! [String: Any]
+    let outcome = data["sourcePublication"] as! [String: Any]
+    precondition(outcome["state"] as? String == "unavailable"
+        && (outcome["error"] as? [String: Any])?["code"] as? String == "INVALID_JOURNAL_PREFIX",
+        "Immutable authority mismatch must settle unavailable: \(mismatch)")
 }
 
 @MainActor
@@ -222,7 +227,11 @@ private func actualCrashRecovery(root: URL) async throws {
             let response = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": authority], root: root, name: "crash-\(mode)-\(kind)")
             let data = response["data"] as! [String: Any]
             let outcome = data["sourcePublication"] as! [String: Any]
-            if mode == "camera-only" && kind == "primary" { precondition(outcome["state"] as? String == "unavailable") }
+            if mode == "camera-only" && kind == "primary" {
+                precondition(outcome["state"] as? String == "unavailable"
+                    && (outcome["error"] as? [String: Any])?["code"] as? String == "INVALID_JOURNAL_PREFIX",
+                    "Retry cannot invent missing captured placement provenance")
+            }
             else {
                 precondition(outcome["state"] as? String == "published" && (data["durationUs"] as! Int64) > 0, "Actual crash must retain verified source support: \(response)")
                 let published = try JSONDecoder().decode(CapturePublishedSource.self, from: JSONSerialization.data(withJSONObject: outcome["source"]!))
@@ -296,7 +305,11 @@ private func interruptedAuthorityControls(root: URL) async throws {
         }
         let response = try await recoveryWire("media.recover", params: ["directory": folder.path, "sourceAuthority": authority], root: root, name: "primary-\(mode)")
         let data = response["data"] as! [String: Any]; let source = data["sourcePublication"] as! [String: Any]
-        precondition(source["state"] as? String == (mode == "permission" ? "pending" : "unavailable"))
+        let expectedCode = ["permission": "PUBLICATION_FAILED", "occupied": "INVALID_JOURNAL_PREFIX",
+            "no-video": "INVALID_MEDIA", "no-origin": "INVALID_JOURNAL_PREFIX"][mode]!
+        precondition(source["state"] as? String == (mode == "permission" ? "pending" : "unavailable")
+            && (source["error"] as? [String: Any])?["code"] as? String == expectedCode,
+            "Only operational publication failure may stay pending (\(mode)): \(response)")
         if mode == "permission" {
             precondition(data["durationUs"] as? Int == 300000)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: folder.path)

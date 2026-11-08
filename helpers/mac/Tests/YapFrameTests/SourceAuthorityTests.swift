@@ -60,7 +60,7 @@ func verifySourceAuthority(in parent: URL) async throws {
         _ = try await PresentationSource.prepare(source: oversized, streamId: nil)
         preconditionFailure("Oversized metadata must refuse")
     } catch let refusal as NativeFailure {
-        precondition(refusal.code == "LIMIT_EXCEEDED" && !refusal.retryable,
+        precondition(refusal.code == "LIMIT_EXCEEDED",
             "Metadata budget refusal must preserve its deterministic native meaning")
     }
     print("PASS inherited and normal-path presentation retain unchanged pixels/sample time after close, unlink and replacement; unopened metadata retains the same source")

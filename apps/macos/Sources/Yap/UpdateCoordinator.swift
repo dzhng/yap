@@ -1,4 +1,5 @@
 import Foundation
+import YapProtocol
 
 /// Joins existing native intent to the service's atomic permit. Sparkle owns the
 /// update cycle and launch exclusion. This owner never closes resources to obtain idle;
@@ -16,9 +17,19 @@ final class UpdateCoordinator {
             let retryable: Bool
         }
         var parameters: [String: Any] {
-            [
+            let workState: String
+            let availability = state == "disabled" ? "disabled" : state == "unavailable" ? "unavailable" : "available"
+            switch state {
+            case "idle": workState = "idle"
+            case "disabled", "unavailable": workState = "unavailable"
+            case "checking", "downloading", "installing": workState = "running"
+            case "failed": workState = "failed"
+            case "waiting": workState = "queued"
+            default: preconditionFailure("Unknown update state: \(state)")
+            }
+            return [
                 "update": [
-                    "state": state, "availableVersion": availableVersion as Any? ?? NSNull(),
+                    "state": workState, "jobId": NSNull(), "availability": availability, "availableVersion": availableVersion as Any? ?? NSNull(),
                     "blockers": blockers,
                     "error": error.map {
                         ["code": $0.code, "message": $0.message, "retryable": $0.retryable] as [String: Any]
@@ -70,7 +81,7 @@ final class UpdateCoordinator {
             && ["idle", "disabled", "failed"].contains(status.state)
     }
     var checkFailure: ServiceFailure {
-        ServiceFailure(code: "UPDATE_BUSY", message: "An update is already in progress.", retryable: true)
+        ServiceFailure(code: "UPDATE_BUSY", message: "An update is already in progress.")
     }
     func beginManualCheck() throws(ServiceFailure) {
         guard canStartManualCheck else { throw checkFailure }
@@ -366,7 +377,7 @@ final class UpdateCoordinator {
     }
     func fail(code: String, message: String) {
         status.state = "failed"
-        status.error = .init(code: code, message: message, retryable: false)
+        status.error = .init(code: code, message: message, retryable: RefusalLedger.retryable(code))
         publish()
     }
     private func stop(state: String) {

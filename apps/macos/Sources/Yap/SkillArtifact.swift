@@ -44,7 +44,7 @@ final class SkillArtifact {
         self.resources = resources
     }
 
-    /// Starts the install or removal in the background; `skill.status` reads `updating` until it settles.
+    /// Starts the install or removal in the background; `skill.status` reads `running` until it settles.
     @discardableResult
     func setEnabled(_ enabled: Bool, settled: @escaping @Sendable () -> Void = {}) -> String {
         let home = self.home
@@ -74,9 +74,17 @@ final class SkillArtifact {
 
     /// The last known state without running the installer: for a status line, not for agents.
     var summaryState: String {
-        if let state = readState()?.state { return state }
-        guard let receipt = readReceipt(), receipt.managed else { return "missing" }
-        return receipt.paths.allSatisfy { FileManager.default.fileExists(atPath: $0) } ? "installed" : "needs_attention"
+        if let state = readState()?.state {
+            switch state {
+            case "updating": return "running"
+            case "installed": return "ready"
+            case "needs_attention": return "failed"
+            case "missing", "disabled", "unmanaged": return "unavailable"
+            default: preconditionFailure("Unknown stored skill state: \(state)")
+            }
+        }
+        guard let receipt = readReceipt(), receipt.managed else { return "unavailable" }
+        return receipt.paths.allSatisfy { FileManager.default.fileExists(atPath: $0) } ? "ready" : "failed"
     }
 
     private var receiptURL: URL { home.appendingPathComponent(".config/yap/skill-install.json") }
@@ -111,8 +119,23 @@ final class SkillArtifact {
             ["path": path, "exists": FileManager.default.fileExists(atPath: path),
              "symlink": Self.isSymlink(URL(fileURLWithPath: path))]
         }
+        let workState: String
+        let installation: String
+        switch effective {
+        case "installed": workState = "ready"; installation = "installed"
+        case "updating":
+            workState = "running"
+            installation = receipt?.managed == true ? "installed" : "missing"
+        case "needs_attention": workState = "failed"; installation = "needs_attention"
+        case "missing": workState = "unavailable"; installation = "missing"
+        case "unmanaged": workState = "unavailable"; installation = "unmanaged"
+        case "disabled": workState = "unavailable"; installation = "disabled"
+        default: preconditionFailure("Unknown skill installation state: \(effective)")
+        }
         var value: [String: Any] = [
-            "state": effective,
+            "state": workState,
+            "jobId": (operationId ?? state?.operationId).map { $0 as Any } ?? NSNull(),
+            "installation": installation,
             "managed": receipt?.managed == true,
             "paths": paths,
             "destinations": details,
@@ -120,7 +143,6 @@ final class SkillArtifact {
             "sourceRevision": receipt?.entries.first?.source ?? NSNull(),
             "installer": receipt?.installer ?? Self.installer,
         ]
-        if let operationId = operationId ?? state?.operationId { value["operationId"] = operationId }
         if let error = state?.error { value["error"] = error }
         if let backupPath = state?.backupPath { value["backupPath"] = backupPath }
         if let entries = receipt?.entries, let data = try? JSONEncoder().encode(entries),

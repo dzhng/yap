@@ -113,19 +113,22 @@ try {
     });
   }
   const edited = await call("edit.apply", {
-    projectId: created.project.projectId,
+    projectId: created.project.id,
     expectedRevisionId: created.revision.id,
     requestId: "pressure",
     operations,
   });
-  const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+  const selection = {
+    projectId: created.project.id,
+    revisionId: edited.revision.id,
+  };
   const preparation = await call("audio.prepare", selection);
   const failed = await settled(preparation.jobId);
   await writeFile(join(home, "native-calls.json"), JSON.stringify(calls, null, 2));
   let recovered = failed;
   if (process.env.YAP_PRESSURE_EXPECT_FAILURE === "1") {
     assert.equal(failed.state, "failed", JSON.stringify(failed));
-    assert.equal(failed.retryable, true);
+    assert.equal(failed.retryable, true, JSON.stringify(failed));
     assert.match(
       failed.reason,
       /Too many open files|EMFILE|ENFILE|error -42/i,
@@ -144,7 +147,7 @@ try {
         (call) => call.operation === "media.prepareCompositionAudioDomain" && !call.result.ok,
       ),
     );
-    assert.equal(failed.result, null);
+    assert.equal(failed.published, null);
     assert.equal((await call("audio.prepare", selection)).published, null);
     assert.deepEqual(await readdir(join(home, "library", "render")), []);
     assert.deepEqual(await readFile(source), bytes);

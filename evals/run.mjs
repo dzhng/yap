@@ -198,12 +198,21 @@ try {
             status: "ready",
             update: testCase.fixture.endsWith("waiting")
               ? {
-                  state: "waiting",
+                  state: "queued",
+                  jobId: null,
+                  availability: "available",
                   availableVersion: "fixture-next",
                   blockers: ["capture", "delivery"],
                   error: null,
                 }
-              : { state: "disabled", availableVersion: null, blockers: [], error: null },
+              : {
+                  state: "unavailable",
+                  jobId: null,
+                  availability: "disabled",
+                  availableVersion: null,
+                  blockers: [],
+                  error: null,
+                },
           });
         if (testCase.cli) files["cli/main.mjs"] = cli.bundle;
         const artifact = await runContainer({

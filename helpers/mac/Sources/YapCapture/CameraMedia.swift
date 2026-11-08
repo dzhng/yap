@@ -49,10 +49,6 @@ package struct CameraFrameMapping: Codable {
 /// the outer span and `gaps` the off time strictly inside it, so a camera never turned off has
 /// no gaps. The only owner of camera interval arithmetic.
 package struct CameraAvailability: Sendable, Equatable {
-    /// A take turns its camera on at most 500 times, counting a turn-on at its start; the 501st is
-    /// refused (`CAMERA_TOGGLE_LIMIT`). Each turn-on starts at most one run, so at most 499 gaps;
-    /// that keeps the receipt inside its 64 KiB read bound and the normalized receipt's 32 KiB.
-    package static let maximumGaps = 499
     package let support: ExactRange
     package let gaps: [ExactRange]
 
@@ -72,8 +68,8 @@ package struct CameraAvailability: Sendable, Equatable {
             }
             merged.append(interval)
         }
-        guard let first = merged.first, let last = merged.last, merged.count - 1 <= Self.maximumGaps else {
-            throw CameraMedia.invalid("Camera availability requires 1...\(Self.maximumGaps + 1) intervals.")
+        guard let first = merged.first, let last = merged.last else {
+            throw CameraMedia.invalid("Camera availability requires a nonempty interval inventory.")
         }
         support = ExactRange(startUs: first.startUs, endUs: last.endUs)
         gaps = zip(merged, merged.dropFirst()).map { ExactRange(startUs: $0.endUs, endUs: $1.startUs) }
@@ -96,6 +92,8 @@ package struct CameraAvailability: Sendable, Equatable {
 
 /// Canonical camera publication/replay owner. Raw files and observations stay retained.
 package enum CameraMedia {
+    // One callback has bounded IDs and rational clocks (<8 KiB); 8× JSON/envelope margin is 64 KiB.
+    private static let observationLineBytes = 64 * 1024
     package static let mappingFile = "camera.mapping.jsonl"
     package enum Presentation: String, Codable { case nativeBounded = "native-bounded" }
     package struct Receipt: Codable {
@@ -137,7 +135,8 @@ package enum CameraMedia {
     private static func save<T: Encodable>(_ value: T, to url: URL) throws {
         let file = try NewFile(at: url.path, assembledAs: "receipt.json")
         defer { file.discard() }
-        try file.write(JSONEncoder().encode(value)); _ = try file.publish()
+        try file.write(JSONEncoder().encode(value))
+        _ = try file.publish()
     }
     package static func recordClosed(raw: URL, marker: URL) throws {
         try save(CaptureMediaIdentity.read(raw), to: marker)
@@ -169,9 +168,9 @@ package enum CameraMedia {
             }
             var info = stat()
             guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
-                info.st_size >= 0, info.st_size <= 268_435_456 else {
+                info.st_size >= 0 else {
                 Darwin.close(descriptor)
-                throw invalid("Camera mapping exceeds its regular-file read budget.")
+                throw invalid("Camera mapping must be a regular file.")
             }
             input = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
             openedBytes = info.st_size
@@ -194,7 +193,7 @@ package enum CameraMedia {
                 if let end = pending.firstIndex(of: 10) {
                     let data = Data(pending[..<end]); pending.removeSubrange(...end)
                     lines += 1
-                    guard lines <= 5_000_000, data.count <= 65536 else { throw invalid("Observation bounds exceeded.") }
+                    guard data.count <= observationLineBytes else { throw invalid("Camera observation row exceeds its envelope budget.") }
                     let row: Row
                     do { row = try JSONDecoder().decode(Row.self, from: data) }
                     catch { throw invalid("Malformed camera observation row.") }
@@ -212,7 +211,7 @@ package enum CameraMedia {
                         return frame
                     } else if row.cameraFrame != nil { throw invalid("Unaccepted picture has a camera mapping.") }
                 } else {
-                    guard pending.count <= 65536 else { throw invalid("Observation line exceeds bounded size.") }
+                    guard pending.count <= observationLineBytes else { throw invalid("Camera observation row exceeds its envelope budget.") }
                     if eof { torn = !pending.isEmpty; return nil }
                     let remaining = openedBytes - readBytes
                     if remaining == 0 {
@@ -302,11 +301,11 @@ package enum CameraMedia {
 
     /// The original closed observation bytes become a local immutable publication dependency.
     package static func retainMapping(observations: URL, directory: URL, identity: CaptureMediaIdentity? = nil) throws -> URL {
-        let expected = try identity ?? CaptureMediaIdentity.read(observations, maximumBytes: 268_435_456)
-        guard expected.bytes > 0, expected.bytes <= 268_435_456 else { throw invalid("Camera mapping exceeds its read budget.") }
+        let expected = try identity ?? CaptureMediaIdentity.read(observations)
+        guard expected.bytes > 0 else { throw invalid("Camera mapping is empty.") }
         let target = directory.appendingPathComponent(mappingFile)
         if FileManager.default.fileExists(atPath: target.path) {
-            guard try CaptureMediaIdentity.read(target, maximumBytes: 268_435_456) == expected else { throw invalid("Retained camera mapping differs from closed observations.") }
+            guard try CaptureMediaIdentity.read(target) == expected else { throw invalid("Retained camera mapping differs from closed observations.") }
             return target
         }
         let descriptor = Darwin.open(observations.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
@@ -326,22 +325,22 @@ package enum CameraMedia {
             guard bytes <= expected.bytes else { throw invalid("Closed camera mapping changed length.") }
             try output.write(contentsOf: data)
         }
-        guard try CaptureMediaIdentity.read(file.url, maximumBytes: 268_435_456) == expected,
-            try CaptureMediaIdentity.read(observations, maximumBytes: 268_435_456) == expected else { throw invalid("Closed camera mapping changed during retention.") }
+        guard try CaptureMediaIdentity.read(file.url) == expected,
+            try CaptureMediaIdentity.read(observations) == expected else { throw invalid("Closed camera mapping changed during retention.") }
         _ = try file.publish()
         return target
     }
 
     private static func facts(_ lease: CaptureJournalLease, through prefix: JournalPrefix? = nil) throws -> CaptureJournalSummary {
         try lease.check()
-        return try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: 268_435_456, retainTiming: true,
+        return try CaptureJournal.readEvidence(directory: lease.directory, retainTiming: true,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, retainPrefix: true,
             through: prefix, descriptor: lease.descriptor)
     }
 
     private static func validateJournal(_ receipt: Receipt, lease: CaptureJournalLease) throws {
         let pinned = try facts(lease, through: receipt.journal)
-        guard let header = pinned.header, header.schemaVersion == 1 else { throw invalid("Camera requires its source journal.") }
+        guard let header = pinned.header, JournalSchema.isCompanion(header.schemaVersion) else { throw invalid("Camera requires its source journal.") }
         let production = header.source.kind == "camera" || header.cameraBinding != nil || receipt.binding != nil
         if production {
             guard let binding = receipt.binding, header.source.kind == "camera", header.cameraBinding == binding,
@@ -436,7 +435,7 @@ package enum CameraMedia {
     }
     private static func scanCanonical(_ url: URL, mappingURL: URL, represented: Int, scale: Int32,
         expected: CameraAvailability?) async throws -> CanonicalScan {
-        guard represented > 0, represented <= 5_000_000, scale > 0 else { throw invalid("Invalid represented camera picture count or timescale.") }
+        guard represented > 0, scale > 0 else { throw invalid("Invalid represented camera picture count or timescale.") }
         let candidate = try await Pictures(url: url)
         // Occupied segments are the canonical movie's only statement of availability.
         let availability: CameraAvailability
@@ -471,11 +470,15 @@ package enum CameraMedia {
         guard descriptor >= 0 else { throw CaptureFailure([ENOENT, ENOTDIR, ELOOP].contains(errno) ? "INVALID_CAMERA_MAPPING" : "MEDIA_UNAVAILABLE", "Cannot read camera publication receipt.") }
         let input = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
         defer { try? input.close() }
-        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"), maximumBytes: receiptLimit)
-        let data = try input.read(upToCount: Int(receiptLimit) + 1) ?? Data()
-        guard Int64(data.count) == identity.bytes, hex(SHA256.hash(data: data)) == identity.sha256 else { throw invalid("Camera publication receipt changed during read.") }
-        do { return (try JSONDecoder().decode(Receipt.self, from: data), identity) }
+        let identity = try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)"))
+        do {
+            let receipt = try JSONDecoder().decode(Receipt.self, from: input.readToEnd() ?? Data())
+            guard try CaptureMediaIdentity.read(URL(fileURLWithPath: "/dev/fd/\(descriptor)")) == identity else { throw invalid("Camera publication receipt changed during read.") }
+            return (receipt, identity)
+        } catch let failure as CaptureFailure { throw failure }
+        catch is CancellationError { throw CancellationError() }
         catch { throw invalid("Malformed retained camera publication.") }
+
     }
 
     /// Encodes the receipt's form: outer `support`, and `gaps` only when the camera was off.
@@ -504,7 +507,7 @@ package enum CameraMedia {
         let (receipt, receiptIdentity) = try readReceipt(receiptURL)
         try validateJournal(receipt, lease: lease)
         let mappingURL = root.appendingPathComponent(mappingFile)
-        let mapping = try CaptureMediaIdentity.read(mappingURL, maximumBytes: 268_435_456)
+        let mapping = try CaptureMediaIdentity.read(mappingURL)
         guard mapping == receipt.observations, try CaptureMediaIdentity.read(canonical) == receipt.canonical else { throw invalid("Canonical camera or mapping differs from publication.") }
         let scale: Int32
         if let retained = receipt.pictureTimeScale { scale = retained }
@@ -526,14 +529,12 @@ package enum CameraMedia {
         guard try availability.support.startUs.sample(1_000_000, nearest: true) == receipt.firstUs,
             try availability.support.endUs.sample(1_000_000, nearest: true) == receipt.endUs,
             try CaptureMediaIdentity.read(canonical) == receipt.canonical,
-            try CaptureMediaIdentity.read(mappingURL, maximumBytes: 268_435_456) == mapping,
-            try CaptureMediaIdentity.read(receiptURL, maximumBytes: receiptLimit) == receiptIdentity else { throw invalid("Camera publication changed during canonical verification.") }
+            try CaptureMediaIdentity.read(mappingURL) == mapping,
+            try CaptureMediaIdentity.read(receiptURL) == receiptIdentity else { throw invalid("Camera publication changed during canonical verification.") }
         try validateJournal(receipt, lease: lease)
         return (VerifiedSource(canonical: receipt.canonical, receipt: receiptIdentity, mapping: mapping,
             availability: availability, representedFrames: receipt.representedFrames), receipt.diagnostics)
     }
-    /// Room for the most gaps a receipt may state, each with fractional endpoints.
-    private static let receiptLimit = Int64(65536)
 
     fileprivate struct IntendedSupport: Sendable {
         let source: Source
@@ -763,7 +764,7 @@ package enum CameraMedia {
             defer { Darwin.close(fd) }
             var info = stat()
             guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_uid == getuid(),
-                request.bytes > 0, request.bytes <= info.st_size, request.bytes <= 268_435_456,
+                request.bytes > 0, request.bytes <= info.st_size,
                 ftruncate(fd, request.bytes) == 0 else {
                 throw invalid("Camera observation snapshot exceeds its written prefix.")
             }
@@ -1179,7 +1180,7 @@ package enum CameraMedia {
         let receiptURL = root.appendingPathComponent("camera.publication.json")
         let canonicalURL = root.appendingPathComponent("video.mov")
         let rawIdentity = try CaptureMediaIdentity.read(rawURL)
-        let observationIdentity = try CaptureMediaIdentity.read(observationURL, maximumBytes: 268_435_456)
+        let observationIdentity = try CaptureMediaIdentity.read(observationURL)
         let mappingURL = try retainMapping(observations: observationURL, directory: root, identity: observationIdentity)
         let provenance = try facts(lease)
         guard let header = provenance.header, let prefix = provenance.validatedPrefix else { throw invalid("Camera publication requires source journal provenance.") }
@@ -1199,8 +1200,8 @@ package enum CameraMedia {
         func unchanged() throws {
             try lease.check(); try Task.checkCancellation()
             guard try CaptureMediaIdentity.read(rawURL) == rawIdentity,
-                try CaptureMediaIdentity.read(observationURL, maximumBytes: 268_435_456) == observationIdentity,
-                try CaptureMediaIdentity.read(mappingURL, maximumBytes: 268_435_456) == observationIdentity,
+                try CaptureMediaIdentity.read(observationURL) == observationIdentity,
+                try CaptureMediaIdentity.read(mappingURL) == observationIdentity,
                 (FileManager.default.fileExists(atPath: markerURL.path) ? try CaptureMediaIdentity.read(markerURL) : nil) == closed else { throw invalid("Camera input changed during publication.") }
         }
         if FileManager.default.fileExists(atPath: receiptURL.path) {

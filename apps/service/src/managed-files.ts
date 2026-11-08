@@ -64,7 +64,6 @@ export class ManagedFiles {
             "RECORDING_BUSY",
             "A native worker still owns this recording; retry after it exits",
             { recordingId },
-            true,
           );
         throw error;
       },
@@ -84,6 +83,10 @@ export class ManagedFiles {
       await handle.close();
       throw error;
     }
+  }
+  /** The path owned by recording retirement; byte inspection uses this same root. */
+  recordingPaths(recordingId: string): readonly string[] {
+    return [join(this.home, "recordings", recordingId)];
   }
   removeRecordingDirectory(
     recordingId: string,

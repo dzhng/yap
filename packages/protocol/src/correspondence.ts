@@ -1,5 +1,6 @@
 import { processingTapSchema, selectionRangeSchema, signedTimeValueSchema } from "@yap/composition";
 import { z } from "zod";
+import { pageParams } from "./paging.js";
 
 const id = z.string().min(1);
 const sourceEndpointSchema = z.strictObject({
@@ -8,16 +9,16 @@ const sourceEndpointSchema = z.strictObject({
   streamId: id,
   acquisitionId: id.optional(),
   channel: z.int().nonnegative(),
-  range: selectionRangeSchema,
+  sourceRange: selectionRangeSchema,
 });
 const projectEndpointSchema = z.strictObject({
   kind: z.literal("project"),
-  projectId: id,
+  id: id,
   revisionId: id,
   preparedResourceId: id,
   tap: processingTapSchema,
   channel: z.int().nonnegative(),
-  range: selectionRangeSchema,
+  sourceRange: selectionRangeSchema,
 });
 export const correspondenceEndpointSchema = z.discriminatedUnion("kind", [
   sourceEndpointSchema,
@@ -130,7 +131,7 @@ export type CorrespondenceMeasurement = z.infer<typeof correspondenceMeasurement
 
 export const correspondenceReceiptSchema = z
   .strictObject({
-    evidenceId: id,
+    id,
     generation: id,
     recipe: z.literal("temporal-correspondence-v1"),
     left: correspondenceEndpointSchema,
@@ -154,12 +155,8 @@ export const correspondencePrepareParamsSchema = z.strictObject({
   right: correspondenceEndpointSchema,
   measurement: correspondenceMeasurementSchema,
 });
-export const correspondenceGetParamsSchema = z.strictObject({
+export const correspondenceGetParamsSchema = pageParams({
   evidenceId: id,
   generation: id,
   packageHandle: id.optional(),
-  limit: z.int().min(1).max(128).optional(),
-  cursor: z
-    .strictObject({ evidenceId: id, generation: id, afterAnchor: z.int().min(-1) })
-    .optional(),
 });

@@ -87,7 +87,7 @@ extension CompositionAudio {
         guard let state = plan.state else { return nil }
         if plan.statePreparationImplementationId != nil || state.domains.contains(where: { $0.recipe != .rnnoise && $0.sampleRange.end > $0.sampleRange.start }) {
             guard plan.statePreparationImplementationId == statePreparationImplementation else {
-                throw NativeFailure("NOT_READY", "The bound audio state preparation implementation is unavailable.")
+                throw NativeFailure(plan.statePreparationImplementationId == nil ? "INTERNAL_ERROR" : "PINNED_IMPLEMENTATION_UNAVAILABLE", "The bound audio state preparation implementation is unavailable.")
             }
         }
         guard state.implementationId == rnnoiseImplementation, !state.domains.isEmpty,

@@ -31,13 +31,19 @@ public enum CaptureExclusion {
 
      Shareable content only names applications that have something on screen, so an app showing
      nothing has nothing here to exclude; the panels a take floats over the screen keep themselves
-     out of every capture instead.
+     out of every capture instead, unless the take later confirms it leaves them out.
      */
     public static func displayFilter(_ display: SCDisplay, in content: SCShareableContent) -> SCContentFilter {
+        ownExcludingFilter(display, in: content) ?? SCContentFilter(display: display, excludingWindows: [])
+    }
+
+    /// The same display minus this application, or nil while shareable content names nothing of
+    /// this application's to leave out.
+    public static func ownExcludingFilter(_ display: SCDisplay, in content: SCShareableContent) -> SCContentFilter? {
         let own = ownApplications(
             among: content.applications, bundleIdentifier: Bundle.main.bundleIdentifier,
             identity: \.bundleIdentifier)
-        guard !own.isEmpty else { return SCContentFilter(display: display, excludingWindows: []) }
+        guard !own.isEmpty else { return nil }
         return SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
     }
 }

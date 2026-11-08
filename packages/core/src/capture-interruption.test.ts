@@ -39,7 +39,7 @@ async function fixture({
   const acquisitions = new AcquisitionStore(catalog);
   const records = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw Error("Wrong owner");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const importer = new AcquisitionImporter(catalog, acquisitions, assets, records, home);
   await importer.recover(new AbortController().signal);
@@ -47,7 +47,7 @@ async function fixture({
   const projects = projectStoreFixture(catalog, assets, home, acquisitions);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw Error("Wrong owner");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   let inspection: ProjectEvidenceInspection;
@@ -57,7 +57,10 @@ async function fixture({
     targets: {
       pin: (target) => {
         if (target.kind !== "project") throw Error("No model work expected");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.id, target.revisionId).id,
+        };
       },
       isAvailable: () => true,
       isDeleting: () => false,
@@ -80,7 +83,7 @@ async function fixture({
     transcripts: new TranscriptProcessing({
       jobs,
       transcripts,
-      models: new Models(home).transcription("parakeet"),
+      models: new Models(home, globalThis.fetch, undefined, catalog).transcription("parakeet"),
       asset: { assets, acquisitions },
       transcribe: async () => {
         throw Error("Capture inspection cannot infer speech");
@@ -186,13 +189,13 @@ async function fixture({
         background: "#000000ff",
       },
     });
-    const applied = projects.apply(created.project.projectId, {
+    const applied = projects.apply(created.project.id, {
       requestId: randomUUID(),
       expectedRevisionId: created.revision.id,
       operations,
     });
     return {
-      projectId: created.project.projectId,
+      projectId: created.project.id,
       revisionId: applied.revision.id,
       labels: applied.edit.labels,
     };
@@ -465,7 +468,7 @@ test("reordered, repeated and rationally retimed capture endpoints retain exact 
   ).toEqual([
     [project.labels.earlier, 500, 1000, 500],
     [project.labels.later, null, null, 1000],
-    [project.labels.later, 500, 1000, { numerator: 3001, denominator: 2 }],
+    [project.labels.later, 500, 1000, 1501],
   ]);
 });
 

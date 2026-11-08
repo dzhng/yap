@@ -64,6 +64,11 @@ missed-filler and pause evidence, and reversible speaker-attribution corrections
 receipt and pinned continuation that bring launch-video playback under ten
 seconds while preserving the full-quality export contract.
 
+[Library deletion](done/library-deletion/README.md) records why every deletable thing in
+Yap follows one rule (a refusal names what still uses it; `cascade` deletes those users),
+how a delete stays safe across crashes and concurrent use, and the one rule per concept
+the public API gained alongside it.
+
 ## Archived plans
 
 The [reliable autonomous video editing rationale](done/video-editing-feedback/README.md)
@@ -77,6 +82,19 @@ the mechanics; the archived document owns the reasons and explicit evidence limi
 [App-managed install](app-managed-install/README.md) makes agents the only install
 route: the agent places the app, and the app installs and keeps current the `yap`
 command, the skill and the PATH line. It is built and awaiting its release-day checks.
+
+[Library permissions](library-permissions.md) makes library permissions only as strict
+as they need to be: a small, independent companion to closed library deletion.
+
+[Show your agent](show-your-agent/README.md) brings back Yap's original use case: `⌥⇧S`
+to record, ⇧ to draw and pin, `⌥⇧V` to paste a prompt that hands the recording to your
+agent. It is built; its handoff names the checks left for a signed, installed build, and its
+choices ledger holds every call made without the user.
+
+[Long takes and honest retries](long-takes-and-retries/README.md) makes a take that recorded
+fine always importable: limits derive from two stated requirements (a 12-hour take, a 5-minute
+stroke), every failure says whether and how to retry, and the app never shows an error without
+a way forward. The implementation is built; release and installed acceptance remain.
 
 ## Future proposals
 

@@ -26,6 +26,35 @@ import { spectralWindows } from "@yap/core/audio-spectrum";
 
 type Input = Extract<z.infer<typeof operationSchema>, { operation: "join.verify" }>["params"];
 
+function publicSampleRange(range: { start: number; end: number }) {
+  return { startSamples: range.start, endSamples: range.end };
+}
+
+function publicAudio(value: any): any {
+  if (!value || typeof value !== "object") return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "bytes") result.sizeBytes = child;
+    else if (key === "frames" || key === "fftFrames" || key === "hopFrames")
+      result[
+        key === "frames" ? "frameCount" : key === "fftFrames" ? "fftFrameCount" : "hopFrameCount"
+      ] = child;
+    else if (key === "dataOffset") result.dataOffsetBytes = child;
+    else if (key === "dataBytes") result.dataSizeBytes = child;
+    else if (key === "gridStart") result.gridStartSamples = child;
+    else if (key === "center") result.centerSamples = child;
+    else if (key === "sampleRange" && child && typeof child === "object")
+      result.sampleRange = publicSampleRange(child as { start: number; end: number });
+    else if ((key === "analysis" || key === "available") && child && typeof child === "object")
+      result[key] = publicSampleRange(child as { start: number; end: number });
+    else if (key === "readFrames") result.frameCount = child;
+    else if (key === "start" && typeof child === "number") result.startSamples = child;
+    else if (key === "end" && typeof child === "number") result.endSamples = child;
+    else result[key] = Array.isArray(child) ? child.map(publicAudio) : publicAudio(child);
+  }
+  return result;
+}
+
 function coverage(requested: SelectionRange, observed: SelectionRange) {
   const start = fromTime(requested.startUs),
     end = fromTime(requested.endUs);
@@ -51,7 +80,8 @@ export async function verifyJoin(
 ) {
   const { composition } = owners;
   const prepared = owners.preparedAudio.resolve(composition, input.tap, input.preparedResourceId);
-  if (!prepared) throw new CatalogError("NOT_READY", "Prepared join-review tap is unavailable");
+  if (!prepared)
+    throw new CatalogError("PREREQUISITE_MISSING", "Prepared join-review tap is unavailable");
   const boundary = createProjectCuts(composition.model).boundary(input.boundary);
   if (boundary.mediaKind !== "audio")
     throw new CatalogError("INVALID_PARAMS", "Join speech review requires an audio track");
@@ -71,7 +101,7 @@ export async function verifyJoin(
     throw new CatalogError("INVALID_PARAMS", "Join context does not overlap the project");
   const alignment = (assetId: string, generation: string, range: SelectionRange) => {
     const metadata = owners.alignments.metadata({
-      owner: { kind: "asset", assetId },
+      owner: { kind: "asset", id: assetId },
       generation,
       policy: "alignment-v1",
     });
@@ -94,7 +124,7 @@ export async function verifyJoin(
     };
     return {
       state: "observed" as const,
-      metadata,
+      metadata: publicAudio(metadata),
       requestedRange: range,
       coverage: coverage(range, metadata.source.observationRange),
       words: rows("words"),
@@ -162,7 +192,7 @@ export async function verifyJoin(
       .join(" ");
     return {
       state: "observed" as const,
-      pcm: read.pcm,
+      pcm: publicAudio(read.pcm),
       transcript: read.transcript,
       generation: read.generation,
       requestedRange: projectRange,
@@ -205,10 +235,11 @@ export async function verifyJoin(
   );
   if (unavailable.length)
     throw new CatalogError(
-      "NOT_READY",
+      "UNAVAILABLE_SUPPORT",
       "Prepared join-review audio contains unavailable samples",
-      { unavailable },
-      true,
+      {
+        unavailable,
+      },
     );
   const preparedFile = owners.preparedAudio.open(prepared.resourceId, prepared.audio.sampleRange);
   const retained: RetainedRead = {
@@ -273,17 +304,17 @@ export async function verifyJoin(
         after: source(boundary.after, input.sourceEvidence?.after),
       },
       rendered: {
-        prepared: prepared.audio,
+        prepared: publicAudio(prepared.audio),
         alignment: renderedAlignment,
         recognition: renderedRecognition,
       },
       audio: {
-        dimensions,
-        waveform,
-        spectrum: { ...spectrum, density: Array.from(spectrum.density) },
+        dimensions: publicAudio(dimensions),
+        waveform: publicAudio(waveform),
+        spectrum: publicAudio({ ...spectrum, density: Array.from(spectrum.density) }),
         discontinuity: {
           state: "observed" as const,
-          edgeRMS: waveform.buckets.slice(0, 2).concat(waveform.buckets.slice(-2)),
+          edgeRMS: publicAudio(waveform.buckets.slice(0, 2).concat(waveform.buckets.slice(-2))),
           interpretation: "energy_boundary_only" as const,
         },
         roomTone: { state: "unknown" as const, reason: "No room-tone classifier is retained" },

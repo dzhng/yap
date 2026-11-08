@@ -1,0 +1,42 @@
+[
+  {
+    "appearance": "aqua",
+    "backingScale": 2,
+    "contentHeightPoints": 476,
+    "contentWidthPoints": 768,
+    "controls": {
+      "actions.fixture-import": [
+        566,
+        156,
+        30,
+        26
+      ],
+      "actions.fixture-recording-one": [
+        566,
+        96,
+        30,
+        26
+      ],
+      "actions.fixture-recording-three": [
+        566,
+        276,
+        30,
+        26
+      ],
+      "actions.fixture-recording-two": [
+        566,
+        216,
+        30,
+        26
+      ],
+      "library.filter": [
+        468,
+        25,
+        132,
+        25
+      ]
+    },
+    "facts": "synthetic",
+    "fixture": "failed-import"
+  }
+]

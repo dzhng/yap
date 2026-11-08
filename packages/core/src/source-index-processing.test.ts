@@ -8,6 +8,7 @@ import { encodeIndexRecord } from "./screenshot-index.js";
 import { readFile, unlink } from "node:fs/promises";
 import { CatalogError } from "./catalog.js";
 import { fixture, gate, png } from "./index-processing.fixture.js";
+import { expectPageTraversal } from "./page-traversal.fixture.js";
 function acquiredSelection(f: Awaited<ReturnType<typeof fixture>>) {
   const selection = { ...f.selection, acquisitionId: "selection" };
   f.catalog.catalog.prepare("INSERT OR REPLACE INTO acquisitions VALUES(?,?,?,?)").run(
@@ -102,7 +103,7 @@ async function assertSourceIndex(
     durationUs: 1200000,
     candidateCount: 4,
     coverageCount: 7,
-    bytes: 4 * png.length,
+    sizeBytes: 4 * png.length,
   });
   expect(
     result.page!.entries.map(({ candidate, frame }) => [
@@ -202,6 +203,34 @@ test("face observation requests reach source index frame materialization", async
     }).page?.entries,
   ).toHaveLength(1);
 });
+test("a source face index retained before the noun-ID cutover is refused, not projected, by generation", async () => {
+  const f = await fixture();
+  const selection = acquiredSelection(f);
+  const faceObservations = { recipe: "vision-face-rectangles-v1" as const };
+  f.index.requestSource({ ...selection, faceObservations });
+  await f.jobs.idle();
+  f.index.requestSource({ ...selection, faceObservations });
+  await f.jobs.idle();
+  const { generation } = f.index.requestSource({ ...selection, faceObservations }).published!
+    .evidence;
+  const rows = f.catalog.catalog
+    .prepare("SELECT rowid,frame FROM screenshot_index_entries")
+    .all() as { rowid: number; frame: string }[];
+  expect(rows.some((row) => row.frame.includes('"id":"face-'))).toBe(true);
+  for (const row of rows)
+    f.catalog.catalog
+      .prepare("UPDATE screenshot_index_entries SET frame=? WHERE rowid=?")
+      .run(row.frame.replaceAll('"id":"face-', '"faceId":"face-'), row.rowid);
+  await f.restart();
+  // face.trajectory.get and index.get/index.frame read a named generation through these paths.
+  for (const read of [
+    () => f.index.getSource({ ...selection, faceObservations, generation }),
+    () => f.index.frameSource({ ...selection, generation, ordinal: 0 }),
+  ])
+    expect(read).toThrow(
+      expect.objectContaining({ code: "ARTIFACT_CHANGED" }) as unknown as CatalogError,
+    );
+});
 test("source index execution rechecks current authority before cancellation", async () => {
   const barrier = gate();
   const f = await fixture({ barrier });
@@ -209,7 +238,7 @@ test("source index execution rechecks current authority before cancellation", as
   f.scenes.prepareSource(selection);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: selection.assetId },
+    target: { kind: "asset", id: selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",
@@ -249,7 +278,7 @@ test("source index target mismatch refuses before metadata lookup and cancellati
   f.scenes.prepareSource(selection);
   await f.jobs.idle();
   f.jobs.submit({
-    target: { kind: "asset", assetId: selection.assetId },
+    target: { kind: "asset", id: selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",
@@ -258,7 +287,7 @@ test("source index target mismatch refuses before metadata lookup and cancellati
   const original = f.jobs.job(queued.jobId!);
   const job = {
     ...original,
-    target: { kind: "asset" as const, assetId: "missing-target" },
+    target: { kind: "asset" as const, id: "missing-target" },
     input: encodeIndexRecord({ ...JSON.parse(original.input), assetId: "missing-input" }),
   };
   const { work, restore } = observeSourceMetadata(f);
@@ -324,7 +353,7 @@ test("shared jobs publish source PNGs and exact gap coverage with bounded canoni
 test("terminal child failure settles the parent and only explicit retry attempts the child again", async () => {
   const f = await fixture({
     beforeFrame: async (n) => {
-      if (n === 1) throw new CatalogError("NATIVE_DECODE_FAILED", "decoder failed", {}, true);
+      if (n === 1) throw new CatalogError("DECODE_FAILED", "decoder failed", {});
     },
   });
   const { pending } = await f.prepare();
@@ -409,7 +438,7 @@ test("queued index pins its exact old scene generation across regeneration then 
   await f.jobs.idle();
   const otherScene = f.scenes.sourceStatus(other).published!.evidence;
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     input: "barrier",
     lane: "heavy",
@@ -497,8 +526,7 @@ test("retrying an index with a failed scene dependency retries that dependency e
   let calls = 0;
   const f = await fixture({
     beforeScene: () => {
-      if (++calls === 1)
-        throw new CatalogError("NATIVE_DECODE_FAILED", "scene decoder failed", {}, true);
+      if (++calls === 1) throw new CatalogError("DECODE_FAILED", "scene decoder failed", {});
     },
   });
   f.index.requestSource(f.selection);
@@ -523,7 +551,7 @@ test("explicit index retry recovers a canceled scene prerequisite without read-t
     },
   });
   f.jobs.submit({
-    target: { kind: "asset", assetId: f.selection.assetId },
+    target: { kind: "asset", id: f.selection.assetId },
     artifact: "barrier",
     input: "hold",
     lane: "heavy",
@@ -603,8 +631,7 @@ test("reading an adopted source index preserves its generation without a donor j
 test("partial source index pictures stay private until explicit retry publishes complete coverage", async () => {
   const f = await fixture({
     beforeFrame: async (n) => {
-      if (n === 2)
-        throw new CatalogError("NATIVE_DECODE_FAILED", "second decoder interrupted", {}, true);
+      if (n === 2) throw new CatalogError("DECODE_FAILED", "second decoder interrupted", {});
     },
   });
   const { pending } = await f.prepare();
@@ -649,7 +676,7 @@ test("complete source index files require a published matching generation", asyn
   expect(first.nextCursor).not.toBeNull();
   expect(() =>
     f.index.coverageSource({ ...reference, candidateOrdinal: 0, cursor: first.nextCursor! }),
-  ).toThrow("another index or filter");
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
   const next = f.index.coverageSource({ ...reference, cursor: first.nextCursor!, limit: 1 });
   expect(next.coverage[0]!.source.startUs).toBe(first.coverage[0]!.source.endUs);
   expect(() => f.index.frameSource({ ...reference, ordinal: metadata.candidateCount })).toThrow(
@@ -681,4 +708,66 @@ test("a plain source-index cursor cannot be relabeled as face evidence", async (
       cursor: first.page!.nextCursor!,
     }),
   ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+});
+
+test("source index, coverage and face-trajectory pages conform to the paging contract", async () => {
+  const f = await fixture();
+  const selection = acquiredSelection(f);
+  const faceObservations = { recipe: "vision-face-rectangles-v1" as const };
+  for (let pass = 0; pass < 2; pass++) {
+    f.index.requestSource({ ...selection, faceObservations });
+    await f.jobs.idle();
+  }
+  const generation = f.index.requestSource({ ...selection, faceObservations }).published!.evidence
+    .generation;
+  type EntryCursor = NonNullable<Parameters<typeof f.index.getSource>[0]["cursor"]>;
+  type CoverageCursor = NonNullable<Parameters<typeof f.index.coverageSource>[0]["cursor"]>;
+  const ordinal = (entry: unknown) =>
+    String((entry as { candidate: { ordinal: number } }).candidate.ordinal);
+  // index.get: the request's selection is bound into its continuation.
+  const entries = expectPageTraversal<EntryCursor>((limit, cursor) => {
+    const page = f.index.getSource({ ...selection, faceObservations, limit, cursor }).page!;
+    return { items: page.entries, nextCursor: page.nextCursor };
+  }, ordinal);
+  // face.trajectory.get: the same entries, read through an explicit retained generation.
+  const trajectory = expectPageTraversal<EntryCursor>((limit, cursor) => {
+    const page = f.index.getSource({ ...selection, generation, limit, cursor }).page!;
+    return { items: page.entries, nextCursor: page.nextCursor };
+  }, ordinal);
+  expect(trajectory.expected).toEqual(entries.expected);
+  for (const changed of [
+    { streamId: "w" },
+    { acquisitionId: "other" },
+    { generation: "other-generation" },
+  ])
+    expect(() =>
+      f.index.getSource({ ...selection, ...changed, cursor: trajectory.firstCursor, limit: 1 }),
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+  expect(() =>
+    f.index.getSource({
+      ...selection,
+      cursor: { ...trajectory.firstCursor, afterOrdinal: 99 },
+      limit: 1,
+    }),
+  ).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
+  // index.coverage: the candidate filter and the generation are bound into the continuation.
+  const reference = { ...selection, generation };
+  const coverage = expectPageTraversal<CoverageCursor>((limit, cursor) => {
+    const page = f.index.coverageSource({ ...reference, limit, cursor });
+    return { items: page.coverage, nextCursor: page.nextCursor };
+  });
+  expect(coverage.expected.length).toBeGreaterThanOrEqual(3);
+  expect(() =>
+    f.index.coverageSource({
+      ...reference,
+      candidateOrdinal: 0,
+      cursor: coverage.firstCursor,
+      limit: 1,
+    }),
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
+  // Another selection cannot even resolve this index, so it refuses before reading the cursor.
+  for (const changed of [{ streamId: "w" }, { acquisitionId: "other" }])
+    expect(() =>
+      f.index.coverageSource({ ...reference, ...changed, cursor: coverage.firstCursor, limit: 1 }),
+    ).toThrow(CatalogError);
 });

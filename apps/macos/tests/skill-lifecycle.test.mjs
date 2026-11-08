@@ -32,7 +32,8 @@ test("skill status discovers every global harness destination", () => {
   symlinkSync("../../.agents/skills/yap", join(home, ".claude/skills/yap"));
   const resources = makeResources(root);
   const [status] = runHome(driver, { home, resources }, "skill.status");
-  assert.equal(status.state, "unmanaged");
+  assert.equal(status.state, "unavailable");
+  assert.equal(status.installation, "unmanaged");
   assert.deepEqual(status.paths, [
     join(home, ".agents/skills/yap"),
     join(home, ".claude/skills/yap"),
@@ -57,8 +58,9 @@ test("installs with no npx on PATH", () => {
     "skill.install",
     "wait",
   );
-  assert.equal(started.state, "updating");
-  assert.equal(settled.state, "installed", JSON.stringify(settled));
+  assert.equal(started.state, "running");
+  assert.equal(settled.state, "ready", JSON.stringify(settled));
+  assert.equal(settled.installation, "installed");
   assert.equal(settled.managed, true);
   assert.equal(existsSync(join(home, "npx-ran")), false, "no host npx runs");
   assert.equal(readFileSync(join(home, ".agents/skills/yap/SKILL.md"), "utf8"), "bundled skill\n");

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { retryable } from "./refusal.mjs";
 
 const executable =
   process.env.YAP_NATIVE ?? fileURLToPath(new URL("../.build/debug/yap-native", import.meta.url));
@@ -34,7 +35,11 @@ test("the native process answers every shared conformance line in order", () => 
       continue;
     }
     assert.equal(response.error.code, fixture.expected.code, fixture.name);
-    assert.equal(response.error.retryable, false, fixture.name);
+    assert.equal(
+      retryable(response.error),
+      fixture.expected.code === "MODEL_UNAVAILABLE",
+      fixture.name,
+    );
     assert.equal(typeof response.error.message, "string", fixture.name);
     assert.deepEqual(response.error.details, {}, fixture.name);
   }
@@ -60,7 +65,7 @@ test("capability queries reject parameters they do not read", () => {
     assert.equal(response.id, operations[index]);
     assert.equal(response.ok, false, JSON.stringify(response));
     assert.equal(response.error.code, "INVALID_REQUEST");
-    assert.equal(response.error.retryable, false);
+    assert.equal(retryable(response.error), false);
   }
 });
 
@@ -94,7 +99,7 @@ test("a changed directory identity reports the same final failure through every 
     ];
     for (const failure of failures) {
       assert.equal(failure.code, "INVALID_STORAGE");
-      assert.equal(failure.retryable, false, JSON.stringify(failure));
+      assert.equal(retryable(failure), true, JSON.stringify(failure));
     }
   } finally {
     closeSync(directory);
@@ -120,6 +125,6 @@ test("retired recording render operations refuse without opening media", () => {
     assert.equal(response.id, operations[index]);
     assert.equal(response.ok, false);
     assert.equal(response.error.code, "UNKNOWN_OPERATION");
-    assert.equal(response.error.retryable, false);
+    assert.equal(retryable(response.error), false);
   }
 });

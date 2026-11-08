@@ -8,7 +8,7 @@ enum RenderWorkspace {
         let removing = params["parent"] != nil
         guard Set(params.keys) == (removing ? ["expectedDirectory", "parent"] : ["expectedDirectory"]) else {
             throw NativeFailure(
-                "INVALID_REQUEST", "Render cleanup requires its directory identity.", retryable: false)
+                "INVALID_REQUEST", "Render cleanup requires its directory identity.")
         }
         let expected = try InodeIdentity(params["expectedDirectory"])
         try expected.check(3)
@@ -18,7 +18,7 @@ enum RenderWorkspace {
                 Set(parent.keys) == ["expectedDirectory", "name"],
                 let name = parent["name"] as? String, name.hasPrefix("render-"),
                 name.utf8.count <= 255, !name.contains("/"), !name.contains("\0") else {
-                throw NativeFailure("INVALID_REQUEST", "Render attempt requires one owned basename.", retryable: false)
+                throw NativeFailure("INVALID_REQUEST", "Render attempt requires one owned basename.")
             }
             try InodeIdentity(parent["expectedDirectory"]).check(4)
             try ManagedFiles.lockPrivateDirectory(4, shared: true)

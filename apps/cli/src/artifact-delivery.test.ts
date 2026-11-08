@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { mkdtemp, rm, readFile, readdir, open } from "node:fs/promises";
 import { listenLocal } from "@yap/service";
-import type { OperationResponse } from "@yap/protocol";
+import { operationError, type OperationResponse } from "@yap/protocol";
 import { artifactBytes, consumeBatch, artifactFile } from "./artifact-delivery.js";
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -30,18 +30,22 @@ async function fixture(
         renewals++;
         return {
           ok: true,
-          data: { token: "lease", bytes: bytes.length, expiresAt: Date.now() + 30000 },
+          data: { token: "lease", sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
         };
       }
       onRead();
       reads++;
-      const { offset, maxBytes } = request.params as { offset: number; maxBytes: number };
+      const { offsetBytes: offset, maxBytes } = request.params as {
+        offsetBytes: number;
+        maxBytes: number;
+      };
       const part = bytes.subarray(offset, offset + maxBytes);
       return {
         ok: true,
         data: {
-          offset,
-          nextOffset: malformed === true || malformed === reads ? offset : offset + part.length,
+          offsetBytes: offset,
+          nextOffsetBytes:
+            malformed === true || malformed === reads ? offset : offset + part.length,
           eof: offset + part.length === bytes.length,
           data: part.toString("base64"),
         },
@@ -57,8 +61,8 @@ async function fixture(
     ok: true,
     data: {
       state: "ready",
-      delivery: { token: "lease", bytes: bytes.length, expiresAt: Date.now() + 30000 },
-      published: { generation: 1, output: { mediaType }, issues: [] },
+      delivery: { token: "lease", sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
+      published: { generation: "1", output: { mediaType }, issues: [] },
     },
   };
   return {
@@ -121,12 +125,7 @@ test("timestamp batches preserve timestamp identity on failed media reads", asyn
     },
     "atUs",
     async () => ({}),
-    (error) => ({
-      code: (error as { code: string }).code,
-      message: (error as Error).message,
-      retryable: false,
-      details: {},
-    }),
+    (error) => operationError((error as { code: string }).code, (error as Error).message).error,
   );
   expect(result).toEqual({
     id: "time",
@@ -141,7 +140,7 @@ test("timestamp batches preserve timestamp identity on failed media reads", asyn
           error: {
             code: "INVALID_RESPONSE",
             message: "Media chunk does not advance within the delivery",
-            retryable: false,
+            retryable: true,
             details: {},
           },
         },
@@ -163,7 +162,7 @@ test("selected batch metadata cannot masquerade as timestamp batch metadata", as
           projectId: "project",
           revisionId: "r1",
           generation: "index",
-          items: [{ atUs: 0, ok: true, data: { state: "processing" } }],
+          items: [{ atUs: 0, ok: true, data: { state: "running" } }],
         },
       },
       "ordinal",
@@ -215,7 +214,7 @@ test.each(["video/mp4", "audio/wav"] as const)(
     }
     expect(await artifactFile(f.selection, f.result, output)).toEqual({
       output,
-      bytes: bytes.length,
+      sizeBytes: bytes.length,
       mediaType,
     });
     expect((await readFile(output)).equals(bytes)).toBe(true);
@@ -271,7 +270,7 @@ test("waveform JSON streams unchanged and uses bounded buffered delivery with le
   const output = folder + "/waveform.json";
   expect(await artifactFile(f.selection, f.result, output)).toEqual({
     output,
-    bytes: bytes.length,
+    sizeBytes: bytes.length,
     mediaType: "application/json",
   });
   expect(await readFile(output)).toEqual(bytes);

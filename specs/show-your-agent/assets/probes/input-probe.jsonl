@@ -1,0 +1,8 @@
+{"event":"start","axTrusted":false,"listenAccess":false}
+{"event":"shift","held":true,"buttons":0}
+{"event":"down","shift":true,"x":320,"y":280}
+{"event":"up","shift":true,"x":320,"y":280}
+{"event":"shift","held":false,"buttons":0}
+{"event":"down","shift":false,"x":320,"y":280}
+{"event":"up","shift":false,"x":320,"y":280}
+{"event":"end"}

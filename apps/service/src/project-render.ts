@@ -11,12 +11,7 @@ import type { CompositionMovie, ProjectMovieRenderer } from "@yap/core/project-p
 import type { ProjectFrameRenderer } from "@yap/core/frame-inspection";
 import type { ProjectAudioRenderer } from "@yap/core/audio-inspection";
 import { withRenderAttempt, withRenderedFile } from "./render.js";
-import {
-  MAX_MEDIA_TIMEOUT_MS,
-  renderWindowDeadlineMs,
-  nativeResult,
-  type MediaWorker,
-} from "./worker.js";
+import { renderWindowDeadlineMs, nativeResult, type MediaWorker } from "./worker.js";
 
 import type { PointerPreparation, PointerHistoryRenderer } from "@yap/core/pointer-preparation";
 import type { SourceEvidenceReader } from "@yap/core/evidence-read";
@@ -62,7 +57,10 @@ function picturePayload(
     );
     if (!requirements.length) continue;
     if (!identity || requirements.some((item) => item.implementationId !== identity))
-      throw new CatalogError("NOT_READY", `The bound native ${type} recipe is unavailable`);
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        `The bound native ${type} recipe is unavailable`,
+      );
     payload[field] = identity;
   }
   return payload;
@@ -100,12 +98,7 @@ function retimePayload(window: AudioWindowInput["window"], identity?: string) {
   const requirements = window.manifest.requirements.filter((item) => item.kind === "retime");
   if (!requirements.length) return {};
   if (!identity || requirements.some((item) => item.implementationId !== identity))
-    throw new CatalogError(
-      "NOT_READY",
-      "The bound native retiming recipe is unavailable",
-      {},
-      true,
-    );
+    throw new CatalogError("NOT_READY", "The bound native retiming recipe is unavailable", {});
   return { retimeImplementationId: identity };
 }
 function nativeAudioSupport(
@@ -200,13 +193,17 @@ function statePayload(
 ) {
   const state = window.audioState();
   if (!state) return {};
-  if (!identity) throw new CatalogError("NOT_READY", "The native RNNoise recipe is unavailable");
+  if (!identity)
+    throw new CatalogError("PREREQUISITE_MISSING", "The native RNNoise recipe is unavailable");
   const external = state.domains.some(
     (domain) =>
       domain.recipe.type !== "rnnoise" && domain.sampleRange.end > domain.sampleRange.start,
   );
   if (external && !preparationId)
-    throw new CatalogError("NOT_READY", "The native audio state preparation recipe is unavailable");
+    throw new CatalogError(
+      "PREREQUISITE_MISSING",
+      "The native audio state preparation recipe is unavailable",
+    );
   return {
     ...(external ? { statePreparationImplementationId: preparationId } : {}),
     state: { ...state, implementationId: identity },
@@ -255,10 +252,7 @@ export function audioDeadline(window: AudioWindowInput["window"], retained = fal
   }
   // Preparation is measured in frames; only its scheduling budget rounds up to milliseconds.
   const preparationMs = Number((preparationFrames * 1000n + 47999n) / 48000n);
-  return Math.min(
-    MAX_MEDIA_TIMEOUT_MS,
-    renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs,
-  );
+  return renderWindowDeadlineMs(window.manifest.range) + 2 * preparationMs;
 }
 type PointerOwners = { preparation: PointerPreparation; evidence: SourceEvidenceReader };
 export function projectPointerHistoryRenderer(
@@ -282,7 +276,6 @@ export function projectPointerHistoryRenderer(
                 clockOffsetUs: request.clockOffsetUs,
                 plan: renderPlan({ spans: request.spans }),
                 output,
-                ...request.limits,
               },
               {
                 signal,
@@ -582,7 +575,7 @@ export function projectFrameRenderer(
 ): ProjectFrameRenderer {
   return {
     implementationId:
-      "native-composition-picture-v21" +
+      "native-composition-picture-v22" +
       (capabilities.sdrCorrection ? ":" + capabilities.sdrCorrection : "") +
       (capabilities.lut ? ":" + capabilities.lut : ""),
     ...capabilities,

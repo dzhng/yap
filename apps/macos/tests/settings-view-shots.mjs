@@ -13,7 +13,7 @@ const scratch = mkdtempSync(join(tmpdir(), "yap-settings-view-"));
 try {
   const executable = compileControlsCheck(
     scratch,
-    ["SettingsWindow", "WindowMenu"],
+    ["SettingsWindow", "WindowMenu", "CurrentKeyboardLayout"],
     String.raw`
 import AppKit
 import SwiftUI
@@ -38,13 +38,16 @@ enum ControlsProbe { static let observed = true }
             ("failure", .init(available: true, enabled: true, status: "Update failed: the download could not be verified. Your current version is unchanged.", canCheck: true)),
             ("manual", .init()),
             ("notice", .init(available: true, enabled: true, canCheck: true)),
+            ("accessibility-allowed", .init(available: true, enabled: true, canCheck: true)),
+            ("accessibility-reopen", .init(available: true, enabled: true, canCheck: true)),
         ]
         for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for (name, updates) in states {
                 let preferences = Preferences(defaults: UserDefaults(suiteName: "\(scratch)/\(theme)-\(name)")!)
                 let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
-                model.state.permissions = ControlsState.Permissions(screen: .granted, microphone: .granted)
-                model.state.shortcutOverridePath = "/Users/example/.yap/shortcuts.json"
+                model.state.permissions = ControlsState.Permissions(
+                    screen: .granted, microphone: .granted,
+                    accessibility: name == "accessibility-allowed" ? .granted : name == "accessibility-reopen" ? .reopenToUse : .denied)
                 model.state.updates = updates
                 if name == "notice" {
                     model.state.adminMessage = "Yap 0.1.41 cannot update itself. Back up ~/.yap, then reinstall Yap from justyap.io."
@@ -85,11 +88,69 @@ enum ControlsProbe { static let observed = true }
                 window.close()
             }
         }
+
+        let shortcutStates = [
+            "active", "refused-by-macos", "duplicate-in-yap",
+            "recording-in-progress", "field-recording", "customized",
+        ]
+        for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            for name in shortcutStates {
+                let preferences = Preferences(defaults: UserDefaults(suiteName: "\(scratch)/shortcuts-\(theme)-\(name)")!)
+                let model = SettingsModel(preferences: preferences, perform: { _ in }, update: { _, _ in }, agentSetup: ShotAgentSetup())
+                model.shortcuts = ShortcutBindings.defaults
+                switch name {
+                case "refused-by-macos":
+                    model.state.unavailableShortcuts = [ControlsAction.undoMark.id]
+                case "duplicate-in-yap":
+                    model.shortcutErrorAction = .cancel
+                case "recording-in-progress":
+                    model.state.service = .ready
+                    model.state.device = .init(state: .recording, recordingId: "shot", elapsedUs: 1_000_000)
+                case "field-recording":
+                    model.recordingAction = .startOrStop
+                case "customized":
+                    model.shortcuts[.startOrStop] = .init(
+                        shortcut: .init(keyCode: 15, modifiers: 4_352, label: "⌃⌘R"), lifetime: .app)
+                default: break
+                }
+                let content = NSHostingView(rootView: SettingsView(model: model))
+                content.sizingOptions = []
+                content.appearance = NSAppearance(named: appearance)
+                let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 560, height: 780),
+                    styleMask: .borderless, backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.contentView = content
+                window.appearance = content.appearance
+                window.orderBack(nil)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+                content.layoutSubtreeIfNeeded()
+                let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
+                content.cacheDisplay(in: content.bounds, to: bitmap)
+                try! bitmap.representation(using: .png, properties: [:])!.write(to:
+                    URL(fileURLWithPath: "\(output)/\(theme)-shortcuts-\(name).png"))
+                func scrollView(_ view: NSView) -> NSScrollView? {
+                    if let scroll = view as? NSScrollView { return scroll }
+                    return view.subviews.lazy.compactMap { scrollView($0) }.first
+                }
+                guard let scroll = scrollView(content), let document = scroll.documentView else {
+                    preconditionFailure("The settings form must remain scrollable")
+                }
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: document.bounds.height - scroll.contentView.bounds.height))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+                let bottom = content.bitmapImageRepForCachingDisplay(in: content.bounds)!
+                content.cacheDisplay(in: content.bounds, to: bottom)
+                try! bottom.representation(using: .png, properties: [:])!.write(to:
+                    URL(fileURLWithPath: "\(output)/\(theme)-shortcuts-\(name)-bottom.png"))
+                window.orderOut(nil)
+                window.close()
+            }
+        }
     }
 }
 `,
   );
-  execFileSync(executable, [output, scratch], { timeout: 20_000 });
+  execFileSync(executable, [output, scratch], { timeout: 60_000 });
   console.log(output);
 } finally {
   rmSync(scratch, { recursive: true, force: true });

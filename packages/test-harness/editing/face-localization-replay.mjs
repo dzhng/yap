@@ -39,6 +39,7 @@ function assertObservation(frame, zone, minimumIoU) {
   assert.equal(observations.height, 360);
   assert.equal(observations.status, "available");
   assert.equal(observations.faces.length, 1);
+  // Frozen corpus format: this report predates the public faceId rename.
   const face = observations.faces[0];
   assert.equal(face.id, "face-0");
   assert.ok(Number.isFinite(face.confidence) && face.confidence >= 0 && face.confidence <= 1);

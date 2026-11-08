@@ -71,12 +71,12 @@ test("finalizing acknowledgment releases control order while cancellation waits 
     newId: randomUUID,
   });
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  const source = sourceDirectory(home, recording.recordingId);
+  const source = sourceDirectory(home, recording.id);
   await mkdir(source, { recursive: true });
   const sentinel = join(source, "sentinel");
   await writeFile(sentinel, "retain until native unwinds");
@@ -89,7 +89,7 @@ test("finalizing acknowledgment releases control order while cancellation waits 
     unwind = resolve;
   });
   const report = (sequence: number) => ({
-    recordingId: recording.recordingId,
+    recordingId: recording.id,
     sourceId: recording.sourceId,
     sequence,
     state: "finalizing" as const,
@@ -108,7 +108,7 @@ test("finalizing acknowledgment releases control order while cancellation waits 
           ok: true,
           data: {
             state: "finalizing",
-            recordingId: recording.recordingId,
+            recordingId: recording.id,
             sourceId: recording.sourceId,
             elapsedUs: 1,
             selection: null,
@@ -124,12 +124,12 @@ test("finalizing acknowledgment releases control order while cancellation waits 
   );
   let cancel: ReturnType<CaptureService["cancel"]> | undefined;
   try {
-    expect(await service.stop(recording.recordingId)).toMatchObject({ state: "finalizing" });
+    expect(await service.stop(recording.id)).toMatchObject({ state: "finalizing" });
     expect(await service.status()).toMatchObject({ device: { state: "finalizing" } });
-    cancel = service.cancel(recording.recordingId);
+    cancel = service.cancel(recording.id);
     await cancelEntered;
     expect(await readFile(sentinel, "utf8")).toBe("retain until native unwinds");
-    expect(store.get(recording.recordingId).state).toBe("finalizing");
+    expect(store.get(recording.id).state).toBe("finalizing");
     unwind({ ok: true, data: report(3) });
     expect(await cancel).toMatchObject({ state: "canceled" });
     await expect(readFile(sentinel)).rejects.toMatchObject({ code: "ENOENT" });
@@ -161,7 +161,7 @@ test("unproved start keeps finalizing media out of recovery until the native ter
       return {
         ok: true,
         data: {
-          recordingId: recording.recordingId,
+          recordingId: recording.id,
           sourceId: recording.sourceId,
           sequence: 1,
           state: "finalizing",
@@ -174,22 +174,22 @@ test("unproved start keeps finalizing media out of recovery until the native ter
     },
   );
   try {
-    await expect(service.stop(recording.recordingId)).resolves.toMatchObject({
+    await expect(service.stop(recording.id)).resolves.toMatchObject({
       state: "finalizing",
     });
     expect(recoveries).toBe(0);
-    expect(store.get(recording.recordingId).state).toBe("finalizing");
-    expect(await service.stop(recording.recordingId)).toMatchObject({ state: "finalizing" });
+    expect(store.get(recording.id).state).toBe("finalizing");
+    expect(await service.stop(recording.id)).toMatchObject({ state: "finalizing" });
     expect(
       service.report({
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         sequence: 2,
         state: "complete",
         sourceDurationUs: 1234,
       }),
     ).toMatchObject({ state: "complete", sourceDurationUs: 1234 });
-    expect(await service.stop(recording.recordingId)).toMatchObject({
+    expect(await service.stop(recording.id)).toMatchObject({
       state: "complete",
       sourceDurationUs: 1234,
     });
@@ -210,12 +210,12 @@ test.each(["cleanup", "completion", "role"] as const)(
       newId: randomUUID,
     });
     const recording = store.allocate().recording;
-    store.ingestLifecycle(recording.recordingId, {
+    store.ingestLifecycle(recording.id, {
       sourceId: recording.sourceId,
       sequence: 1,
       state: "finalizing",
     });
-    const recovered = await recoveredSource(home, recording.recordingId, recording.sourceId, 1234);
+    const recovered = await recoveredSource(home, recording.id, recording.sourceId, 1234);
     const logs: string[] = [];
     const service = new CaptureService(
       store,
@@ -225,7 +225,7 @@ test.each(["cleanup", "completion", "role"] as const)(
           ? idleNative
           : {
               ok: false,
-              error: { code: "INVALID_STATE", message: "closed", retryable: false, details: {} },
+              error: { code: "INVALID_STATE", message: "closed", retryable: true, details: {} },
             },
       async () => ({
         ok: true,
@@ -245,9 +245,9 @@ test.each(["cleanup", "completion", "role"] as const)(
       (line) => logs.push(line),
     );
     try {
-      expect(await service.stop(recording.recordingId)).toMatchObject({ state: "finalizing" });
+      expect(await service.stop(recording.id)).toMatchObject({ state: "finalizing" });
       await expect
-        .poll(() => store.get(recording.recordingId))
+        .poll(() => store.get(recording.id))
         .toMatchObject({
           state: "interrupted",
           sourceDurationUs: 1234,
@@ -274,7 +274,7 @@ test("absent-native recovery acknowledges finalizing before media finishes and r
     newId: randomUUID,
   });
   const take = store.allocate().recording;
-  store.ingestLifecycle(take.recordingId, {
+  store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "recording",
@@ -309,7 +309,7 @@ test("absent-native recovery acknowledges finalizing before media finishes and r
             error: {
               code: "INVALID_STATE",
               message: "No native take",
-              retryable: false,
+              retryable: true,
               details: {},
             },
           },
@@ -329,16 +329,16 @@ test("absent-native recovery acknowledges finalizing before media finishes and r
   };
   const release = setTimeout(() => finish(failure), 1000);
   try {
-    const stopped = service.stop(take.recordingId);
+    const stopped = service.stop(take.id);
     await workerEntered;
     expect(await stopped).toMatchObject({ state: "finalizing", finalizationError: null });
     expect(await service.status()).toMatchObject({
       device: { state: "idle" },
-      recording: { recordingId: take.recordingId, state: "finalizing" },
+      recording: { id: take.id, state: "finalizing" },
     });
     finish(failure);
     await new Promise((resolve) => setImmediate(resolve));
-    expect(store.get(take.recordingId)).toMatchObject({
+    expect(store.get(take.id)).toMatchObject({
       state: "finalizing",
       finalizationError: { code: "MEDIA_WORKER_TIMEOUT", retryable: true },
     });
@@ -360,7 +360,7 @@ test.each(["recording", "finalizing", "idle"] as const)(
       newId: randomUUID,
     });
     const take = store.allocate().recording;
-    store.ingestLifecycle(take.recordingId, {
+    store.ingestLifecycle(take.id, {
       sourceId: take.sourceId,
       sequence: 1,
       state: "recording",
@@ -375,7 +375,7 @@ test.each(["recording", "finalizing", "idle"] as const)(
           ok: true,
           data: {
             state,
-            recordingId: take.recordingId,
+            recordingId: take.id,
             sourceId: take.sourceId,
             elapsedUs: 10,
             selection: null,
@@ -392,25 +392,25 @@ test.each(["recording", "finalizing", "idle"] as const)(
     try {
       await service.reconcileStranded();
       expect(recoveries).toBe(0);
-      expect(store.get(take.recordingId)).toMatchObject({
+      expect(store.get(take.id)).toMatchObject({
         state: "recording",
         lifecycleSequence: 1,
         finalizationError: null,
       });
       service.report({
-        recordingId: take.recordingId,
+        recordingId: take.id,
         sourceId: take.sourceId,
         sequence: 2,
         state: "finalizing",
       });
       service.report({
-        recordingId: take.recordingId,
+        recordingId: take.id,
         sourceId: take.sourceId,
         sequence: 3,
         state: "complete",
         sourceDurationUs: 10,
       });
-      expect(store.get(take.recordingId).state).toBe("complete");
+      expect(store.get(take.id).state).toBe("complete");
     } finally {
       await service.close();
       store.close();
@@ -426,7 +426,7 @@ test("explicit stop retries retained recovery failure and completed result wins 
     newId: randomUUID,
   });
   const take = store.allocate().recording;
-  store.ingestLifecycle(take.recordingId, {
+  store.ingestLifecycle(take.id, {
     sourceId: take.sourceId,
     sequence: 1,
     state: "finalizing",
@@ -444,7 +444,7 @@ test("explicit stop retries retained recovery failure and completed result wins 
         ? idleNative
         : {
             ok: false,
-            error: { code: "INVALID_STATE", message: "No take", retryable: false, details: {} },
+            error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
           },
     async () => {
       attempts++;
@@ -462,30 +462,28 @@ test("explicit stop retries retained recovery failure and completed result wins 
     },
   );
   try {
-    expect(await service.stop(take.recordingId)).toMatchObject({ state: "finalizing" });
-    await expect
-      .poll(() => store.get(take.recordingId).finalizationError?.code)
-      .toBe("MEDIA_WORKER_FAILED");
+    expect(await service.stop(take.id)).toMatchObject({ state: "finalizing" });
+    await expect.poll(() => store.get(take.id).finalizationError?.code).toBe("MEDIA_WORKER_FAILED");
     expect((await service.status()) as object).toMatchObject({
       recording: { finalizationError: { code: "MEDIA_WORKER_FAILED" } },
     });
     expect(attempts).toBe(1);
-    expect(await service.stop(take.recordingId)).toMatchObject({
+    expect(await service.stop(take.id)).toMatchObject({
       state: "finalizing",
       finalizationError: null,
     });
-    expect(await service.stop(take.recordingId)).toMatchObject({
+    expect(await service.stop(take.id)).toMatchObject({
       state: "finalizing",
       finalizationError: null,
     });
     await expect.poll(() => attempts).toBe(2);
     complete({
       ok: true,
-      data: await recoveredSource(home, take.recordingId, take.sourceId, 10),
+      data: await recoveredSource(home, take.id, take.sourceId, 10),
     });
-    await expect.poll(() => store.get(take.recordingId).state).toBe("interrupted");
-    await expect(service.cancel(take.recordingId)).rejects.toMatchObject({ code: "INVALID_STATE" });
-    expect(store.get(take.recordingId)).toMatchObject({
+    await expect.poll(() => store.get(take.id).state).toBe("interrupted");
+    await expect(service.cancel(take.id)).rejects.toMatchObject({ code: "INVALID_STATE" });
+    expect(store.get(take.id)).toMatchObject({
       state: "interrupted",
       sourceDurationUs: 10,
       finalizationError: null,
@@ -508,14 +506,18 @@ test("status follows the active recovery ahead of an older retained failure", as
     newId: randomUUID,
   });
   const older = store.allocate().recording;
-  store.ingestLifecycle(older.recordingId, {
+  store.ingestLifecycle(older.id, {
     sourceId: older.sourceId,
     sequence: 1,
     state: "finalizing",
-    finalizationError: { code: "OLDER_FAILURE", message: "Explicit retry needed", retryable: true },
+    finalizationError: {
+      code: "INVALID_EVIDENCE",
+      message: "Explicit retry needed",
+      retryable: true,
+    },
   });
   const selected = store.allocate().recording;
-  store.ingestLifecycle(selected.recordingId, {
+  store.ingestLifecycle(selected.id, {
     sourceId: selected.sourceId,
     sequence: 1,
     state: "recording",
@@ -532,22 +534,22 @@ test("status follows the active recovery ahead of an older retained failure", as
         ? idleNative
         : {
             ok: false,
-            error: { code: "INVALID_STATE", message: "No take", retryable: false, details: {} },
+            error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
           },
     async () => work,
   );
   try {
-    expect(await service.stop(selected.recordingId)).toMatchObject({ state: "finalizing" });
+    expect(await service.stop(selected.id)).toMatchObject({ state: "finalizing" });
     expect(await service.status()).toMatchObject({
-      recording: { recordingId: selected.recordingId, finalizationError: null },
+      recording: { id: selected.id, finalizationError: null },
     });
     finish({
       ok: true,
-      data: await recoveredSource(home, selected.recordingId, selected.sourceId, 10),
+      data: await recoveredSource(home, selected.id, selected.sourceId, 10),
     });
-    await expect.poll(() => store.get(selected.recordingId).state).toBe("interrupted");
+    await expect.poll(() => store.get(selected.id).state).toBe("interrupted");
     expect(await service.status()).toMatchObject({
-      recording: { recordingId: older.recordingId, finalizationError: { code: "OLDER_FAILURE" } },
+      recording: { id: older.id, finalizationError: { code: "INVALID_EVIDENCE" } },
     });
   } finally {
     finish({
@@ -569,7 +571,7 @@ test("startup drains each recovery before continuing past a retained failure", a
   const first = store.allocate().recording;
   const second = store.allocate().recording;
   for (const take of [first, second])
-    store.ingestLifecycle(take.recordingId, {
+    store.ingestLifecycle(take.id, {
       sourceId: take.sourceId,
       sequence: 1,
       state: "recording",
@@ -588,25 +590,25 @@ test("startup drains each recovery before continuing past a retained failure", a
       if (attempts === 1) return held;
       return {
         ok: true,
-        data: await recoveredSource(home, second.recordingId, second.sourceId, 20),
+        data: await recoveredSource(home, second.id, second.sourceId, 20),
       };
     },
   );
   const startup = service.reconcileStranded();
   try {
     await expect.poll(() => attempts).toBe(1);
-    expect(store.get(second.recordingId).state).toBe("recording");
-    expect(await service.status()).toMatchObject({ recording: { recordingId: first.recordingId } });
+    expect(store.get(second.id).state).toBe("recording");
+    expect(await service.status()).toMatchObject({ recording: { id: first.id } });
     release({
       ok: false,
-      error: { code: "RETRY_MEDIA", message: "Retained", retryable: true, details: {} },
+      error: { code: "MEDIA_UNAVAILABLE", message: "Retained", retryable: true, details: {} },
     });
     await startup;
-    expect(store.get(first.recordingId)).toMatchObject({
+    expect(store.get(first.id)).toMatchObject({
       state: "finalizing",
-      finalizationError: { code: "RETRY_MEDIA" },
+      finalizationError: { code: "MEDIA_UNAVAILABLE" },
     });
-    expect(store.get(second.recordingId)).toMatchObject({
+    expect(store.get(second.id)).toMatchObject({
       state: "interrupted",
       sourceDurationUs: 20,
     });
@@ -623,43 +625,151 @@ test("startup drains each recovery before continuing past a retained failure", a
   }
 });
 
-test("native finalization failures persist until a reported new attempt or terminal outcome", async () => {
-  const home = await mkdtemp("/tmp/yap-native-finalization-error-");
+test.each([
+  ["INVALID_EVIDENCE", true],
+  ["INVALID_INPUT_EVIDENCE", false],
+  ["INVALID_JOURNAL_PREFIX", false],
+  ["AUDIO_UNAVAILABLE", false],
+])(
+  "native finalization derives %s retryability and retains the failure",
+  async (code, retryable) => {
+    const home = await mkdtemp("/tmp/yap-native-finalization-error-");
+    const store = new CaptureStore(join(home, "library.sqlite"), {
+      now: () => new Date().toISOString(),
+      newId: randomUUID,
+    });
+    const take = store.allocate().recording;
+    const service = new CaptureService(
+      store,
+      home,
+      async () => idleNative,
+      async () => {
+        throw new Error("Native still owns this take");
+      },
+    );
+    const identity = { recordingId: take.id, sourceId: take.sourceId };
+    const error = {
+      code,
+      message: "Native publication diagnostic",
+    };
+    try {
+      service.report({ ...identity, sequence: 1, state: "recording" });
+      service.report({ ...identity, sequence: 2, state: "finalizing", finalizationError: error });
+      expect(store.get(take.id)).toMatchObject({
+        state: "finalizing",
+        finalizationError: { ...error, retryable },
+      });
+      service.report({ ...identity, sequence: 3, state: "finalizing" });
+      expect(store.get(take.id).finalizationError).toEqual({ ...error, retryable });
+      service.report({ ...identity, sequence: 4, state: "finalizing", finalizationError: null });
+      expect(store.get(take.id).finalizationError).toBeNull();
+      service.report({ ...identity, sequence: 5, state: "complete", sourceDurationUs: 100 });
+      expect(store.get(take.id)).toMatchObject({
+        state: "complete",
+        finalizationError: null,
+      });
+    } finally {
+      await service.close();
+      store.close();
+      await rm(home, { recursive: true, force: true });
+    }
+  },
+);
+
+// A shutdown during recovery is an interruption, not a failure: the next service finishes it.
+test("startup resumes a recovery that shutdown interrupted", async () => {
+  const home = await mkdtemp("/tmp/yap-interrupted-recovery-startup-");
   const store = new CaptureStore(join(home, "library.sqlite"), {
     now: () => new Date().toISOString(),
     newId: randomUUID,
   });
   const take = store.allocate().recording;
+  const native = async (operation: string) =>
+    operation === "capture.status"
+      ? idleNative
+      : {
+          ok: false as const,
+          error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
+        };
+  let attempts = 0;
+  const first = new CaptureService(store, home, native, async (_operation, _params, options) => {
+    attempts++;
+    // Hold recovery until the service shuts down underneath it.
+    await new Promise((_, reject) =>
+      options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+    );
+    throw new Error("unreachable");
+  });
+  try {
+    store.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 1, state: "recording" });
+    await first.stop(take.id);
+    await expect.poll(() => attempts).toBe(1);
+    await first.close();
+    await expect.poll(() => store.get(take.id).finalizationError?.code).toBe("RECOVERY_CANCELED");
+    const second = new CaptureService(store, home, native, async () => {
+      attempts++;
+      return { ok: true, data: await recoveredSource(home, take.id, take.sourceId, 10) };
+    });
+    try {
+      await second.reconcileStranded();
+      await expect.poll(() => store.get(take.id).state).toBe("interrupted");
+      expect(attempts).toBe(2);
+      expect(store.get(take.id).finalizationError).toBeNull();
+    } finally {
+      await second.close();
+    }
+  } finally {
+    store.close();
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+// Characterize restart independently of the explicit Retry Finalization path.
+test("startup leaves a recorded finalization failure for capture.stop", async () => {
+  const home = await mkdtemp("/tmp/yap-failed-finalization-startup-");
+  const store = new CaptureStore(join(home, "library.sqlite"), {
+    now: () => new Date().toISOString(),
+    newId: randomUUID,
+  });
+  const take = store.allocate().recording;
+  let attempts = 0;
   const service = new CaptureService(
     store,
     home,
-    async () => idleNative,
+    async (operation) =>
+      operation === "capture.status"
+        ? idleNative
+        : {
+            ok: false,
+            error: { code: "INVALID_STATE", message: "No take", retryable: true, details: {} },
+          },
     async () => {
-      throw new Error("Native still owns this take");
+      attempts++;
+      if (attempts === 1)
+        return {
+          ok: false,
+          error: {
+            code: "MEDIA_WORKER_FAILED",
+            message: "Retained for explicit retry",
+            retryable: true,
+            details: {},
+          },
+        };
+      return { ok: true, data: await recoveredSource(home, take.id, take.sourceId, 10) };
     },
   );
-  const identity = { recordingId: take.recordingId, sourceId: take.sourceId };
-  const error = {
-    code: "INVALID_OUTPUT",
-    message: "Publication permission denied",
-    retryable: true,
-  };
   try {
-    service.report({ ...identity, sequence: 1, state: "recording" });
-    service.report({ ...identity, sequence: 2, state: "finalizing", finalizationError: error });
-    expect(store.get(take.recordingId)).toMatchObject({
-      state: "finalizing",
-      finalizationError: error,
-    });
-    service.report({ ...identity, sequence: 3, state: "finalizing" });
-    expect(store.get(take.recordingId).finalizationError).toEqual(error);
-    service.report({ ...identity, sequence: 4, state: "finalizing", finalizationError: null });
-    expect(store.get(take.recordingId).finalizationError).toBeNull();
-    service.report({ ...identity, sequence: 5, state: "complete", sourceDurationUs: 100 });
-    expect(store.get(take.recordingId)).toMatchObject({
-      state: "complete",
-      finalizationError: null,
-    });
+    store.ingestLifecycle(take.id, { sourceId: take.sourceId, sequence: 1, state: "recording" });
+    await service.stop(take.id);
+    await expect.poll(() => store.get(take.id).finalizationError?.code).toBe("MEDIA_WORKER_FAILED");
+    const failed = store.get(take.id);
+    await service.reconcileStranded();
+    expect(attempts).toBe(1);
+    expect(store.get(take.id)).toEqual(failed);
+    await service.stop(take.id);
+    await expect.poll(() => store.get(take.id).state).toBe("interrupted");
+    expect(attempts).toBe(2);
+    expect(store.get(take.id).finalizationError).toBeNull();
   } finally {
     await service.close();
     store.close();

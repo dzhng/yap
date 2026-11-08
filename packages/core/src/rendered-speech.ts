@@ -1,10 +1,16 @@
-import { add, fromTime, rational, toTime } from "@yap/composition";
+import { add, fromTime, rational, round } from "@yap/composition";
 import { isDeepStrictEqual } from "node:util";
 import type { AssetStore } from "./assets.js";
 import type { Catalog } from "./catalog.js";
 import type { ProjectStore } from "./projects.js";
-import type { AudioExtraction, AudioExtractionInput, ExtractedAudio } from "./audio-extraction.js";
-import { CatalogError } from "./catalog.js";
+import {
+  parseExtractedAudio,
+  publicExtraction,
+  type AudioExtraction,
+  type AudioExtractionInput,
+  type ExtractedAudio,
+} from "./audio-extraction.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import type {
   ArtifactStatus,
   Job,
@@ -16,6 +22,8 @@ import type {
 import { ResourceReferences, resourceKinds } from "./references.js";
 import {
   transcriptGenerationResource,
+  publicTranscriptMetadata,
+  parsePublicTranscriptMetadata,
   type TranscriptMetadata,
   type TranscriptStore,
 } from "./transcript.js";
@@ -36,6 +44,24 @@ type RenderedSpeechEvidence = {
   pcm: ExtractedAudio;
   transcript: TranscriptMetadata;
 };
+function publicSpeech(value: RenderedSpeechEvidence) {
+  const output = {
+    ...value,
+    pcm: publicExtraction(value.pcm),
+    transcript: publicTranscriptMetadata(value.transcript),
+  };
+  return JSON.parse(
+    JSON.stringify(output, (_, child) => (typeof child === "bigint" ? Number(child) : child)),
+  );
+}
+function parsePublicSpeech(value: unknown): RenderedSpeechEvidence {
+  const record = value as Record<string, any>;
+  return {
+    ...record,
+    pcm: parseExtractedAudio(record.pcm),
+    transcript: parsePublicTranscriptMetadata(record.transcript),
+  } as RenderedSpeechEvidence;
+}
 export type RenderedSpeechRead = {
   projectId: string;
   revisionId: string;
@@ -70,15 +96,18 @@ export class RenderedSpeech {
       tap: input.tap,
       rendition: input.rendition,
     };
-    return {
+    const result = {
       target: {
         kind: "project" as const,
-        projectId: request.projectId,
+        id: request.projectId,
         revisionId: request.revisionId,
       },
       artifact,
       input: JSON.stringify({ request, execution: this.owners.transcripts.recognitionExecution() }),
     };
+    return JSON.parse(
+      JSON.stringify(result, (_, child) => (typeof child === "bigint" ? Number(child) : child)),
+    );
   }
   /**
    * The pinned project bounds the range: clamped with range-clamped, or refused with no overlap.
@@ -99,7 +128,7 @@ export class RenderedSpeech {
         ? {
             generation: status.published.generation,
             issues: status.published.issues,
-            speech: JSON.parse(status.published.result) as RenderedSpeechEvidence,
+            speech: publicSpeech(parsePublicSpeech(JSON.parse(status.published.result))),
           }
         : null,
       issues: admitted.issues,
@@ -143,7 +172,7 @@ export class RenderedSpeech {
       const job = this.owners.jobs.job(status.jobId);
       if (["waiting", "queued", "running"].includes(job.state))
         return { state: "waiting", dependency: job.jobId };
-      throw new CatalogError(
+      throw dependencyRefusal(
         job.errorCode ?? "DEPENDENCY_FAILED",
         job.reason ?? "Rendered speech dependency failed",
         {
@@ -154,7 +183,7 @@ export class RenderedSpeech {
         job.retryable,
       );
     }
-    throw new CatalogError(
+    throw dependencyRefusal(
       status.reason === "model_not_prepared" ? "MODEL_NOT_PREPARED" : "UNAVAILABLE",
       status.reason ?? "Rendered speech dependency is unavailable",
       {},
@@ -162,7 +191,7 @@ export class RenderedSpeech {
     );
   }
   private pcm(status: ArtifactStatus) {
-    const pcm = JSON.parse(status.published!.result) as ExtractedAudio;
+    const pcm = parseExtractedAudio(JSON.parse(status.published!.result));
     if (pcm.origin.selection.kind !== "project")
       throw new CatalogError(
         "INVALID_EVIDENCE",
@@ -191,7 +220,6 @@ export class RenderedSpeech {
         "MODEL_NOT_PREPARED",
         "Speech model is not prepared; model.prepare will download/acquire and verify the transcription model/runtime files.",
         this.owners.transcripts.recognitionNotPrepared(),
-        true,
       );
     return { state: "ready" };
   }
@@ -200,7 +228,7 @@ export class RenderedSpeech {
     const current = this.status(input, admitted);
     if (current.published) return current;
     if (!current.jobId)
-      throw new CatalogError("NOT_READY", "Use transcript.render.prepare before retry");
+      throw new CatalogError("PREREQUISITE_MISSING", "Use transcript.render.prepare before retry");
     const parent = this.owners.jobs.job(current.jobId);
     if (["waiting", "queued", "running"].includes(parent.state)) return current;
     const extracted = this.owners.extraction.request(admitted.applied);
@@ -208,15 +236,19 @@ export class RenderedSpeech {
     this.owners.jobs.retry(current.jobId);
     return this.status(input, admitted);
   }
+  /** `job.retry` names only the recognition job; its retry still re-runs a failed extraction. */
+  retryJob(job: Job) {
+    return this.retry(this.selection(job));
+  }
   async execute({ job, signal }: JobExecution): Promise<StagedJobResult> {
     signal.throwIfAborted();
     const input = this.selection(job),
       extracted = this.owners.extraction.request(input);
     if (!extracted.published)
-      throw new CatalogError("ARTIFACT_CHANGED", "Rendered PCM dependency disappeared", {}, true);
+      throw new CatalogError("DEPENDENCY_LOST", "Rendered PCM dependency disappeared", {});
     const pcm = this.pcm(extracted);
     const resourceId = transcriptGenerationResource({
-      owner: { kind: "asset", assetId: pcm.assetId },
+      owner: { kind: "asset", id: pcm.assetId },
       generation: job.attemptId,
     });
     this.owners.jobs.retainInputs(job.jobId, "transcript-generation", [resourceId]);
@@ -234,7 +266,7 @@ export class RenderedSpeech {
     };
     let published = false;
     return {
-      result: JSON.stringify(speech),
+      result: JSON.stringify(publicSpeech(speech)),
       issues,
       publish: () => {
         this.references.retain("transcript-generation", { kind: "job", id: job.jobId }, [
@@ -251,7 +283,7 @@ export class RenderedSpeech {
   get(input: RenderedSpeechRead) {
     this.owners.projects.revision(input.projectId, input.revisionId);
     const retained = this.owners.jobs.retainedArtifact(
-      { kind: "project", projectId: input.projectId },
+      { kind: "project", id: input.projectId },
       artifact,
       input.generation,
     );
@@ -264,10 +296,10 @@ export class RenderedSpeech {
       );
     if (input.cursor && input.cursor.generation !== input.generation)
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
-        "Rendered recognition continuation changed generation",
+        "INVALID_PARAMS",
+        "Rendered recognition continuation belongs to another generation",
       );
-    const speech = JSON.parse(retained.result) as RenderedSpeechEvidence;
+    const speech = parsePublicSpeech(JSON.parse(retained.result));
     const origin = speech.pcm.origin;
     if (origin.selection.kind !== "project")
       throw new CatalogError("INVALID_EVIDENCE", "Rendered PCM origin is not a project");
@@ -286,16 +318,20 @@ export class RenderedSpeech {
       kind: "rendered-speech" as const,
       state: "ready" as const,
       issues: this.owners.jobs.issues(retained),
-      pcm: speech.pcm,
-      transcript: speech.transcript,
+      pcm: publicExtraction(speech.pcm),
+      transcript: publicTranscriptMetadata(speech.transcript),
       page: {
-        rows: page.rows.map((row) => ({
-          ...row,
-          projectRange: {
-            startUs: toTime(add(start, fromTime(row.sourceRange.startUs))),
-            endUs: toTime(add(start, fromTime(row.sourceRange.endUs))),
-          },
-        })),
+        rows: page.rows.map((row) => {
+          const { issues, ...rest } = row as typeof row & { issues?: unknown };
+          return {
+            ...rest,
+            ...(issues === undefined ? {} : { issues }),
+            projectRange: {
+              startUs: round(add(start, fromTime(row.sourceRange.startUs))),
+              endUs: round(add(start, fromTime(row.sourceRange.endUs))),
+            },
+          };
+        }),
         nextCursor: page.nextCursor
           ? { generation: input.generation, sourceCursor: page.nextCursor }
           : null,

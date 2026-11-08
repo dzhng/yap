@@ -70,12 +70,11 @@ async function fixture(
       targets: {
         pin: (target) => {
           if (target.kind !== "project") throw Error("project");
-          projects.revision(target.projectId, target.revisionId);
+          projects.revision(target.id, target.revisionId);
           return target;
         },
-        isAvailable: (target) =>
-          target.kind === "project" && !projects.isDeleting(target.projectId),
-        isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
+        isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.id),
+        isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.id),
         isCapturing: () => false,
       },
       execute: async (execution) => {
@@ -176,7 +175,7 @@ async function fixture(
       background: "#000000ff",
     },
   });
-  const placed = current.projects.apply(created.project.projectId, {
+  const placed = current.projects.apply(created.project.id, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
     operations: [
@@ -198,7 +197,7 @@ async function fixture(
     home,
     asset,
     placed,
-    input: { projectId: created.project.projectId, revisionId: placed.revision.id },
+    input: { projectId: created.project.id, revisionId: placed.revision.id },
     get current() {
       return current;
     },
@@ -223,7 +222,11 @@ async function ready(f: Awaited<ReturnType<typeof fixture>>) {
   await f.current.jobs.idle();
   const status = await f.current.prepared.request(f.input);
   expect(status.state).toBe("ready");
-  return JSON.parse(status.published!.result) as PreparedAudio;
+  return JSON.parse(status.published!.result) as PreparedAudio & {
+    sizeBytes: number;
+    frameCount: number;
+    sampleRange: { startSamples: number; endSamples: number };
+  };
 }
 test("retains exact PCM and immutable revision dependencies; bounded reads survive restart and newer edits", async () => {
   const f = await fixture();
@@ -357,12 +360,12 @@ test("renaming the normalization implementation re-keys a failed preparation ins
   });
   const input = { projectId: f.input.projectId, revisionId: normalized.revision.id };
   f.setHold(async () => {
-    throw new CatalogError("NORMALIZATION_NOT_FEASIBLE", "Normalization misses its targets");
+    throw new CatalogError("INVALID_PARAMS", "Normalization misses its targets");
   });
   await f.current.prepared.request(input);
   await f.current.jobs.idle();
   const failed = await f.current.prepared.request(input);
-  expect(failed).toMatchObject({ state: "failed", retryable: false, published: null });
+  expect(failed).toMatchObject({ state: "failed", retryable: true, published: null });
   await f.reopen("native-window", { normalization: "normalization-v1" });
   expect(await f.current.prepared.request(input)).toMatchObject({
     jobId: failed.jobId,
@@ -685,8 +688,8 @@ test("deleting a project fences staged work and retires every revision dependenc
   const f = await fixture();
   const value = await ready(f);
   f.current.projects.markDeleting(f.input.projectId);
-  await f.current.jobs.drainOwner({ kind: "project", projectId: f.input.projectId });
-  await f.current.jobs.forgetOwner({ kind: "project", projectId: f.input.projectId });
+  await f.current.jobs.drainOwner({ kind: "project", id: f.input.projectId });
+  await f.current.jobs.forgetOwner({ kind: "project", id: f.input.projectId });
   while (!f.current.projects.finishDeletionPage(f.input.projectId)) {}
   expect(
     new ResourceReferences(f.current.catalog).dependencies({
@@ -778,7 +781,7 @@ test("owner deletion rejects an already staged publication", async () => {
   await f.current.prepared.request(f.input);
   await staged;
   f.current.projects.markDeleting(f.input.projectId);
-  const drained = f.current.jobs.drainOwner({ kind: "project", projectId: f.input.projectId });
+  const drained = f.current.jobs.drainOwner({ kind: "project", id: f.input.projectId });
   release();
   await drained;
   expect(
@@ -804,7 +807,7 @@ test("identical prepared bytes do not merge unrelated project source closures", 
     requestId: "second-project",
     canvas: f.placed.revision.document.canvas,
   });
-  const placed = f.current.projects.apply(created.project.projectId, {
+  const placed = f.current.projects.apply(created.project.id, {
     requestId: "second-source",
     expectedRevisionId: created.revision.id,
     operations: [
@@ -821,7 +824,7 @@ test("identical prepared bytes do not merge unrelated project source closures", 
       },
     ],
   });
-  const input = { projectId: created.project.projectId, revisionId: placed.revision.id };
+  const input = { projectId: created.project.id, revisionId: placed.revision.id };
   await f.current.prepared.request(input);
   await f.current.jobs.idle();
   const second = JSON.parse(
@@ -889,7 +892,7 @@ test.each(["processed", "dry"] as const)(
         publish: () => canceled.publish(),
       }),
     ).toThrow();
-    expect(() => receiver.current.projects.get(adoption.project.projectId)).toThrow();
+    expect(() => receiver.current.projects.get(adoption.project.id)).toThrow();
     expect(() => receiver.current.assets.get(original.assetId)).toThrow();
     await expect(
       receiver.current.prepared.stagePortable(
@@ -1068,7 +1071,10 @@ test("admission resolves pinned inputs once and retains resources without droppi
   expect(JSON.parse(ready.published!.input)).toEqual(expected);
   const value = JSON.parse(ready.published!.result) as PreparedAudio;
   expect(value.dependencies).toEqual(dependencies);
-  expect(value.sampleRange).toEqual(expected.sampleRange);
+  expect(value.sampleRange).toEqual({
+    startSamples: expected.sampleRange.start,
+    endSamples: expected.sampleRange.end,
+  });
   expect(
     new ResourceReferences(f.current.catalog).dependencies({ kind: "job-input", id: job.jobId }),
   ).toEqual([]);
@@ -1100,7 +1106,7 @@ test("prepared PCM admission honors the native WAV header capacity before queuei
       requestId,
       canvas: f.placed.revision.document.canvas,
     });
-    const { revision } = f.current.projects.apply(created.project.projectId, {
+    const { revision } = f.current.projects.apply(created.project.id, {
       requestId: "place",
       expectedRevisionId: created.revision.id,
       operations: [
@@ -1117,7 +1123,7 @@ test("prepared PCM admission honors the native WAV header capacity before queuei
         },
       ],
     });
-    return { projectId: created.project.projectId, revisionId: revision.id };
+    return { projectId: created.project.id, revisionId: revision.id };
   };
   const supported = place("supported", 11184799980);
   const refused = place("refused", 11184800000);
@@ -1337,7 +1343,7 @@ test("equivalent retained references share one output; distinct recorded policie
       resourceId = JSON.stringify([f.input.projectId, attemptId]);
     f.current.jobs.adoptArtifact(
       {
-        target: { kind: "project", projectId: f.input.projectId, revisionId: restored.id },
+        target: { kind: "project", id: f.input.projectId, revisionId: restored.id },
         artifact: "prepared-audio",
         generation: 1,
         attemptId,
@@ -1399,7 +1405,7 @@ test.each(["retained", "produced"] as const)(
             if (mode === "retained") {
               expect(prepared).toBeDefined();
               descriptor = prepared!.fd;
-              expect(fstatSync(descriptor).size).toBe(value.bytes);
+              expect(fstatSync(descriptor).size).toBe(value.sizeBytes);
             } else expect(prepared).toBeUndefined();
             throw new Error("delivery failed");
           },
@@ -1407,7 +1413,7 @@ test.each(["retained", "produced"] as const)(
       },
     });
     const job = f.current.jobs.submitDeferred({
-      target: { kind: "project", ...f.input },
+      target: { kind: "project", id: f.input.projectId, revisionId: f.input.revisionId },
       artifact: "audio",
       lane: "heavy",
       input: JSON.stringify({
@@ -1426,7 +1432,7 @@ test.each(["retained", "produced"] as const)(
     }
     const read = f.current.prepared.open(value.resourceId);
     try {
-      expect(fstatSync(read.fd).size).toBe(value.bytes);
+      expect(fstatSync(read.fd).size).toBe(value.sizeBytes);
     } finally {
       read.release();
     }
@@ -1458,7 +1464,7 @@ test("a preview or export pin keeps produced audio when preparation finishes lat
   expect(preview.pin(f.input).preparedResourceId).toBe(value.resourceId);
   expect(preview.pin(pinned)).toEqual(pinned);
   const job = f.current.jobs.submitDeferred({
-    target: { kind: "project", ...f.input },
+    target: { kind: "project", id: f.input.projectId, revisionId: f.input.revisionId },
     artifact: "preview",
     lane: "heavy",
     input: JSON.stringify({
@@ -1508,7 +1514,7 @@ test("an explicit acoustic measurement pin survives PCM admission and retry amon
   const recipe = JSON.parse(portable.publication.input);
   f.current.jobs.adoptArtifact(
     {
-      target: { kind: "project", ...f.input },
+      target: { kind: "project", id: f.input.projectId, revisionId: f.input.revisionId },
       artifact: "prepared-audio",
       generation: 1,
       attemptId,

@@ -16,7 +16,7 @@ export async function waitForObservation(
   throw new Error(`${label} timed out; ${evidence}`);
 }
 
-export async function waitForHealth(read, wait, expectedUpdateState) {
+export async function waitForHealth(read, wait, expectedAvailability) {
   let latest;
   try {
     return await wait(
@@ -27,7 +27,7 @@ export async function waitForHealth(read, wait, expectedUpdateState) {
           return (
             reply.ok &&
             reply.data.status === "ready" &&
-            (!expectedUpdateState || reply.data.update?.state === expectedUpdateState) &&
+            (!expectedAvailability || reply.data.update?.availability === expectedAvailability) &&
             reply.data
           );
         } catch (error) {
@@ -35,7 +35,7 @@ export async function waitForHealth(read, wait, expectedUpdateState) {
           return false;
         }
       },
-      expectedUpdateState ? `ready service with updater ${expectedUpdateState}` : "ready service",
+      expectedAvailability ? `ready service with updater ${expectedAvailability}` : "ready service",
     );
   } catch (error) {
     throw new Error(`${error.message}; last health: ${JSON.stringify(latest)}`, { cause: error });

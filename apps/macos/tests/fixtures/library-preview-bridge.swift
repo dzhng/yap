@@ -54,7 +54,7 @@ struct CheckFailure: Error, LocalizedError {
     var preparing = true
     init(_ evidence: Evidence) { self.evidence = evidence }
     func call(_ operation: String, _ params: [String: Any]) async throws(ServiceFailure) -> Data {
-        guard ["project.list", "project.get", "recording.list"].contains(operation) || operation == "project.create" && preparing else {
+        guard ["project.list", "project.get", "media.list", "recording.get"].contains(operation) || operation == "project.create" && preparing else {
             refused.append(["operation": operation, "params": params])
             evidence.record(["scope": "actual-metadata", "refusedBeforeForward": operation, "params": params])
             throw ServiceFailure(code: "FIXTURE_METADATA_ONLY", message: "Preview dispatch observed before service submission")
@@ -95,7 +95,7 @@ struct CheckFailure: Error, LocalizedError {
         var params = original
         let value: [String: Any]
         switch operation {
-        case "recording.list": value = ["recordings": [], "nextCursor": NSNull()]
+        case "media.list": value = ["media": [], "nextCursor": NSNull()]
         case "project.list": value = showProject ? ["projects": [project], "nextCursor": NSNull()] : empty
         case "project.get": value = project
         case "preview.get":
@@ -117,11 +117,15 @@ struct CheckFailure: Error, LocalizedError {
     var closed: [String] { calls.filter { $0["operation"] as? String == "artifact.close" }.map { ($0["params"] as! [String: Any])["token"] as! String } }
 }
 @MainActor func library(_ call: @escaping LibraryController.Call, _ preview: PreviewController) -> LibraryController {
-    LibraryController(call: call, changed: {}, closePreview: { preview.close(target: $0) }, forgetExports: { _ in },
-        deleted: {}, preview: { preview.open($0) }, export: { _, _ in })
+    LibraryController(call: call, confirm: { _ in true }, changed: {}, closePreview: { preview.close(target: $0) }, forgetExports: { _ in },
+        deleted: {}, preview: { preview.open($0) }, export: { _, _ in }, failure: { _, _ in })
+}
+/// The player first asks for a bounded draft: the opening ten seconds at its draft long edge.
+func draftPreview(_ projectId: String) -> [String: Any] {
+    ["projectId": projectId, "range": ["startUs": 0, "endUs": 10_000_000], "maxLongEdge": 960]
 }
 @MainActor func page(_ owner: LibraryController) -> [[String: String]] {
-    owner.state.projects.map { ["projectId": $0.projectId, "title": $0.title, "createdAt": $0.createdAt, "currentRevisionId": $0.currentRevisionId] }
+    owner.state.projects.map { ["id": $0.id, "title": $0.title, "createdAt": $0.createdAt, "currentRevisionId": $0.currentRevisionId] }
 }
 @main struct Check {
     @MainActor static func main() async {
@@ -154,30 +158,32 @@ struct CheckFailure: Error, LocalizedError {
                 live.preparing = false
                 let presentation = Presentation(evidence)
                 var failures: [String] = []
-                let preview = PreviewController(call: live.call, presentation: presentation, failure: { failures.append($0) })
+                let preview = PreviewController(call: live.call, presentation: presentation, failure: { _, message in if let message { failures.append(message) } })
                 let owner = library(live.call, preview)
                 owner.serviceChanged(ready: true)
                 try await until { !owner.state.projectsRefreshing && !owner.state.recent.isEmpty || !owner.state.projectsRefreshing && !owner.state.projects.isEmpty }
-                try require(page(owner) == Array(expected.prefix(5)), "Actual first page must preserve complete public creation values")
+                // Library listings are newest first: the first page holds the five latest creations.
+                let newestFirst = Array(expected.reversed())
+                try require(page(owner) == Array(newestFirst.prefix(5)), "Actual first page must preserve complete public creation values")
                 try require((live.calls.first { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary).isEqual(to: ["limit": 5]), "Actual first-page request must preserve the native page limit")
-                evidence.record(["state": "actual-first-page", "projects": page(owner), "nextCursor": owner.state.nextProjectCursor.map { ["afterSequence": $0.afterSequence] } ?? [:]])
+                evidence.record(["state": "actual-first-page", "projects": page(owner), "nextCursor": owner.state.nextProjectCursor ?? ""])
                 let cursor = owner.state.nextProjectCursor!
                 owner.nextProjects(); try await until { !owner.state.projectsRefreshing }
-                try require(page(owner) == Array(expected.suffix(1)) && owner.state.hasPreviousProjectPage && owner.state.nextProjectCursor == nil,
+                try require(page(owner) == Array(newestFirst.suffix(1)) && owner.state.hasPreviousProjectPage && owner.state.nextProjectCursor == nil,
                     "Actual continuation must preserve the final project and exhausted cursor")
                 let continuation = live.calls.last { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary
-                try require(continuation.isEqual(to: ["limit": 5, "cursor": ["afterSequence": cursor.afterSequence]]), "Continuation must send the returned cursor unchanged")
+                try require(continuation.isEqual(to: ["limit": 5, "cursor": cursor]), "Continuation must send the returned cursor unchanged")
                 evidence.record(["state": "actual-continuation-page", "projects": page(owner)])
                 owner.previousProjects(); try await until { !owner.state.projectsRefreshing }
-                try require(page(owner) == Array(expected.prefix(5)) && !owner.state.hasPreviousProjectPage, "Actual previous page must restore complete values")
+                try require(page(owner) == Array(newestFirst.prefix(5)) && !owner.state.hasPreviousProjectPage, "Actual previous page must restore complete values")
                 try require((live.calls.last { $0["operation"] as? String == "project.list" }!["params"] as! NSDictionary).isEqual(to: ["limit": 5]), "Previous navigation must request the original page")
                 let selected = expected[2]
-                let fetched = try JSONSerialization.jsonObject(with: await live.call("project.get", ["projectId": selected["projectId"]!])) as! NSDictionary
+                let fetched = try JSONSerialization.jsonObject(with: await live.call("project.get", ["projectId": selected["id"]!])) as! NSDictionary
                 try require(fetched.isEqual(to: selected), "Actual selected project.get must preserve all page metadata")
-                owner.perform(.previewProject(selected["projectId"]!))
+                owner.perform(.previewProject(selected["id"]!))
                 try await until { !failures.isEmpty }
-                try require(live.refused.count == 1 && live.refused[0]["operation"] as? String == "preview.get" && (live.refused[0]["params"] as! NSDictionary).isEqual(to: ["projectId": selected["projectId"]!]), "Actual library action must dispatch exactly the selected project owner")
-                try require(presentation.movies.isEmpty && failures.last!.contains("FIXTURE_METADATA_ONLY"), "Metadata action must stop before live preview submission")
+                try require(live.refused.count == 1 && live.refused[0]["operation"] as? String == "preview.get" && (live.refused[0]["params"] as! NSDictionary).isEqual(to: draftPreview(selected["id"]!)), "Actual library action must dispatch exactly the selected project owner")
+                try require(presentation.movies.isEmpty && failures.last == "Preview dispatch observed before service submission", "Metadata action must stop before live preview submission")
                 preview.close(); live.host.shutdown(); try await until { live.exited }
                 live.watcher?.cancel(); evidence.record(["check": "actual-metadata-pages-get-and-composed-dispatch", "passed": true])
                 source = nil
@@ -187,26 +193,26 @@ struct CheckFailure: Error, LocalizedError {
             let presentation = Presentation(evidence)
             let ready = historical.ready
             let token = (ready["delivery"] as! [String: Any])["token"] as! String
-            let expiry = (ready["delivery"] as! [String: Any])["expiresAt"] as! Double
+            let expiry = (ready["delivery"] as! [String: Any])["expiresAtMs"] as! Double
             let clock = Date(timeIntervalSince1970: expiry / 1000 - 20)
             evidence.record(["scope": "historical-replay", "clockUnixMs": clock.timeIntervalSince1970 * 1000])
             var failures: [String] = []
-            let preview = PreviewController(call: historical.call, presentation: presentation, now: { clock }, failure: { failures.append($0) })
+            let preview = PreviewController(call: historical.call, presentation: presentation, now: { clock }, failure: { _, message in if let message { failures.append(message) } })
             let owner = library(historical.call, preview)
             // As the app does: the preview is titled by the name the Library holds for the project.
-            preview.projectTitle = { id in owner.state.projects.first { $0.projectId == id }?.title }
+            preview.projectTitle = { id in owner.state.projects.first { $0.id == id }?.title }
             owner.serviceChanged(ready: true); try await until { !owner.state.projectsRefreshing }
             try require(page(owner).isEmpty && owner.state.nextProjectCursor == nil, "Retained actual empty page must remain empty")
             historical.showProject = true; owner.refreshProjects(); try await until { !owner.state.projectsRefreshing }
             try require(page(owner) == [historical.project as! [String: String]], "Scripted navigation must preserve the unchanged actual metadata row")
-            let id = historical.project["projectId"] as! String, revision = historical.waiting["revisionId"] as! String
+            let id = historical.project["id"] as! String, revision = historical.waiting["revisionId"] as! String
             owner.perform(.previewProject(id)); try await until { !presentation.messages.isEmpty }
             preview.tick(); try await until { !presentation.movies.isEmpty || !failures.isEmpty }
             let requests = historical.calls.filter { $0["operation"] as? String == "preview.get" }.map { $0["params"] as! NSDictionary }
-            try require(requests.count == 2 && requests[0].isEqual(to: ["projectId": id]) && requests[1].isEqual(to: ["projectId": id, "revisionId": revision]),
+            try require(requests.count == 2 && requests[0].isEqual(to: draftPreview(id)) && requests[1].isEqual(to: draftPreview(id).merging(["revisionId": revision]) { _, pinned in pinned }),
                 "Historical preview request must retain the first returned revision")
             let movie = (ready["published"] as! [String: Any])["output"] as! [String: Any]
-            try require(presentation.movies == [["title": owner.state.projects.first { $0.projectId == id }!.title, "file": movie["file"] as! String, "mediaType": movie["mediaType"] as! String]],
+            try require(presentation.movies == [["title": owner.state.projects.first { $0.id == id }!.title, "file": movie["file"] as! String, "mediaType": movie["mediaType"] as! String]],
                 "Historical ready receipt must dispatch its exact movie path and revision")
             preview.tick(); try await until { historical.calls.contains { $0["operation"] as? String == "project.get" } }
             try require(presentation.movies.count == 1 && failures.isEmpty, "Different actual historical head must not replace preview pin")

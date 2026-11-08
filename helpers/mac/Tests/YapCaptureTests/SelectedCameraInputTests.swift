@@ -48,7 +48,7 @@ func runSelectedCameraInputTests(output: String? = nil) async throws {
         precondition(cameraTimes.filter { $0 >= 200000 } == [200000, 300000, 400000], "The exact selected fixture must survive independent publication")
         var cursorSamples: [CursorSample] = []
         let screenJournal = try CaptureJournal.readEvidence(directory: folder.appendingPathComponent("screen").path,
-            maximumBytes: nil, retainTiming: true, geometry: { _ in }, samples: { cursorSamples.append(contentsOf: $0) }, displaySpace: { _ in }, layout: 2)
+            retainTiming: true, geometry: { _ in }, samples: { cursorSamples.append(contentsOf: $0) }, displaySpace: { _ in }, layout: JournalSchema.current)
         precondition(screenJournal.finished && cursorSamples.count == 1)
         let cursor = cursorSamples[0]
         precondition(cursor.sourceUs == 150000 && cursor.globalX == 50 && cursor.globalY == 40 && cursor.buttons == 0)
@@ -756,24 +756,16 @@ private func verifyCameraSwitch(root: URL, screenSource: URL, cameraSource: URL,
     catch let error as CaptureFailure { precondition(error.code == "INVALID_STATE") }
     print("PASS idempotent-set: repeating a state opens and stops nothing more; a settled take refuses")
 
-    // A take turns its camera on at most 500 times, counting the turn-on at its start: the 501st
-    // is refused, so availability never exceeds what publication and recovery accept.
-    t = try take("toggle-limit", startsOn: true) { $0.pulseUs = 1000 }
+    // Camera transitions have no aggregate ceiling; all off intervals survive publication.
+    t = try take("many-toggles", startsOn: true) { $0.pulseUs = 1000 }
     try await t.start()
-    var turnOns = 1
-    var refusal: CaptureFailure?
-    for _ in 0..<600 {
+    for _ in 0..<501 {
         try await Task.sleep(for: .milliseconds(3))
         try await t.capture.setCamera(on: false)
-        do { try await t.capture.setCamera(on: true); turnOns += 1 }
-        catch let error as CaptureFailure { refusal = error; break }
+        try await t.capture.setCamera(on: true)
     }
-    precondition(turnOns == 500 && refusal?.code == "CAMERA_TOGGLE_LIMIT",
-        "Expected 500 turn-ons then the toggle limit, got \(turnOns) and \(String(describing: refusal))")
-    precondition(t.capture.deviceState == "recording" && t.capture.companionCamera?.on == false)
     result = try await t.stop()
-    precondition(result.state == "complete" && result.camera?.state == "complete",
-        "A take at the limit publishes: \(String(describing: result.failure ?? result.camera?.failure))")
-    precondition(t.gaps?.count == CameraAvailability.maximumGaps, "Refused only at run 500: \(t.gaps?.count ?? 0) gaps")
-    print("PASS toggle-limit: 500 turn-ons publish \(CameraAvailability.maximumGaps) gaps; the 501st is refused")
+    precondition(result.state == "complete" && result.camera?.state == "complete")
+    precondition(t.gaps?.count == 501, "All camera off intervals must survive publication")
+    print("PASS 502 camera turn-ons publish all 501 gaps")
 }

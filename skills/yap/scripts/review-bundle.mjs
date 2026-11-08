@@ -148,15 +148,17 @@ export async function reviewBundle(request, invoke = createCli(request.cli), art
         });
         if (result.revisionId && result.revisionId !== revisionId)
           throw failure("ARTIFACT_CHANGED", "Events returned a different revision");
-        const { page: pageData, ...facts } = result;
+        // A pending read carries no rows collection; only a returned page can complete the scan.
+        const { rows, nextCursor = null, ...facts } = result;
         events.observations.push(facts);
         events.coverage ??= result.coverage;
-        events.rows.push(...(pageData?.rows ?? []));
+        events.rows.push(...(rows ?? []));
         if (events.rows.length > budgets.maxEvents)
           throw failure("INVALID_RESPONSE", "Event owner exceeded the row budget");
-        cursor = pageData?.nextCursor;
+        cursor = nextCursor;
         events.nextCursor = cursor ?? null;
-        events.complete = !!pageData && !cursor && events.coverage?.cuts?.state === "ready";
+        events.complete =
+          Array.isArray(rows) && !cursor && events.coverage?.cuts?.state === "ready";
         if (!cursor || events.rows.length >= budgets.maxEvents) break;
       }
     } catch (error) {

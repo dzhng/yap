@@ -82,9 +82,14 @@ async function fixture() {
       entry: "execution/worker.py",
     },
   };
-  const models = new Models(home, () => {
-    throw new Error("network refused");
-  }, [manifest]);
+  const models = new Models(
+    home,
+    () => {
+      throw new Error("network refused");
+    },
+    [manifest],
+    catalog,
+  );
   await models.prepare(manifest.name, new AbortController().signal, { runtimeSource, modelSource });
   const evidence = new SpeakerEvidenceStore(catalog, assetSpeakerOwner(assets, acquisitions));
   const requests: Parameters<SpeakerObserver>[0][] = [];
@@ -98,7 +103,7 @@ async function fixture() {
       });
     if (control.fail)
       return {
-        pcm: { ...speakerSource.pcm, frames },
+        pcm: { ...speakerSource.pcm, frameCount: frames },
         operands: {
           nativeReceipt: nativeOutput(
             ["0.000 30.001 speaker_0"],
@@ -110,7 +115,7 @@ async function fixture() {
         failure: new CatalogError("MODEL_CONTRACT_CHANGED", "Native endpoint is outside support"),
       };
     return {
-      pcm: { ...speakerSource.pcm, frames },
+      pcm: { ...speakerSource.pcm, frameCount: frames },
       operands: nativeOutput(undefined, request.engine.modelSha256, frames),
     };
   };
@@ -121,7 +126,7 @@ async function fixture() {
     targets: {
       pin: (v) => {
         if (v.kind !== "asset") throw new Error("expected asset");
-        assets.get(v.assetId);
+        assets.get(v.id);
         return v;
       },
       isAvailable: () => !control.deleting,
@@ -202,7 +207,7 @@ test("cancellation drains a held worker and explicit retry publishes a fresh gen
   expect(f.processing.sourceStatus(f.input).published).toBeNull();
   expect(() =>
     f.evidence.metadata({
-      owner: { kind: "asset", assetId: f.input.assetId },
+      owner: { kind: "asset", id: f.input.assetId },
       sourceId: f.input.assetId,
       generation: first,
       policy: "speaker-v1",
@@ -222,7 +227,7 @@ test("native refusals retain exact original operands but never expose ready inte
   const status = f.processing.sourceStatus(f.input),
     job = f.jobs.job(status.jobId!);
   const identity = {
-    owner: { kind: "asset" as const, assetId: f.input.assetId },
+    owner: { kind: "asset" as const, id: f.input.assetId },
     sourceId: f.input.assetId,
     generation: job.attemptId,
     policy: "speaker-v1" as const,
@@ -339,7 +344,7 @@ test("selected-range preparation publishes an independent bounded generation", a
     await new Promise((resolve) => setTimeout(resolve, 5));
   expect(f.processing.sourceStatus(selected).state).toBe("ready");
   expect(f.processing.sourceStatus(selected).published?.evidence).toMatchObject({
-    source: { observationRange: selected.sourceRange, pcm: { frames: 160_000 } },
+    source: { observationRange: selected.sourceRange, pcm: { frameCount: 160_000 } },
     scoreCount: 125,
   });
   expect(f.requests).toHaveLength(1);

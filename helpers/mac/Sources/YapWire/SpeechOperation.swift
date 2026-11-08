@@ -40,7 +40,7 @@ enum SpeechOperation {
         guard channel >= 0, dup2(STDERR_FILENO, STDOUT_FILENO) >= 0 else {
             if channel >= 0 { close(channel) }
             throw NativeFailure(
-                "TRANSCRIPTION_FAILED", "Cannot protect the response channel.", retryable: true)
+                "TRANSCRIPTION_FAILED", "Cannot protect the response channel.")
         }
         defer {
             fflush(stdout)

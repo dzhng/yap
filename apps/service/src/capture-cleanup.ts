@@ -1,3 +1,4 @@
+import { MAXIMUM_TAKE_US } from "@yap/protocol";
 import { join } from "node:path";
 import { lstat, type FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
@@ -5,8 +6,8 @@ import { openDirectoryLease } from "@yap/core/files";
 import type { CaptureStore } from "@yap/core/capture-store";
 import { isSettled } from "@yap/core/capture-store";
 import type { JobExecution, JobQueue } from "@yap/core/jobs";
-import { nativeResult, MAX_MEDIA_TIMEOUT_MS, type MediaWorker } from "./worker.js";
-import { publicationDeadlineMs } from "./publication.js";
+import { nativeResult, type MediaWorker } from "./worker.js";
+import { captureWorkDeadlineMs } from "./publication.js";
 
 const artifact = "capture-cleanup";
 type RoleResult = {
@@ -46,12 +47,12 @@ export class CaptureCleanup {
   request(recordingId: string) {
     const recording = this.store.get(recordingId);
     const job = this.jobs.submit({
-      target: { kind: "recording", recordingId, revisionId: null },
+      target: { kind: "recording", id: recordingId, revisionId: null },
       artifact,
       lane: "heavy",
       input: recording.sourceId,
     });
-    return this.jobs.inspect(job.jobId);
+    return this.jobs.work(job.jobId);
   }
 
   async execute({ job, signal }: JobExecution): Promise<string> {
@@ -61,22 +62,24 @@ export class CaptureCleanup {
       job.target.revisionId !== null
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Cleanup requires a recording-owned source job");
-    const recording = this.store.get(job.target.recordingId);
+    const recording = this.store.get(job.target.id);
     if (
       !isSettled(recording.state) ||
       recording.state === "canceled" ||
-      this.store.isDeleting(recording.recordingId)
+      this.store.isDeleting(recording.id)
     )
       throw new CatalogError("INVALID_STATE", "Cleanup requires a settled available recording");
     if (recording.sourceId !== job.input)
       throw new CatalogError("SOURCE_CHANGED", "Cleanup source differs from its pinned recording");
-    const root = join(this.home, "recordings", recording.recordingId);
+    const root = join(this.home, "recordings", recording.id);
     let lease: FileHandle | undefined;
     try {
       lease = await openDirectoryLease(root, "shared");
       signal.throwIfAborted();
       const directory = join(root, "source");
-      let bytes = 0;
+      const roles = new Set<string>();
+      let bytes = 0,
+        journalBytes = 0;
       for (const name of [
         "capture.journal.jsonl",
         "narration.mov",
@@ -88,8 +91,19 @@ export class CaptureCleanup {
           if (error.code === "ENOENT") return null;
           throw error;
         });
-        if (info?.isFile()) bytes += info.size;
+        if (info?.isFile()) {
+          bytes += info.size;
+          if (name === "capture.journal.jsonl") journalBytes = info.size;
+          else roles.add(name.split(".")[0]!);
+        }
       }
+      const timeoutMs = captureWorkDeadlineMs({
+        journalBytes,
+        bytes,
+        audioRoles: roles.size,
+        extraTraversals: 0,
+        durationUs: recording.sourceDurationUs ?? MAXIMUM_TAKE_US,
+      });
       const value = cleanupResult(
         nativeResult(
           await this.worker(
@@ -98,14 +112,14 @@ export class CaptureCleanup {
             {
               signal,
               descriptors: [lease.fd],
-              timeoutMs: Math.min(MAX_MEDIA_TIMEOUT_MS, 1_200_000 + publicationDeadlineMs(bytes)),
+              timeoutMs,
             },
           ),
         ),
       );
       signal.throwIfAborted();
       return JSON.stringify({
-        recordingId: recording.recordingId,
+        recordingId: recording.id,
         sourceId: recording.sourceId,
         roles: value,
       });
@@ -120,7 +134,6 @@ export class CaptureCleanup {
           "CLEANUP_UNAVAILABLE",
           "Cannot access recording cleanup inputs; retry after access is restored",
           {},
-          true,
         );
       throw error;
     } finally {

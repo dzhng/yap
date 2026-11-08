@@ -99,9 +99,6 @@ const readyTranscript = {
 };
 let data;
 switch (operation) {
-  case "recording.latest":
-    data = { recordingId: "fixture-recording" };
-    break;
   case "recording.get":
     data = {
       recordingId: params.recordingId,
@@ -142,7 +139,7 @@ switch (operation) {
       streams: [
         params.assetId === "video-asset"
           ? {
-              id: "video-stream",
+              streamId: "video-stream",
               kind: "video",
               width: 640,
               height: 360,
@@ -153,7 +150,7 @@ switch (operation) {
               ],
             }
           : {
-              id: "audio-stream",
+              streamId: "audio-stream",
               kind: "audio",
               sampleRate: 48000,
               channels: 1,
@@ -188,16 +185,7 @@ switch (operation) {
         ...data,
         page: {
           ...data.page,
-          nextCursor: {
-            assetId: "audio-asset",
-            streamId: "audio-stream",
-            acquisitionId: "fixture-acquisition",
-            generation: "transcript-generation",
-            supportDigest: "fixture-support",
-            afterSourceUs: 5200000,
-            afterOrdinal: 1,
-            range: null,
-          },
+          nextCursor: "fixture-transcript-cursor",
         },
       };
     }
@@ -236,7 +224,7 @@ switch (operation) {
   case "project.create":
     data = {
       project: { projectId: "fixture-project" },
-      revision: { id: "revision-0", ordinal: 0, document: { tracks: [], clips: [] } },
+      revision: { revisionId: "revision-0", ordinal: 0, document: { tracks: [], clips: [] } },
     };
     break;
   case "edit.apply": {
@@ -273,7 +261,7 @@ switch (operation) {
     );
     data = {
       revision: {
-        id: params.operations.some((item) => item.operation === "remove")
+        revisionId: params.operations.some((item) => item.operation === "remove")
           ? "revision-cut"
           : "revision-placed",
         ordinal: 1,
@@ -287,10 +275,10 @@ switch (operation) {
     data = { revisions: [], entries: [], nextCursor: null };
     break;
   case "edit.undo":
-    data = { id: "revision-undone", ordinal: 2, document: { tracks: [], clips: [] } };
+    data = { revisionId: "revision-undone", ordinal: 2, document: { tracks: [], clips: [] } };
     break;
   case "edit.restore":
-    data = { id: "revision-restored", ordinal: 3, document: { tracks: [], clips: [] } };
+    data = { revisionId: "revision-restored", ordinal: 3, document: { tracks: [], clips: [] } };
     break;
   case "index.frames":
   case "preview.get":
@@ -302,8 +290,10 @@ switch (operation) {
       published: {
         generation: "audio-generation",
         output: {
-          range: params.range,
-          unavailable: params.assetId ? unavailable(params.range, narrationBinding.available) : [],
+          range: params.sourceRange ?? params.range,
+          unavailable: params.assetId
+            ? unavailable(params.sourceRange ?? params.range, narrationBinding.available)
+            : [],
         },
       },
     };
@@ -349,7 +339,7 @@ switch (operation) {
   case "export.create":
     mkdirSync(params.directory, { recursive: true });
     writeFileSync(join(params.directory, params.leaf), "controlled package fixture");
-    data = { exportId: params.exportId, state: "queued" };
+    data = { exportId: params.requestId, state: "queued" };
     break;
   case "export.status": {
     const creation = readFileSync(process.env.YAP_CALLER_TRACE, "utf8")
@@ -357,35 +347,36 @@ switch (operation) {
       .split("\n")
       .map(JSON.parse)
       .findLast(
-        (item) => item.operation === "export.create" && item.params.exportId === params.exportId,
+        (item) => item.operation === "export.create" && item.params.requestId === params.exportId,
       );
     data = {
-      exportId: params.exportId,
-      state: "committed",
+      requestId: params.exportId,
+      state: "ready",
+      jobId: null,
       output: join(creation.params.directory, creation.params.leaf),
       receipt: {},
     };
     break;
   }
   case "package.open":
-    data = { id: "fixture-admission" };
+    data = { packageId: "fixture-admission" };
     break;
   case "package.status": {
     const prior = tracedCalls().filter((item) => item.operation === "package.status").length;
     const state = process.env.YAP_CALLER_PACKAGE_STATE;
     data =
       state && prior === 0
-        ? { id: params.admissionId, state, error: { message: "fixture package status" } }
+        ? { packageId: params.admissionId, state, error: { message: "fixture package status" } }
         : prior > 0
-          ? { id: params.admissionId, state: "failed", reason: "unexpected repeat poll" }
-          : { id: params.admissionId, state: "ready", packageHandle: "fixture-handle" };
+          ? { packageId: params.admissionId, state: "failed", reason: "unexpected repeat poll" }
+          : { packageId: params.admissionId, state: "ready", packageHandle: "fixture-handle" };
     break;
   }
   case "package.adopt":
     data = { state: "ready", projectId: "adopted-project", revisionId: "adopted-revision" };
     break;
   case "package.close":
-    data = { admissionId: params.admissionId, closed: true };
+    data = { packageId: params.admissionId, closed: true };
     break;
   case "project.get":
     data = { project: { projectId: params.projectId }, currentRevisionId: "adopted-revision" };

@@ -1,7 +1,7 @@
 import { createCli } from "./yap-cli.mjs";
 import { failure, runJsonHelper } from "./inspection-artifacts.mjs";
 
-const active = new Set(["waiting", "queued", "running", "processing", "not_ready"]);
+const active = new Set(["queued", "running"]);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function assertRequest(request) {

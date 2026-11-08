@@ -63,10 +63,20 @@ test("ordinary launch owns one service child and answers health without starting
   assert.equal(exists(join(home, "recordings")), false);
   const latest = await callLocal(socketPath(home), {
     id: "idle-latest",
-    operation: "recording.latest",
+    operation: "recording.get",
     params: {},
   });
-  assert.deepEqual(latest, { id: "idle-latest", ok: true, data: null });
+  assert.deepEqual(latest, {
+    id: "idle-latest",
+    ok: false,
+    error: {
+      code: "NOT_READY",
+      message: "There are no recordings yet",
+      retryable: true,
+      retryAfterMs: 15000,
+      details: { retry: { operation: "recording.get", params: {} } },
+    },
+  });
   assert.doesNotMatch(instance.diagnostics, /capture|permission/i);
 });
 
@@ -141,7 +151,13 @@ test("a second owner reports the conflict and leaves the live socket and its own
   const [, code] = await intruder.waitFor(/service failed code=(\w+)/);
   assert.equal(code, "SOCKET_IN_USE");
   assert.equal(intruder.running, true, "A failed start must stay visible, not exit silently");
-  assert.deepEqual(intruder.children(), [], "The refused service must not linger");
+  // The app reports the refusal, then ends the child, escalating to SIGKILL after its 2 s signal
+  // deadline; the child can still be exiting when the report lands.
+  await waitFor(
+    () => intruder.children().length === 0,
+    3_000,
+    () => `The refused service lingered: ${JSON.stringify(intruder.children())}`,
+  );
 
   assert.equal(statSync(socketPath(home)).ino, before.ino, "The live socket was replaced");
   assert.equal(alive(owner.servicePid), true);

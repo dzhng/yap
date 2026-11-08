@@ -4,7 +4,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { createCli } from "./yap-cli.mjs";
 import { budget, failure, runJsonHelper } from "./inspection-artifacts.mjs";
 
-const active = new Set(["waiting", "queued", "processing", "running", "not_ready"]);
+const active = new Set(["queued", "running"]);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const time = (value, name) => {
   if (Number.isSafeInteger(value)) return value;
@@ -44,14 +44,14 @@ function exactDistance(a, b) {
   );
 }
 function eventRows(result) {
-  return result.page?.rows ?? [];
+  return result.rows ?? [];
 }
 async function readEvents(invoke, selection, budgets, label) {
   const rows = [];
   const observations = [];
   let cursor;
   let coverage = null;
-  let state = "not_ready";
+  let state = "queued";
   for (let page = 0; page < budgets.maxEventPages; page++) {
     const result = await invoke("timeline.events", {
       ...selection,
@@ -77,7 +77,7 @@ async function readEvents(invoke, selection, budgets, label) {
     rows.push(...eventRows(result));
     if (rows.length > budgets.maxEvents)
       throw failure("OUTPUT_BUDGET_EXCEEDED", `${label} exceeded maxEvents`);
-    cursor = result.page?.nextCursor;
+    cursor = result.nextCursor;
     if (!cursor)
       return { state: "ready", rows, coverage, observations, complete: true, nextCursor: null };
   }
@@ -166,8 +166,8 @@ export async function deliveredScenes(request, invoke, { readFile = readBytes } 
   };
   const joinToleranceUs = budget(request.joinToleranceUs, 1, 0, 5_000_000, "joinToleranceUs");
   const exportStatus = await invoke("export.status", { exportId: request.exportId });
-  if (exportStatus.state !== "committed" || typeof exportStatus.output !== "string")
-    throw failure("NOT_READY", `Export ${request.exportId} is not committed`);
+  if (exportStatus.state !== "ready" || typeof exportStatus.output !== "string")
+    throw failure("NOT_READY", `Export ${request.exportId} is not ready`);
   const exportProjectId = exportStatus.snapshot?.projectId ?? exportStatus.projectId;
   if (exportProjectId !== request.projectId)
     throw failure("ARTIFACT_CHANGED", "Export belongs to a different project");
@@ -190,7 +190,7 @@ export async function deliveredScenes(request, invoke, { readFile = readBytes } 
     ino: before.ino,
   };
   const imported = await invoke("asset.import", {
-    requestId: `delivered-scenes:${request.exportId}`,
+    requestId: `delivered-scenes:${request.requestId}`,
     path: exportStatus.output,
   });
   const importedJob = await waitJob(invoke, imported.jobId, budgets);

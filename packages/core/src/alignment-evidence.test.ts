@@ -11,7 +11,7 @@ import {
 } from "./alignment-evidence.fixture.js";
 const sha = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 const identity = {
-  owner: { kind: "asset" as const, assetId: sha("asset") },
+  owner: { kind: "asset" as const, id: sha("asset") },
   generation: "g1",
   policy: "alignment-v1" as const,
 };
@@ -104,7 +104,7 @@ test("only settlement publishes; pagination binds exact threshold and exposes co
     ]);
     expect(() =>
       read.page({ view: "acoustic", thresholdRMS: 0.2, limit: 3, cursor: first.nextCursor! }),
-    ).toThrow("changed");
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
     const next = read.page({
       view: "acoustic",
       thresholdRMS: 0.1,

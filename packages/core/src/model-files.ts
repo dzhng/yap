@@ -64,7 +64,6 @@ export async function adoptFile(
       "MODEL_STORAGE_FULL",
       "An independent model copy requires its file size plus 512 MiB of free reserve",
       {},
-      true,
     );
   await copyImportedFile(
     source,

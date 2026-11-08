@@ -6,6 +6,7 @@ import { controlsProbe, launchReady, setDefault, temporary, waitFor } from "./ha
 
 const countdownWindow = "Yap Countdown";
 const controlsWindow = "Yap Controls";
+const captureWindow = "Yap Capture";
 
 /**
  * An ordinary launch of the packaged app, observed and driven through its controls probe. Such a
@@ -72,7 +73,7 @@ test(
   "Escape during the countdown abandons the start and allocates no recording",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     // A display is selected but never recorded: the count is abandoned before capture is asked for.
     await app.ready();
     await app.choose("capture.startOrStop");
@@ -111,10 +112,17 @@ test(
   "the menu offers to cancel the count it is running, and does",
   { timeout: 90_000 },
   async () => {
-    const app = await launchWith();
+    const app = await launchWith([["countdownBeforeRecording", "-bool", "YES"]]);
     await app.ready();
+    assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
     await app.instance.waitFor(/countdown \d+ seconds on display/);
+    // The menu hangs from the menu bar, right where the count and then the controls appear.
+    assert.notEqual(
+      (await app.window(captureWindow))?.visible,
+      true,
+      "Starting puts the menu away",
+    );
 
     // Escape is not the only way out: a person who reaches for the menu bar instead must find a
     // row that says what pressing it will do, rather than Start doing nothing.
@@ -151,8 +159,9 @@ test(
       return Boolean(find(await app.rows(), `source.window.${windowId}`));
     }, 20_000);
     await app.choose(`source.window.${windowId}`);
-    // The microphone switch starts on; turning it off records no audio device of any kind.
-    await app.choose("microphone.toggle");
+    // A Mac with a microphone starts with its switch on, and turning it off records no audio
+    // device of any kind; on a Mac without one the switch is already off.
+    if (find(await app.rows(), "microphone.toggle").checked) await app.choose("microphone.toggle");
     assert.equal(find(await app.rows(), "microphone.toggle").checked, false);
     assert.notEqual(
       (await app.window(controlsWindow))?.visible,
@@ -160,8 +169,14 @@ test(
       "An idle app floats no controls",
     );
 
+    assert.equal((await app.window(captureWindow))?.visible, true);
     await app.choose("capture.startOrStop");
     await waitFor(async () => (await app.working()).startsWith("Recording —"), 20_000);
+    assert.notEqual(
+      (await app.window(captureWindow))?.visible,
+      true,
+      "Starting puts the menu away, so it never covers the floating controls",
+    );
     assert.doesNotMatch(
       app.instance.diagnostics,
       /countdown/,

@@ -1,9 +1,15 @@
 import { verifyJoin } from "./join-verification.js";
 import { AssetConversionJobs, assetConversionRuntime } from "./asset-conversion.js";
 import { UpdateAdmission } from "./update-admission.js";
-import { RecordingDeletion } from "./deletion.js";
+import { LibraryDeletion } from "./library-deletion.js";
+import { recordingRetirement } from "./recording-retirement.js";
+import { projectRetirement } from "./project-retirement.js";
+import { assetRetirement } from "./asset-retirement.js";
+import { acquisitionRetirement } from "./acquisition-retirement.js";
 import { CaptureCleanup } from "./capture-cleanup.js";
 import { ManagedStorage } from "@yap/core/storage";
+import { filteredPage, pageCursor, pageEnvelope, pageFilters } from "@yap/core/page-cursor";
+
 import { VoiceGenerationJobs } from "@yap/core/voice-generation";
 import { voiceRenderer } from "./voice.js";
 import { AudioExtraction } from "@yap/core/audio-extraction";
@@ -17,13 +23,17 @@ import {
   outputCapabilities,
   audioOutputCapabilities,
   createSourceRangeProjection,
-  omit,
 } from "@yap/composition";
 import { ProjectPackages } from "./project-packages.js";
 import { writeFile } from "node:fs/promises";
 import { AcousticInspection } from "@yap/core/acoustic-inspection";
 import { MediaFrameInspection } from "@yap/core/frame-inspection";
 import { CaptureSourceRead } from "@yap/core/capture-source-read";
+import {
+  handoffPrompt,
+  recordingPromptFacts,
+  renderRecordingPrompt,
+} from "@yap/core/recording-prompt";
 import { SourceEvents } from "@yap/core/source-events";
 import { SourceSceneRead } from "@yap/core/scene-source-read";
 import { SceneEvidenceStore, assetSceneOwner } from "@yap/core/scene-evidence";
@@ -40,8 +50,13 @@ import { createPresets, type PresetsOptions } from "@yap/core/presets";
 import { PresetRefresh } from "@yap/core/preset-refresh";
 import { remoteSource, type RemoteOptions } from "@yap/core/preset-remote";
 import { runtimeMaterializer } from "./runtime-materialization.js";
-import { TranscriptStore, type SpeechTranscriptionReceipt } from "@yap/core/transcript";
+import {
+  TranscriptStore,
+  publicTranscriptMetadata,
+  type SpeechTranscriptionReceipt,
+} from "@yap/core/transcript";
 import { TranscriptProcessing, assetTranscriptOwner } from "@yap/core/transcript-processing";
+import { TranscriptBacklog } from "@yap/core/transcript-backlog";
 import { SourceTranscriptRead } from "@yap/core/transcript-read";
 import { wordKind } from "@yap/core/word-kind";
 import {
@@ -50,6 +65,7 @@ import {
 } from "@yap/core/imported-transcript";
 import { AcquisitionStore, AcquisitionImporter } from "@yap/core/acquisitions";
 import { SourceEvidenceStore } from "@yap/core/evidence";
+import { sourceCursorOverlay } from "@yap/core/trails";
 import { MediaExports } from "./exports.js";
 import { PointerPreparation } from "@yap/core/pointer-preparation";
 import { ProjectPreviewInspection } from "@yap/core/project-preview";
@@ -65,12 +81,14 @@ import { clearRenderWorkspace, withRenderedFile } from "./render.js";
 import { DerivativeDelivery } from "./delivery.js";
 import { DerivedCache } from "@yap/core/cache";
 import { ManagedFiles } from "./managed-files.js";
-import { ProjectDeletion } from "./project-deletion.js";
 import { ProjectStore } from "@yap/core/projects";
 import { createHash, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { AssetStore } from "@yap/core/assets";
-import { CatalogError } from "@yap/core/catalog";
+import { MediaListing } from "@yap/core/media-listing";
+import { CatalogError, dependencyRefusal, type Catalog } from "@yap/core/catalog";
+import { DeletionPlans } from "@yap/core/deletion-plans";
+import { LibraryUsers } from "@yap/core/library-users";
 import { CaptureStore, isSettled } from "@yap/core/capture-store";
 import { CaptureService } from "./capture.js";
 import { CaptureSources } from "./capture-sources.js";
@@ -91,7 +109,16 @@ import {
   type UpdateStatus,
   type UpdateBlocker,
   appOperations,
+  workState,
 } from "@yap/protocol";
+
+function sourceRangeAsMicroseconds(value: SelectionRange | undefined) {
+  if (!value) return undefined;
+  const endpoint = (time: SelectionRange["startUs"]) =>
+    typeof time === "number" ? time : Math.round(time.numerator / time.denominator);
+  return { startUs: endpoint(value.startUs), endUs: endpoint(value.endUs) };
+}
+
 import {
   listenLocal,
   prepareRuntimeDirectory,
@@ -135,7 +162,7 @@ type TranscriptSpeakerRequest = {
   acquisitionId?: string;
   channel: number;
   modelId: string;
-  observationRange: SelectionRange;
+  sourceRange: SelectionRange;
   generation: string;
 };
 type TranscriptSpeakerCursor = TranscriptSpeakerRequest & { bindingDigest?: string };
@@ -146,22 +173,7 @@ type TranscriptSpeakerCursor = TranscriptSpeakerRequest & { bindingDigest?: stri
  * only here. The page already carries the transcript, so the publication omits it.
  */
 function sourceTranscriptPublication(published: { generation: number | string; issues: Issue[] }) {
-  return { generation: published.generation, issues: published.issues };
-}
-
-function sameTranscriptSpeakerRequest(
-  a: TranscriptSpeakerRequest,
-  b: TranscriptSpeakerRequest,
-): boolean {
-  return (
-    a.streamId === b.streamId &&
-    a.acquisitionId === b.acquisitionId &&
-    a.channel === b.channel &&
-    a.modelId === b.modelId &&
-    a.generation === b.generation &&
-    a.observationRange.startUs === b.observationRange.startUs &&
-    a.observationRange.endUs === b.observationRange.endUs
-  );
+  return { generation: String(published.generation), issues: published.issues };
 }
 
 function importedAlignmentView(
@@ -190,6 +202,7 @@ function importedAlignmentView(
         ...cue,
         alignment: {
           state: status.state,
+          jobId: null,
           reason: status.reason,
           retryable: status.retryable,
           modelId: input.modelId,
@@ -224,6 +237,11 @@ export async function startProjectService(options: {
   presets?: Pick<PresetsOptions, "bundled" | "trash"> & { refresh?: true | RemoteOptions };
   version?: string | null;
   autoPrepareModels?: boolean;
+  /** Transcribe every recording and import in the background. The installed service turns it
+   * on; library callers and tests get only the transcription they ask for unless they opt in. */
+  autoTranscribe?: boolean;
+  /** Tests substitute deletion plans that fail a chosen durable write. */
+  deletionPlans?: (catalog: Catalog) => DeletionPlans;
   control?: { input: Readable; output: Writable; timeoutMs?: number };
 }) {
   const started = performance.now();
@@ -235,11 +253,11 @@ export async function startProjectService(options: {
   let jobs: JobQueue | undefined;
   let presetRefresh: PresetRefresh | undefined;
   let listenerStarting: Promise<LocalListener> | undefined;
-  let deletion: ProjectDeletion | undefined;
-  let recordingDeletion: RecordingDeletion | undefined;
+  let deletion: LibraryDeletion | undefined;
   let exports: MediaExports | undefined;
   let packages: ProjectPackages | undefined;
   let storage: ManagedStorage | undefined;
+  let libraryUsers: LibraryUsers | undefined;
   let controller: ControlChannel | undefined;
   let captureControl: CaptureService | undefined;
   let modelsOwner: Models | undefined;
@@ -259,6 +277,8 @@ export async function startProjectService(options: {
   let starting = true;
   let update: UpdateStatus = {
     state: "unavailable",
+    jobId: null,
+    availability: "unavailable",
     availableVersion: null,
     blockers: [],
     error: null,
@@ -272,7 +292,7 @@ export async function startProjectService(options: {
       if (jobs?.updateBlocked) blockers.push("jobs");
       if (captureControl?.updateBlocked) blockers.push("capture");
       if (exports?.updateBlocked) blockers.push("publication");
-      if (deletion?.updateBlocked || recordingDeletion?.updateBlocked) blockers.push("deletion");
+      if (deletion?.updateBlocked) blockers.push("deletion");
       if (packages?.updateBlocked) blockers.push("packages");
       if (delivery.updateBlocked) blockers.push("delivery");
       if (modelsOwner?.updateBlocked || modelPreparations.size) blockers.push("models");
@@ -287,7 +307,6 @@ export async function startProjectService(options: {
       if (modelsOwner) modelsOwner.onUpdateProgress = callback;
       if (storage) storage.onUpdateProgress = callback;
       if (deletion) deletion.onUpdateProgress = callback;
-      if (recordingDeletion) recordingDeletion.onUpdateProgress = callback;
       if (exports) exports.onUpdateProgress = callback;
       if (packages) packages.onUpdateProgress = callback;
       if (captureControl) captureControl.onUpdateProgress = callback;
@@ -313,7 +332,6 @@ export async function startProjectService(options: {
         reconciliation,
         jobs?.close(),
         deletion?.close(),
-        recordingDeletion?.close(),
         exports?.close(),
         packages?.close(),
         storage?.close(),
@@ -333,6 +351,7 @@ export async function startProjectService(options: {
       newId: randomUUID,
     });
     const captures = catalog;
+    const plans = options.deletionPlans?.(captures) ?? new DeletionPlans(captures);
     const presetsRoot = join(options.home, "presets");
     const remote = options.presets?.refresh;
     if (remote) {
@@ -355,7 +374,25 @@ export async function startProjectService(options: {
     const evidence = new SourceEvidenceStore(catalog, (identity) => {
       if (identity.owner.kind !== "acquisition")
         throw new CatalogError("NOT_FOUND", "Unsupported source evidence owner");
-      acquisitions.intent(identity.owner.acquisitionId);
+      acquisitions.intent(identity.owner.id);
+    });
+    // Work that settles during startup feeds the backlog; it drains once transcription exists.
+    let transcriptionStarted = false;
+    const transcriptBacklog = new TranscriptBacklog(catalog, {
+      readiness: () => transcriptionStarted && transcripts.recognitionReadiness().state === "ready",
+      status: (selection) => {
+        const status = transcripts.sourceStatus(selection);
+        return {
+          ...status,
+          errorCode: status.jobId ? queue.job(status.jobId).errorCode : null,
+          retryJobId: status.jobId,
+        };
+      },
+      submit: (selection, priority, retryJobId) => {
+        if (retryJobId) queue.retry(retryJobId);
+        else transcripts.prepareSource(selection, priority);
+      },
+      report: (error) => console.error(error),
     });
     const acquisitionImports = new AcquisitionImporter(
       catalog,
@@ -363,6 +400,20 @@ export async function startProjectService(options: {
       assets,
       evidence,
       library,
+      (acquisition) => {
+        for (const binding of acquisition.bindings) {
+          const stream = assets
+            .get(binding.assetId)
+            .streams.find((candidate) => candidate.id === binding.streamId);
+          if (stream?.kind !== "audio" || !options.autoTranscribe) continue;
+          transcriptBacklog.enqueue({
+            assetId: binding.assetId,
+            streamId: binding.streamId,
+            acquisitionId: acquisition.id,
+          });
+        }
+        transcriptBacklog.wake();
+      },
     );
     const capture = new CaptureSourceRead(assets, acquisitions, evidence);
     const sceneRecords = new SceneEvidenceStore(catalog, assetSceneOwner(assets, acquisitions));
@@ -373,6 +424,7 @@ export async function startProjectService(options: {
       library,
       globalThis.fetch,
       undefined,
+      catalog,
       runtimeMaterializer(nativeExecutable),
     );
     const speakerLabels = new SpeakerLabelStore(catalog);
@@ -398,6 +450,7 @@ export async function startProjectService(options: {
       modelPreparations.add(automaticModels);
       void automaticModels.finally(() => {
         modelPreparations.delete(automaticModels);
+        transcriptBacklog.wake();
         admission.progress();
       });
     }
@@ -421,11 +474,11 @@ export async function startProjectService(options: {
     const projects = new ProjectStore(catalog, assets, transcriptStore, acquisitions);
     const files = new ManagedFiles(library, worker);
     const cache = new DerivedCache(catalog, library, (owner) => {
-      if (owner.kind === "project") projects.get(owner.projectId);
+      if (owner.kind === "project") projects.get(owner.id);
       else if (owner.kind === "asset") {
-        if (!assets.has(owner.assetId))
-          throw new CatalogError("NOT_FOUND", "Asset does not exist", { assetId: owner.assetId });
-      } else if (owner.kind === "acquisition") acquisitions.get(owner.acquisitionId);
+        if (!assets.has(owner.id))
+          throw new CatalogError("NOT_FOUND", "Asset does not exist", { assetId: owner.id });
+      } else if (owner.kind === "acquisition") acquisitions.get(owner.id);
       else throw new CatalogError("NOT_FOUND", "Unsupported derived-file owner");
     });
     await cache.reconcile();
@@ -434,46 +487,62 @@ export async function startProjectService(options: {
     const probe = assetProbe(worker, workspace);
     const targets: JobTargets = {
       pin(target) {
-        if (target.kind === "import") assets.intent(target.importId);
+        if (target.kind === "import") assets.intent(target.id);
         else if (target.kind === "acquisition") {
-          if (!captureSources.available(target.acquisitionId))
+          if (plans.isTombstoned("acquisition", target.id))
+            throw new CatalogError("DELETE_IN_PROGRESS", "acquisition deletion is in progress", {
+              acquisitionId: target.id,
+            });
+          if (!captureSources.available(target.id))
             throw new CatalogError("NOT_FOUND", "Capture source donor is unavailable");
         } else if (target.kind === "asset") {
-          if (!assets.has(target.assetId))
+          if (plans.isTombstoned("asset", target.id))
+            throw new CatalogError("DELETE_IN_PROGRESS", "asset deletion is in progress", {
+              assetId: target.id,
+            });
+          if (!assets.has(target.id))
             throw new CatalogError("NOT_FOUND", "Asset does not exist", {
-              assetId: target.assetId,
+              assetId: target.id,
             });
         } else if (target.kind === "project")
-          projects.requireRevision(target.projectId, target.revisionId);
+          projects.requireRevision(target.id, target.revisionId);
         else if (target.kind === "recording" && target.revisionId === null) {
-          const recording = captures.get(target.recordingId);
+          const recording = captures.get(target.id);
           if (!isSettled(recording.state) || recording.state === "canceled")
             throw new CatalogError(
               "INVALID_STATE",
               "Source-owned work requires a settled available recording",
             );
           return { ...target, revisionId: null };
-        } else throw new CatalogError("NOT_READY", "Unsupported project service job target");
+        } else
+          throw new CatalogError("PREREQUISITE_MISSING", "Unsupported project service job target");
         return target;
       },
       isAvailable(target) {
-        if (target.kind === "recording") return captures.isAvailable(target.recordingId);
-        if (target.kind === "asset") return assets.has(target.assetId);
-        if (target.kind === "project")
-          return projects.hasRevision(target.projectId, target.revisionId);
+        if (target.kind === "recording") return captures.isAvailable(target.id);
+        if (target.kind === "asset")
+          return !plans.isTombstoned("asset", target.id) && assets.has(target.id);
+        if (target.kind === "project") return projects.hasRevision(target.id, target.revisionId);
         if (target.kind !== "import" && target.kind !== "acquisition") return false;
         try {
           targets.pin(target);
           return true;
         } catch (error) {
-          if (error instanceof CatalogError && error.code === "NOT_FOUND") return false;
+          if (
+            error instanceof CatalogError &&
+            (error.code === "NOT_FOUND" || error.code === "DELETE_IN_PROGRESS")
+          )
+            return false;
           throw error;
         }
       },
-      isDeleting: (owner) =>
-        owner.kind === "recording"
-          ? captures.isDeleting(owner.recordingId)
-          : owner.kind === "project" && projects.isDeleting(owner.projectId),
+      isDeleting: (owner) => {
+        if (owner.kind === "recording") return captures.isDeleting(owner.id);
+        if (owner.kind === "project") return projects.isDeleting(owner.id);
+        if (owner.kind === "asset") return plans.isTombstoned("asset", owner.id);
+        if (owner.kind === "acquisition") return plans.isTombstoned("acquisition", owner.id);
+        return false;
+      },
       isCapturing: () => captures.isCapturing(),
     };
     await acquisitionImports.recover(new AbortController().signal);
@@ -512,6 +581,7 @@ export async function startProjectService(options: {
       onCapacity: () => {
         resumeCaptureSources();
         for (const error of exports?.resumeRecovery() ?? []) console.error(error);
+        transcriptBacklog.wake();
       },
       execute: async ({ job, signal }) => {
         if (job.artifact === "asset-conversion") return convertedAssets.execute({ job, signal });
@@ -551,7 +621,11 @@ export async function startProjectService(options: {
           return alignments.execute({ job, signal });
         if (job.target.kind === "asset" && job.artifact === "source-speakers")
           return speakers.execute({ job, signal });
-        if (job.artifact === "transcript") return transcripts.execute({ job, signal });
+        if (job.artifact === "transcript") {
+          const result = await transcripts.execute({ job, signal });
+          transcriptBacklog.wake();
+          return result;
+        }
         if (job.artifact === "export-media" || job.artifact === "export-recovery")
           return exports!.execute({ job, signal });
         if (job.target.kind === "project" && job.artifact === "preview")
@@ -559,7 +633,7 @@ export async function startProjectService(options: {
         if (job.artifact === "capture-cleanup") return captureCleanup.execute({ job, signal });
         if (job.target.kind === "acquisition" && job.artifact === "acquisition.import") {
           const acquisition = await acquisitionImports.executeImport(
-            job.target.acquisitionId,
+            job.target.id,
             job.attemptId,
             {
               probe,
@@ -570,11 +644,19 @@ export async function startProjectService(options: {
           return JSON.stringify({ acquisitionId: acquisition.id });
         }
         if (job.target.kind !== "import" || job.artifact !== "asset.import")
-          throw new CatalogError("NOT_READY", "Unsupported preparation job");
-        const asset = await assets.executeImport(job.target.importId, probe, signal, {
-          kind: "job",
-          id: job.jobId,
-        });
+          throw new CatalogError("PREREQUISITE_MISSING", "Unsupported preparation job");
+        const asset = await assets.executeImport(
+          job.target.id,
+          probe,
+          signal,
+          { kind: "job", id: job.jobId },
+          (published) => {
+            for (const stream of published.streams)
+              if (stream.kind === "audio" && options.autoTranscribe)
+                transcriptBacklog.enqueue({ assetId: published.id, streamId: stream.id });
+            transcriptBacklog.wake();
+          },
+        );
         return JSON.stringify({ assetId: asset.id });
       },
     });
@@ -623,16 +705,11 @@ export async function startProjectService(options: {
           const admitted = admitProjectRange(composition.model.durationUs, input.range);
           const prepared = preparedAudio.resolve(composition, input.tap, input.preparedResourceId);
           if (!prepared)
-            throw new CatalogError(
-              "NOT_READY",
-              "Prepared project tap is not ready",
-              {
-                projectId: input.projectId,
-                revisionId: composition.revisionId,
-                preparedResourceId: input.preparedResourceId,
-              },
-              true,
-            );
+            throw new CatalogError("NOT_READY", "Prepared project tap is not ready", {
+              projectId: input.projectId,
+              revisionId: composition.revisionId,
+              preparedResourceId: input.preparedResourceId,
+            });
           const asset = assets.get(prepared.audio.assetId),
             stream = asset.streams.find((value) => value.kind === "audio");
           if (!stream)
@@ -669,15 +746,18 @@ export async function startProjectService(options: {
           }),
         ) as SpeechTranscriptionReceipt,
     });
+    transcriptionStarted = true;
+    transcriptBacklog.drain();
+    /** The review model's status, as work with no job of its own. */
     const ensureReviewModel = () => {
       const modelId = "parakeet";
-      const current = transcripts.recognitionReadiness();
+      const current = { ...transcripts.recognitionReadiness(), jobId: null };
       if (current.state === "ready" || current.state === "preparing" || current.state === "failed")
         return current;
       let flight = reviewModelPreparations.get(modelId);
       if (!flight) {
         flight = models
-          .prepare(modelId, modelLifetime.signal, {})
+          .prepare(modelId, modelLifetime.signal, {}, { clearRemoval: false })
           .catch((error) => {
             if (!modelLifetime.signal.aborted) console.error(error);
           })
@@ -686,10 +766,11 @@ export async function startProjectService(options: {
         modelPreparations.add(flight);
         void flight.finally(() => {
           modelPreparations.delete(flight!);
+          transcriptBacklog.wake();
           admission.progress();
         });
       }
-      return transcripts.recognitionReadiness();
+      return { ...transcripts.recognitionReadiness(), jobId: null };
     };
     const audioCapabilities = await nativeAudioCapabilities(worker);
     const pictureCapabilities = await nativePictureCapabilities(worker);
@@ -723,7 +804,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: audioRenderer, prepared: preparedAudio },
       sourceRenderer: {
-        implementationId: "native-source-audio-v5",
+        implementationId: "native-source-audio-v6",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -752,7 +833,7 @@ export async function startProjectService(options: {
       probe,
       staging: join(library, "staging", "audio-extract"),
       converter: {
-        implementationId: "native-finite-pcm-v1",
+        implementationId: "native-finite-pcm-v2",
         convert: async ({ input, ...request }, signal) =>
           withRenderedFile(
             worker,
@@ -801,7 +882,7 @@ export async function startProjectService(options: {
       cache,
       loudness: ffmpegLoudnessAnalyzer(options.ffmpeg, nativeExecutable),
       renderer: {
-        implementationId: "native-acoustic-image-v1",
+        implementationId: "native-acoustic-image-v2",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -894,7 +975,7 @@ export async function startProjectService(options: {
       cache,
       project: { projects, renderer: projectPictures },
       imageRenderer: {
-        implementationId: "native-source-image-v2",
+        implementationId: "native-source-image-v5",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -905,7 +986,7 @@ export async function startProjectService(options: {
           ),
       },
       sourceRenderer: {
-        implementationId: "native-source-picture-v7-cursor",
+        implementationId: "native-source-picture-v12-ink",
         render: async (request, signal) =>
           withRenderedFile(
             worker,
@@ -915,44 +996,16 @@ export async function startProjectService(options: {
               nativeResult(await execute("media.sourceFrame", { ...request, output }, { signal })),
           ),
       },
-      cursorOverlay: async (input, signal) => {
-        const startUs = Math.max(0, input.atUs - input.trailUs);
-        const page = capture.cursor({
-          ...input,
-          sourceRange: { startUs, endUs: Math.min(input.atUs + 1, Number.MAX_SAFE_INTEGER) },
-          limit: 5000,
-        });
-        if (page.state !== "ready" || !page.page)
-          throw new CatalogError(
-            "UNAVAILABLE",
-            "Cursor rendering requires captured-video authority",
-          );
-        if (page.page.nextCursor)
-          throw new CatalogError(
-            "LIMIT_EXCEEDED",
-            "Cursor trail has too many observations; narrow the request",
-          );
-        const rows = page.page.rows;
-        const runs: Array<Array<{ atSourceUs: number; x: number; y: number }>> = [];
-        let run: Array<{ atSourceUs: number; x: number; y: number }> = [];
-        for (const row of rows) {
-          signal.throwIfAborted();
-          const observation = row.observation as { x?: number; y?: number; eligibility?: string };
-          if (
-            observation.eligibility !== "inside" ||
-            typeof observation.x !== "number" ||
-            typeof observation.y !== "number"
-          ) {
-            if (run.length) runs.push(run);
-            run = [];
-            continue;
-          }
-          run.push({ atSourceUs: Number(row.sourceAtUs), x: observation.x, y: observation.y });
-        }
-        if (run.length) runs.push(run);
-        const pointer = runs.at(-1)?.at(-1) ?? null;
-        return { trail: runs, trailUs: input.trailUs, pointer };
-      },
+      cursorOverlay: sourceCursorOverlay({
+        assets,
+        acquisitions,
+        capture,
+        evidence,
+        sample: async (request, signal) =>
+          nativeResult(
+            await worker("media.sourceVisualSamples", request, { signal }),
+          ) as SourceVisualObservations,
+      }),
     });
     const projectIndex = new ScreenshotIndexStore<ProjectIndexRecords>(
       catalog,
@@ -978,6 +1031,27 @@ export async function startProjectService(options: {
     );
     await sourceIndex.recoverPending("asset", new AbortController().signal);
     await projectIndex.recoverPending("project", new AbortController().signal);
+    libraryUsers = new LibraryUsers(captures, {
+      asset: (id) => [
+        assets.path(id),
+        join(library, "transcripts", "assets", id),
+        join(library, "transcripts", "imported", id),
+        ...sourceIndex.ownedPaths({ kind: "asset", id: id }),
+        ...cache.ownedPaths({ kind: "asset", id: id }),
+      ],
+      acquisition: (id) => acquisitionImports.managedPaths(id),
+      recording: (id) => files.recordingPaths(id),
+      project: (id) => [
+        ...projectIndex.ownedPaths({ kind: "project", id: id }),
+        ...cache.ownedPaths({ kind: "project", id: id }),
+      ],
+    });
+    const mediaListing = new MediaListing(
+      catalog,
+      plans,
+      (subject) => libraryUsers!.usersOf(subject).freesBytes,
+      (recordingId) => captures.listable(recordingId),
+    );
     indexes = new IndexProcessing({
       jobs: queue,
       project: {
@@ -988,6 +1062,8 @@ export async function startProjectService(options: {
         index: projectIndex,
         scenes,
         records: sceneRecords,
+        evidence,
+        capture,
         frames: mediaFrames,
         cache,
       },
@@ -998,6 +1074,8 @@ export async function startProjectService(options: {
         index: sourceIndex,
         scenes,
         records: sceneRecords,
+        evidence,
+        capture,
         frames: mediaFrames,
         cache,
       },
@@ -1088,21 +1166,83 @@ export async function startProjectService(options: {
     await speakers.cleanup(modelLifetime.signal);
     await alignments.cleanup(modelLifetime.signal);
     await indexes.cleanup(modelLifetime.signal);
-    const projectDeletion = new ProjectDeletion(
-      projects,
-      queue,
+    const libraryDeletion = new LibraryDeletion(plans);
+    deletion = libraryDeletion;
+    const assetRetirementRegistration = assetRetirement({
+      catalog: captures,
+      assets,
+      users: libraryUsers!,
+      transcripts: transcriptStore,
+      importedTranscripts,
+      scenes: sceneRecords,
+      indexes: sourceIndex,
+      alignments: alignmentRecords,
+      speakers: speakerRecords,
       cache,
+      jobs: queue,
       files,
       delivery,
-      mediaExports,
-      projectIndex,
+    });
+    libraryDeletion.register(
+      projectRetirement({
+        catalog: captures,
+        store: projects,
+        jobs: queue,
+        cache,
+        files,
+        delivery,
+        exports: mediaExports,
+        index: projectIndex,
+        freedBytes: (id: string) => libraryUsers!.usersOf({ kind: "project", id }).freesBytes,
+      }),
     );
-    deletion = projectDeletion;
-    await projectDeletion.resume((error) => console.error(error));
+    libraryDeletion.register(
+      acquisitionRetirement({
+        catalog: captures,
+        store: acquisitions,
+        importer: acquisitionImports,
+        jobs: queue,
+      }),
+    );
+    libraryDeletion.register(assetRetirementRegistration);
     const status = (jobId: string) => queue.inspect(jobId);
+    /** A lifecycle word that is not a presence fact asks the installed files instead. */
+    const modelPresence = (modelId: string, state: string) =>
+      state === "absent" || state === "ready" || state === "invalid"
+        ? state
+        : models.presence(modelId);
+    /** The export intent a job belongs to, or null for every other job. */
+    const exportOf = (jobId: string) => {
+      const job = queue.job(jobId);
+      if (
+        job.artifact !== "export" &&
+        job.artifact !== "export-media" &&
+        job.artifact !== "export-recovery"
+      )
+        return null;
+      try {
+        return { exportId: JSON.parse(job.input) as string, recovery: false };
+      } catch {
+        return job.artifact === "export-recovery"
+          ? { exportId: job.input.split("/", 1)[0]!, recovery: true }
+          : { exportId: job.input, recovery: false };
+      }
+    };
+
+    /** Work is a record with a `state` and a `jobId`; its state reports WorkState. */
+    const toWire = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(toWire);
+      if (typeof value === "bigint") return Number(value);
+      if (!value || typeof value !== "object") return value;
+      const mapped: Record<string, unknown> = Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [key, toWire(child)]),
+      );
+      if ("state" in mapped && "jobId" in mapped) mapped.state = workState(String(mapped.state));
+      return mapped;
+    };
     const describeCapture = captureSources.describe.bind(captureSources);
     const handle: LocalHandler = async (request, requestSignal): Promise<OperationResult> => {
-      if (closing) return operationError("SERVICE_STOPPED", "Service is closing", true);
+      if (closing) return operationError("SERVICE_STOPPED", "Service is closing");
       if (!operationNames.has(request.operation))
         return operationError("UNKNOWN_OPERATION", "Unknown service operation");
       if (appOperations.has(request.operation))
@@ -1117,12 +1257,12 @@ export async function startProjectService(options: {
         switch (operation.operation) {
           case "correspondence.prepare": {
             const receipt = admitCorrespondence(operation.params);
-            correspondenceReceipts.set(`${receipt.evidenceId}:${receipt.generation}`, receipt);
+            correspondenceReceipts.set(`${receipt.id}:${receipt.generation}`, receipt);
             return {
               ok: true,
               data: {
                 state: "ready",
-                evidenceId: receipt.evidenceId,
+                evidenceId: receipt.id,
                 generation: receipt.generation,
                 published: { generation: receipt.generation, output: receipt },
               },
@@ -1131,39 +1271,55 @@ export async function startProjectService(options: {
           case "correspondence.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Correspondence package reads are not available for service-local receipts",
-                true,
               );
             const key = `${operation.params.evidenceId}:${operation.params.generation}`;
             const receipt = correspondenceReceipts.get(key);
             if (!receipt)
               return operationError("NOT_FOUND", "Correspondence receipt is not retained");
             const checked = verifyCorrespondenceReceipt(receipt);
-            const after = operation.params.cursor?.afterAnchor ?? -1;
-            const limit = operation.params.limit ?? 128;
+            const correspondencePosition =
+              operation.params.cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "correspondence.get",
+                    operation.params.cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    afterAnchor?: unknown;
+                  });
+            const after = (correspondencePosition?.afterAnchor ?? -1) as number;
+            if (
+              correspondencePosition &&
+              (!Number.isSafeInteger(after) ||
+                after < 0 ||
+                after >= checked.measurement.anchors.length)
+            )
+              throw new CatalogError("INVALID_PARAMS", "Invalid correspondence page cursor");
+            const limit = operation.params.limit;
             const anchors = checked.measurement.anchors.slice(after + 1, after + 1 + limit);
             const next =
-              after + anchors.length < checked.measurement.anchors.length
+              after + 1 + anchors.length < checked.measurement.anchors.length
                 ? after + anchors.length
                 : null;
             return {
               ok: true,
               data: {
                 state: "ready",
-                evidenceId: checked.evidenceId,
+                evidenceId: checked.id,
                 generation: checked.generation,
                 verdict: checked.measurement.verdict,
+                anchors,
                 measurement: { ...checked.measurement, anchors },
-                ...(next === null
-                  ? {}
-                  : {
-                      nextCursor: {
-                        evidenceId: checked.evidenceId,
-                        generation: checked.generation,
-                        afterAnchor: next,
-                      },
-                    }),
+                nextCursor:
+                  next === null
+                    ? null
+                    : pageCursor.encode(
+                        "correspondence.get",
+                        { afterAnchor: next },
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1179,7 +1335,9 @@ export async function startProjectService(options: {
                 home: options.home,
                 node: process.versions.node,
                 uptimeMs: Math.round(performance.now() - started),
-                models: models.statuses(),
+                models: models
+                  .statuses()
+                  .map((model) => ({ ...model, status: { ...model.status, jobId: null } })),
               },
             };
           case "service.tools":
@@ -1193,7 +1351,28 @@ export async function startProjectService(options: {
           case "recording.delete":
             return {
               ok: true,
-              data: await recordingDeletion!.delete(operation.params.recordingId),
+              data: await deletion!.delete(
+                { kind: "recording", id: operation.params.recordingId },
+                {
+                  requestId: operation.params.requestId,
+                  ...(operation.params.cascade === undefined
+                    ? {}
+                    : { cascade: operation.params.cascade }),
+                },
+              ),
+            };
+          case "asset.delete":
+            return {
+              ok: true,
+              data: await deletion!.delete(
+                { kind: "asset", id: operation.params.assetId },
+                {
+                  requestId: operation.params.requestId,
+                  ...(operation.params.cascade === undefined
+                    ? {}
+                    : { cascade: operation.params.cascade }),
+                },
+              ),
             };
           case "recording.cleanup":
             return { ok: true, data: captureCleanup.request(operation.params.recordingId) };
@@ -1255,7 +1434,46 @@ export async function startProjectService(options: {
               ),
             };
           case "recording.get":
+            if (operation.params.recordingId === undefined) {
+              const latest = captures.latest();
+              return latest
+                ? { ok: true, data: describeCapture(latest) }
+                : operationError("NOT_READY", "There are no recordings yet");
+            }
             return { ok: true, data: describeCapture(captures.get(operation.params.recordingId)) };
+          case "recording.prompt": {
+            const params = operation.params;
+            if ("projectId" in params) {
+              const { id: projectId } = projects.get(params.projectId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("project", projectId), facts: { projectId } },
+              };
+            }
+            if ("assetId" in params) {
+              const { id: assetId } = assets.describe(params.assetId);
+              return {
+                ok: true,
+                data: { text: handoffPrompt("asset", assetId), facts: { assetId } },
+              };
+            }
+            const facts = await recordingPromptFacts(
+              {
+                recordings: captures,
+                captureImport: (recording) =>
+                  captureSources
+                    .describe(recording)
+                    .sourceAdmissions.find((source) => source.kind === "primary")?.job ?? null,
+                acquisitions,
+                status: () => captureCoordinator.status(),
+                autoTranscribe: options.autoTranscribe ?? false,
+                backlog: transcriptBacklog,
+                transcripts,
+              },
+              params.recordingId,
+            );
+            return { ok: true, data: { text: renderRecordingPrompt(facts), facts } };
+          }
           case "recording.list": {
             const page = captures.list(operation.params.cursor, operation.params.limit);
             return {
@@ -1263,24 +1481,60 @@ export async function startProjectService(options: {
               data: { ...page, recordings: page.recordings.map(describeCapture) },
             };
           }
-          case "recording.latest": {
-            const recording = captures.latest();
-            return { ok: true, data: recording ? describeCapture(recording) : null };
-          }
+          case "media.list":
+            return {
+              ok: true,
+              data: mediaListing.list({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
+            };
           case "index.get": {
             const params = operation.params;
-            if ("projectId" in params) return { ok: true, data: indexes.getProject(params) };
-            return { ok: true, data: indexes.getSource(params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      "index.get",
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            if ("projectId" in normalized)
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  indexes.getProject(normalized as never),
+                  "index.get",
+                  pageFilters(operation.params),
+                ),
+              };
+            return {
+              ok: true,
+              data: pageEnvelope(
+                indexes.getSource(normalized as never),
+                "index.get",
+                pageFilters(operation.params),
+              ),
+            };
           }
           case "face.trajectory.get": {
             const { generation, maxGapUs, prediction, limit, cursor, ...selection } =
               operation.params;
+            const trajectoryCursor =
+              cursor === undefined
+                ? undefined
+                : pageCursor.decode("face.trajectory.get", cursor, pageFilters(operation.params));
             const page = indexes.getSource({
               ...selection,
               generation,
               ...(limit === undefined ? {} : { limit }),
-              ...(cursor === undefined ? {} : { cursor }),
-            });
+              ...(trajectoryCursor === undefined ? {} : { cursor: trajectoryCursor }),
+            } as never);
             if (!page.page) return { ok: true, data: { ...page, trajectory: null } };
             const entries = page.page.entries;
             if (entries.length === 0)
@@ -1291,7 +1545,14 @@ export async function startProjectService(options: {
                   generation,
                   trajectory: null,
                   reason: "no_face_observations",
-                  nextCursor: page.page.nextCursor,
+                  nextCursor:
+                    page.page.nextCursor === null
+                      ? null
+                      : pageCursor.encode(
+                          "face.trajectory.get",
+                          page.page.nextCursor,
+                          pageFilters(operation.params),
+                        ),
                 },
               };
             const observations = entries.map((entry) => entry.frame.faceObservations);
@@ -1302,7 +1563,14 @@ export async function startProjectService(options: {
                   state: "unavailable",
                   reason: "face_observations_unavailable",
                   generation,
-                  nextCursor: page.page.nextCursor,
+                  nextCursor:
+                    page.page.nextCursor === null
+                      ? null
+                      : pageCursor.encode(
+                          "face.trajectory.get",
+                          page.page.nextCursor,
+                          pageFilters(operation.params),
+                        ),
                 },
               };
             const supportDigest = entries[0]?.frame.supportDigest;
@@ -1334,26 +1602,48 @@ export async function startProjectService(options: {
                 state: "ready",
                 generation,
                 trajectory,
-                nextCursor: page.page.nextCursor,
-              },
-            };
-          }
-          case "index.retry": {
-            const params = operation.params;
-            const status =
-              "projectId" in params ? indexes.retryProject(params) : indexes.retrySource(params);
-            return {
-              ok: true,
-              data: {
-                ...status,
-                published: publishedOutput(status.published, (value) => value.evidence),
+                nextCursor:
+                  page.page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "face.trajectory.get",
+                        page.page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
           case "index.coverage": {
             const params = operation.params;
-            if ("projectId" in params) return { ok: true, data: indexes.coverageProject(params) };
-            return { ok: true, data: indexes.coverageSource(params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      "index.coverage",
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            const page =
+              "projectId" in normalized
+                ? indexes.coverageProject(normalized as never)
+                : indexes.coverageSource(normalized as never);
+            return {
+              ok: true,
+              data: {
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "index.coverage",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
+              },
+            };
           }
           case "index.frame": {
             const params = operation.params;
@@ -1385,35 +1675,95 @@ export async function startProjectService(options: {
             };
           }
           case "model.list":
-            return { ok: true, data: models.list() };
+            return {
+              ok: true,
+              data: models.page({
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
+                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
+              }),
+            };
           case "preset.list":
-            return { ok: true, data: presets.list() };
+            return {
+              ok: true,
+              data: (() => {
+                const page = presets.page({
+                  ...(operation.params.cursor === undefined
+                    ? {}
+                    : { cursor: operation.params.cursor }),
+                  ...(operation.params.limit === undefined
+                    ? {}
+                    : { limit: operation.params.limit }),
+                });
+                return {
+                  ...page,
+                  refresh: {
+                    ...page.refresh,
+                    state: page.refresh.error
+                      ? "failed"
+                      : page.refresh.checkedAt
+                        ? "ready"
+                        : "idle",
+                    jobId: null,
+                  },
+                };
+              })(),
+            };
           case "preset.get":
-            return { ok: true, data: presets.get(operation.params.id) };
+            return {
+              ok: true,
+              data: (() => {
+                const details = presets.get(operation.params.presetId);
+                return {
+                  ...details,
+                  files: details.files.map(({ bytes, ...file }) => ({ ...file, sizeBytes: bytes })),
+                };
+              })(),
+            };
           case "preset.update":
-            return { ok: true, data: await presets.update(operation.params.id) };
+            return {
+              ok: true,
+              data: await (async () => {
+                const result = await presets.update(
+                  operation.params.presetId,
+                  operation.params.requestId,
+                );
+                return { ...result, state: "ready", jobId: null };
+              })(),
+            };
           case "preset.create":
             return {
               ok: true,
-              data: await presets.create({
-                name: operation.params.name,
-                ...(operation.params.references === undefined
-                  ? {}
-                  : { references: operation.params.references }),
-              }),
+              data: await (async () => {
+                return await presets.create({
+                  requestId: operation.params.requestId,
+                  name: operation.params.name,
+                  ...(operation.params.references === undefined
+                    ? {}
+                    : { references: operation.params.references }),
+                });
+              })(),
             };
           case "preset.delete":
-            return { ok: true, data: await presets.delete(operation.params.id) };
-          case "model.status":
+            return {
+              ok: true,
+              data: await presets.delete(operation.params.presetId, operation.params.requestId),
+            };
+          case "model.status": {
+            const model = await models.status(operation.params.modelId);
             return {
               ok: true,
               data: {
-                modelId: operation.params.modelId,
-                purpose: models.list().find((entry) => entry.modelId === operation.params.modelId)
+                id: operation.params.modelId,
+                purpose: models.list().find((entry) => entry.id === operation.params.modelId)
                   ?.purpose,
-                ...(await models.status(operation.params.modelId)),
+                presence: modelPresence(operation.params.modelId, model.state),
+                jobId: null,
+                ...model,
               },
             };
+          }
           case "model.prepare": {
             const { modelId } = operation.params;
             const state = await models.status(modelId);
@@ -1426,15 +1776,34 @@ export async function startProjectService(options: {
               modelPreparations.add(preparing);
               void preparing.finally(() => {
                 modelPreparations.delete(preparing);
+                transcriptBacklog.wake();
                 admission.progress();
               });
             }
-            return { ok: true, data: await models.status(modelId) };
+            const model = await models.status(modelId);
+            transcriptBacklog.wake();
+            return {
+              ok: true,
+              data: {
+                id: modelId,
+                jobId: null,
+                presence: modelPresence(modelId, model.state),
+                ...model,
+              },
+            };
+          }
+          case "model.remove": {
+            const { modelId, requestId } = operation.params;
+            return {
+              ok: true,
+              data: await models.remove(modelId, requestId, (digest) => jobs!.runsModel(digest)),
+            };
           }
           case "alignment.observe": {
             const params = operation.params;
             if ("projectId" in params) {
-              const status = alignments.prepareProject(params);
+              const { sourceRange, ...projectParams } = params;
+              const status = alignments.prepareProject({ ...projectParams, range: sourceRange });
               return {
                 ok: true,
                 data: {
@@ -1466,21 +1835,16 @@ export async function startProjectService(options: {
                 params.preparedResourceId,
               );
               if (!prepared)
-                throw new CatalogError(
-                  "NOT_READY",
-                  "Prepared project tap is not ready",
-                  {
-                    projectId: params.projectId,
-                    revisionId: composition.revisionId,
-                    preparedResourceId: params.preparedResourceId,
-                  },
-                  true,
-                );
+                throw new CatalogError("NOT_READY", "Prepared project tap is not ready", {
+                  projectId: params.projectId,
+                  revisionId: composition.revisionId,
+                  preparedResourceId: params.preparedResourceId,
+                });
               // The display range is a project read range: clamped to the revision, with its issue.
               const admitted = admitProjectRange(composition.model.durationUs, params.range),
                 range = admitted.range;
               const identity = {
-                  owner: { kind: "asset" as const, assetId: params.assetId },
+                  owner: { kind: "asset" as const, id: params.assetId },
                   generation: params.generation,
                   policy: "alignment-v1" as const,
                 },
@@ -1490,7 +1854,14 @@ export async function startProjectService(options: {
                   sourceRange: params.sourceRange,
                   thresholdRMS: params.thresholdRMS,
                   limit: params.limit,
-                  cursor: params.cursor,
+                  cursor:
+                    params.cursor === undefined
+                      ? undefined
+                      : (pageCursor.decode(
+                          "alignment.get",
+                          params.cursor,
+                          pageFilters(operation.params),
+                        ) as string),
                 },
                 sourcePage = new SourceAlignmentRead(
                   alignmentRecords,
@@ -1510,13 +1881,13 @@ export async function startProjectService(options: {
                 }),
                 rows =
                   "rows" in sourcePage
-                    ? metadata.owner.assetId === prepared.audio.assetId
+                    ? metadata.owner.id === prepared.audio.assetId
                       ? projectTapAlignmentRows(sourcePage.rows, range)
                       : projectAlignmentRows(
                           sourcePage.rows,
                           occurrences.filter(
                             (occurrence) =>
-                              occurrence.assetId === metadata.owner.assetId &&
+                              occurrence.assetId === metadata.owner.id &&
                               occurrence.streamId === metadata.source.streamId &&
                               (occurrence.acquisitionId ?? null) === metadata.source.acquisitionId,
                           ),
@@ -1537,14 +1908,35 @@ export async function startProjectService(options: {
                 },
               };
             }
-            const { assetId, generation, packageHandle, ...query } = params;
+            const { assetId, generation, packageHandle, cursor, ...queryParams } = params;
+            const query = {
+              ...queryParams,
+              ...(cursor === undefined
+                ? {}
+                : {
+                    cursor: pageCursor.decode(
+                      "alignment.get",
+                      cursor,
+                      pageFilters(operation.params),
+                    ),
+                  }),
+            };
             if (packageHandle)
               return {
                 ok: true,
-                data: projectPackages.sourceAlignment(packageHandle, assetId, generation, query),
+                data: pageEnvelope(
+                  projectPackages.sourceAlignment(
+                    packageHandle,
+                    assetId,
+                    generation,
+                    query as never,
+                  ),
+                  "alignment.get",
+                  pageFilters(operation.params),
+                ),
               };
             const identity = {
-              owner: { kind: "asset" as const, assetId },
+              owner: { kind: "asset" as const, id: assetId },
               generation,
               policy: "alignment-v1" as const,
             };
@@ -1561,13 +1953,22 @@ export async function startProjectService(options: {
                 throw error;
               }
             })();
+            const page = new SourceAlignmentRead(alignmentRecords, metadata).page(query as never);
             return {
               ok: true,
               data: {
                 assetId,
                 state: "wordCount" in metadata ? "ready" : "captured",
                 generation,
-                page: new SourceAlignmentRead(alignmentRecords, metadata).page(query),
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "alignment.get",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -1579,6 +1980,7 @@ export async function startProjectService(options: {
                 data: {
                   ...request,
                   state: "unavailable",
+                  jobId: null,
                   reason: "continuity_candidate_required",
                   retryable: false,
                   receipt: null,
@@ -1603,6 +2005,7 @@ export async function startProjectService(options: {
               data: {
                 ...request,
                 state: "ready",
+                jobId: null,
                 reason: receipt.status === "accepted" ? null : "continuity_quality_gate",
                 retryable: false,
                 receipt,
@@ -1612,16 +2015,15 @@ export async function startProjectService(options: {
           case "speaker.continuity.get": {
             if (operation.params.packageHandle)
               return operationError(
-                "NOT_READY",
+                "INVALID_PARAMS",
                 "Continuity package reads are not available for service-local receipts",
-                true,
               );
             const key = `${operation.params.assetId}:${operation.params.streamId}:${operation.params.channel}:${operation.params.modelId}:${operation.params.generation}`;
             const retained = continuityReceipts.get(key);
             if (retained) {
               if (
-                retained.sourceRange.startUs !== operation.params.observationRange.startUs ||
-                retained.sourceRange.endUs !== operation.params.observationRange.endUs
+                retained.sourceRange.startUs !== operation.params.sourceRange.startUs ||
+                retained.sourceRange.endUs !== operation.params.sourceRange.endUs
               )
                 throw new CatalogError(
                   "ARTIFACT_CHANGED",
@@ -1632,6 +2034,7 @@ export async function startProjectService(options: {
                 data: {
                   ...operation.params,
                   state: "ready",
+                  jobId: null,
                   reason:
                     retained.receipt.status === "accepted"
                       ? "continuity_not_promoted"
@@ -1646,6 +2049,7 @@ export async function startProjectService(options: {
               data: {
                 ...operation.params,
                 state: "unavailable",
+                jobId: null,
                 reason: "continuity_not_published",
                 retryable: false,
                 receipt: null,
@@ -1653,7 +2057,8 @@ export async function startProjectService(options: {
             };
           }
           case "speaker.observe": {
-            const status = speakers.prepareSource(operation.params);
+            const params = operation.params;
+            const status = speakers.prepareSource(params);
             return {
               ok: true,
               data: {
@@ -1667,26 +2072,30 @@ export async function startProjectService(options: {
               if (operation.params.packageHandle !== undefined)
                 return {
                   ok: true,
-                  data: projectPackages.projectSpeakers(
-                    operation.params.packageHandle,
-                    (() => {
-                      const input = { ...operation.params };
-                      delete input.packageHandle;
-                      delete input.view;
-                      return input;
-                    })(),
+                  data: pageEnvelope(
+                    projectPackages.projectSpeakers(
+                      operation.params.packageHandle,
+                      (() => {
+                        const input = { ...operation.params };
+                        delete input.packageHandle;
+                        delete input.view;
+                        return input;
+                      })(),
+                    ),
+                    "speaker.get",
+                    pageFilters(operation.params),
                   ),
                 };
               const result = await projectEvidence.speakers(operation.params);
               const labelsByGeneration = new Map<string, Map<number, string>>();
-              const rows = result.page?.rows.map((row) => {
+              const rows = result.page?.rows.map((row: any) => {
                 const key = `${row.assetId}:${row.generation}`;
                 let labels = labelsByGeneration.get(key);
                 if (!labels) {
                   labels = new Map(
                     speakerLabels
                       .read({
-                        owner: { kind: "asset", assetId: row.assetId },
+                        owner: { kind: "asset", id: row.assetId },
                         sourceId: row.assetId,
                         generation: row.generation,
                         policy: "speaker-v1",
@@ -1699,45 +2108,56 @@ export async function startProjectService(options: {
               });
               return {
                 ok: true,
-                data: {
-                  ...result,
-                  ...(result.page === null || rows === undefined
-                    ? {}
-                    : { page: { ...result.page, rows } }),
-                },
+                data: pageEnvelope(
+                  {
+                    ...result,
+                    ...(result.page === null || rows === undefined
+                      ? {}
+                      : { page: { ...result.page, rows } }),
+                  },
+                  "speaker.get",
+                  pageFilters(operation.params),
+                ),
               };
             }
-            const {
-              observationRange,
-              sourceRange,
-              view,
-              limit,
-              cursor,
-              packageHandle,
-              ...selection
-            } = operation.params;
+            const { sourceRange, view, limit, cursor, packageHandle, ...selection } =
+              operation.params;
+            const decodedSpeakerCursor =
+              cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "speaker.get",
+                    cursor,
+                    pageFilters(operation.params),
+                  ) as string);
             if (packageHandle !== undefined)
               return {
                 ok: true,
-                data: projectPackages.sourceSpeakers(
-                  packageHandle,
-                  { ...selection, sourceRange: observationRange },
-                  {
-                    ...(sourceRange === undefined ? {} : { sourceRange }),
-                    ...(view === undefined ? {} : { view }),
-                    ...(limit === undefined ? {} : { limit }),
-                    ...(cursor === undefined ? {} : { cursor }),
-                  },
+                data: pageEnvelope(
+                  projectPackages.sourceSpeakers(
+                    packageHandle,
+                    { ...selection, sourceRange: sourceRange },
+                    {
+                      ...(sourceRange === undefined ? {} : { sourceRange }),
+                      ...(view === undefined ? {} : { view }),
+                      ...(limit === undefined ? {} : { limit }),
+                      ...(decodedSpeakerCursor === undefined
+                        ? {}
+                        : { cursor: decodedSpeakerCursor }),
+                    },
+                  ),
+                  "speaker.get",
+                  pageFilters(operation.params),
                 ),
               };
-            const current = speakers.sourceStatus({ ...selection, sourceRange: observationRange });
+            const current = speakers.sourceStatus({ ...selection, sourceRange: sourceRange });
             if (!current.published) {
               if (cursor)
                 throw new CatalogError(
                   "ARTIFACT_CHANGED",
                   "Speaker observation is no longer published",
                 );
-              return { ok: true, data: { ...current, page: null } };
+              return { ok: true, data: { ...current } };
             }
             const metadata = current.published.evidence;
             const labels = new Map(
@@ -1751,7 +2171,7 @@ export async function startProjectService(options: {
               ...(sourceRange === undefined ? {} : { sourceRange }),
               ...(view === undefined ? {} : { view }),
               ...(limit === undefined ? {} : { limit }),
-              ...(cursor === undefined ? {} : { cursor }),
+              ...(decodedSpeakerCursor === undefined ? {} : { cursor: decodedSpeakerCursor }),
             });
             const labeledPage =
               view === "scores"
@@ -1770,23 +2190,38 @@ export async function startProjectService(options: {
                 ...selection,
                 state: "ready",
                 generation: metadata.generation,
-                page: labeledPage,
+                ...labeledPage,
+                nextCursor:
+                  labeledPage.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "speaker.get",
+                        labeledPage.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
           case "speaker.bind": {
-            const { observationRange, generation, bindings, ...selection } = operation.params;
-            const current = speakers.sourceStatus({ ...selection, sourceRange: observationRange });
+            const {
+              sourceRange,
+              generation,
+              bindings,
+              requestId,
+              expectedBindingDigest,
+              ...selection
+            } = operation.params;
+            const current = speakers.sourceStatus({ ...selection, sourceRange: sourceRange });
             if (!current.published || current.published.evidence.generation !== generation)
               throw new CatalogError(
                 "ARTIFACT_CHANGED",
                 "Speaker generation is no longer published",
               );
             const metadata = current.published.evidence;
-            const labels = speakerLabels.bind(metadata, bindings);
+            const labels = speakerLabels.bind(metadata, bindings, requestId, expectedBindingDigest);
             return {
               ok: true,
-              data: { ...selection, observationRange, generation, bindings: labels },
+              data: { ...selection, sourceRange, generation, bindings: labels },
             };
           }
           case "join.verify": {
@@ -1802,11 +2237,8 @@ export async function startProjectService(options: {
               }),
             };
           }
-          case "transcript.render.prepare":
-          case "transcript.render.retry": {
-            const status = renderedSpeech[
-              operation.operation === "transcript.render.retry" ? "retry" : "prepare"
-            ](operation.params);
+          case "transcript.render.prepare": {
+            const status = renderedSpeech.prepare(operation.params);
             return {
               ok: true,
               data: {
@@ -1815,8 +2247,32 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "transcript.render.get":
-            return { ok: true, data: renderedSpeech.get(operation.params) };
+          case "transcript.render.get": {
+            const { cursor, ...params } = operation.params;
+            const decoded =
+              cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    "transcript.render.get",
+                    cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    generation: string;
+                    sourceCursor: unknown;
+                  });
+            return {
+              ok: true,
+              data: pageEnvelope(
+                renderedSpeech.get({
+                  ...params,
+                  // The continuation keeps its own generation so a different request refuses.
+                  ...(decoded === undefined ? {} : { cursor: decoded }),
+                }),
+                "transcript.render.get",
+                pageFilters(operation.params),
+              ),
+            };
+          }
           case "transcript.import": {
             const source: ImportedTranscriptSource = {
               assetId: operation.params.assetId,
@@ -1878,7 +2334,13 @@ export async function startProjectService(options: {
             };
           }
           case "transcript.disfluency.get": {
-            const { generation, range, limit = 100, cursor, ...selection } = operation.params;
+            const { generation, range, limit, cursor, ...selection } = operation.params;
+            const page = filteredPage("transcript.disfluency.get", {
+              cursor,
+              limit,
+              filters: pageFilters(operation.params),
+            });
+            const disfluent = (kind: string) => ["filler", "vocalization"].includes(kind);
             const source: ImportedTranscriptSource = {
               assetId: selection.assetId,
               streamId: selection.streamId,
@@ -1898,23 +2360,21 @@ export async function startProjectService(options: {
                     }
                   })();
             if (imported) {
-              const rows = imported.cues
-                .flatMap((cue) =>
-                  cue.words
-                    .filter(
-                      (word) =>
-                        !range ||
-                        (word.source.endUs > range.startUs && word.source.startUs < range.endUs),
-                    )
-                    .filter((word) => ["filler", "vocalization"].includes(wordKind(word.text)))
-                    .map((word) => ({
-                      type: "word" as const,
-                      text: word.text,
-                      sourceRange: word.source,
-                      kind: wordKind(word.text),
-                    })),
-                )
-                .slice(cursor ? Number(cursor) : 0, (cursor ? Number(cursor) : 0) + limit);
+              const rows = imported.cues.flatMap((cue) =>
+                cue.words
+                  .filter(
+                    (word) =>
+                      !range ||
+                      (word.source.endUs > range.startUs && word.source.startUs < range.endUs),
+                  )
+                  .filter((word) => disfluent(wordKind(word.text)))
+                  .map((word) => ({
+                    type: "word" as const,
+                    text: word.text,
+                    sourceRange: word.source,
+                    kind: wordKind(word.text),
+                  })),
+              );
               return {
                 ok: true,
                 data: {
@@ -1922,7 +2382,7 @@ export async function startProjectService(options: {
                   generation: imported.generation,
                   method: "word-kind-v1",
                   coverage: "complete",
-                  page: { rows, nextCursor: null },
+                  ...page.read(imported.generation, () => ({ rows, nextCursor: null })),
                 },
               };
             }
@@ -1930,16 +2390,8 @@ export async function startProjectService(options: {
               ...selection,
               ...(generation ? { generation } : {}),
             });
-            if (!current.published) return { ok: true, data: { ...current, page: null } };
+            if (!current.published) return { ok: true, data: { ...current } };
             const read = new SourceTranscriptRead(transcriptStore, current.published.transcript);
-            const page = read.page({
-              range,
-              limit: Math.max(limit, 1000),
-              ...(cursor ? { cursor: JSON.parse(cursor) } : {}),
-            });
-            const rows = page.rows.filter(
-              (row) => row.type === "word" && ["filler", "vocalization"].includes(row.kind),
-            );
             return {
               ok: true,
               data: {
@@ -1947,44 +2399,63 @@ export async function startProjectService(options: {
                 generation: current.published.transcript.generation,
                 method: "word-kind-v1",
                 coverage: "complete",
-                page: {
-                  rows: rows.slice(0, limit),
-                  nextCursor: rows.length > limit ? JSON.stringify(page.nextCursor) : null,
-                },
-              },
-            };
-          }
-          case "transcript.retry": {
-            if ("projectId" in operation.params) {
-              const status = projectEvidence.retry(operation.params);
-              return {
-                ok: true,
-                data: {
-                  ...status,
-                  published: publishedOutput(status.published, (value) => value.value),
-                },
-              };
-            }
-            const status = transcripts.retrySource(operation.params);
-            return {
-              ok: true,
-              data: {
-                ...status,
-                published: publishedOutput(status.published, (value) => value.transcript),
+                ...page.read(
+                  current.published.transcript.generation,
+                  (sourceCursor) =>
+                    read.page({
+                      range,
+                      limit: 1000,
+                      ...(sourceCursor === undefined ? {} : { cursor: sourceCursor as never }),
+                    }),
+                  (row) => row.type === "word" && disfluent(row.kind),
+                ),
               },
             };
           }
           case "transcript.get":
           case "transcript.search": {
             const params = operation.params;
-            if ("projectId" in params)
+            if ("projectId" in params) {
+              const normalizedParams = {
+                ...params,
+                ...(params.speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: params.speakerGenerations.map((speaker) => ({
+                        ...speaker,
+                        observationRange:
+                          (speaker as { sourceRange?: unknown }).sourceRange ??
+                          (speaker as { observationRange?: unknown }).observationRange,
+                      })) as never,
+                    }),
+              };
+              const projectParams =
+                params.cursor === undefined
+                  ? normalizedParams
+                  : {
+                      ...normalizedParams,
+                      cursor: pageCursor.decode(
+                        operation.operation,
+                        params.cursor,
+                        pageFilters(operation.params),
+                      ),
+                    };
               return {
                 ok: true,
                 data:
                   "text" in params
-                    ? await projectEvidence.search(params)
-                    : await projectEvidence.get(params),
+                    ? pageEnvelope(
+                        await projectEvidence.search(projectParams as never),
+                        "transcript.search",
+                        pageFilters(operation.params),
+                      )
+                    : pageEnvelope(
+                        await projectEvidence.get(projectParams as never),
+                        "transcript.get",
+                        pageFilters(operation.params),
+                      ),
               };
+            }
             const selection = {
               assetId: params.assetId,
               streamId: params.streamId,
@@ -1992,22 +2463,27 @@ export async function startProjectService(options: {
                 ? {}
                 : { acquisitionId: params.acquisitionId }),
             };
-            const generation = params.generation ?? params.cursor?.generation;
+            const transcriptPosition =
+              params.cursor === undefined
+                ? undefined
+                : (pageCursor.decode(
+                    operation.operation,
+                    params.cursor,
+                    pageFilters(operation.params),
+                  ) as {
+                    generation?: unknown;
+                    sourceCursor?: unknown;
+                    speaker?: TranscriptSpeakerCursor;
+                  });
+            const generation =
+              params.generation ?? (transcriptPosition?.generation as string | undefined);
             const sourceParams = params as typeof params & {
               speaker?: TranscriptSpeakerRequest;
               cursor?: { speaker?: TranscriptSpeakerCursor } & Record<string, unknown>;
             };
-            const cursorSpeaker = sourceParams.cursor?.speaker;
-            const speakerRequest = sourceParams.speaker ?? cursorSpeaker;
-            if (
-              sourceParams.speaker &&
-              cursorSpeaker &&
-              !sameTranscriptSpeakerRequest(sourceParams.speaker, cursorSpeaker)
-            )
-              throw new CatalogError(
-                "ARTIFACT_CHANGED",
-                "Transcript continuation used another speaker generation",
-              );
+            // The cursor binds the speaker request as a filter and keeps the binding digest as a pin.
+            const cursorSpeaker = transcriptPosition?.speaker;
+            const speakerRequest = sourceParams.speaker;
             const importedSource: ImportedTranscriptSource = {
               assetId: selection.assetId,
               streamId: selection.streamId,
@@ -2049,39 +2525,38 @@ export async function startProjectService(options: {
                     state: "ready",
                     generation: imported.generation,
                     origin: imported.origin,
-                    page: {
-                      entries: joined.cues
-                        .filter((cue) => {
-                          const words = (
-                            cue.words.length
-                              ? cue.words.map((word) => word.text)
-                              : cue.text.split(/\s+/)
-                          ).map((word) =>
-                            word.toLowerCase().replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, ""),
-                          );
-                          return (
-                            terms.length > 0 &&
-                            words.some((_, index) =>
-                              terms.every((term, offset) => words[index + offset] === term),
-                            )
-                          );
-                        })
-                        .slice(0, params.limit ?? 100)
-                        .map((cue) => ({
-                          wordIds: cue.words.map((_, index) => `imported:${cue.ordinal}:${index}`),
-                          sourceRange: cue.source,
-                        })),
-                      nextCursor: null,
-                    },
+                    entries: joined.cues
+                      .filter((cue) => {
+                        const words = (
+                          cue.words.length
+                            ? cue.words.map((word) => word.text)
+                            : cue.text.split(/\s+/)
+                        ).map((word) =>
+                          word.toLowerCase().replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, ""),
+                        );
+                        return (
+                          terms.length > 0 &&
+                          words.some((_, index) =>
+                            terms.every((term, offset) => words[index + offset] === term),
+                          )
+                        );
+                      })
+                      .slice(0, params.limit ?? 100)
+                      .map((cue) => ({
+                        wordIds: cue.words.map((_, index) => `imported:${cue.ordinal}:${index}`),
+                        sourceRange: cue.source,
+                      })),
+                    nextCursor: null,
                   },
                 };
               }
+              const sourceRange = sourceRangeAsMicroseconds(params.sourceRange);
               const rows = joined.cues
                 .filter(
                   (cue) =>
-                    !params.range ||
-                    (cue.source.endUs > params.range.startUs &&
-                      cue.source.startUs < params.range.endUs),
+                    !sourceRange ||
+                    (cue.source.endUs > sourceRange.startUs &&
+                      cue.source.startUs < sourceRange.endUs),
                 )
                 .slice(0, params.limit ?? 250)
                 .map((cue) => ({
@@ -2101,7 +2576,8 @@ export async function startProjectService(options: {
                   state: "ready",
                   generation: imported.generation,
                   origin: imported.origin,
-                  page: { rows, nextCursor: null },
+                  rows,
+                  nextCursor: null,
                 },
               };
             }
@@ -2115,13 +2591,13 @@ export async function startProjectService(options: {
                   "ARTIFACT_CHANGED",
                   "Transcript generation is no longer published",
                 );
-              return { ok: true, data: { ...current, page: null } };
+              return { ok: true, data: { ...current } };
             }
             const metadata = current.published.transcript;
             const read = new SourceTranscriptRead(transcriptStore, metadata);
-            const sourceCursor = sourceParams.cursor
-              ? omit(sourceParams.cursor, "speaker")
-              : undefined;
+            const sourceCursor = transcriptPosition?.sourceCursor as
+              | Record<string, unknown>
+              | undefined;
             const { issues, ...page } =
               "text" in params
                 ? {
@@ -2132,7 +2608,11 @@ export async function startProjectService(options: {
                     }),
                     issues: [],
                   }
-                : read.page({ range: params.range, cursor: sourceCursor, limit: params.limit });
+                : read.page({
+                    range: sourceRangeAsMicroseconds(params.sourceRange),
+                    cursor: sourceCursor,
+                    limit: params.limit,
+                  });
             let attributedPage = page;
             let pinnedSpeaker: TranscriptSpeakerCursor | undefined;
             if (speakerRequest && "rows" in page) {
@@ -2144,10 +2624,10 @@ export async function startProjectService(options: {
                   : { acquisitionId: speakerRequest.acquisitionId }),
                 channel: speakerRequest.channel,
                 modelId: speakerRequest.modelId,
-                sourceRange: speakerRequest.observationRange,
+                sourceRange: speakerRequest.sourceRange,
               });
               if (!speakerStatus.published) {
-                throw new CatalogError(
+                throw dependencyRefusal(
                   "NOT_READY",
                   "Speaker evidence is not ready for transcript attribution",
                   {},
@@ -2180,7 +2660,7 @@ export async function startProjectService(options: {
               do {
                 const speakerPage = speakerRead.page({
                   view: "intervals",
-                  sourceRange: speakerRequest.observationRange,
+                  sourceRange: speakerRequest.sourceRange,
                   limit: 1000,
                   ...(speakerCursor === undefined ? {} : { cursor: speakerCursor }),
                 });
@@ -2212,26 +2692,57 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                page: {
-                  transcript: metadata,
-                  ...attributedPage,
-                  ...(pinnedSpeaker === undefined ? {} : { speaker: pinnedSpeaker }),
-                  ...(attributedPage.nextCursor === null
-                    ? {}
-                    : {
-                        nextCursor: {
-                          ...attributedPage.nextCursor,
+                transcript: publicTranscriptMetadata(metadata),
+                ...(attributedPage.nextCursor === null
+                  ? { nextCursor: null }
+                  : {
+                      nextCursor: pageCursor.encode(
+                        operation.operation,
+                        {
+                          generation: metadata.generation,
+                          sourceCursor: attributedPage.nextCursor,
                           ...(pinnedSpeaker === undefined ? {} : { speaker: pinnedSpeaker }),
                         },
-                      }),
-                },
+                        pageFilters(operation.params),
+                      ),
+                    }),
+                ...("rows" in attributedPage
+                  ? { rows: attributedPage.rows }
+                  : { entries: attributedPage.entries }),
               },
             };
           }
           case "transcript.review": {
             const params = operation.params;
             if ("projectId" in params) {
-              const requested = projectEvidence.request({ ...params, prepare: true });
+              const normalizedParams = {
+                ...params,
+                ...(params.speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: params.speakerGenerations.map((speaker) => ({
+                        ...speaker,
+                        observationRange:
+                          (speaker as { sourceRange?: unknown }).sourceRange ??
+                          (speaker as { observationRange?: unknown }).observationRange,
+                      })) as never,
+                    }),
+              };
+              const projectParams =
+                params.cursor === undefined
+                  ? normalizedParams
+                  : {
+                      ...normalizedParams,
+                      cursor: pageCursor.decode(
+                        "transcript.review",
+                        params.cursor,
+                        pageFilters(operation.params),
+                      ),
+                    };
+              const requested = projectEvidence.request({
+                ...projectParams,
+                prepare: true,
+              } as never);
               const pending = requested.dependencies.filter(
                 (dependency) =>
                   dependency.state === "unavailable" && dependency.reason === "model_not_prepared",
@@ -2249,7 +2760,6 @@ export async function startProjectService(options: {
                           ? "failed"
                           : "preparing",
                     model,
-                    page: null,
                   },
                 };
               }
@@ -2257,9 +2767,16 @@ export async function startProjectService(options: {
                 if (dependency.transcript || dependency.reason === "no_audio") continue;
                 transcripts.prepareSource(dependency.selection);
               }
-              const ready = projectEvidence.request({ ...params, prepare: true });
-              if (!ready.published) return { ok: true, data: { ...ready, page: null } };
-              return { ok: true, data: await projectEvidence.get(params) };
+              const ready = projectEvidence.request({ ...projectParams, prepare: true } as never);
+              if (!ready.published) return { ok: true, data: { ...ready } };
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  await projectEvidence.get(projectParams as never),
+                  "transcript.review",
+                  pageFilters(operation.params),
+                ),
+              };
             }
             const selection = {
               assetId: params.assetId,
@@ -2268,13 +2785,18 @@ export async function startProjectService(options: {
                 ? {}
                 : { acquisitionId: params.acquisitionId }),
             };
+            // Decode before any readiness work so another filter set never reaches a transcript.
+            const reviewCursor =
+              params.cursor === undefined
+                ? undefined
+                : pageCursor.decode("transcript.review", params.cursor, pageFilters(params));
+            const reviewRange = sourceRangeAsMicroseconds(params.sourceRange);
             const reviewSelection = {
               ...selection,
-              ...(params.range === undefined ? {} : { executionRange: params.range }),
+              ...(reviewRange === undefined ? {} : { sourceRange: reviewRange }),
             };
             let current = transcripts.sourceStatus(reviewSelection);
-            if (current.reason === "no_audio")
-              return { ok: true, data: { ...current, page: null } };
+            if (current.reason === "no_audio") return { ok: true, data: { ...current } };
             if (current.reason === "model_not_prepared") {
               const model = ensureReviewModel();
               return {
@@ -2283,7 +2805,6 @@ export async function startProjectService(options: {
                   ...current,
                   state: model.state === "failed" ? "failed" : "preparing",
                   model,
-                  page: null,
                 },
               };
             }
@@ -2291,10 +2812,14 @@ export async function startProjectService(options: {
               transcripts.prepareSource(reviewSelection);
               current = transcripts.sourceStatus(reviewSelection);
             }
-            if (!current.published) return { ok: true, data: { ...current, page: null } };
+            if (!current.published) return { ok: true, data: { ...current } };
             const metadata = current.published.transcript;
             const read = new SourceTranscriptRead(transcriptStore, metadata);
-            const { issues, ...page } = read.page({ range: params.range, limit: params.limit });
+            const { issues, ...page } = read.page({
+              range: reviewRange,
+              limit: params.limit,
+              ...(reviewCursor === undefined ? {} : { cursor: reviewCursor as never }),
+            });
             return {
               ok: true,
               data: {
@@ -2303,7 +2828,16 @@ export async function startProjectService(options: {
                 generation: metadata.generation,
                 issues,
                 published: sourceTranscriptPublication(current.published),
-                page: { transcript: metadata, ...page },
+                transcript: publicTranscriptMetadata(metadata),
+                ...page,
+                nextCursor:
+                  page.nextCursor === null
+                    ? null
+                    : pageCursor.encode(
+                        "transcript.review",
+                        page.nextCursor,
+                        pageFilters(operation.params),
+                      ),
               },
             };
           }
@@ -2311,26 +2845,47 @@ export async function startProjectService(options: {
           case "cursor.raw": {
             const params = operation.params;
             const method = operation.operation === "timeline.events" ? "events" : "cursor";
-            if ("projectId" in params)
-              return { ok: true, data: await projectEvidence[method](params) };
+            const normalized =
+              params.cursor === undefined
+                ? params
+                : {
+                    ...params,
+                    cursor: pageCursor.decode(
+                      operation.operation,
+                      params.cursor,
+                      pageFilters(operation.params),
+                    ),
+                  };
+            if ("projectId" in normalized)
+              return {
+                ok: true,
+                data: pageEnvelope(
+                  await projectEvidence[method](normalized as never),
+                  operation.operation,
+                  pageFilters(operation.params),
+                ),
+              };
             if ("assetId" in params)
               return {
                 ok: true,
-                data: method === "events" ? sourceEvents.events(params) : capture.cursor(params),
+                data: pageEnvelope(
+                  method === "events"
+                    ? sourceEvents.events(normalized as never)
+                    : capture.cursor(normalized as never),
+                  operation.operation,
+                  pageFilters(operation.params),
+                ),
               };
             return operationError(
-              "NOT_READY",
+              "INVALID_PARAMS",
               "This service inspects asset and project capture evidence",
             );
           }
-          case "frame.get":
-          case "frame.retry": {
+          case "frame.get": {
             const params = operation.params;
             return {
               ok: true,
-              data: frameDelivery(
-                mediaFrames[operation.operation === "frame.get" ? "request" : "retry"](params),
-              ),
+              data: frameDelivery(mediaFrames.request(params)),
             };
           }
           case "frame.batch": {
@@ -2372,8 +2927,7 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "cursor.render":
-          case "cursor.render.retry": {
+          case "cursor.render": {
             const params = operation.params;
             const identity =
               "projectId" in params
@@ -2399,11 +2953,7 @@ export async function startProjectService(options: {
                     return {
                       atUs,
                       ok: true,
-                      data: frameDelivery(
-                        mediaFrames[
-                          operation.operation === "cursor.render.retry" ? "retry" : "request"
-                        ](input),
-                      ),
+                      data: frameDelivery(mediaFrames.request(input)),
                     };
                   } catch (error) {
                     return { atUs, ...operationFailure(error) };
@@ -2413,16 +2963,11 @@ export async function startProjectService(options: {
             };
           }
           case "waveform.get":
-          case "waveform.retry":
-          case "spectrogram.get":
-          case "spectrogram.retry": {
-            const spectrum = operation.operation.startsWith("spectrogram.");
-            const status = await acoustics[
-              operation.operation.endsWith(".get") ? "request" : "retry"
-            ](
-              spectrum
-                ? { ...operation.params, kind: "spectrum", format: "image" }
-                : operation.params,
+          case "spectrogram.get": {
+            const spectrum = operation.operation === "spectrogram.get";
+            const params = operation.params;
+            const status = await acoustics.request(
+              spectrum ? { ...params, kind: "spectrum", format: "image" } : params,
             );
             return {
               ok: true,
@@ -2483,7 +3028,11 @@ export async function startProjectService(options: {
             };
           }
           case "audio.measure": {
-            const status = await acoustics.request({ ...operation.params, kind: "loudness" });
+            const measureParams = operation.params;
+            const status = await acoustics.request({
+              ...measureParams,
+              kind: "loudness",
+            });
             return {
               ok: true,
               data: {
@@ -2501,28 +3050,31 @@ export async function startProjectService(options: {
             };
           }
           case "audio.pause.get": {
-            const { limit = 100, cursor, ...selection } = operation.params;
-            const status = await acoustics.request({ ...selection, kind: "pause" });
+            const { limit, cursor, ...selection } = operation.params;
+            // Refuse a foreign continuation before admitting analysis work.
+            const page = filteredPage("audio.pause.get", {
+              cursor,
+              limit,
+              filters: pageFilters(operation.params),
+            });
+            const status = await acoustics.request({
+              ...selection,
+              kind: "pause",
+            });
             const allIntervals =
               status.published?.artifact.analysis.kind === "pause"
                 ? status.published.artifact.analysis.intervals
                 : [];
+            const { rows: intervals, nextCursor } = page.read(
+              status.published ? status.published.generation : null,
+              () => ({ rows: allIntervals, nextCursor: null }),
+            );
             const published = status.published
               ? {
                   ...status.published,
                   artifact: {
                     ...status.published.artifact,
-                    analysis: {
-                      ...status.published.artifact.analysis,
-                      intervals: allIntervals.slice(
-                        cursor?.offset ?? 0,
-                        (cursor?.offset ?? 0) + limit,
-                      ),
-                    },
-                    nextCursor:
-                      (cursor?.offset ?? 0) + limit < allIntervals.length
-                        ? { offset: (cursor?.offset ?? 0) + limit }
-                        : null,
+                    analysis: { ...status.published.artifact.analysis, intervals },
                   },
                 }
               : null;
@@ -2531,6 +3083,7 @@ export async function startProjectService(options: {
               data: {
                 ...status,
                 published: publishedOutput(published, (value) => value.artifact),
+                intervals,
                 delivery: published
                   ? delivery.open(
                       "projectId" in status
@@ -2539,14 +3092,13 @@ export async function startProjectService(options: {
                       () => cache.acquire(published.artifact.cacheId),
                     )
                   : null,
+                nextCursor,
               },
             };
           }
-          case "audio.get":
-          case "audio.retry": {
+          case "audio.get": {
             const params = operation.params;
-            const status =
-              await mediaAudio[operation.operation === "audio.get" ? "request" : "retry"](params);
+            const status = await mediaAudio.request(params);
             return {
               ok: true,
               data: {
@@ -2565,8 +3117,7 @@ export async function startProjectService(options: {
           }
           case "storage.usage":
             return { ok: true, data: await managedStorage.usage() };
-          case "inspect.open":
-          case "inspect": {
+          case "inspect.open": {
             const params = operation.params;
             const project = projects.get(params.projectId);
             const revision = projects.revision(params.projectId, params.revisionId);
@@ -2585,7 +3136,7 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: {
-                projectId: project.projectId,
+                projectId: project.id,
                 headRevisionId: project.currentRevisionId,
                 revision,
                 history: history.revisions.map((item) => ({
@@ -2623,7 +3174,14 @@ export async function startProjectService(options: {
                 ...(range === undefined ? {} : { range }),
                 ...(trackIds === undefined ? {} : { trackIds }),
                 ...(sourceGenerations === undefined ? {} : { sourceGenerations }),
-                ...(speakerGenerations === undefined ? {} : { speakerGenerations }),
+                ...(speakerGenerations === undefined
+                  ? {}
+                  : {
+                      speakerGenerations: speakerGenerations.map(({ sourceRange, ...speaker }) => ({
+                        ...speaker,
+                        observationRange: sourceRange,
+                      })),
+                    }),
                 limit,
                 prepare: false,
               });
@@ -2633,10 +3191,10 @@ export async function startProjectService(options: {
                   "The selected project transcript is not ready",
                   {
                     state: transcript.state,
+                    jobId: null,
                     reason: "reason" in transcript ? transcript.reason : null,
                     dependencies: transcript.dependencies,
                   },
-                  "retryable" in transcript && transcript.retryable === true,
                 );
               }
               if (transcript.page.nextCursor !== null) {
@@ -2646,12 +3204,12 @@ export async function startProjectService(options: {
                   { limit: operation.params.limit },
                 );
               }
-              const rowIndexes = transcript.page.rows.flatMap((row, index) =>
+              const rowIndexes = transcript.page.rows.flatMap((row: any, index: number) =>
                 row.type === "word" ? [index] : [],
               );
               if (!rowIndexes.length) {
                 throw new CatalogError(
-                  "NOT_READY",
+                  "INVALID_PARAMS",
                   "The selected project transcript contains no word evidence",
                   { state: transcript.state },
                 );
@@ -2684,7 +3242,6 @@ export async function startProjectService(options: {
                   "details" in error && error.details && typeof error.details === "object"
                     ? (error.details as Record<string, unknown>)
                     : {},
-                  "retryable" in error && error.retryable === true,
                 );
               throw error;
             }
@@ -2692,11 +3249,21 @@ export async function startProjectService(options: {
             projects.requireRevision(operation.params.projectId, operation.params.revisionId);
             return {
               ok: true,
-              data: {
-                projectId: operation.params.projectId,
-                revisionId: operation.params.revisionId,
-                ...layoutDiagnostics(operation.params.samples, operation.params.maxIssues ?? 100),
-              },
+              data: (() => {
+                const diagnostics = layoutDiagnostics(
+                  operation.params.samples,
+                  operation.params.maxIssueCount ?? 100,
+                );
+                return {
+                  projectId: operation.params.projectId,
+                  revisionId: operation.params.revisionId,
+                  ...diagnostics,
+                  coverage: (() => {
+                    const { samples, ...coverage } = diagnostics.coverage;
+                    return { ...coverage, sampleCount: samples };
+                  })(),
+                };
+              })(),
             };
           case "project.create":
             return {
@@ -2707,15 +3274,35 @@ export async function startProjectService(options: {
                 ...(operation.params.title === undefined ? {} : { title: operation.params.title }),
               }),
             };
+          case "project.duplicate":
+            return {
+              ok: true,
+              data: projects.duplicate({
+                requestId: operation.params.requestId,
+                projectId: operation.params.projectId,
+                ...(operation.params.revisionId === undefined
+                  ? {}
+                  : { revisionId: operation.params.revisionId }),
+                ...(operation.params.title === undefined ? {} : { title: operation.params.title }),
+              }),
+            };
           case "project.delete":
-            return { ok: true, data: await projectDeletion.delete(operation.params.projectId) };
+            return {
+              ok: true,
+              data: await deletion!.delete(
+                { kind: "project", id: operation.params.projectId },
+                { requestId: operation.params.requestId },
+              ),
+            };
           case "project.get":
             return { ok: true, data: projects.get(operation.params.projectId) };
           case "project.list":
             return {
               ok: true,
               data: projects.list({
-                ...operation.params.cursor,
+                ...(operation.params.cursor === undefined
+                  ? {}
+                  : { cursor: operation.params.cursor }),
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
@@ -2725,7 +3312,10 @@ export async function startProjectService(options: {
               data: projects.seedText(operation.params.projectId, operation.params),
             };
           case "edit.apply":
-            return { ok: true, data: projects.apply(operation.params.projectId, operation.params) };
+            return {
+              ok: true,
+              data: projects.apply(operation.params.projectId, operation.params),
+            };
           case "speaker.correct":
             return {
               ok: true,
@@ -2770,14 +3360,23 @@ export async function startProjectService(options: {
           case "revision.history":
             return {
               ok: true,
-              data: projects.history(
-                operation.params.projectId,
-                operation.params.cursor,
-                operation.params.limit,
-              ),
+              data: (() => {
+                const page = projects.history(
+                  operation.params.projectId,
+                  operation.params.cursor,
+                  operation.params.limit,
+                );
+                return {
+                  ...page,
+                  revisions: page.revisions,
+                };
+              })(),
             };
           case "edit.undo":
-            return { ok: true, data: projects.undo(operation.params.projectId, operation.params) };
+            return {
+              ok: true,
+              data: projects.undo(operation.params.projectId, operation.params),
+            };
           case "edit.restore":
             return {
               ok: true,
@@ -2788,36 +3387,53 @@ export async function startProjectService(options: {
               operation.params.requestId,
               operation.params.path,
             );
-            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {}, true);
+            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {});
             const job = queue.submit(() => {
               const intent = acquisitions.admitImport(prepared);
               return {
-                target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+                target: { kind: "acquisition", id: intent.acquisitionId },
                 artifact: "acquisition.import",
                 lane: "heavy",
                 input: JSON.stringify(intent.files),
               };
             });
-            return { ok: true, data: status(job.jobId) };
+            return { ok: true, data: queue.work(job.jobId) };
           }
-          case "acquisition.get":
-            return { ok: true, data: acquisitions.get(operation.params.acquisitionId) };
+          case "acquisition.get": {
+            const { acquisitionId } = operation.params;
+            try {
+              return { ok: true, data: acquisitions.get(acquisitionId) };
+            } catch (error) {
+              // "Still importing" would ask a caller to wait for an import that can never finish.
+              if (
+                error instanceof CatalogError &&
+                error.code === "NOT_READY" &&
+                captureSources.orphaned(acquisitionId)
+              )
+                throw new CatalogError(
+                  "OWNER_DELETED",
+                  "The recording this import belonged to was deleted.",
+                  { acquisitionId },
+                );
+              throw error;
+            }
+          }
           case "asset.import": {
             const prepared = await assets.prepareImport(
               operation.params.requestId,
               operation.params.path,
             );
-            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {}, true);
+            if (closing) throw new CatalogError("SERVICE_STOPPED", "Service is closing", {});
             const job = queue.submit(() => {
               const intent = assets.admitImport(prepared);
               return {
-                target: { kind: "import", importId: intent.importId },
+                target: { kind: "import", id: intent.importId },
                 artifact: "asset.import",
                 lane: "heavy",
                 input: JSON.stringify(intent.source),
               };
             });
-            return { ok: true, data: status(job.jobId) };
+            return { ok: true, data: queue.work(job.jobId) };
           }
           case "asset.convert": {
             const converted = await convertedAssets.request(operation.params, requestSignal);
@@ -2833,8 +3449,10 @@ export async function startProjectService(options: {
               },
             };
           }
-          case "asset.get":
-            return { ok: true, data: assets.describe(operation.params.assetId) };
+          case "asset.get": {
+            const { bytes, ...asset } = assets.describe(operation.params.assetId);
+            return { ok: true, data: { ...asset, sizeBytes: bytes } };
+          }
           case "asset.segments":
             return {
               ok: true,
@@ -2847,23 +3465,34 @@ export async function startProjectService(options: {
             return {
               ok: true,
               data: assets.origins(operation.params.assetId, {
-                ...operation.params.cursor,
+                ...(operation.params.cursor ? { cursor: operation.params.cursor } : {}),
                 ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
               }),
             };
           case "asset.list":
             return {
               ok: true,
-              data: assets.list({
-                ...operation.params.cursor,
-                ...(operation.params.limit === undefined ? {} : { limit: operation.params.limit }),
-              }),
+              data: (() => {
+                const page = assets.list({
+                  ...(operation.params.cursor === undefined
+                    ? {}
+                    : { cursor: operation.params.cursor }),
+                  ...(operation.params.limit === undefined
+                    ? {}
+                    : { limit: operation.params.limit }),
+                });
+                return {
+                  ...page,
+                  assets: page.assets.map(({ bytes, ...asset }) => ({
+                    ...asset,
+                    sizeBytes: bytes,
+                  })),
+                };
+              })(),
             };
-          case "preview.get":
-          case "preview.retry": {
+          case "preview.get": {
             const params = operation.params;
-            const status =
-              await preview[operation.operation === "preview.get" ? "request" : "retry"](params);
+            const status = await preview.request(params);
             return {
               ok: true,
               data: {
@@ -2878,9 +3507,15 @@ export async function startProjectService(options: {
             };
           }
           case "package.open":
-            return { ok: true, data: await projectPackages.open(operation.params.path) };
+            return {
+              ok: true,
+              data: await projectPackages.open(operation.params.path, operation.params.requestId),
+            };
           case "package.status":
-            return { ok: true, data: projectPackages.status(operation.params.admissionId) };
+            return {
+              ok: true,
+              data: projectPackages.status(operation.params.admissionId),
+            };
           case "package.close":
             return {
               ok: true,
@@ -2895,45 +3530,71 @@ export async function startProjectService(options: {
               ),
             };
           case "export.create":
-            return { ok: true, data: await mediaExports.create(operation.params) };
+            return {
+              ok: true,
+              data: await mediaExports.create({
+                ...operation.params,
+                exportId: operation.params.requestId,
+              } as never),
+            };
           case "export.list":
             return { ok: true, data: mediaExports.list(operation.params) };
           case "export.status":
-            return { ok: true, data: mediaExports.status(operation.params.exportId) };
-          case "export.retry":
-            return { ok: true, data: await mediaExports.retry(operation.params.exportId) };
+            return {
+              ok: true,
+              data: mediaExports.publicStatus(operation.params.exportId),
+            };
           case "export.recover":
-            return { ok: true, data: await mediaExports.recover(operation.params.exportId) };
+            return {
+              ok: true,
+              data: await mediaExports.recover(
+                operation.params.exportId,
+                operation.params.requestId,
+              ),
+            };
           case "export.cancel":
             mediaExports.cancel(operation.params.exportId);
             return { ok: true, data: mediaExports.status(operation.params.exportId) };
           case "export.abandon":
             await mediaExports.abandon(operation.params.exportId);
-            return { ok: true, data: { exportId: operation.params.exportId, abandoned: true } };
+            return { ok: true, data: { id: operation.params.exportId, abandoned: true } };
           case "artifact.read":
             return {
               ok: true,
               data: delivery.read(
                 operation.params.token,
-                operation.params.offset,
+                operation.params.offsetBytes,
                 operation.params.maxBytes,
               ),
             };
           case "artifact.renew":
-            return { ok: true, data: delivery.renew(operation.params.token) };
+            return {
+              ok: true,
+              data: delivery.renew(operation.params.token, operation.params.requestId),
+            };
           case "artifact.close":
             delivery.close(operation.params.token);
-            return { ok: true, data: { closed: true } };
+            return { ok: true, data: { token: operation.params.token, closed: true } };
           case "job.get":
             return { ok: true, data: status(operation.params.jobId) };
-          case "job.retry":
-            queue.retry(operation.params.jobId);
+          case "job.retry": {
+            // An export's retry also repairs its own failed prerequisites and honours its fences.
+            // Rendered recognition likewise re-runs its failed PCM extraction.
+            const owner = exportOf(operation.params.jobId);
+            const job = queue.job(operation.params.jobId);
+            if (owner && !owner.recovery) await mediaExports.retry(owner.exportId);
+            else if (job.artifact === "rendered-speech") renderedSpeech.retryJob(job);
+            else queue.retry(operation.params.jobId);
             return { ok: true, data: status(operation.params.jobId) };
+          }
           case "job.cancel":
             await queue.drainJob(operation.params.jobId);
             return { ok: true, data: status(operation.params.jobId) };
           default:
-            return operationError("NOT_READY", "Operation is not available in the project service");
+            return operationError(
+              "PREREQUISITE_MISSING",
+              "Operation is not available in the project service",
+            );
         }
       } catch (error) {
         const failure = operationFailure(error);
@@ -2953,7 +3614,9 @@ export async function startProjectService(options: {
       }
     };
     const serve: LocalHandler = (request, signal) => {
-      const task = Promise.resolve(handle(request, signal));
+      const task = Promise.resolve(handle(request, signal)).then((result) => {
+        return toWire(result) as OperationResult;
+      });
       pending.add(task);
       void task.then(
         () => {
@@ -2968,7 +3631,8 @@ export async function startProjectService(options: {
       return task;
     };
     function requireCaptureControl(): CaptureService {
-      if (!controller) throw new CatalogError("NOT_READY", "No capture controller is connected");
+      if (!controller)
+        throw new CatalogError("PREREQUISITE_MISSING", "No capture controller is connected");
       return captureCoordinator;
     }
     const captureCoordinator = new CaptureService(
@@ -2977,7 +3641,9 @@ export async function startProjectService(options: {
       (operation, params, options) =>
         controller
           ? controller.call(operation, params, options)
-          : Promise.resolve(operationError("NOT_READY", "No capture controller is connected")),
+          : Promise.resolve(
+              operationError("PREREQUISITE_MISSING", "No capture controller is connected"),
+            ),
       worker,
       console.error,
       () => {
@@ -2991,14 +3657,21 @@ export async function startProjectService(options: {
       captureSources,
     );
     captureControl = captureCoordinator;
-    recordingDeletion = new RecordingDeletion({
-      store: captures,
-      jobs: queue,
-      capture: captureCoordinator,
-      delivery,
-      files,
-      sources: captureSources,
-    });
+    deletion!.register(
+      recordingRetirement({
+        store: captures,
+        jobs: queue,
+        capture: captureCoordinator,
+        delivery,
+        files,
+        sources: captureSources,
+        users: libraryUsers!,
+        freedBytes: (id, cascade) => {
+          const result = libraryUsers!.usersOf({ kind: "recording", id });
+          return cascade ? result.cascadeFreesBytes : result.freesBytes;
+        },
+      }),
+    );
     listenerStarting = listenLocal({
       runtimeDirectory: runtime,
       handler: serve,
@@ -3010,7 +3683,7 @@ export async function startProjectService(options: {
         ...options.control,
         admission,
         dispatch: async (request) => {
-          if (closing) return operationError("SERVICE_STOPPED", "Service is closing", true);
+          if (closing) return operationError("SERVICE_STOPPED", "Service is closing");
           if (updateControlOperations.has(request.operation)) {
             const parsed = updateControlSchema.safeParse({
               operation: request.operation,
@@ -3028,7 +3701,7 @@ export async function startProjectService(options: {
                 return admission.release(command.params.permitId);
               case "update.report":
                 update = command.params.update;
-                admission.observe(update.state === "waiting");
+                admission.observe(update.state === "queued" || update.state === "running");
                 return { ok: true, data: { reported: true } };
             }
           }
@@ -3048,7 +3721,7 @@ export async function startProjectService(options: {
     reconciliation = closing
       ? Promise.resolve()
       : (async () => {
-          await recordingDeletion!.resume((error) => console.error(error));
+          await deletion!.resume((error) => console.error(error));
           queue.start();
           await captureCoordinator.reconcileStranded();
         })();
@@ -3056,12 +3729,7 @@ export async function startProjectService(options: {
     boundListener = listener;
     if (closing) {
       await close();
-      throw new CatalogError(
-        "SERVICE_STOPPED",
-        "Capture controller closed during startup",
-        {},
-        true,
-      );
+      throw new CatalogError("SERVICE_STOPPED", "Capture controller closed during startup", {});
     }
     controller?.emit({ event: "started", pid: process.pid, socketPath: listener.socketPath });
     void reconciliation
@@ -3077,7 +3745,7 @@ export async function startProjectService(options: {
         admission.progress();
         console.error(error);
       });
-    return { socketPath: listener.socketPath, assets, close };
+    return { socketPath: listener.socketPath, assets, captures, libraryUsers, close };
   } catch (error) {
     await close();
     throw error;

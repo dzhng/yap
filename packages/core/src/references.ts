@@ -1,4 +1,5 @@
-import type { Catalog } from "./catalog.js";
+import { CatalogError, type Catalog } from "./catalog.js";
+import { DeletionPlans } from "./deletion-plans.js";
 
 export const resourceKinds = [
   "asset",
@@ -28,7 +29,9 @@ export type ResourceOwner = {
 
 /** Domain owners validate existence; their publication transactions retain these dependencies. */
 export class ResourceReferences {
+  private readonly plans: DeletionPlans;
   constructor(private readonly store: Catalog) {
+    this.plans = new DeletionPlans(store);
     store.catalog.exec(`
       CREATE TABLE IF NOT EXISTS resource_references (
         resourceKind TEXT NOT NULL, resourceId TEXT NOT NULL,
@@ -37,13 +40,45 @@ export class ResourceReferences {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS resource_reference_owner
         ON resource_references(ownerKind,ownerId,resourceKind);
+      CREATE TABLE IF NOT EXISTS resource_fences (
+        resourceKind TEXT NOT NULL, resourceId TEXT NOT NULL,
+        PRIMARY KEY(resourceKind,resourceId)
+      ) STRICT;
     `);
   }
   retain(kind: ResourceKind, owner: ResourceOwner, ids: readonly string[]): void {
+    for (const id of ids)
+      if (this.plans.isTombstoned(kind, id) || this.isFenced(kind, id))
+        throw new CatalogError("DELETE_IN_PROGRESS", `${kind} deletion is in progress`, {
+          [`${kind}Id`]: id,
+        });
     const insert = this.store.catalog.prepare(
       "INSERT OR IGNORE INTO resource_references VALUES(?,?,?,?)",
     );
     for (const id of ids) insert.run(kind, id, owner.kind, owner.id);
+  }
+  /** Fence a resource before its owning operation reaches member retirement. */
+  fence(kind: ResourceKind, ids: readonly string[]): void {
+    const insert = this.store.catalog.prepare(
+      "INSERT OR IGNORE INTO resource_fences(resourceKind,resourceId) VALUES(?,?)",
+    );
+    for (const id of ids) insert.run(kind, id);
+  }
+  unfence(kind: ResourceKind, ids: readonly string[]): void {
+    const remove = this.store.catalog.prepare(
+      "DELETE FROM resource_fences WHERE resourceKind=? AND resourceId=?",
+    );
+    for (const id of ids) remove.run(kind, id);
+  }
+  private isFenced(kind: ResourceKind, id: string): boolean {
+    return Boolean(
+      this.store.catalog
+        .prepare("SELECT 1 FROM resource_fences WHERE resourceKind=? AND resourceId=? LIMIT 1")
+        .get(kind, id),
+    );
+  }
+  isTombstoned(kind: ResourceKind, id: string): boolean {
+    return this.plans.isTombstoned(kind, id);
   }
   release(kind: ResourceKind, owner: ResourceOwner): void {
     this.store.catalog
@@ -57,6 +92,15 @@ export class ResourceReferences {
         .prepare(`DELETE FROM resource_references WHERE rowid IN
       (SELECT rowid FROM resource_references WHERE ownerKind=? AND ownerId=? LIMIT 256)`)
         .run(owner.kind, owner.id).changes,
+    );
+  }
+  /** Release a bounded page of references owned by a resource being retired. */
+  releaseResourcePage(kind: ResourceKind, id: string): number {
+    return Number(
+      this.store.catalog
+        .prepare(`DELETE FROM resource_references WHERE rowid IN
+      (SELECT rowid FROM resource_references WHERE resourceKind=? AND resourceId=? LIMIT 256)`)
+        .run(kind, id).changes,
     );
   }
   dependencies(owner: ResourceOwner, limit = 25_000): ResourceReference[] {

@@ -31,7 +31,6 @@ package struct SpeechWindow: Codable, Sendable {
 
 package enum SpeechWindows {
     static let windowUs: Int64 = 20_000_000
-    static let maximumWindows = 10_000
 
     package static func plan(available: [ExactRange], execution: SpeechExecution) throws -> [SpeechWindow] {
         guard execution.recipe == SpeechExecution.recipeIdentifier, execution.context.beforeUs >= 0, execution.context.afterUs >= 0,
@@ -55,7 +54,6 @@ package enum SpeechWindows {
             let decodeSupport = try decodeRequest.flatMap({ try support.intersection($0) }) ?? support
             var at = admitted.startUs
             while try at.compare(admitted.endUs) == .orderedAscending {
-                guard windows.count < maximumWindows else { throw NativeFailure("LIMIT_EXCEEDED", "Speech execution exceeds the window budget.") }
                 let next = try at.adding(ExactTime(Int128(windowUs)))
                 let end = try next.compare(admitted.endUs) == .orderedDescending ? admitted.endUs : next
                 let lower = try at.subtract(ExactTime(Int128(SpeechBoundaryMerge.contextUs)))

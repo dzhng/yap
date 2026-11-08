@@ -71,10 +71,10 @@ public final class PresentationSource {
             let asset = input.asset
             let duration = try await asset.load(.duration)
             let tracks = try await asset.loadTracks(withMediaType: .video)
-            guard
-                let track = streamId.flatMap({ id in tracks.first { "track:\($0.trackID)" == id } })
-                    ?? (streamId == nil ? tracks.first : nil),
-                try await track.load(.canProvideSampleCursors)
+            guard let track = streamId.flatMap({ id in tracks.first { "track:\($0.trackID)" == id } })
+                    ?? (streamId == nil ? tracks.first : nil)
+            else { throw NativeFailure(streamId == nil ? "NO_VIDEO" : "NOT_FOUND", "The selected video stream does not exist.") }
+            guard try await track.load(.canProvideSampleCursors)
             else { throw NativeFailure("UNAVAILABLE", "Render plan exceeds a usable video source.") }
             let segments = try await track.load(.segments)
             try input.requireSelfContainedStorage(of: track)
@@ -162,14 +162,14 @@ public final class PresentationSource {
 
     deinit { reader.cancelReading() }
 
-    public func selection(at: CMTime, end: CMTime, maximumDecodedSamples: Int? = nil) throws
+    public func selection(at: CMTime, end: CMTime) throws
         -> Selection
     {
-        try selection(at: ExactTime(at), end: end, maximumDecodedSamples: maximumDecodedSamples)
+        try selection(at: ExactTime(at), end: end)
     }
 
     /// Requested rationals need not fit a CMTime timescale to select physical support.
-    package func selection(at: ExactTime, end: CMTime, maximumDecodedSamples: Int? = nil) throws
+    package func selection(at: ExactTime, end: CMTime) throws
         -> Selection
     {
         while segmentIndex < segments.count {
@@ -190,12 +190,8 @@ public final class PresentationSource {
         }
         while try held == nil || at.compare(ExactTime(heldEnd)) != .orderedAscending {
             held = nil
-            if let maximumDecodedSamples, decodedCount >= maximumDecodedSamples {
-                throw NativeFailure(
-                    "LIMIT_EXCEEDED", "Presentation decode exceeds its sample budget.")
-            }
             guard let sample = autoreleasepool(invoking: { decoded.copyNextSampleBuffer() }) else {
-                throw NativeFailure("UNAVAILABLE", "Decoder ended before retained sample support.")
+                throw NativeFailure("DECODE_FAILED", "Decoder ended before retained sample support.")
             }
             try Task.checkCancellation()
             decodedCount += 1

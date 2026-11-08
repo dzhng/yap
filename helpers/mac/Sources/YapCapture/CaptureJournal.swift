@@ -2,11 +2,50 @@ import Darwin
 import CryptoKit
 import Foundation
 import YapMedia
+import YapProtocol
+
+public struct CursorSampling: Codable, Sendable, Equatable {
+    public static let defaultIntervalUs: Int64 = 16_667
+    public let intervalUs: Int64
+    public let holds: Bool
+    public init(intervalUs: Int64 = Self.defaultIntervalUs, holds: Bool = false) {
+        self.intervalUs = intervalUs; self.holds = holds
+    }
+}
+
+/// The sole interpretation of journal versions, shared by writers, readers and publication.
+public enum JournalSchema {
+    public static let companion = 1
+    public static let current = 4
+    private struct Capabilities {
+        let isPacked: Bool
+        let carriesMarks: Bool
+        let boundedStrokes: Bool
+        let summarizesTake: Bool
+        let holdsCursor: Bool
+    }
+    private static let capabilities: [Int: Capabilities] = [
+        1: .init(isPacked: false, carriesMarks: false, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        2: .init(isPacked: true, carriesMarks: false, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        3: .init(isPacked: true, carriesMarks: true, boundedStrokes: false, summarizesTake: false, holdsCursor: false),
+        4: .init(isPacked: true, carriesMarks: true, boundedStrokes: true, summarizesTake: true, holdsCursor: true),
+    ]
+    public static func isCompanion(_ version: Int?) -> Bool { version == companion }
+    public static func isSupported(_ version: Int) -> Bool { capabilities[version] != nil }
+    public static func isPacked(_ version: Int?) -> Bool { version.flatMap { capabilities[$0]?.isPacked } ?? false }
+    public static func carriesMarks(_ version: Int) -> Bool { capabilities[version]?.carriesMarks ?? false }
+    package static func summarizesTake(_ version: Int) -> Bool { capabilities[version]?.summarizesTake ?? false }
+    package static func boundedStrokes(_ version: Int) -> Bool { capabilities[version]?.boundedStrokes ?? false }
+    public static func cursorSampling(_ header: CaptureJournalHeader) -> CursorSampling {
+        capabilities[header.schemaVersion]?.holdsCursor == true ? header.cursorSampling ?? CursorSampling() : CursorSampling()
+    }
+}
 
 public struct CaptureJournalHeader: Codable, Sendable {
     public init(
         schemaVersion: Int, sessionID: String, source: CaptureSource, width: Int, height: Int,
-        microphone: Bool, systemAudio: Bool, cameraBinding: CameraCaptureBinding? = nil
+        microphone: Bool, systemAudio: Bool, cameraBinding: CameraCaptureBinding? = nil,
+        cursorSampling: CursorSampling? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.sessionID = sessionID
@@ -16,6 +55,7 @@ public struct CaptureJournalHeader: Codable, Sendable {
         self.microphone = microphone
         self.systemAudio = systemAudio
         self.cameraBinding = cameraBinding
+        self.cursorSampling = cursorSampling
     }
 
     public let schemaVersion: Int
@@ -26,6 +66,7 @@ public struct CaptureJournalHeader: Codable, Sendable {
     public let microphone: Bool
     public let systemAudio: Bool
     public let cameraBinding: CameraCaptureBinding?
+    public let cursorSampling: CursorSampling?
 
     /// Whether the take asked for this role at all. A take always records video; audio roles are
     /// requested per take, and a role the header never asked for cannot have been lost.
@@ -90,7 +131,9 @@ package struct JournalPrefix: Codable, Sendable, Equatable {
 
 // One capture queue owns append order. Media bytes never enter this journal.
 public final class CaptureJournal {
-    private static let maximumRecordBytes = 1_048_576
+    package static let maximumRecordBytes = Requirements.journalRecordBytes
+    // Schemas 1–3 were written with a strict < 1 MiB rule. This is format interpretation.
+    private static let historicalRecordBytes = 1_048_576
     private let handle: FileHandle
     package let lease: CaptureJournalLease
     private var sequence = 0
@@ -107,8 +150,8 @@ public final class CaptureJournal {
 
     package func recordPCMOrigin(_ origin: JournalPCMOrigin, placedPauses: [PauseEvent] = []) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard JournalSchema.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.origin(origin)
         try append("pcmOrigin", data: origin, durable: true)
@@ -117,8 +160,8 @@ public final class CaptureJournal {
     }
     package func recordPCMTrack(_ track: JournalPCMTrack) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard JournalSchema.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.track(track, header: header)
         try append("pcmTrack", data: track, durable: true)
@@ -126,8 +169,8 @@ public final class CaptureJournal {
     }
     package func recordPCMAppend(_ accepted: JournalPCMAppend) throws {
         var next = pcmState
-        guard header.schemaVersion == 2 else {
-            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require schema2.")
+        guard JournalSchema.isPacked(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "PCM mappings require a packed journal.")
         }
         try next.append(accepted)
         try append("pcmAppend", data: accepted)
@@ -138,7 +181,7 @@ public final class CaptureJournal {
     // drift apart. Boundaries a recovery reads to place the take in time are synchronized when
     // written; per-buffer acquisition ranges use ordinary writes. Power-loss durability is unproven.
     public func recordOrigin(hostUs: Int64, placedPauses: [PauseEvent] = []) throws {
-        guard header.schemaVersion == 1 else {
+        guard JournalSchema.isCompanion(header.schemaVersion) else {
             throw CaptureFailure("INVALID_JOURNAL", "Packed PCM layout requires raw origin evidence.")
         }
         try append("origin", data: JournalHostTime(hostUs: hostUs), durable: true)
@@ -156,7 +199,7 @@ public final class CaptureJournal {
         role: String, file: String, firstSourceUs: Int64, sampleRate: Double?,
         channelCount: UInt32?
     ) throws {
-        guard header.schemaVersion == 1 || role == "video" else {
+        guard JournalSchema.isCompanion(header.schemaVersion) || role == "video" else {
             throw CaptureFailure("INVALID_JOURNAL", "Packed PCM layout requires a declared audio phase.")
         }
         try append(
@@ -166,7 +209,7 @@ public final class CaptureJournal {
                 channelCount: channelCount), durable: true)
     }
     public func recordAudioSamples(role: String, startUs: Int64, endUs: Int64) throws {
-        guard header.schemaVersion == 1 else {
+        guard JournalSchema.isCompanion(header.schemaVersion) else {
             throw CaptureFailure("INVALID_JOURNAL", "Packed PCM layout requires accepted frame mappings.")
         }
         try append(
@@ -192,11 +235,18 @@ public final class CaptureJournal {
             "displaySpace",
             data: JournalDisplaySpace(hostUs: hostUs, zeroOriginHeight: zeroOriginHeight))
     }
+    /// Appends all captured points; the recognizer owns stroke duration.
+    public func recordMark(_ mark: JournalMark) throws {
+        guard JournalSchema.carriesMarks(header.schemaVersion) else {
+            throw CaptureFailure("INVALID_JOURNAL", "This journal schema cannot carry marks.")
+        }
+        try append("mark", data: mark)
+    }
     /// Records one device transition this take reports to its service and hands back the journal
     /// sequence that carries it. The journal is the single producer of these numbers, so a live
     /// report and the same take read back from disk cannot disagree about their order.
-    public func recordLifecycle(state: String, reason: String?) throws -> Int {
-        try append("lifecycle", data: JournalLifecycle(state: state, reason: reason), durable: true)
+    public func recordLifecycle(state: String, reason: String?, completionReason: String? = nil) throws -> Int {
+        try append("lifecycle", data: JournalLifecycle(state: state, reason: reason, completionReason: completionReason), durable: true)
         return sequence
     }
     public func recordFinished(_ result: CaptureResult) throws {
@@ -214,7 +264,8 @@ public final class CaptureJournal {
         encoder.outputFormatting = [.sortedKeys]
         let record = try encoder.encode(JournalRecord(sequence: next, event: event, data: data))
         // The reader treats any longer run as corruption, which is only sound if no record is.
-        guard record.count < Self.maximumRecordBytes else {
+        let limit = JournalSchema.boundedStrokes(header.schemaVersion) ? Self.maximumRecordBytes : Self.historicalRecordBytes - 1
+        guard record.count <= limit else {
             throw CaptureFailure("JOURNAL_FAILED", "Journal record exceeds its size bound.")
         }
         try handle.write(contentsOf: record + Data([10]))
@@ -236,8 +287,8 @@ public final class CaptureJournal {
     /// and the evidence stream read through this one loop so they cannot disagree about where a
     /// journal stops being believable.
     private static func readRecords(
-        directory: String, maximumBytes: Int?, descriptor: Int32? = nil,
-        throughBytes: Int64? = nil, _ body: (Data) throws -> Bool
+        directory: String, descriptor: Int32? = nil,
+        throughBytes: Int64? = nil, schema: Int = JournalSchema.companion, _ body: (Data) throws -> Bool
     ) throws -> RecordsEnd {
         let url = URL(fileURLWithPath: directory).appendingPathComponent("capture.journal.jsonl")
         let input = descriptor ?? Darwin.open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
@@ -248,6 +299,8 @@ public final class CaptureJournal {
         }
         defer { if descriptor == nil { close(input) } }
         var pending = Data()
+        var scanOffset = 0
+        let recordBytes = JournalSchema.boundedStrokes(schema) ? maximumRecordBytes : historicalRecordBytes
         var bytes: Int64 = 0
         while throughBytes.map({ bytes < $0 }) ?? true {
             try Task.checkCancellation()
@@ -259,27 +312,32 @@ public final class CaptureJournal {
             if count == 0 { break }
             chunk.removeSubrange(count..<chunk.count)
             bytes += Int64(count)
-            if let maximumBytes, bytes > maximumBytes {
-                throw CaptureFailure("EVIDENCE_LIMIT", "Journal exceeds the evidence read budget.")
-            }
             pending.append(chunk)
-            while let end = pending.firstIndex(of: 10) {
-                try Task.checkCancellation()
-                let line = Data(pending[..<end])
-                pending.removeSubrange(...end)
-                // Foundation JSON bridging creates autoreleased objects. Drain each record so
-                // a long worker request does not retain the entire parsed journal indirectly.
-                guard try autoreleasepool(invoking: { try body(line) }) else { return .read }
+            var start = pending.startIndex
+            var scan = pending.index(start, offsetBy: scanOffset)
+            while scan < pending.endIndex {
+                if pending[scan] == 10 {
+                    try Task.checkCancellation()
+                    let line = Data(pending[start..<scan])
+                    if JournalSchema.boundedStrokes(schema) && line.count > recordBytes { return .oversized }
+                    // Drain Foundation's bridged JSON objects after each record.
+                    guard try autoreleasepool(invoking: { try body(line) }) else { return .read }
+                    start = pending.index(after: scan)
+                }
+                scan = pending.index(after: scan)
             }
+            // Compact once per chunk, and never scan an unfinished line's old bytes again.
+            pending.removeSubrange(pending.startIndex..<start)
+            scanOffset = pending.count
             // The writer never produces a record this long, so an unterminated run past the bound
             // is corruption wherever it sits, never a crash that cut a record short.
-            guard pending.count <= maximumRecordBytes else { return .oversized }
+            guard pending.count <= recordBytes else { return .oversized }
         }
         return pending.isEmpty ? .read : .tornTail
     }
 
     /// Streams a take's placement evidence without retaining it. A take changes geometry as often
-    /// as it delivers frames and samples the pointer sixty times a second, so the caller decides
+    /// as it delivers frames and writes pointer observations only when the pointer state changes, so the caller decides
     /// what to keep. The returned summary omits pause/audio arrays (those are streamed), so
     /// a consumer learns from that one pass both what the evidence was and where — at
     /// `invalidAtSequence` or an `incompleteTail` — the file stopped being believable. A stream
@@ -290,12 +348,14 @@ public final class CaptureJournal {
         samples: ([CursorSample]) throws -> Void = { _ in },
         displaySpace: (JournalDisplaySpace) throws -> Void = { _ in },
         pause: (PauseEvent) throws -> Void = { _ in },
-        audioAcquired: (JournalAudioSamples) throws -> Void = { _ in }
+        audioAcquired: (JournalAudioSamples) throws -> Void = { _ in },
+        mark: (JournalMark) throws -> Void = { _ in }
     ) throws -> CaptureJournalSummary {
-        try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: false,
+        let layout = try CaptureJournal.layout(directory: directory)
+        return try readEvidence(
+            directory: directory, retainTiming: false,
             geometry: geometry, samples: samples, displaySpace: displaySpace,
-            pause: pause, audioAcquired: audioAcquired)
+            pause: pause, audioAcquired: audioAcquired, mark: mark, layout: layout)
     }
 
     /// Mapping evidence only. It is not proof of committed media or acquired source support.
@@ -306,10 +366,11 @@ public final class CaptureJournal {
         track: (JournalPCMTrack) throws -> Void = { _ in },
         accepted: @escaping (JournalPCMAppend) throws -> Void
     ) throws -> CaptureJournalSummary {
-        try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: false,
+        let layout = try CaptureJournal.layout(directory: directory)
+        return try readEvidence(
+            directory: directory, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
-            pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted, through: prefix, layout: 2)
+            pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted, through: prefix, layout: layout)
     }
 
     /// Callbacks are provisional until this returns: discard staged work on prefix or identity failure.
@@ -320,27 +381,29 @@ public final class CaptureJournal {
         accepted: @escaping (JournalPCMAppend) throws -> Void
     ) throws -> CaptureJournalSummary {
         try lease.check()
+        let layout = try CaptureJournal.layout(directory: lease.directory)
         let summary = try readEvidence(
-            directory: lease.directory, maximumBytes: nil, retainTiming: false,
+            directory: lease.directory, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             pcmOrigin: origin, pcmTrack: track, pcmAppend: accepted,
-            through: prefix, descriptor: lease.descriptor, layout: 2)
+            through: prefix, descriptor: lease.descriptor, layout: layout)
         try lease.check()
         return summary
     }
 
     /// Both layouts retain/verify prefixes through the same decoded-record byte boundary.
     package static func readEvidence(
-        directory: String, maximumBytes: Int?, retainTiming: Bool,
+        directory: String, retainTiming: Bool,
         geometry: (JournalGeometry) throws -> Void,
         samples: ([CursorSample]) throws -> Void,
         displaySpace: (JournalDisplaySpace) throws -> Void,
         pause: (PauseEvent) throws -> Void = { _ in },
         audioAcquired: (JournalAudioSamples) throws -> Void = { _ in },
+        mark: (JournalMark) throws -> Void = { _ in },
         pcmOrigin: (JournalPCMOrigin) throws -> Void = { _ in },
         pcmTrack: (JournalPCMTrack) throws -> Void = { _ in },
         pcmAppend: ((JournalPCMAppend) throws -> Void)? = nil, retainPrefix: Bool = false,
-        through prefix: JournalPrefix? = nil, descriptor: Int32? = nil, layout: Int = 1
+        through prefix: JournalPrefix? = nil, descriptor: Int32? = nil, layout: Int = JournalSchema.companion
     ) throws -> CaptureJournalSummary {
         if let prefix {
             guard prefix.bytes > 0,
@@ -366,43 +429,47 @@ public final class CaptureJournal {
             if retainTiming { summary.pauses.append(completed) }
             try pause(completed)
         }
-        let end = try readRecords(directory: directory, maximumBytes: maximumBytes,
-                                  descriptor: descriptor, throughBytes: prefix?.bytes) {
+        let end = try readRecords(directory: directory,
+                                  descriptor: descriptor, throughBytes: prefix?.bytes, schema: layout) {
             line in
             let record: JournalEntry
             do {
                 let decoder = JSONDecoder()
-                decoder.userInfo[.journalSchema] = summary.header?.schemaVersion ?? 1
+                decoder.userInfo[.journalSchema] = summary.header?.schemaVersion ?? JournalSchema.companion
                 record = try decoder.decode(JournalEntry.self, from: line)
                 try record.check(following: summary.lastSequence)
                 let schema =
                     summary.header?.schemaVersion
                     ?? {
                         if case .header(let header) = record.event { return header.schemaVersion }
-                        return 1
+                        return JournalSchema.companion
                     }()
                 guard schema == layout else {
                     throw CaptureFailure("INVALID_JOURNAL", "Unsupported journal layout for this reader.")
                 }
                 switch record.event {
                 case .pcmOrigin(let origin):
-                    guard schema == 2 else {
+                    guard JournalSchema.isPacked(schema) else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM origin.")
                     }
                     try pcm.origin(origin)
                 case .pcmTrack(let track):
-                    guard schema == 2, let header = summary.header else {
+                    guard JournalSchema.isPacked(schema), let header = summary.header else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM track.")
                     }
                     try pcm.track(track, header: header)
                 case .pcmAppend(let append):
-                    guard schema == 2 else {
+                    guard JournalSchema.isPacked(schema) else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected PCM append.")
                     }
                     try pcm.append(append)
                 case .origin, .audioSamples, .other:
-                    guard schema == 1 else {
+                    guard JournalSchema.isCompanion(schema) else {
                         throw CaptureFailure("INVALID_JOURNAL", "Unexpected legacy journal event.")
+                    }
+                case .mark(let mark):
+                    guard JournalSchema.carriesMarks(schema), validMark(mark) else {
+                        throw CaptureFailure("INVALID_JOURNAL", "Invalid journal mark.")
                     }
                 default: break
                 }
@@ -453,6 +520,8 @@ public final class CaptureJournal {
             case .displaySpace(let space):
                 summary.zeroOriginHeight = space.zeroOriginHeight
                 try displaySpace(space)
+            case .mark(let observed):
+                try mark(observed)
             case .lifecycle(let lifecycle): summary.lastLifecycle = lifecycle
             case .finished(let finished):
                 summary.finished = true
@@ -494,11 +563,12 @@ public final class CaptureJournal {
     /// Read only the persisted discriminant through the same bounded record decoder.
     package static func layout(directory: String) throws -> Int {
         var schema: Int?
-        _ = try readRecords(directory: directory, maximumBytes: maximumRecordBytes) { line in
+        _ = try readRecords(directory: directory) { line in
             do {
                 let record = try JSONDecoder().decode(JournalEntry.self, from: line)
                 try record.check(following: 0)
                 if case .header(let header) = record.event { schema = header.schemaVersion }
+            } catch let failure as CaptureFailure { throw failure
             } catch {
                 throw CaptureFailure("INVALID_JOURNAL", "Invalid journal header.")
             }
@@ -511,8 +581,9 @@ public final class CaptureJournal {
     /// The same read with nothing streamed, for a consumer that only wants the summary.
     public static func inspect(directory: String) throws -> CaptureJournalSummary {
         try readEvidence(
-            directory: directory, maximumBytes: nil, retainTiming: true,
-            geometry: { _ in }, samples: { _ in }, displaySpace: { _ in })
+            directory: directory, retainTiming: true,
+            geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
+            layout: try layout(directory: directory))
     }
 }
 
@@ -540,6 +611,7 @@ private struct JournalEntry: Decodable {
         case geometry(JournalGeometry)
         case cursorSamples([CursorSample])
         case displaySpace(JournalDisplaySpace)
+        case mark(JournalMark)
         case lifecycle(JournalLifecycle)
         case finished(JournalFinished)
         case other
@@ -572,15 +644,20 @@ private struct JournalEntry: Decodable {
         switch name {
         case "header":
             let header = try payload(CaptureJournalHeader.self)
-            guard [1, 2].contains(header.schemaVersion) else { throw invalid("Invalid journal header.") }
+            guard JournalSchema.isSupported(header.schemaVersion) else {
+                throw invalid("Unsupported journal schema \(header.schemaVersion); this app reads through \(JournalSchema.current).")
+            }
+            if let sampling = header.cursorSampling, sampling.intervalUs <= 0 {
+                throw invalid("Invalid journal cursor sampling.")
+            }
             event = .header(header)
         case "pcmOrigin": event = .pcmOrigin(try payload(JournalPCMOrigin.self))
         case "pcmTrack": event = .pcmTrack(try payload(JournalPCMTrack.self))
         case "pcmAppend": event = .pcmAppend(try payload(JournalPCMAppend.self))
-        case "trackStarted" where decoder.userInfo[.journalSchema] as? Int == 2:
+        case "trackStarted" where JournalSchema.isPacked(decoder.userInfo[.journalSchema] as? Int):
             let track = try payload(JournalTrackStart.self)
             guard track.role == "video", track.file == "video.mov", track.firstSourceUs >= 0 else {
-                throw invalid("Invalid schema2 video track.")
+                throw invalid("Invalid packed video track.")
             }
             event = .videoTrack
         case "origin": event = .origin(try payload(JournalHostTime.self).hostUs)
@@ -614,6 +691,7 @@ private struct JournalEntry: Decodable {
                 finished.state != "complete" || finished.failure == nil
             else { throw invalid("Invalid journal completion.") }
             event = .finished(finished)
+        case "mark": event = .mark(try payload(JournalMark.self))
         default: event = .other
         }
     }
@@ -630,6 +708,7 @@ private struct JournalEntry: Decodable {
 public struct JournalLifecycle: Codable, Sendable {
     public let state: String
     public let reason: String?
+    public let completionReason: String?
 }
 
 struct JournalHostTime: Codable {

@@ -12,6 +12,7 @@ import {
   type ProjectIndexIdentity,
   type ProjectIndexRecords,
 } from "./project-index.js";
+import { projectIndexPolicy } from "./project-index-selection.js";
 import {
   materializeProjectIndex,
   retainedProjectIndexIssues,
@@ -29,6 +30,8 @@ import {
 import { type SourceSelection } from "./source-selection.js";
 import type { SourceIndexIdentity, SourceIndexRecords } from "./source-index.js";
 import { sourceIndexPolicy } from "./source-index-selection.js";
+import type { SourceEvidenceReader } from "./evidence-read.js";
+import type { IndexCaptureOwners } from "./index-capture-evidence.js";
 import { materializeSourceIndex } from "./source-index-materialization.js";
 import { RetainedIndexRead, type IndexCoverageCursor, type IndexReadCursor } from "./index-read.js";
 import { setImmediate } from "node:timers/promises";
@@ -84,6 +87,8 @@ type MediaIndexOwners = {
   acquisitions: AcquisitionStore;
   scenes: SceneProcessing;
   records: SceneEvidenceStore;
+  evidence?: SourceEvidenceReader;
+  capture?: IndexCaptureOwners["capture"];
   frames: MediaFrameInspection;
   cache: DerivedCache;
 };
@@ -153,7 +158,7 @@ export class IndexProcessing {
     const identity = {
       target: {
         kind: "project" as const,
-        projectId: recipe.projectId,
+        id: recipe.projectId,
         revisionId: recipe.revisionId,
       },
       artifact,
@@ -270,7 +275,7 @@ export class IndexProcessing {
           )))
     )
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
+        "INVALID_PARAMS",
         "Project index continuation belongs to another selection",
       );
     const status = input.cursor ? null : this.requestProject(input);
@@ -278,7 +283,11 @@ export class IndexProcessing {
     const metadata = input.cursor
       ? this.publishedProject(input.cursor)
       : status!.published!.evidence;
-    return this.projectRead(metadata).get({ cursor: input.cursor, limit: input.limit });
+    // A ready read keeps the job identity its status reported; continuations name no job.
+    return {
+      ...this.projectRead(metadata).get({ cursor: input.cursor, limit: input.limit }),
+      jobId: status?.jobId ?? null,
+    };
   }
   coverageProject(
     input: ProjectIndexReference & {
@@ -292,7 +301,7 @@ export class IndexProcessing {
   frameProject(input: ProjectIndexReference & { ordinal: number }) {
     return this.withIssues(this.projectRead(input).frame(input.ordinal), {
       kind: "project",
-      projectId: input.projectId,
+      id: input.projectId,
     });
   }
   /** A frame read from a retained index carries the issues reported with that index publication. */
@@ -310,11 +319,14 @@ export class IndexProcessing {
     return this.projectRead(input).openRead(input.ordinal);
   }
   private async cleanupProject(projectId: string, signal: AbortSignal) {
-    const owner = { kind: "project" as const, projectId };
+    const owner = { kind: "project" as const, id: projectId };
     await this.project.index.reclaim(
       owner,
-      ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
+      (identity) =>
+        identity.selectionPolicy === projectIndexPolicy.id &&
+        this.jobs.retainsAttempt(owner, artifact, identity.generation),
       signal,
+      (identity) => identity.selectionPolicy !== projectIndexPolicy.id,
     );
   }
   admitProject(job: Job): ReturnType<JobAdmission> {
@@ -323,10 +335,11 @@ export class IndexProcessing {
     const input = JSON.parse(job.input) as ProjectIndexRecipe;
     if (input.implementationId !== this.project.frames.projectSupport.implementationId)
       throw new CatalogError(
-        "NOT_READY",
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
         "Pinned picture renderer is unavailable",
-        { implementationId: input.implementationId },
-        true,
+        {
+          implementationId: input.implementationId,
+        },
       );
     const plan = this.projectPlan({
       ...input,
@@ -348,7 +361,7 @@ export class IndexProcessing {
     });
     const { scenes, ...identity } = input;
     if (
-      job.target.projectId !== input.projectId ||
+      job.target.id !== input.projectId ||
       job.target.revisionId !== input.revisionId ||
       !isDeepStrictEqual(identity, plan.identity)
     )
@@ -370,7 +383,7 @@ export class IndexProcessing {
   }
   portableProject(metadata: ScreenshotIndexMetadata<ProjectIndexRecords>) {
     const publication = this.jobs.retainedArtifact(
-      { kind: "project", projectId: metadata.projectId },
+      { kind: "project", id: metadata.projectId },
       artifact,
       metadata.generation,
     );
@@ -422,7 +435,7 @@ export class IndexProcessing {
     this.jobs.adoptArtifact(
       {
         ...publication,
-        target: { kind: "project", projectId: adopted.projectId, revisionId: adopted.revisionId },
+        target: { kind: "project", id: adopted.projectId, revisionId: adopted.revisionId },
         input: encodeIndexRecord(projectRecipe({ ...adopted, scenes })),
         artifact,
         result: JSON.stringify(this.project.index.metadata(adopted)),
@@ -432,7 +445,7 @@ export class IndexProcessing {
   }
   portableSource(metadata: ScreenshotIndexMetadata<SourceIndexRecords>) {
     const publication = this.jobs.retainedArtifact(
-      { kind: "asset", assetId: metadata.assetId },
+      { kind: "asset", id: metadata.assetId },
       artifact,
       metadata.generation,
     );
@@ -496,7 +509,7 @@ export class IndexProcessing {
     this.jobs.adoptArtifact(
       {
         ...publication,
-        target: { kind: "asset", assetId: metadata.assetId },
+        target: { kind: "asset", id: metadata.assetId },
         artifact,
         result: JSON.stringify(this.asset.index.metadata(metadata)),
       },
@@ -542,7 +555,7 @@ export class IndexProcessing {
       };
     const input = this.sourceRecipe(plan.options, dependency.published.evidence);
     const identity = {
-      target: { kind: "asset" as const, assetId: input.assetId },
+      target: { kind: "asset" as const, id: input.assetId },
       artifact,
       input: encodeIndexRecord(input),
     };
@@ -633,10 +646,11 @@ export class IndexProcessing {
       input.cursor &&
       (input.cursor.assetId !== input.assetId ||
         input.cursor.streamId !== input.streamId ||
-        input.cursor.acquisitionId !== input.acquisitionId)
+        input.cursor.acquisitionId !== input.acquisitionId ||
+        (input.generation !== undefined && input.cursor.generation !== input.generation))
     )
       throw new CatalogError(
-        "ARTIFACT_CHANGED",
+        "INVALID_PARAMS",
         "Source index continuation belongs to another selection",
       );
     const status = input.cursor || input.generation ? null : this.requestSource(input);
@@ -668,7 +682,11 @@ export class IndexProcessing {
         "ARTIFACT_CHANGED",
         "Source index continuation changed its face request",
       );
-    return this.sourceRead(metadata).get({ cursor: input.cursor, limit: input.limit });
+    // A ready read keeps the job identity its status reported; continuations name no job.
+    return {
+      ...this.sourceRead(metadata).get({ cursor: input.cursor, limit: input.limit }),
+      jobId: status?.jobId ?? null,
+    };
   }
   coverageSource(
     input: SourceIndexReference & {
@@ -682,7 +700,7 @@ export class IndexProcessing {
   frameSource(input: SourceIndexReference & { ordinal: number }) {
     return this.withIssues(this.sourceRead(input).frame(input.ordinal), {
       kind: "asset",
-      assetId: input.assetId,
+      id: input.assetId,
     });
   }
   openReadSource(input: SourceIndexReference & { ordinal: number }) {
@@ -692,22 +710,25 @@ export class IndexProcessing {
   retainsSourceScenes(assetId: string, generation: string) {
     return this.jobs.retainsInput(
       "scene-generation",
-      sceneGenerationResource({ owner: { kind: "asset", assetId }, generation }),
+      sceneGenerationResource({ owner: { kind: "asset", id: assetId }, generation }),
     );
   }
   private async cleanupAsset(assetId: string, signal: AbortSignal) {
-    const owner = { kind: "asset" as const, assetId };
+    const owner = { kind: "asset" as const, id: assetId };
     await this.asset.index.reclaim(
       owner,
-      ({ generation }) => this.jobs.retainsAttempt(owner, artifact, generation),
+      (identity) =>
+        identity.selectionPolicy === sourceIndexPolicy.id &&
+        this.jobs.retainsAttempt(owner, artifact, identity.generation),
       signal,
+      (identity) => identity.selectionPolicy !== sourceIndexPolicy.id,
     );
   }
   private async executeSource({ job, signal }: JobExecution) {
     if (job.target.kind !== "asset" || job.artifact !== artifact)
       throw new CatalogError("UNSUPPORTED_JOB", "Source index requires an asset job");
     const input = JSON.parse(job.input) as SourceIndexInput;
-    if (job.target.assetId !== input.assetId)
+    if (job.target.id !== input.assetId)
       throw new CatalogError("ARTIFACT_CHANGED", "Source index recipe changed");
     const { options, source } = this.asset.frames.sourcePlan({
       ...input,
@@ -740,22 +761,21 @@ export class IndexProcessing {
 
   async cleanup(signal: AbortSignal): Promise<void> {
     if (this.options.project) {
-      let afterSequence = 0;
+      let cursor: string | undefined;
       for (;;) {
         signal.throwIfAborted();
-        const page = this.project.projects.list({ afterSequence, limit: 100 });
-        for (const project of page.projects) await this.cleanupProject(project.projectId, signal);
+        const page = this.project.projects.list({ ...(cursor ? { cursor } : {}), limit: 100 });
+        for (const project of page.projects) await this.cleanupProject(project.id, signal);
         if (!page.nextCursor) break;
-        afterSequence = page.nextCursor.afterSequence;
+        cursor = page.nextCursor;
         await setImmediate(undefined, { signal });
       }
     }
     if (this.options.asset) {
-      let afterSequence = 0,
-        failure: unknown;
+      let cursor: string | undefined, failure: unknown;
       for (;;) {
         signal.throwIfAborted();
-        const page = this.asset.assets.list({ afterSequence, limit: 100 });
+        const page = this.asset.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
         for (const asset of page.assets) {
           try {
             await this.cleanupAsset(asset.id, signal);
@@ -765,7 +785,7 @@ export class IndexProcessing {
           }
         }
         if (!page.nextCursor) break;
-        afterSequence = page.nextCursor.afterSequence;
+        cursor = page.nextCursor;
         await setImmediate(undefined, { signal });
       }
       if (failure) throw failure;

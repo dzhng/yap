@@ -69,7 +69,7 @@ test("external controls update capture with actual source, audio and clock", asy
   const windowId = controls.windowId;
   const started = await succeeds(home, "capture.start", {
     requestId: randomUUID(),
-    source: { kind: "window", windowId },
+    source: { kind: "window", id: windowId },
     microphone: false,
     systemAudio: false,
   });
@@ -88,18 +88,61 @@ test("external controls update capture with actual source, audio and clock", asy
   for (const item of ["source.device", "microphone.toggle", "audio.system"]) {
     assert.equal(find(active, item).enabled, false, `${item} stays fixed during the take`);
   }
-  await succeeds(home, "capture.pause", { recordingId: started.recordingId });
+  await succeeds(home, "capture.pause", { recordingId: started.id });
   await waitFor(async () => (await snapshot()).status.startsWith("Paused —"), 20_000);
   const paused = (await snapshot()).status;
   await new Promise((resolve) => setTimeout(resolve, 1100));
   assert.equal((await snapshot()).status, paused);
-  await succeeds(home, "capture.resume", { recordingId: started.recordingId });
+  await succeeds(home, "capture.resume", { recordingId: started.id });
   await waitFor(async () => (await snapshot()).status.startsWith("Recording —"), 20_000);
   await waitFor(async () => seconds((await snapshot()).status) > seconds(paused), 20_000);
-  await succeeds(home, "capture.stop", { recordingId: started.recordingId });
+  await succeeds(home, "capture.stop", { recordingId: started.id });
   // A finished take returns the native start control to its idle action.
   await waitFor(
     async () => find((await snapshot()).rows, "capture.startOrStop").title === "Start recording",
     20_000,
   );
+});
+
+test("a take the person finishes hands its whole prompt to the clipboard with the notice", async () => {
+  requireScreenPermission();
+  const home = temporary("/tmp/scr-controls-prompt-");
+  const controls = await controlledApp(home);
+  const snapshot = () => controls.send({ do: "snapshot" });
+  const clipboard = async () => (await controls.send({ do: "pasteboard" })).text;
+  const take = async (stop) => {
+    const started = await succeeds(home, "capture.start", {
+      requestId: randomUUID(),
+      source: { kind: "window", id: controls.windowId },
+      microphone: false,
+      systemAudio: false,
+    });
+    await waitFor(async () => /^Recording — 0:0[1-9]/.test((await snapshot()).status), 20_000);
+    await stop(started.id);
+    await waitFor(
+      async () =>
+        (await succeeds(home, "recording.get", { recordingId: started.id })).state === "complete",
+      30_000,
+    );
+    return started.id;
+  };
+
+  // An agent that stops a take through the service already has it; the clipboard stays theirs.
+  await take((recordingId) => succeeds(home, "capture.stop", { recordingId }));
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  assert.equal(await clipboard(), null);
+
+  // Stopped from the menu, the take's prompt arrives once it is whole, with the notice up.
+  const finished = await take(async () => {
+    await controls.send({ do: "open" });
+    assert.equal((await controls.send({ do: "choose", item: "capture.startOrStop" })).ok, true);
+  });
+  await waitFor(async () => (await clipboard())?.includes(finished), 20_000);
+  const text = await clipboard();
+  assert.match(text, /^I recorded my screen/);
+  assert.match(text, new RegExp(`Recording: ${finished} \\(0:0\\d, screen`));
+  const notice = (await controls.send({ do: "windows" })).windows.find(
+    (window) => window.title === "Yap Paste Notice",
+  );
+  assert.equal(notice?.visible, true);
 });

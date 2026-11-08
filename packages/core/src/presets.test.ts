@@ -7,6 +7,26 @@ import { createPresets } from "./presets.js";
 const bundled = resolve(import.meta.dirname, "../../../presets");
 
 describe("presets facade", () => {
+  it("pages the deterministic id-sorted preset listing with an opaque cursor", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-page-"));
+    try {
+      const presets = await createPresets({ root, bundled });
+      expect(presets.page({}).presets.map(({ id }) => id)).toEqual([
+        "on-location-conversation",
+        "studio-podcast",
+        "tactile-launch-film",
+      ]);
+      const first = presets.page({ limit: 1 });
+      expect(first.presets).toHaveLength(1);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      expect(presets.page({ limit: 1, cursor: first.nextCursor! }).presets[0]?.id).toBe(
+        "studio-podcast",
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("installs bundled presets and returns path-aware instructions", async () => {
     const root = await mkdtemp(join(tmpdir(), "presets-facade-"));
     try {
@@ -76,6 +96,50 @@ describe("presets facade", () => {
       })();
       expect(deleted.trashedPaths).toEqual([created.path]);
       expect(moved).toEqual([created.path]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replays a preset deletion 0.1.61 recorded in the current shape", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-receipts-"));
+    try {
+      await createPresets({ root, bundled });
+      const result = {
+        trashed: true,
+        trashedPaths: [join(root, "gone")],
+        instructions: ["Preset gone is in the Trash."],
+      };
+      const input = JSON.stringify({ operation: "preset.delete", presetId: "gone" });
+      const path = join(root, ".request-receipts.json");
+      await writeFile(
+        path,
+        JSON.stringify({ "delete-gone": { input, result: { presetId: "gone", ...result } } }),
+      );
+      const presets = await createPresets({ root, bundled });
+      await expect(presets.delete("gone", "delete-gone")).resolves.toEqual({
+        id: "gone",
+        ...result,
+      });
+      expect(JSON.parse(await readFile(path, "utf8"))).toEqual({
+        version: 2,
+        receipts: { "delete-gone": { input, result: { id: "gone", ...result } } },
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("replays a preset request after the facade is reconstructed", async () => {
+    const root = await mkdtemp(join(tmpdir(), "presets-replay-"));
+    try {
+      const first = await createPresets({ root, bundled });
+      const created = await first.create({ name: "Replay me", requestId: "preset-replay" });
+      const restarted = await createPresets({ root, bundled });
+      await expect(
+        restarted.create({ name: "Replay me", requestId: "preset-replay" }),
+      ).resolves.toEqual(created);
+      expect(restarted.list().presets.filter((preset) => preset.id === created.id)).toHaveLength(1);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

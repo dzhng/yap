@@ -1,8 +1,9 @@
 import CoreGraphics
 import Foundation
+import YapInk
 import YapMedia
 
-/// Rasterizes the supplied pointer and trail into a transparent image the size of the oriented
+/// Rasterizes the supplied ink, pointer and trail into a transparent image the size of the oriented
 /// source frame, so the caller can composite it before cropping and scaling.
 ///
 /// Every coordinate and time comes from the core. Nothing here selects history, decides a cutoff,
@@ -53,9 +54,9 @@ enum CursorOverlay {
             throw NativeFailure.decodeFailed(
                 "Overlay raster has no scale to size its marks against.")
         }
-        guard overlay.pointer != nil || overlay.trail.contains(where: { !$0.isEmpty }) else {
-            return nil
-        }
+        guard overlay.pointer != nil || overlay.trail.contains(where: { !$0.isEmpty })
+            || overlay.ink?.marks.isEmpty == false
+        else { return nil }
         guard
             let context = CGContext(
                 data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -64,6 +65,7 @@ enum CursorOverlay {
         else {
             throw NativeFailure.decodeFailed("Cannot allocate the cursor overlay raster.")
         }
+        if let ink = overlay.ink { drawInk(ink, in: context, agedFromUs: agedFromUs, height: height) }
         // Overlay points are stated in top-left source pixels; Core Graphics grows y upward.
         context.translateBy(x: 0, y: CGFloat(height))
         context.scaleBy(x: 1, y: -1)
@@ -96,6 +98,24 @@ enum CursorOverlay {
             throw NativeFailure.decodeFailed("Cannot produce the cursor overlay image.")
         }
         return image
+    }
+
+    /// The person's marks as they saw them, under everything else: ink sits on their screen, below
+    /// the pointer. Drawn before the flip, since a pin's number is text and must stay upright.
+    private static func drawInk(_ ink: FrameInk, in context: CGContext, agedFromUs: Int64, height: Int) {
+        let scale = CGFloat(ink.scale)
+        func upright(_ point: FrameMark.Point) -> CGPoint { CGPoint(x: point.x, y: Double(height) - point.y) }
+        for mark in ink.marks {
+            let shown = mark.fade.map { Ink.opacity(atUs: agedFromUs, fadeFromUs: $0.fromUs, untilUs: $0.untilUs) } ?? 1
+            guard let opacity = shown.map({ CGFloat($0) }) else { continue }
+            if let number = mark.pin, let point = mark.runs.first?.first {
+                Ink.drawPin(number, at: upright(point), opacity: opacity, in: context, scale: scale)
+            } else {
+                for run in mark.runs {
+                    Ink.drawStroke(run.map(upright), opacity: opacity, in: context, scale: scale)
+                }
+            }
+        }
     }
 
     private static func strokes(for overlay: FrameOverlay, agedFromUs: Int64) -> [Stroke] {

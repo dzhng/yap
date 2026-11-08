@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { Catalog } from "./catalog.js";
 import { AssetStore, compositionAsset } from "./assets.js";
+import { pageCursor } from "./page-cursor.js";
+import { expectPageTraversal } from "./page-traversal.fixture.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -674,11 +676,11 @@ test("verified byte digest is enforced before both fresh and cached asset public
   expect(store.origins(correct.id).origins).toContainEqual({ kind: "capture", source: "verified" });
 });
 
-test("sparse admission preserves leading, inter-run and trailing physical gaps at the occupied-run capacity", async () => {
+test("sparse admission preserves leading, inter-run and trailing physical gaps beyond the retired run cap", async () => {
   const { root, store } = await setup();
   const path = join(root, "sparse.mov");
   await writeFile(path, "sparse metadata fixture");
-  const runs = 100_000;
+  const runs = 100_001;
   const segments = Array.from({ length: 2 * runs + 1 }, (_, index) => ({
     startUs: index * 100,
     endUs: (index + 1) * 100,
@@ -709,16 +711,6 @@ test("sparse admission preserves leading, inter-run and trailing physical gaps a
       .filter((row) => !row.empty)
       .map(({ startUs, endUs }) => ({ startUs, endUs })),
   });
-  const excessive = join(root, "excessive.mov");
-  await writeFile(excessive, "different sparse metadata fixture");
-  await expect(
-    store.import(excessive, { kind: "import" }, async () => ({
-      ...metadata,
-      streams: [
-        { ...metadata.streams[0], segments: [...segments, { startUs: 0, endUs: 1, empty: true }] },
-      ],
-    })),
-  ).rejects.toMatchObject({ code: "INVALID_NATIVE_RESPONSE" });
 });
 
 test("public asset headers and immutable ordinal pages preserve complete physical rows", async () => {
@@ -747,10 +739,13 @@ test("public asset headers and immutable ordinal pages preserve complete physica
     ],
   }));
   const header = omit(asset.streams[0]!, "segments");
-  expect(store.describe(asset.id)).toEqual({ ...asset, streams: [{ ...header, segmentCount: 3 }] });
+  expect(store.describe(asset.id)).toEqual({
+    ...asset,
+    streams: [{ ...header, segmentCount: 3 }],
+  });
   const first = store.segments(asset.id, "audio:0", { limit: 2 });
   expect(first.segments).toEqual(segments.slice(0, 2).map((row, ordinal) => ({ ordinal, ...row })));
-  expect(first.nextCursor).toEqual({ assetId: asset.id, streamId: "audio:0", afterOrdinal: 1 });
+  expect(first.nextCursor).toEqual(expect.any(String));
   expect(store.segments(asset.id, "audio:0", { cursor: first.nextCursor!, limit: 2 })).toEqual({
     assetId: asset.id,
     streamId: "audio:0",
@@ -758,13 +753,51 @@ test("public asset headers and immutable ordinal pages preserve complete physica
     nextCursor: null,
   });
   expect(() => store.segments(asset.id, "missing")).toThrow(/Stream does not exist/);
-  expect(() =>
-    store.segments(asset.id, "audio:0", { cursor: { ...first.nextCursor!, assetId: "wrong" } }),
-  ).toThrow(/cursor/);
-  expect(() =>
-    store.segments(asset.id, "audio:0", { cursor: { ...first.nextCursor!, afterOrdinal: 3 } }),
-  ).toThrow(/cursor/);
+  expect(() => store.segments(asset.id, "audio:0", { cursor: "wrong" })).toThrow(/cursor/);
+  expect(() => store.segments(asset.id, "audio:0", { cursor: "wrong" })).toThrow(/cursor/);
   expect(store.get(asset.id)).toEqual(asset);
+});
+
+test("asset segment pages conform to the paging contract and bind their asset and stream", async () => {
+  const { root, store } = await setup();
+  const stream = (id: string, count: number) => ({
+    id,
+    kind: "audio",
+    codec: "pcm",
+    decodable: true,
+    startUs: 0,
+    endUs: count * 10,
+    sampleRate: 48000,
+    channels: 1,
+    segments: Array.from({ length: count }, (_, index) => ({
+      startUs: index * 10,
+      endUs: (index + 1) * 10,
+      empty: index % 2 === 0,
+    })),
+  });
+  const imported = async (name: string) => {
+    const path = join(root, name);
+    await writeFile(path, name);
+    return store.import(path, { kind: "import" }, async () => ({
+      originUs: 0,
+      streams: [stream("audio:0", 4), stream("audio:1", 4)],
+    }));
+  };
+  const asset = await imported("one.mov"),
+    other = await imported("two.mov");
+  const { firstCursor } = expectPageTraversal<string>((limit, cursor) => {
+    const page = store.segments(asset.id, "audio:0", { limit, ...(cursor ? { cursor } : {}) });
+    return { items: page.segments, nextCursor: page.nextCursor };
+  });
+  for (const [assetId, streamId, cursor] of [
+    [asset.id, "audio:0", "garbage"],
+    [asset.id, "audio:0", pageCursor.encode("asset.list", { sequence: 1 }, {})],
+    [asset.id, "audio:1", firstCursor],
+    [other.id, "audio:0", firstCursor],
+  ] as const)
+    expect(() => store.segments(assetId, streamId, { cursor, limit: 1 })).toThrow(
+      expect.objectContaining({ code: "INVALID_PARAMS" }),
+    );
 });
 
 test("portable physical rows commit atomically, preserve optional fields and reject conflicting deduplication", async () => {

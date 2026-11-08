@@ -47,7 +47,7 @@ createInterface({ input: process.stdin })
             error: {
               code: "UNAVAILABLE",
               message: "Native lifetime fixture",
-              retryable: false,
+              retryable: true,
               details: {},
             },
           },

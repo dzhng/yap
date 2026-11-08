@@ -29,8 +29,8 @@ test("actual public metadata leaves transferred annotations historical without p
       fps: { numerator: 30, denominator: 1 },
       background: "#000000ff",
     },
-  })) as { project: { projectId: string }; revision: { id: string } };
-  const projectId = created.project.projectId;
+  })) as { project: { id: string }; revision: { id: string } };
+  const projectId = created.project.id;
   const notes = {
     version: 1,
     projectId,

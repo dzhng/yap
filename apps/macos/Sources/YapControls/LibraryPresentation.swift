@@ -1,51 +1,91 @@
 import Foundation
+import YapProtocol
 
 /// Shared saved-media facts and action applicability; renderers consume these directly.
 public enum LibraryPresentation {
-    /// What a person pastes into their agent to hand it a recording or project.
-    public static func agentPrompt(for target: MediaTarget) -> String {
-        switch target {
-        case .recording(let id): "I want you to use this recording with this ID with the Yap CLI: \(id)"
-        case .project(let id): "I want you to use this project with this ID with the Yap CLI: \(id)"
-        }
-    }
-
     public static func recordings(for state: ControlsState) -> SavedPage {
-        let takes = state.library.recent + state.library.deletions.values.compactMap(\.take)
-            .filter { pending in !state.library.recent.contains { $0.recordingId == pending.recordingId } }
-            .sorted { $0.recordingId < $1.recordingId }
+        let library = state.library
+        // The page is media.list's order; a deletion still pending stays listed after its row leaves.
+        let rows = library.media + library.deletions.values
+            .filter { request in request.media != nil && !library.media.contains { $0.target == request.target } }
+            .sorted { $0.target.id < $1.target.id }
+            .compactMap(\.media)
         // Paging is offered only where another page exists; a refresh disables it without hiding it.
         let actions: [PresentedControlsAction] = [PresentedControlsAction?](arrayLiteral:
-            state.library.hasPreviousRecordingPage ? .init(.previousRecordings, "Previous", enabled: state.service == .ready && !state.library.recordingsRefreshing) : nil,
-            state.library.nextRecordingCursor != nil ? .init(.nextRecordings, "Next", enabled: state.service == .ready && !state.library.recordingsRefreshing) : nil,
-            .init(.refreshLibrary, "Refresh", enabled: state.service == .ready && !state.library.recordingsRefreshing)
+            library.hasPreviousRecordingPage ? .init(.previousRecordings, "Previous", enabled: state.service == .ready && !library.recordingsRefreshing) : nil,
+            library.nextRecordingCursor != nil ? .init(.nextRecordings, "Next", enabled: state.service == .ready && !library.recordingsRefreshing) : nil,
+            .init(.refreshLibrary, "Refresh", enabled: state.service == .ready && !library.recordingsRefreshing)
         ).compactMap { $0 }
         var notices: [SavedItem] = []
-        if let failure = state.library.recordingFailure { notices.append(.init(id: "recordings.failure", kind: .message, title: "Recordings unavailable — \(failure)")) }
-        if let failure = state.library.progressFailure { notices.append(.init(id: "recordings.progress", kind: .message, title: "Preparation status unavailable — \(failure)")) }
-        guard !takes.isEmpty else {
+        if let failure = library.recordingFailure { notices.append(.init(id: "recordings.failure", kind: .message, title: "Recordings unavailable — \(failure)")) }
+        if let failure = library.progressFailure { notices.append(.init(id: "recordings.progress", kind: .message, title: "Preparation status unavailable — \(failure)")) }
+        guard !rows.isEmpty else {
             return .init(items: notices + [.init(id: "recordings.empty", kind: .message, title: "No recordings on this page.")], actions: actions)
         }
-        return .init(items: notices + takes.map { take in
-            let request = state.library.deletions[.recording(take.recordingId)]
+        return .init(items: notices + rows.map { row in
+            let request = library.deletions[row.target]
             let pending = request?.isPending == true
-            var details: [String] = []
-            if take.sourceAdmissions?.contains(where: { $0.kind == "primary" && $0.publication?.state == .published }) == true {
-                details.append("Microphone audio")
+            let usable = state.service == .ready && !pending
+            let deleteTitle = request?.failure != nil ? "Retry Delete" : "Delete"
+            switch row.target {
+            case .asset(let id):
+                // An import reads by its own name; its length, size and arrival read once, below.
+                var details = [ElapsedTime.format(row.durationUs), byteCount(row.sizeBytes), "imported \(ElapsedTime.shortTime(of: row.createdAt))"]
+                if let failure = request?.failure { details.append("Delete not confirmed — \(failure)") }
+                return .init(id: id, kind: .imported, title: row.title, badge: "Imported",
+                    status: request == nil ? nil : pending ? "Deleting" : "Attention", details: details, actions: [
+                        .init(.playAsset(id), "Play", enabled: usable),
+                        .init(.copyAssetPrompt(id), "Copy prompt", enabled: usable),
+                        .init(.deleteAsset(id), deleteTitle, enabled: usable),
+                    ], opens: .playAsset(id), attention: request?.failure != nil)
+            case .recording(let id):
+                let take = library.recent.first { $0.id == id } ?? request?.take
+                var details: [String] = []
+                if take?.sourceAdmissions?.contains(where: { $0.kind == "primary" && $0.publication?.state == .published }) == true {
+                    details.append("Microphone audio")
+                }
+                if let failure = take?.finalizationError { details.append("Finalization failed — \(RefusalLedger.cause(failure.code) ?? failure.message)") }
+                if let failure = request?.failure { details.append("Delete not confirmed — \(failure)") }
+                let primary = take?.sourceAdmissions?.first { $0.kind == "primary" }?.job
+                let importFailed = primary?.importFailed == true
+                let importing = primary.map { $0.isActive || library.retryingImports.contains($0.id) } ?? false
+                var message: String?
+                if importFailed, let job = primary {
+                    let cause = job.errorCode.flatMap(RefusalLedger.cause) ?? job.reason ?? "The import could not finish."
+                    message = "Couldn't import your \(ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt)) recording: \(cause.trimmingCharacters(in: CharacterSet(charactersIn: "."))). Your recording is safe."
+                }
+                let state = take?.state ?? "complete"
+                let status = request != nil ? pending ? "Deleting" : "Attention" : importing ? "Importing…" : importFailed ? "Import failed" : take?.finalizationError != nil ? "Attention" : state == "complete" ? "Ready" : state.capitalized
+                // The title is when; how long and what state it is in read once, on the line below.
+                if state == "complete" || state == "interrupted" {
+                    details.insert(ElapsedTime.format(take?.sourceDurationUs ?? row.durationUs), at: 0)
+                }
+                var recordingActions: [PresentedControlsAction] = [
+                    .init(.playRecording(id), "Play", enabled: usable && state != "canceled"),
+                    .init(.copyRecordingPrompt(id), "Copy prompt", enabled: usable),
+                    .init(.deleteRecording(id), deleteTitle, enabled: usable),
+                ]
+                if let job = primary, let retryJobId = job.retryJobId {
+                    recordingActions.append(.init(.retryImport(retryJobId), importing ? "Retrying…" : "Retry",
+                        enabled: usable && !importing))
+                }
+                return .init(id: id, kind: .recording, title: ElapsedTime.shortTime(of: take?.createdAt ?? row.createdAt),
+                    status: status, details: details, message: message, actions: recordingActions,
+                    opens: .playRecording(id), attention: status == "Attention" || status == "Import failed")
+            case .project:
+                preconditionFailure("media.list never lists projects")
             }
-            if let failure = take.finalizationError { details.append("Finalization failed — \(failure.code): \(failure.message)") }
-            if let failure = request?.failure { details.append("Delete not confirmed — \(failure)") }
-            let status = request != nil ? pending ? "Deleting" : "Attention" : take.finalizationError != nil ? "Attention" : take.state == "complete" ? "Ready" : take.state.capitalized
-            // The title is when; how long and what state it is in read once, on the line below.
-            if let duration = take.sourceDurationUs, take.state == "complete" || take.state == "interrupted" {
-                details.insert(ElapsedTime.format(duration), at: 0)
-            }
-            return .init(id: take.recordingId, kind: .recording, title: ElapsedTime.shortTime(of: take.createdAt),
-                status: status, details: details, actions: [
-                    .init(.playRecording(take.recordingId), "Play", enabled: state.service == .ready && !pending && take.state != "canceled"),
-                    .init(.copyRecordingPrompt(take.recordingId), "Copy agent prompt", enabled: !pending),
-                ], opens: .playRecording(take.recordingId), attention: status == "Attention")
         }, actions: actions)
+    }
+
+    /// The library total, then the same bytes split into media and models.
+    public static func storage(_ observation: ControlsState.StorageObservation) -> (total: String, media: String, models: String) {
+        let media = max(0, observation.totalBytes - observation.modelBytes)
+        return ("\(byteCount(observation.totalBytes)) used", "Media \(byteCount(media))", "Models \(byteCount(observation.modelBytes))")
+    }
+
+    public static func byteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     public static func projects(for state: ControlsState, exports: ExportsState) -> SavedPage {
@@ -53,17 +93,17 @@ public enum LibraryPresentation {
         if let failure = state.library.projectFailure { items.append(.init(id: "projects.failure", kind: .message, title: "Projects unavailable — \(failure)")) }
         if state.library.projectsRefreshing { items.append(.init(id: "projects.refreshing", kind: .message, title: "Reading projects…")) }
         for project in state.library.projects {
-            let request = state.library.deletions[.project(project.projectId)]
+            let request = state.library.deletions[.project(project.id)]
             guard request == nil else { continue }
             let usable = state.service == .ready
-            items.append(.init(id: project.projectId, kind: .project, title: project.title,
+            items.append(.init(id: project.id, kind: .project, title: project.title,
                 details: ["Created \(ElapsedTime.shortTime(of: project.createdAt))"], actions: [
-                .init(.previewProject(project.projectId), "Preview", enabled: usable),
-                .init(.copyProjectPrompt(project.projectId), "Copy agent prompt", enabled: true),
-                .init(.exportProject(project.projectId, .video), "Export Video…", enabled: usable && exports.choosing == nil),
-                .init(.exportProject(project.projectId, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
-                .init(.deleteProject(project.projectId), "Delete Project", enabled: usable),
-            ], opens: .previewProject(project.projectId)))
+                .init(.previewProject(project.id), "Preview", enabled: usable),
+                .init(.copyProjectPrompt(project.id), "Copy prompt", enabled: usable),
+                .init(.exportProject(project.id, .video), "Export Video…", enabled: usable && exports.choosing == nil),
+                .init(.exportProject(project.id, .package), "Export AI Package…", enabled: usable && exports.choosing == nil),
+                .init(.deleteProject(project.id), "Delete Project", enabled: usable),
+            ], opens: .previewProject(project.id)))
         }
         for request in state.library.deletions.values.sorted(by: { $0.target.id < $1.target.id }) {
             guard case .project(let id) = request.target else { continue }

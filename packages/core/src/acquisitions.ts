@@ -49,6 +49,7 @@ import {
 } from "./files.js";
 import {
   cameraProofIntervals,
+  journalCapabilities,
   validateSourceReceipt,
   type CameraPublicationProof,
   type SourceEvidenceMetadata,
@@ -106,44 +107,45 @@ export type Acquisition = {
     supportBasis: "physical" | "captured-audio";
   })[];
 };
-const memberBytes = z.number().int().nonnegative().max(268_435_456);
-export const portableAcquisitionSchema = z
-  .strictObject({
-    id: z
-      .uuid()
-      .refine((value) => value === value.toLowerCase(), "Acquisition ID must be canonical"),
-    sourceId: z.string().min(1).max(256),
-    generation: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
-    receipt: z.record(z.string(), z.unknown()),
-    journal: z.strictObject({ bytes: memberBytes, sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
-    bindings: z
-      .array(
-        acquisitionContextSchema.shape.bindings.element
-          .extend({
-            sourceRoles: z
-              .array(z.enum(["video", "narration", "system"]))
-              .min(1)
-              .max(3),
-            sourceToAssetOffsetUs: signedTimeValueSchema,
-            supportBasis: z.enum(["physical", "captured-audio"]),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(256),
-  })
-  .transform((value) => {
-    if ("file" in value.receipt)
-      throw new CatalogError(
-        "INVALID_PACKAGE",
-        "Portable acquisition receipt must not contain a local path",
-      );
-    const receipt = omit(
-      validateSourceReceipt({ ...value.receipt, file: "source.jsonl" }, value.sourceId),
-      "file",
+const memberBytes = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+const portableAcquisitionShape = z.strictObject({
+  id: z.uuid().refine((value) => value === value.toLowerCase(), "Acquisition ID must be canonical"),
+  sourceId: z.string().min(1).max(256),
+  generation: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/),
+  receipt: z.record(z.string(), z.unknown()),
+  journal: z.strictObject({ bytes: memberBytes, sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+  bindings: z
+    .array(
+      acquisitionContextSchema.shape.bindings.element
+        .extend({
+          sourceRoles: z
+            .array(z.enum(["video", "narration", "system"]))
+            .min(1)
+            .max(3),
+          sourceToAssetOffsetUs: signedTimeValueSchema,
+          supportBasis: z.enum(["physical", "captured-audio"]),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(256),
+});
+export const portableAcquisitionSchema = portableAcquisitionShape.transform((value) => {
+  if ("file" in value.receipt)
+    throw new CatalogError(
+      "INVALID_PACKAGE",
+      "Portable acquisition receipt must not contain a local path",
     );
-    return { ...value, receipt };
-  });
+  const receipt = omit(
+    validateSourceReceipt(
+      { ...value.receipt, file: "source.jsonl" },
+      value.sourceId,
+      "INVALID_INPUT_EVIDENCE",
+    ),
+    "file",
+  );
+  return { ...value, receipt };
+});
 export type PortableAcquisition = z.infer<typeof portableAcquisitionSchema>;
 export type PortableAcquisitionFiles = Record<
   "journal" | "normalized",
@@ -153,7 +155,7 @@ export type PortableAcquisitionFiles = Record<
 function portableAcquisition(value: Acquisition): PortableAcquisition {
   if (
     value.evidence.owner.kind !== "acquisition" ||
-    value.evidence.owner.acquisitionId !== value.id ||
+    value.evidence.owner.id !== value.id ||
     value.evidence.sourceId !== value.sourceId
   )
     throw new CatalogError(
@@ -161,7 +163,11 @@ function portableAcquisition(value: Acquisition): PortableAcquisition {
       "Acquisition evidence identity conflicts with its owner",
     );
   const receipt = omit(value.evidence.receipt, "file");
-  return portableAcquisitionSchema.parse({
+  const validated = omit(
+    validateSourceReceipt({ ...receipt, file: "source.jsonl" }, value.sourceId, "INVALID_EVIDENCE"),
+    "file",
+  );
+  const parsed = portableAcquisitionShape.parse({
     id: value.id,
     sourceId: value.sourceId,
     generation: value.evidence.generation,
@@ -169,6 +175,7 @@ function portableAcquisition(value: Acquisition): PortableAcquisition {
     journal: { bytes: value.journal.bytes, sha256: value.journal.sha256 },
     bindings: value.bindings,
   });
+  return { ...parsed, receipt: validated };
 }
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
@@ -256,10 +263,14 @@ function deferredReadFailure(error: unknown, frozen: boolean): never {
     typeof filesystemCode === "string" &&
     !["ENOENT", "ENOTDIR", "ELOOP"].includes(filesystemCode)
   )
-    throw new CatalogError(error.code, error.message, error.details, true);
+    throw new CatalogError(
+      error.code === "INVALID_PATH" ? "ACQUISITION_PATH_UNAVAILABLE" : error.code,
+      error.message,
+      error.details,
+    );
   if (frozen) throw new CatalogError("SOURCE_CHANGED", error.message, error.details);
   if (error.code === "NOT_FOUND")
-    throw new CatalogError(error.code, error.message, error.details, true);
+    throw new CatalogError("MEDIA_UNAVAILABLE", error.message, error.details);
   throw error;
 }
 
@@ -480,12 +491,7 @@ export class AcquisitionStore {
       .get(acquisitionId);
     if (existing) {
       if (existing.metadata === null)
-        throw new CatalogError(
-          "PROCESSING_BUSY",
-          "Acquisition is already being prepared",
-          {},
-          true,
-        );
+        throw new CatalogError("PROCESSING_BUSY", "Acquisition is already being prepared", {});
       return { existing: JSON.parse(existing.metadata as string) as Acquisition, requestId: null };
     }
     const requestId = randomUUID();
@@ -518,7 +524,7 @@ export class AcquisitionStore {
     if (metadata === undefined)
       throw new CatalogError("NOT_FOUND", "Acquisition does not exist", { acquisitionId });
     if (metadata === null)
-      throw new CatalogError("NOT_READY", "Acquisition import has not completed", {
+      throw new CatalogError("NOT_READY", "The acquisition is still importing.", {
         acquisitionId,
       });
     return JSON.parse(metadata);
@@ -563,9 +569,19 @@ export class AcquisitionImporter {
     private readonly assets: AssetStore,
     private readonly evidence: SourceEvidenceStore,
     library: string,
+    private readonly published?: (acquisition: Acquisition) => void,
   ) {
     this.directory = join(library, "acquisitions");
     this.recordings = join(realpathSync(library), "recordings");
+  }
+  /** The acquisition tree retired by this importer. */
+  managedPaths(acquisitionId: string): readonly string[] {
+    return [join(this.directory, acquisitionId)];
+  }
+  /** Remove one admitted acquisition after its queue owner has drained. */
+  async purge(acquisitionId: string, signal: AbortSignal): Promise<void> {
+    await this.evidence.purge({ kind: "acquisition", id: acquisitionId }, signal);
+    await rm(join(this.directory, acquisitionId), { recursive: true, force: true });
   }
   async prepareImport(requestId: string, path: string): Promise<PreparedAcquisition> {
     if (!requestId || !isAbsolute(path))
@@ -591,12 +607,10 @@ export class AcquisitionImporter {
       (error: NodeJS.ErrnoException) => {
         if (error instanceof CatalogError) throw error;
         if (["EAGAIN", "EWOULDBLOCK"].includes(error.code ?? ""))
-          throw new CatalogError(
-            "RECORDING_BUSY",
-            "Capture donor is being retired",
-            { recordingId, filesystemCode: error.code },
-            true,
-          );
+          throw new CatalogError("RECORDING_BUSY", "Capture donor is being retired", {
+            recordingId,
+            filesystemCode: error.code,
+          });
         throw new CatalogError(
           missing(error) ? "NOT_FOUND" : "INVALID_PATH",
           "Cannot lease capture donor directory",
@@ -747,8 +761,6 @@ export class AcquisitionImporter {
             endUs: number;
           };
           const intervals = audio.get(interval.role) ?? [];
-          if (intervals.length === 100_000)
-            throw new CatalogError("LIMIT_EXCEEDED", "Capture acquisition interval limit exceeded");
           intervals.push(interval);
           audio.set(interval.role, intervals);
         },
@@ -817,7 +829,7 @@ export class AcquisitionImporter {
     const reservation = this.catalog.transaction(() =>
       this.store.admitPortable(acquisition.id, packageIdentity),
     );
-    const owner = { kind: "acquisition" as const, acquisitionId: acquisition.id };
+    const owner = { kind: "acquisition" as const, id: acquisition.id };
     if (reservation.existing) {
       if (!isDeepStrictEqual(portableAcquisition(reservation.existing), acquisition))
         throw new CatalogError(
@@ -877,7 +889,7 @@ export class AcquisitionImporter {
         [normalized, files.normalized],
         ...proofMembers.map(([name, member]) => [join(sourceDirectory, name), member] as const),
       ] as const) {
-        const copied = await copyImportedFile(member.path, path, signal, member, 268_435_456);
+        const copied = await copyImportedFile(member.path, path, signal, member);
         if (copied.sha256 !== member.sha256 || copied.bytes !== member.bytes)
           throw new CatalogError(
             "INVALID_PACKAGE",
@@ -1024,7 +1036,6 @@ export class AcquisitionImporter {
           intent.kind === "capture"
             ? { ...journal, sha256: intent.source.journal.sha256 }
             : journal,
-          268_435_456,
         );
         for (const name of publicationMembers) {
           const proof = files[name];
@@ -1036,7 +1047,6 @@ export class AcquisitionImporter {
               intent.kind === "capture"
                 ? { ...proof, sha256: intent.source.members[name]!.sha256 }
                 : proof,
-              name === "camera.mapping.jsonl" ? 268_435_456 : 65_536,
             );
         }
         const canonical = Object.fromEntries(
@@ -1090,7 +1100,7 @@ export class AcquisitionImporter {
         // Native verifies ordinary completion or the private recovered-support basis. The
         // normalized journal keeps its original disposition, including any untrusted completion.
         indexed = await this.evidence.ingest({
-          owner: { kind: "acquisition", acquisitionId },
+          owner: { kind: "acquisition", id: acquisitionId },
           sourceId,
           generation: attemptId,
           file: output,
@@ -1102,7 +1112,7 @@ export class AcquisitionImporter {
           const source = files[`${sourceRole}.mov`];
           if (!source) continue;
           if (
-            receipt.header?.schemaVersion === 2 &&
+            journalCapabilities(receipt.header ?? {})!.isPacked &&
             sourceRole !== "video" &&
             !receipt.publications?.[sourceRole]
           )
@@ -1170,6 +1180,7 @@ export class AcquisitionImporter {
         signal.throwIfAborted();
         this.catalog.transaction(() => {
           this.store.publish(value);
+          this.published?.(value);
         });
         published = true;
         return value;
@@ -1234,8 +1245,6 @@ export class AcquisitionImporter {
         const clippedStart = compare(start, fromTime(0)) < 0 ? fromTime(0) : start;
         if (compare(clippedStart, end) < 0)
           available.push({ startUs: toTime(clippedStart), endUs: toTime(end) });
-        if (available.length > 100_000)
-          throw new CatalogError("LIMIT_EXCEEDED", "Capture acquisition interval limit exceeded");
       }
     }
     return {
@@ -1257,7 +1266,6 @@ export class AcquisitionImporter {
             "ACQUISITION_BUSY",
             "An acquisition worker still owns this library; retry startup after it exits",
             {},
-            true,
           );
         throw error;
       },
@@ -1276,7 +1284,7 @@ export class AcquisitionImporter {
           .get(entry.name);
         const metadata = row?.metadata ? (JSON.parse(row.metadata as string) as Acquisition) : null;
         if (!metadata) {
-          await this.evidence.purge({ kind: "acquisition", acquisitionId: entry.name }, signal);
+          await this.evidence.purge({ kind: "acquisition", id: entry.name }, signal);
           this.assets.release({ kind: "acquisition", id: entry.name });
           await rm(join(this.directory, entry.name), { recursive: true, force: true });
           if (row) {
@@ -1303,7 +1311,7 @@ export class AcquisitionImporter {
         if (!pending.length) break;
         for (const intent of pending) {
           signal.throwIfAborted();
-          await this.evidence.purge({ kind: "acquisition", acquisitionId: intent.id }, signal);
+          await this.evidence.purge({ kind: "acquisition", id: intent.id }, signal);
           this.assets.release({ kind: "acquisition", id: intent.id });
           this.store.discardPortable(intent.id, intent.requestId);
         }

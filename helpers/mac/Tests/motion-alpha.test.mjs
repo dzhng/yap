@@ -314,7 +314,7 @@ test("finite ProRes alpha motion preserves edges, orientation and off-grid phase
       },
       false,
     );
-    assert.equal(error.code, "UNAVAILABLE");
+    assert.equal(error.code, "UNAVAILABLE_SUPPORT");
   }
   report.passed = true;
   save();

@@ -37,17 +37,17 @@ import YapControls
 
     func json(_ value: Any) -> Data { try! JSONSerialization.data(withJSONObject: value) }
     func status(_ params: [String: Any]) -> [String: Any] {
-        ["exportId": params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
+        ["id": params["requestId"] ?? params["exportId"]!, "projectId": params["projectId"]!, "kind": params["kind"]!,
          "snapshot": ["revisionId": params["revisionId"]!], "state": "queued", "abandoning": false,
          "destination": ["directory": params["directory"]!, "leaf": params["leaf"]!],
          "cleanupPending": false, "output": NSNull(), "reason": NSNull(), "retryable": false]
     }
     func call(_ operation: String, _ params: [String: Any]) async throws(ServiceFailure) -> Data {
         calls.append((operation, params))
-        let id = params["exportId"] as? String ?? ""
+        let id = params["requestId"] as? String ?? params["exportId"] as? String ?? ""
         switch operation {
         case "project.get":
-            return json(["projectId": "take", "createdAt": "2026-09-17T10:11:12.345Z", "currentRevisionId": revision])
+            return json(["id": "take", "createdAt": "2026-09-17T10:11:12.345Z", "currentRevisionId": revision])
         case "export.create":
             if !createFailures.isEmpty {
                 let (failure, admit) = createFailures.removeFirst()
@@ -64,7 +64,7 @@ import YapControls
         case "export.abandon":
             try? await Task.sleep(for: .milliseconds(50))
             admitted[id] = nil
-            return json(["exportId": id, "abandoned": true])
+            return json(["id": id, "abandoned": true])
         default:
             throw ServiceFailure(code: "UNKNOWN_OPERATION", message: operation)
         }
@@ -80,6 +80,7 @@ import YapControls
     @MainActor static func main() async {
         let script = Script()
         var failures: [String] = []
+        var feedback = ControlsState()
         var chosen: [(ExportsState.Kind, String)] = []
         var destination: URL? = nil
         let exports = ExportController(
@@ -90,7 +91,10 @@ import YapControls
                 script.revision = "r4"
                 return destination
             },
-            reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            reveal: { _ in }, changed: {}, failure: { action, message in
+                feedback.observeAction(action, failure: message, on: .library)
+                if let message { failures.append(message) }
+            })
 
         exports.export("take", kind: .video)
         await until { exports.state.choosing == nil && chosen.count == 1 }
@@ -105,7 +109,7 @@ import YapControls
         exports.export("take", kind: .video)
         await until { exports.state.requests.first?.unconfirmed != nil }
         let sent = script.calls.last { $0.0 == "export.create" }!.1
-        let first = sent["exportId"] as! String
+        let first = sent["requestId"] as! String
         precondition(sent["revisionId"] as? String == "r3", "The revision is pinned before the panel opens")
         precondition(sent["directory"] as? String == CommandLine.arguments[1] && sent["leaf"] as? String == "demo.mp4")
         precondition(sent["kind"] as? String == "video")
@@ -128,7 +132,7 @@ import YapControls
         exports.resend(second)
         await until { exports.state.requests.isEmpty }
         let resent = script.calls.filter { $0.0 == "export.create" }.suffix(2).map { $0.1 }
-        precondition(resent.allSatisfy { $0["exportId"] as? String == second && $0["leaf"] as? String == "take.zip"
+        precondition(resent.allSatisfy { $0["requestId"] as? String == second && $0["leaf"] as? String == "take.zip"
             && $0["kind"] as? String == "processed-package" }, "Sending again names the same export")
         precondition(exports.state.records.map(\.exportId) == [second, first])
 
@@ -136,23 +140,27 @@ import YapControls
         script.createFailures = [(ServiceFailure(code: "INVALID_PARAMS", message: "Parameters do not match"), false)]
         exports.export("take", kind: .video)
         await until { !failures.isEmpty }
-        precondition(exports.state.requests.isEmpty && failures == ["INVALID_PARAMS: Parameters do not match"])
+        precondition(exports.state.requests.isEmpty && failures == ["Some request settings are missing or incorrect."])
+
+        precondition(feedback.failure?.request == ControlsAction.exportProject("take", .video).id)
+        exports.export("take", kind: .video)
+        await until { feedback.failure == nil && exports.state.choosing == nil }
 
         // A restarted app rediscovers every unfinished page, then acts on what it found.
         let restarted = ExportController(
             call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
-            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
-        let cursor: [String: Any] = ["projectId": NSNull(), "unfinishedOnly": true, "afterExportId": first]
+            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
+        let cursor = "opaque-export-cursor"
         script.pages = [
-            ["exports": [["exportId": first]], "nextCursor": cursor],
-            ["exports": [["exportId": second]], "nextCursor": NSNull()],
+            ["exports": [["id": first]], "nextCursor": cursor],
+            ["exports": [["id": second]], "nextCursor": NSNull()],
         ]
         restarted.discover()
         await until { restarted.state.records.count == 2 }
         let lists = script.calls.filter { $0.0 == "export.list" }.map { $0.1 }
         precondition(lists.count == 2 && lists.allSatisfy { $0["unfinishedOnly"] as? Bool == true },
             "Discovery asks only for unfinished exports")
-        precondition(NSDictionary(dictionary: lists[1]["cursor"] as! [String: Any]).isEqual(to: cursor),
+        precondition(lists[1]["cursor"] as? String == cursor,
             "Discovery replays the complete project cursor without adding another owner")
         precondition(restarted.state.records.map(\.exportId) == [first, second], "Discovered exports keep page order")
         restarted.abandon(second)
@@ -194,7 +202,20 @@ test(
       );
       const receipts = retained.attempts
         .filter((attempt) => attempt.operation === "export.status" && attempt.response.ok)
-        .map((attempt) => attempt.response.data);
+        // The receipts predate the WorkState vocabulary: translate them once into today's public
+        // status (a committed export reads `ready`, and every async status names its job).
+        // They also predate record identity: an export names itself `id`.
+        .map(({ response: { data } }) => {
+          const { exportId, ...status } = data;
+          return {
+            ...status,
+            id: exportId,
+            state:
+              { committed: "ready", not_requested: "idle", waiting: "queued" }[data.state] ??
+              data.state,
+            jobId: exportId,
+          };
+        });
       const fixture = join(scratch, "receipts.json");
       await writeFile(fixture, JSON.stringify(receipts));
       const executable = compileControlsCheck(
@@ -207,7 +228,6 @@ import YapControls
 @MainActor final class Script {
     var calls: [(String, [String: Any])] = []
     var statuses: [String: Data] = [:]
-    var retries: [String: Data] = [:]
     var acceptedRetries: [String: Data] = [:]
     var refusedRetries: [String: ServiceFailure] = [:]
     var lostRetryReplies: [String: ServiceFailure] = [:]
@@ -217,12 +237,13 @@ import YapControls
         calls.append((operation, params))
         switch operation {
         case "export.list": return json(pages.removeFirst())
-        case "export.retry":
-            let id = params["exportId"] as! String
+        case "job.retry":
+            let id = params["jobId"] as! String
             if let refusal = refusedRetries[id] { throw refusal }
             if let accepted = acceptedRetries[id] { statuses[id] = accepted }
             if let lost = lostRetryReplies[id] { throw lost }
-            return retries[id]!
+            // job.retry answers with the job itself.
+            return json(["id": id, "state": "queued"])
         case "export.status":
             guard let value = statuses[params["exportId"] as! String] else {
                 throw ServiceFailure(code: "NOT_FOUND", message: "Export retired")
@@ -258,7 +279,7 @@ import YapControls
             } else { .recording(receipt["recordingId"] as! String) }
             let snapshot = receipt["snapshot"] as! [String: Any]
             let destination = receipt["destination"] as! [String: Any]
-            precondition(record.target == target && record.exportId == receipt["exportId"] as! String)
+            precondition(record.target == target && record.exportId == receipt["id"] as! String)
             precondition(record.revisionId == snapshot["revisionId"] as! String && record.kind == .video)
             precondition(record.directory == destination["directory"] as! String && record.leaf == destination["leaf"] as! String)
             precondition(record.state == receipt["state"] as! String && record.output == receipt["output"] as? String)
@@ -268,13 +289,12 @@ import YapControls
         }
         let recording = receipts.first { $0["recordingId"] != nil }!
         let project = receipts.first { $0["projectId"] != nil }!
-        let recordingId = recording["exportId"] as! String, projectId = project["exportId"] as! String
-        let cursor: [String: Any] = ["projectId": NSNull(),
-            "unfinishedOnly": true, "afterExportId": recordingId]
+        let recordingId = recording["id"] as! String, projectId = project["id"] as! String
+        let cursor = "opaque-export-cursor"
         script.statuses["malformed"] = Data("{}".utf8)
         script.pages = [
-            ["exports": [["exportId": "malformed"], ["exportId": recordingId]], "nextCursor": cursor],
-            ["exports": [["exportId": projectId]], "nextCursor": NSNull()],
+            ["exports": [["id": "malformed"], ["id": recordingId]], "nextCursor": cursor],
+            ["exports": [["id": projectId]], "nextCursor": NSNull()],
         ]
         var changes = 0
         var revealed: [URL] = []
@@ -282,14 +302,14 @@ import YapControls
             call: { operation, params throws(ServiceFailure) in try await script.call(operation, params) },
             choose: { _, _ in preconditionFailure("Discovery must not choose a destination") },
             reveal: { revealed.append($0) }, changed: { changes += 1 },
-            failure: { preconditionFailure("No create failure expected: \($0)") })
+            failure: { _, message in if let message { preconditionFailure("No create failure expected: \(message)") } })
         exports.discover()
         await until { changes > 0 }
         precondition(exports.state.records.map(\.exportId) == [recordingId, projectId], "A malformed item must not hide later items/pages")
-        precondition(exports.state.discoveryFailure?.contains("INVALID_RESPONSE") == true,
+        precondition(exports.state.discoveryFailure?.contains("Yap returned an unreadable or inconsistent response.") == true,
             "Malformed status must remain visible after the last successful page")
         let lists = script.calls.filter { $0.0 == "export.list" }.map { $0.1 }
-        precondition(lists.count == 2 && NSDictionary(dictionary: lists[1]["cursor"] as! [String: Any]).isEqual(to: cursor))
+        precondition(lists.count == 2 && lists[1]["cursor"] as? String == cursor)
         let originalRecording = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(recording))
         let originalProject = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(project))
         precondition(exports.state.records == [originalRecording, originalProject], "Controller retains all public receipt fields")
@@ -298,7 +318,7 @@ import YapControls
         precondition(originalProject.target == .project(projectOwner), "The export stays attributed to its project")
         precondition(!exportLines(exports).contains { $0.contains(projectOwner) || $0.contains(originalProject.revisionId) },
                      "Presentation shows no identifiers")
-        precondition(exportLines(exports).contains { $0.contains("Unreadable export status for malformed") },
+        precondition(exportLines(exports).contains { $0.contains("Yap returned an unreadable or inconsistent response.") },
             "Discovery failure is visible in shared export facts")
 
         // Neither/both owners are malformed, not implicit recording/project defaults.
@@ -310,7 +330,7 @@ import YapControls
         }
 
         // A successful new traversal clears only the previous discovery failure.
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let discovered = changes
         exports.discover()
         await until { changes > discovered }
@@ -321,13 +341,12 @@ import YapControls
         exports.tick()
         await until { exports.state.readFailures[projectId] != nil }
         let unreadable = exports.state.readFailures[projectId]!
-        precondition(unreadable.contains("INVALID_RESPONSE") && exports.state.records.last == originalProject)
+        precondition(unreadable.contains("Yap returned an unreadable or inconsistent response.") && exports.state.records.last == originalProject)
         precondition(exportLines(exports).contains { $0 == unreadable }, "Polling failure is visible")
-        script.retries[projectId] = Data("{}".utf8)
         script.refusedRetries[projectId] = ServiceFailure(code: "INVALID_PARAMS", message: "Retry was refused")
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
-        precondition(exports.state.failures[projectId]?.contains("Retry was refused") == true)
+        precondition(exports.state.failures[projectId]?.contains("Some request settings are missing or incorrect.") == true)
         script.refusedRetries[projectId] = nil
         let refusedRetry = exports.state.failures[projectId]
         script.statuses[projectId] = script.json(project)
@@ -339,19 +358,19 @@ import YapControls
         script.statuses[projectId] = script.json(recording)
         exports.tick()
         await until { exports.state.readFailures[projectId] != nil }
-        precondition(exports.state.readFailures[projectId]!.contains("different exportId"))
+        precondition(exports.state.readFailures[projectId]!.contains("Yap returned an unreadable or inconsistent response."))
         precondition(exports.state.records == [originalRecording, originalProject])
         script.statuses[projectId] = script.json(project)
         exports.tick()
         await until { exports.state.readFailures[projectId] == nil }
 
         // A stopped export with an accepted-but-unreadable retry is recovered by status alone.
-        let committed = receipts.first { $0["projectId"] != nil && $0["state"] as? String == "committed" }!
+        let committed = receipts.first { $0["projectId"] != nil && $0["state"] as? String == "ready" }!
         var stopped = project
         stopped["state"] = "failed"
         stopped["retryable"] = true
         script.statuses[projectId] = script.json(stopped)
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let stoppedRead = changes
         exports.discover()
         await until { changes > stoppedRead }
@@ -359,27 +378,26 @@ import YapControls
         script.refusedRetries[projectId] = ServiceFailure(code: "INVALID_PARAMS", message: "Retry was refused")
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
-        precondition(exports.state.failures[projectId]?.contains("Retry was refused") == true)
+        precondition(exports.state.failures[projectId]?.contains("Some request settings are missing or incorrect.") == true)
         precondition(!exports.state.observed.contains(projectId), "A definite refusal does not make a settled export poll forever")
         script.refusedRetries[projectId] = nil
         script.acceptedRetries[projectId] = script.json(committed)
-        for code in ["INVALID_RESPONSE", "TIMEOUT", "SERVICE_STOPPED", "SERVICE_UNAVAILABLE"] {
+        for code in ["TIMEOUT", "SERVICE_STOPPED", "SERVICE_UNAVAILABLE"] {
             script.statuses[projectId] = script.json(stopped)
-            script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+            script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
             let beforeRead = changes
             exports.discover()
             await until { changes > beforeRead }
-            script.lostRetryReplies[projectId] = code == "INVALID_RESPONSE" ? nil
-                : ServiceFailure(code: code, message: "Accepted retry reply unavailable")
-            let mutationsBeforeRecovery = script.calls.filter { $0.0 == "export.retry" }.count
+            script.lostRetryReplies[projectId] = ServiceFailure(code: code, message: "Accepted retry reply unavailable")
+            let mutationsBeforeRecovery = script.calls.filter { $0.0 == "job.retry" }.count
             exports.retry(projectId)
             await until { exports.state.acting[projectId] == nil }
             precondition(exports.state.observed.contains(projectId), "Accepted retry uncertainty \(code) needs status recovery even when the old receipt was settled")
-            precondition(exportLines(exports).contains { $0.contains(code) })
+            precondition(exportLines(exports).contains { $0.contains(ServiceFailure(code: code, message: "").localizedDescription) })
             exports.tick()
             await until { exports.state.records.last?.committed == true }
             precondition(exports.state.readFailures[projectId] == nil && !exports.state.observed.contains(projectId))
-            precondition(script.calls.filter { $0.0 == "export.retry" }.count == mutationsBeforeRecovery + 1,
+            precondition(script.calls.filter { $0.0 == "job.retry" }.count == mutationsBeforeRecovery + 1,
                 "Status recovery does not resend the accepted retry for \(code)")
         }
         script.lostRetryReplies[projectId] = nil
@@ -390,9 +408,9 @@ import YapControls
         var sameIdRecording = recording
         sameIdRecording["recordingId"] = projectOwner
         let sameIdExport = "00000000-0000-4000-8000-000000000001"
-        sameIdRecording["exportId"] = sameIdExport
+        sameIdRecording["id"] = sameIdExport
         script.statuses[sameIdExport] = script.json(sameIdRecording)
-        script.pages = [["exports": [["exportId": sameIdExport], ["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": sameIdExport], ["id": projectId]], "nextCursor": NSNull()]]
         let collisionRead = changes
         exports.discover()
         await until { changes > collisionRead }
@@ -405,7 +423,7 @@ import YapControls
         var cleanup = committed
         cleanup["cleanupPending"] = true
         script.statuses[projectId] = script.json(cleanup)
-        script.pages = [["exports": [["exportId": projectId]], "nextCursor": NSNull()]]
+        script.pages = [["exports": [["id": projectId]], "nextCursor": NSNull()]]
         let cleanupRead = changes
         exports.discover()
         await until { changes > cleanupRead }
@@ -413,16 +431,16 @@ import YapControls
         precondition(pending.target == originalProject.target && pending.revisionId == originalProject.revisionId
             && pending.directory == originalProject.directory && pending.leaf == originalProject.leaf)
         precondition(pending.committed && pending.cleanupPending && !pending.settled)
-        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.retry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
+        precondition(exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.jobRetry.\(projectId)" && $0.title == "Retry Cleanup" && $0.enabled })
         precondition(!exportItems(exports).flatMap(\.actions).contains { $0.action.id == "export.dismiss.\(projectId)" })
-        script.retries[projectId] = script.json(committed)
+        script.statuses[projectId] = script.json(committed)
         exports.retry(projectId)
         await until { exports.state.acting[projectId] == nil }
         let settled = try JSONDecoder().decode(ExportsState.Record.self, from: script.json(committed))
         precondition(exports.state.records == [settled] && exports.state.failures[projectId] == nil)
         precondition(settled.settled && exports.state.observed.isEmpty)
-        let retries = script.calls.filter { $0.0 == "export.retry" }.map { $0.1 }
-        precondition(retries.allSatisfy { NSDictionary(dictionary: $0).isEqual(to: ["exportId": projectId]) },
+        let retries = script.calls.filter { $0.0 == "job.retry" }.map { $0.1 }
+        precondition(retries.allSatisfy { NSDictionary(dictionary: $0).isEqual(to: ["jobId": project["jobId"] as! String]) },
             "Retries retain the original export identity and do not choose a new owner or destination")
         exports.reveal(projectId)
         precondition(revealed == [URL(fileURLWithPath: committed["output"] as! String)])
@@ -548,7 +566,7 @@ import YapControls
                     "expectedRevisionId": pinnedRevision, "operations": [["operation": "trim", "clipId": clipId, "range": ["startUs": 0, "endUs": 1_000_000], "ripple": "none"]]])
                 return URL(fileURLWithPath: directory).appendingPathComponent("demo.mp4")
             },
-            reveal: { revealed.append($0) }, changed: {}, failure: { failures.append($0) })
+            reveal: { revealed.append($0) }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
 
         first.export(projectId, kind: .video)
         await until(60, first.tick) { first.state.records.first?.settled == true || !failures.isEmpty }
@@ -567,7 +585,7 @@ import YapControls
         let occupied = ExportController(
             call: { operation, params throws(ServiceFailure) in try await service.call(operation, params) },
             choose: { _, _ in URL(fileURLWithPath: directory).appendingPathComponent("occupied.mp4") },
-            reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
         occupied.export(projectId, kind: .video)
         await until(60, occupied.tick) { occupied.state.records.first?.state == "failed" || !failures.isEmpty }
         precondition(failures.isEmpty, "Occupied export was refused before admission: \(failures)")
@@ -578,7 +596,7 @@ import YapControls
         service = await Service.start(resolved)
         let restarted = ExportController(
             call: { operation, params throws(ServiceFailure) in try await service.call(operation, params) },
-            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { failures.append($0) })
+            choose: { _, _ in nil }, reveal: { _ in }, changed: {}, failure: { _, message in if let message { failures.append(message) } })
         restarted.discover()
         await until(20, {}) { !restarted.state.records.isEmpty || restarted.state.discoveryFailure != nil }
         precondition(restarted.state.discoveryFailure == nil, "\(restarted.state.discoveryFailure!)")

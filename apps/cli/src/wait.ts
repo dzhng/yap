@@ -5,47 +5,51 @@ import {
   boundedIssues,
   issueCount,
   operationSchema,
+  operationError,
   waitJobSchema,
   type Issue,
   type OperationRequest,
   type OperationResponse,
   type WaitMetadata,
+  workStateSchema,
 } from "@yap/protocol";
 import { ArtifactDeliveryError, batchReferences, describeBatch } from "./artifact-delivery.js";
 
-const pending = new Set([
-  "waiting",
-  "queued",
-  "running",
-  "processing",
-  "preparing",
-  "opening",
-  "closing",
-  "cleanup_pending",
-  "pending",
-  "not_ready",
-  "updating",
-  "finalizing",
-]);
-const unsuccessful = new Set([
-  "failed",
-  "canceled",
-  "unavailable",
-  "not_requested",
-  "absent",
-  "invalid",
-  "abandoned",
-  "interrupted",
-  "unsupported",
-]);
+const unsuccessful = new Set(["failed", "canceled", "unavailable", "idle"]);
+// Work reads answer in WorkState; a take keeps its own capture lifecycle (`captureReportSchema`),
+// and one whose finalization failed stays `finalizing` until a caller retries it.
+const successful = new Set(["ready", "complete"]);
+function pendingAdmission(source: unknown): boolean {
+  const admission = record(source);
+  return (
+    admission.admissionError == null &&
+    admission.job == null &&
+    record(admission.publication).state === "published"
+  );
+}
+function stillPending(value: Record<string, unknown>): boolean {
+  return (
+    ["queued", "running", "preparing", "recording", "paused"].includes(String(value.state)) ||
+    (value.state === "finalizing" && value.finalizationError == null) ||
+    (Array.isArray(value.sourceAdmissions) &&
+      value.sourceAdmissions.some(
+        (source) => pendingAdmission(source) || stillPending(record(record(source).job)),
+      ))
+  );
+}
 const jobSummary = waitJobSchema.extend({
-  state: z.string(),
+  state: workStateSchema,
   target: z.record(z.string(), z.unknown()),
 });
 const reads = new Map([
-  ...["frame", "audio", "waveform", "spectrogram", "preview", "index", "transcript"].map(
-    (kind) => [`${kind}.retry`, `${kind}.get`] as [string, string],
-  ),
+  ["job.retry", "job.get"],
+  ["index.get", "index.get"],
+  ["transcript.get", "transcript.get"],
+  ["frame.get", "frame.get"],
+  ["audio.get", "audio.get"],
+  ["waveform.get", "waveform.get"],
+  ["spectrogram.get", "spectrogram.get"],
+  ["preview.get", "preview.get"],
   ["frame.batch", "frame.batch"],
   ["index.frames", "index.frames"],
   ["audio.measure", "audio.measure"],
@@ -54,12 +58,11 @@ const reads = new Map([
   ["transcript.transcribe", "transcript.get"],
   ["transcript.review", "transcript.review"],
   ["transcript.render.prepare", "transcript.render.get"],
-  ["transcript.render.retry", "transcript.render.get"],
   ["transcript.render.get", "transcript.render.get"],
   ["export.create", "export.status"],
-  ["export.retry", "export.status"],
   ["export.recover", "export.status"],
   ["capture.stop", "recording.get"],
+  ["recording.get", "recording.get"],
   ["package.open", "package.status"],
   ["speaker.get", "speaker.get"],
   ["alignment.observe", "alignment.observe"],
@@ -68,6 +71,12 @@ const reads = new Map([
   ["skill.install", "skill.status"],
   ["skill.update", "skill.status"],
   ["skill.uninstall", "skill.status"],
+]);
+/** Getters of a record, and the parameter that names it. */
+const recordGetters = new Map([
+  ["export.status", "exportId"],
+  ["recording.get", "recordingId"],
+  ["package.status", "admissionId"],
 ]);
 // Getters used as initial requests must preserve the same domain response while waiting.
 for (const read of reads.values()) reads.set(read, read);
@@ -80,13 +89,26 @@ export function waitSucceeded(result: OperationResponse): boolean {
   if (!result.ok) return false;
   const data = record(result.data);
   const recovery = record(data.recovery);
-  if (result.wait?.job && recovery.jobId === result.wait.job.jobId && recovery.state !== "ready")
+  if (result.wait?.job && recovery.jobId === result.wait.job.id && recovery.state !== "ready")
     return false;
   if (Array.isArray(data.items))
     return data.items.every((item) => waitSucceeded({ id: result.id, ...item }));
+  if (
+    Array.isArray(data.sourceAdmissions) &&
+    data.sourceAdmissions.some((source) => {
+      const admission = record(source);
+      const job = record(admission.job);
+      return (
+        pendingAdmission(source) ||
+        admission.admissionError != null ||
+        (job.state !== undefined && job.state !== "ready")
+      );
+    })
+  )
+    return false;
   return (
     data.state === undefined ||
-    ["ready", "complete", "completed", "committed"].includes(String(data.state))
+    (successful.has(String(data.state)) && data.finalizationError == null)
   );
 }
 function interrupted(result: Extract<OperationResponse, { ok: false }>) {
@@ -116,24 +138,30 @@ export async function waitForWork(options: {
   let progress = "";
   let settled = false;
   const jobs = new Map<string, z.infer<typeof jobSummary>>();
-  if (current) jobs.set(current.jobId, current);
+  if (current) jobs.set(current.id, current);
   let batchSelection: unknown;
   const failures = new Map<number, OperationResponse>();
   const inspect = async (jobId: string) => {
     const result = await call("job.get", { jobId });
     if (result.ok) {
       const job = jobSummary.parse(result.data);
-      for (const key of ["assetId", "projectId", "revisionId"])
-        if (pins[key] !== undefined && job.target[key] !== pins[key])
+      // A job's target names what it works on; the waited response named the same thing.
+      const named = (kind: string) => (job.target.kind === kind ? job.target.id : undefined);
+      for (const [key, value] of [
+        ["assetId", named("asset")],
+        ["projectId", named("project")],
+        ["revisionId", job.target.revisionId],
+      ] as const)
+        if (pins[key] !== undefined && value !== pins[key])
           throw new ArtifactDeliveryError(
             "INVALID_RESPONSE",
             `Waiting job changed selected ${key}`,
           );
       const pinned = jobs.get(jobId);
       if (
-        job.jobId !== jobId ||
+        job.id !== jobId ||
         (pinned &&
-          (pinned.generation !== job.generation ||
+          (pinned.attemptGeneration !== job.attemptGeneration ||
             pinned.attemptId !== job.attemptId ||
             !isDeepStrictEqual(pinned.target, job.target)))
       )
@@ -153,8 +181,8 @@ export async function waitForWork(options: {
     const identity = current
       ? {
           job: {
-            jobId: current.jobId,
-            generation: current.generation,
+            id: current.id,
+            attemptGeneration: current.attemptGeneration,
             attemptId: current.attemptId,
           },
         }
@@ -169,24 +197,20 @@ export async function waitForWork(options: {
   };
   const expired = () => signal.aborted && signal.reason === "wait_deadline";
   const stopped = () =>
-    metadata(expired() ? "timed_out" : "interrupted", {
-      code: "ABORTED",
-      message: "Waiting was interrupted; admitted work is not rolled back",
-      retryable: false,
-      details: {},
-    });
+    metadata(
+      expired() ? "timed_out" : "interrupted",
+      operationError("ABORTED", "Waiting was interrupted; admitted work is not rolled back").error,
+    );
   const pins = record(latest.ok ? latest.data : null);
   let read = reads.get(request.operation);
-  if (request.operation === "transcript.retry" && "text" in request.params)
-    read = "transcript.search";
+  if (request.operation === "transcript.search") read = "transcript.search";
   let params: Record<string, unknown> =
     read === "model.status" ? { modelId: request.params.modelId } : { ...request.params };
   const sourcePreparation =
-    read === "transcript.get" &&
-    (request.operation === "transcript.transcribe" ||
-      (request.operation === "transcript.retry" && "assetId" in request.params));
+    read === "transcript.get" && request.operation === "transcript.transcribe";
   if (sourcePreparation) {
-    delete params.executionRange;
+    delete params.requestId;
+    delete params.sourceRange;
     delete params.context;
     const retainedGeneration = record(record(pins.published).output).generation;
     if (typeof retainedGeneration === "string") params.generation = retainedGeneration;
@@ -198,11 +222,9 @@ export async function waitForWork(options: {
   // requested one, so the read carries the preparation's clamp.
   const admission =
     (sourcePreparation || renderPreparation) && Array.isArray(pins.issues) ? pins.issues : [];
-  if (request.operation === "export.create" && typeof pins.exportId === "string")
-    params = { exportId: pins.exportId };
-  if (request.operation === "capture.stop" && typeof pins.recordingId === "string")
-    params = { recordingId: pins.recordingId };
-  if (read === "package.status" && typeof pins.id === "string") params = { admissionId: pins.id };
+  // A mutation that returns its record waits through that record's own getter.
+  const recordParam = read ? recordGetters.get(read) : undefined;
+  if (recordParam && typeof pins.id === "string") params = { [recordParam]: pins.id };
   const selectionKeys = [
     "projectId",
     "revisionId",
@@ -211,7 +233,7 @@ export async function waitForWork(options: {
     "acquisitionId",
     "exportId",
     "recordingId",
-    ...(read === "package.status" ? ["id"] : []),
+    ...(recordParam ? ["id"] : []),
   ];
   if (read && pins.revisionId !== undefined) params.revisionId = pins.revisionId;
   if (read === "index.frames" && typeof pins.generation === "string")
@@ -220,6 +242,13 @@ export async function waitForWork(options: {
     const recovery = record(data.recovery);
     return read === "export.status" && typeof recovery.jobId === "string" ? recovery : data;
   };
+  /** The job that runs this work: a status refers to it; a job's own record is it. */
+  const jobOf = (work: Record<string, unknown>) =>
+    typeof work.jobId === "string"
+      ? work.jobId
+      : jobSummary.safeParse(work).success
+        ? (work.id as string)
+        : undefined;
 
   const closed = new Set<string>();
   const close = async (result: OperationResponse) => {
@@ -278,11 +307,12 @@ export async function waitForWork(options: {
       read &&
       !renderPreparation &&
       !operationSchema.safeParse({ operation: read, params }).success
-    )
+    ) {
       throw new ArtifactDeliveryError(
         "INVALID_RESPONSE",
         "Acknowledgement cannot pin the advertised read",
       );
+    }
     for (;;) {
       if (signal.aborted) {
         await close(latest);
@@ -302,7 +332,7 @@ export async function waitForWork(options: {
       }
       const work = workStatus(data);
       // Package admissions expose a context-job ID that public job.get cannot inspect.
-      const jobId = read === "package.status" ? undefined : work.jobId;
+      const jobId = read === "package.status" ? undefined : jobOf(work);
       // Issues never change the exit status; a ready output names how many it carries.
       // A read's admission issues sit beside the issues published with its output and with each
       // source generation a project read names.
@@ -314,7 +344,12 @@ export async function waitForWork(options: {
           : []),
       ].flatMap((value) => (Array.isArray(value) ? value : []));
       const count = issueCount(issues as Issue[]);
-      const suffix = current ? `(${current.jobId}, generation ${current.generation})` : "";
+      const attempt =
+        current ??
+        (jobId && typeof work.attemptGeneration === "number"
+          ? { id: jobId, attemptGeneration: work.attemptGeneration }
+          : undefined);
+      const suffix = attempt ? `(${attempt.id}, attempt ${attempt.attemptGeneration})` : "";
       const marker =
         work.state === "ready" && count > 0
           ? `${request.operation}: ready (${count} issues)${suffix ? ` ${suffix}` : ""}`
@@ -359,11 +394,12 @@ export async function waitForWork(options: {
             }
             if (state !== "ready") waiting = true;
             else if (
-              record(value.published).generation !== jobs.get(value.jobId)!.generation ||
-              pending.has(String(value.state))
+              String(record(value.published).generation) !==
+                String(jobs.get(value.jobId)!.attemptGeneration) ||
+              stillPending(value)
             )
               waiting = true;
-          } else if (pending.has(String(value.state))) waiting = true;
+          } else if (stillPending(value)) waiting = true;
           items.push(item);
         }
         latest = { ...latest, data: { ...batch, items } };
@@ -391,7 +427,7 @@ export async function waitForWork(options: {
         if (unsuccessful.has(job.state)) {
           await close(latest);
           if (read === "export.status") {
-            if (!pending.has(String(work.state))) return metadata("settled");
+            if (!stillPending(work)) return metadata("settled");
             await delay(100, undefined, { signal });
             const next = await call(read, params);
             if (!next.ok && interrupted(next))
@@ -405,14 +441,15 @@ export async function waitForWork(options: {
         if (job.state === "ready") {
           const publication = record(work.published);
           if (
-            !pending.has(String(work.state)) &&
-            (!publication.generation || publication.generation === job.generation)
+            !stillPending(work) &&
+            (!publication.generation ||
+              String(publication.generation) === String(job.attemptGeneration))
           )
             return metadata("settled");
           if (
-            !pending.has(String(work.state)) &&
+            !stillPending(work) &&
             publication.generation &&
-            publication.generation !== job.generation
+            String(publication.generation) !== String(job.attemptGeneration)
           )
             throw new ArtifactDeliveryError(
               "INVALID_RESPONSE",
@@ -431,14 +468,14 @@ export async function waitForWork(options: {
           await update(next);
           const nextData = workStatus(record(next.ok ? next.data : null));
           if (
-            nextData.jobId !== job.jobId &&
-            (typeof nextData.jobId === "string" || pending.has(String(nextData.state)))
+            nextData.jobId !== job.id &&
+            (typeof nextData.jobId === "string" || stillPending(nextData))
           )
             current = undefined;
           continue;
         }
         if (!read) latest = inspected;
-      } else if (!pending.has(String(work.state))) return metadata("settled");
+      } else if (!stillPending(work)) return metadata("settled");
       else if (!read)
         throw new ArtifactDeliveryError(
           "INVALID_RESPONSE",
@@ -460,19 +497,12 @@ export async function waitForWork(options: {
     await close(latest);
     if (signal.aborted) return stopped();
     if (error instanceof ArtifactDeliveryError)
-      return metadata("interrupted", {
-        code: error.code,
-        message: error.message,
-        retryable: error.retryable,
-        details: {},
-      });
+      return metadata("interrupted", operationError(error.code, error.message).error);
     if (error instanceof z.ZodError)
-      return metadata("interrupted", {
-        code: "INVALID_RESPONSE",
-        message: "Waiting received malformed job identity",
-        retryable: false,
-        details: {},
-      });
+      return metadata(
+        "interrupted",
+        operationError("INVALID_RESPONSE", "Waiting received malformed job identity").error,
+      );
     throw error;
   } finally {
     if (!settled) await close(latest);

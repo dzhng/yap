@@ -15,8 +15,8 @@ final class RetainedJSONLines {
     private var bytes = 0
     private var hash = SHA256()
 
-    init(path: String, bytes: Int, sha256: String, recordBytes: Int, maximumBytes: Int) throws {
-        guard path.hasPrefix("/"), !path.contains("\0"), bytes >= 0, bytes <= maximumBytes,
+    init(path: String, bytes: Int, sha256: String, recordBytes: Int) throws {
+        guard path.hasPrefix("/"), !path.contains("\0"), bytes >= 0,
             sha256.count == 64, recordBytes > 0
         else { throw invalid("Invalid retained JSONL receipt.") }
         let fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)

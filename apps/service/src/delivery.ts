@@ -26,6 +26,10 @@ const maximumLeases = 32;
  * EOF does not close a lease: the last chunk must remain retryable after a lost response. */
 export class DerivativeDelivery {
   private readonly leases = new Map<string, Lease>();
+  private readonly renewRequests = new Map<
+    string,
+    { token: string; result: { token: string; sizeBytes: number; expiresAtMs: number } }
+  >();
   private readonly reservations = new Set<symbol>();
   private disposed = false;
   onUpdateProgress: (() => void) | undefined;
@@ -44,28 +48,28 @@ export class DerivativeDelivery {
   }
 
   private requireCapacity(): void {
-    if (this.disposed) throw new CatalogError("SERVICE_STOPPED", "Derivative delivery is closed");
+    if (this.disposed) throw new CatalogError("OWNER_CLOSED", "Derivative delivery is closed");
     this.expire();
     if (this.leases.size + this.reservations.size >= maximumLeases)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many derivative deliveries are open", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many derivative deliveries are open");
   }
 
   open(
     owner: DerivativeOwner,
     acquire: () => DerivativeRead | null,
-  ): { token: string; bytes: number; expiresAt: number } {
+  ): { token: string; sizeBytes: number; expiresAtMs: number } {
     this.requireCapacity();
     const retainedOwner = { ...owner };
     const handle = acquire();
     if (!handle)
-      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {}, true);
+      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative is no longer available", {});
     try {
       const token = randomUUID();
       const expiresAt = Date.now() + lifetimeMs;
       const timer = setTimeout(() => this.close(token), lifetimeMs);
       timer.unref();
       this.leases.set(token, { owner: retainedOwner, handle, expiresAt, timer });
-      return { token, bytes: handle.bytes, expiresAt };
+      return { token, sizeBytes: handle.bytes, expiresAtMs: expiresAt };
     } catch (error) {
       handle.release();
       throw error;
@@ -74,38 +78,37 @@ export class DerivativeDelivery {
 
   read(
     token: string,
-    offset: number,
+    offsetBytes: number,
     maxBytes: number,
   ): {
     data: string;
-    offset: number;
-    nextOffset: number;
+    offsetBytes: number;
+    nextOffsetBytes: number;
     eof: boolean;
   } {
     const lease = this.requireLease(token);
     // The operation schema bounds both values; only the delivery knows its own size.
-    if (offset > lease.handle.bytes)
+    if (offsetBytes > lease.handle.bytes)
       throw new CatalogError("INVALID_RANGE", "Offset is past the end of the delivery");
-    const size = Math.min(maxBytes, lease.handle.bytes - offset);
+    const size = Math.min(maxBytes, lease.handle.bytes - offsetBytes);
     const buffer = Buffer.alloc(size);
     try {
       let received = 0;
       while (received < size) {
-        const count = lease.handle.read(buffer.subarray(received), offset + received);
+        const count = lease.handle.read(buffer.subarray(received), offsetBytes + received);
         if (count === 0)
           throw new CatalogError(
             "ARTIFACT_EXPIRED",
             "Derivative ended before its published size",
             {},
-            true,
           );
         received += count;
       }
-      const nextOffset = offset + received;
+      const nextOffset = offsetBytes + received;
       return {
         data: buffer.toString("base64"),
-        offset,
-        nextOffset,
+        offsetBytes,
+        nextOffsetBytes: nextOffset,
         eof: nextOffset === lease.handle.bytes,
       };
     } catch (error) {
@@ -115,23 +118,31 @@ export class DerivativeDelivery {
   }
 
   /** A live consumer extends the same pin; silence still releases it automatically. */
-  renew(token: string): { token: string; bytes: number; expiresAt: number } {
+  renew(
+    token: string,
+    requestId?: string,
+  ): { token: string; sizeBytes: number; expiresAtMs: number } {
+    if (requestId) {
+      const prior = this.renewRequests.get(requestId);
+      if (prior) {
+        if (prior.token !== token)
+          throw new CatalogError("REQUEST_CONFLICT", "Request identity names a different delivery");
+        return prior.result;
+      }
+    }
     const lease = this.requireLease(token);
     lease.expiresAt = Date.now() + lifetimeMs;
     lease.timer.refresh();
-    return { token, bytes: lease.handle.bytes, expiresAt: lease.expiresAt };
+    const result = { token, sizeBytes: lease.handle.bytes, expiresAtMs: lease.expiresAt };
+    if (requestId) this.renewRequests.set(requestId, { token, result });
+    return result;
   }
 
   private requireLease(token: string): Lease {
     const lease = this.leases.get(token);
     if (!lease || Date.now() >= lease.expiresAt) {
       this.close(token);
-      throw new CatalogError(
-        "ARTIFACT_EXPIRED",
-        "Derivative delivery has expired or closed",
-        {},
-        true,
-      );
+      throw new CatalogError("ARTIFACT_EXPIRED", "Derivative delivery has expired or closed", {});
     }
     return lease;
   }

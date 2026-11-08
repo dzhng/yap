@@ -25,7 +25,7 @@ func diagnostic(_ message: String) { FileHandle.standardError.write(Data((messag
                      "Native preparation retains the exact primary camera identity")
         var invalid = fixture["invalidSelections"] as! [[String: Any]]
         invalid.append([
-            "source": ["kind": "camera", "deviceId": "chosen-camera"], "microphone": false, "systemAudio": false,
+            "source": ["kind": "camera", "id": "chosen-camera"], "microphone": false, "systemAudio": false,
             "cameraDeviceId": "companion", "cameraSourceId": "companion-source", "cameraDirectory": "/tmp/unused-companion",
         ])
         for selection in invalid {

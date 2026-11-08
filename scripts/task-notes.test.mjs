@@ -51,7 +51,7 @@ test("transferred notes keep caller decisions historical and missing artifacts m
   let head = "chosen";
   const invoke = async (operation, params) => {
     calls.push({ operation, params });
-    if (operation === "project.get") return { projectId: "project", currentRevisionId: head };
+    if (operation === "project.get") return { id: "project", currentRevisionId: head };
     assert.equal(operation, "revision.get");
     assert.equal(params.revisionId, "chosen");
     return { projectId: "project", revision: { id: "chosen", ordinal: 1 } };
@@ -221,7 +221,7 @@ test("an export owner receipt preserves its nested pinned snapshot without inven
       snapshot: { revisionId: "chosen", documentHash: "immutable-document" },
       jobId: null,
       output: null,
-      state: "waiting",
+      state: "queued",
       reason: "not_prepared",
     };
   const input = { ...notes, artifacts: [{ ...notes.artifacts[0], reference: receipt }] };

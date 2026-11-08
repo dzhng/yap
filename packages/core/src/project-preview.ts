@@ -142,13 +142,12 @@ export class ProjectPreviewInspection {
     const retime = plan.retained ? undefined : retimeImplementation(plan.window, this.renderer);
     if (input.retimeImplementationId !== undefined && input.retimeImplementationId !== retime)
       throw new CatalogError(
-        "NOT_READY",
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
         "Pinned retiming implementation is not available",
         {
           implementationId: input.implementationId ?? this.renderer.implementationId,
           retimeImplementationId: input.retimeImplementationId,
         },
-        true,
       );
     const pinned: PinnedProjectPreview = {
       projectId: input.projectId,
@@ -165,7 +164,7 @@ export class ProjectPreviewInspection {
   private identity(pinned: PinnedProjectPreview) {
     const { projectId, revisionId, ...options } = pinned;
     return {
-      target: { kind: "project" as const, projectId, revisionId },
+      target: { kind: "project" as const, id: projectId, revisionId },
       artifact: "preview",
       input: JSON.stringify(options),
     };
@@ -190,14 +189,9 @@ export class ProjectPreviewInspection {
   resume(input: PinnedProjectPreview) {
     const pinned = this.pin(input);
     if (!this.jobs.status(this.identity(pinned)).jobId)
-      throw new CatalogError(
-        "NOT_READY",
-        "Pinned preview dependency has not been admitted",
-        {
-          implementationId: pinned.implementationId,
-        },
-        true,
-      );
+      throw new CatalogError("NOT_READY", "Pinned preview dependency has not been admitted", {
+        implementationId: pinned.implementationId,
+      });
     return this.submit(pinned, this.plan(pinned), []);
   }
   private submit(
@@ -252,7 +246,7 @@ export class ProjectPreviewInspection {
     if (job.target.kind !== "project" || job.artifact !== "preview")
       throw new CatalogError("UNSUPPORTED_JOB", "Preview admission requires a project job");
     const pinned = this.pin({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options,
     });
@@ -262,10 +256,11 @@ export class ProjectPreviewInspection {
   private requireImplementation(implementationId: string) {
     if (implementationId !== this.renderer.implementationId)
       throw new CatalogError(
-        "NOT_READY",
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
         "Pinned preview implementation is not available",
-        { implementationId },
-        true,
+        {
+          implementationId,
+        },
       );
   }
 
@@ -288,7 +283,7 @@ export class ProjectPreviewInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Composition preview cannot execute this job");
     this.requireImplementation(options.data.implementationId);
     const pinned = this.pin({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options.data,
       preparedResourceId: options.data.preparedResourceId ?? null,
@@ -296,7 +291,7 @@ export class ProjectPreviewInspection {
     const plan = this.plan(pinned);
     signal.throwIfAborted();
     const range = plan.window.manifest.sampleRange;
-    const output = this.cache.reserve({ kind: "project", projectId: job.target.projectId });
+    const output = this.cache.reserve({ kind: "project", id: job.target.id });
     let prepared: PreparedAudioRead | undefined;
     try {
       prepared =
@@ -362,7 +357,7 @@ export class ProjectPreviewInspection {
       const result: ProjectPreviewArtifact = {
         ...movie,
         ...options.data,
-        projectId: job.target.projectId,
+        projectId: job.target.id,
         revisionId: job.target.revisionId,
         cacheId: output.id,
       };

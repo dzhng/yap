@@ -143,12 +143,12 @@ export class AssetConversionJobs {
       streams.filter((item) => item?.kind === "audio").length > 1
     )
       throw new CatalogError(
-        "UNSUPPORTED_MEDIA",
+        "INVALID_PARAMS",
         "Conversion selects one video and at most one audio stream",
       );
     const base = { assetId: asset.id, streamIds, recipe: input.recipe };
     const replay = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "asset-conversion",
       replayKey: digest(base),
     };
@@ -156,9 +156,12 @@ export class AssetConversionJobs {
     if (saved) return saved;
     const runtime = await this.owners.runtime(signal);
     if (!runtime)
-      throw new CatalogError("NOT_READY", "Bundled HDR conversion runtime is unavailable");
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        "Bundled HDR conversion runtime is unavailable",
+      );
     const identity = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "asset-conversion",
       input: JSON.stringify({
         ...base,
@@ -182,7 +185,7 @@ export class AssetConversionJobs {
     if (
       job.artifact !== "asset-conversion" ||
       job.target.kind !== "asset" ||
-      job.target.assetId !== request.assetId ||
+      job.target.id !== request.assetId ||
       request.recipe !== "hdr-to-sdr-hable-1000nit-v1" ||
       !runtime ||
       !isDeepStrictEqual(implementationIdentity(runtime), request.runtime)

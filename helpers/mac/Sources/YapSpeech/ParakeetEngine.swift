@@ -64,8 +64,7 @@ final class ParakeetEngine {
             return ParakeetEngine(manager: manager)
         } catch {
             throw NativeFailure(
-                "TRANSCRIPTION_FAILED", "Cannot load the speech model: \(error.localizedDescription)",
-                retryable: true)
+                "TRANSCRIPTION_FAILED", "Cannot load the speech model: \(error.localizedDescription)")
         }
     }
 
@@ -76,8 +75,7 @@ final class ParakeetEngine {
             return try await manager.transcribe(samples, decoderState: &state, language: nil)
         } catch {
             throw NativeFailure(
-                "TRANSCRIPTION_FAILED", "Speech transcription failed: \(error.localizedDescription)",
-                retryable: true)
+                "TRANSCRIPTION_FAILED", "Speech transcription failed: \(error.localizedDescription)")
         }
     }
 

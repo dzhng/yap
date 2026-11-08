@@ -1,8 +1,14 @@
+import { createHash } from "node:crypto";
+import { JsonDocument } from "@yap/core/json-stream";
 import { setImmediate } from "node:timers/promises";
 import { CatalogError } from "@yap/core/catalog";
 import { retainedFileRead, type FileAccess } from "@yap/core/files";
 import { archiveLimits } from "@yap/core/package-archive";
-import { resolveProjectPackage, type ProjectPackageManifest } from "@yap/core/project-package";
+import {
+  resolveProjectPackage,
+  type ProjectJsonMember,
+  type ProjectPackageManifest,
+} from "@yap/core/project-package";
 
 /** Only admitted extraction descriptors can hydrate metadata before project readiness. */
 export async function resolveProjectPackageMetadata(
@@ -13,41 +19,52 @@ export async function resolveProjectPackageMetadata(
   },
   signal?: AbortSignal,
 ) {
-  const metadata = new Map<string, string>(),
+  const metadata = new Map<string, ProjectJsonMember>(),
     revisions = new Map<string, string>();
   const inventory = new Map(input.manifest.inventory.map((entry) => [entry.path, entry]));
   const members = [
-    ...input.manifest.revisions.map((path) => ({
-      ref: inventory.get(path)!,
-      destination: revisions,
-    })),
-    ...input.manifest.resources.map((resource) => ({
-      ref: resource.metadata,
-      destination: metadata,
-    })),
+    ...input.manifest.revisions.map((path) => ({ ref: inventory.get(path)!, revision: true })),
+    ...input.manifest.resources.map((resource) => ({ ref: resource.metadata, revision: false })),
   ];
-  for (const { ref, destination } of members) {
+  for (const { ref, revision } of members) {
     signal?.throwIfAborted();
     const reader = retainedFileRead(input.files.open(ref.path), ref.bytes);
     try {
-      const bytes = Buffer.allocUnsafe(ref.bytes);
-      for (let position = 0; position < bytes.length;) {
+      if (revision && ref.bytes > archiveLimits.revisionBytes)
+        throw new CatalogError("LIMIT_EXCEEDED", "Authored revision exceeds its member budget");
+      const buffer = Buffer.alloc(65_536);
+      const document = new JsonDocument();
+      const decoder = new TextDecoder("utf-8", { fatal: true });
+      const hash = createHash("sha256");
+      let position = 0,
+        text = "";
+      while (position < ref.bytes) {
         signal?.throwIfAborted();
         const count = reader.read(
-          bytes.subarray(position, Math.min(bytes.length, position + 65536)),
+          buffer.subarray(0, Math.min(buffer.length, ref.bytes - position)),
           position,
         );
         if (count <= 0)
           throw new CatalogError("INVALID_PACKAGE", "Project JSON member is truncated");
+        const bytes = buffer.subarray(0, count);
+        hash.update(bytes);
+        if (revision) text += decoder.decode(bytes, { stream: true });
+        else document.write(bytes);
         position += count;
         await setImmediate();
       }
       signal?.throwIfAborted();
-      try {
-        destination.set(ref.path, new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-      } catch {
-        throw new CatalogError("INVALID_PACKAGE", "Project JSON member is not UTF-8");
-      }
+      if (revision) revisions.set(ref.path, text + decoder.decode());
+      else
+        metadata.set(ref.path, {
+          value: document.finish(),
+          bytes: position,
+          sha256: hash.digest("hex"),
+        });
+    } catch (error) {
+      if (error instanceof SyntaxError || error instanceof TypeError)
+        throw new CatalogError("INVALID_PACKAGE", "Project JSON member is malformed or not UTF-8");
+      throw error;
     } finally {
       reader.release();
     }

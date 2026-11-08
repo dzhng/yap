@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { callLocal } from "@yap/client";
 import { controlsProbe, launchReady, setDefault, temporary, waitFor } from "./harness.mjs";
 
 const title = "Yap Settings";
@@ -24,7 +25,7 @@ async function launchWith(preferences = []) {
   const send = controlsProbe(commands);
   const settings = async () =>
     (await send({ do: "windows" })).windows.find((window) => window.title === title);
-  return { instance, send, settings };
+  return { home, instance, send, settings };
 }
 
 function find(rows, item) {
@@ -66,6 +67,56 @@ test(
     assert.equal((await send({ do: "choose", item: "header.settings" })).ok, true);
     const opened = await waitFor(async () => (await settings())?.visible && settings(), 20_000);
     assert.equal(opened.title, title);
+    instance.kill("SIGTERM");
+    await instance.exited;
+  },
+);
+
+test(
+  "shortcut fields apply a live binding and refuse a duplicate in Yap",
+  { timeout: 60_000 },
+  async () => {
+    const { home, instance } = await launchWith();
+    const socket = join(home, "run", "app.sock");
+    await waitFor(() => existsSync(socket), 20_000);
+    const rebound = await callLocal(socket, {
+      id: "settings-rebind",
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": "option+shift+d" },
+      },
+    });
+    assert.equal(rebound.ok, true, JSON.stringify(rebound));
+    assert.deepEqual(rebound.data.bindings["capture.startOrStop"], {
+      name: "Start or Finish Recording",
+      keys: "option+shift+d",
+      label: "⌥⇧D",
+      during: "app",
+      state: "active",
+    });
+
+    const duplicate = await callLocal(socket, {
+      id: "settings-duplicate",
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": "option+shift+v" },
+      },
+    });
+    assert.equal(duplicate.ok, false, JSON.stringify(duplicate));
+    assert.equal(duplicate.error.code, "DUPLICATE_SHORTCUT");
+
+    // Restoring puts every action back on its default and forgets the stored file, so a later
+    // change to the defaults reaches this person too.
+    assert.equal(existsSync(join(home, "shortcuts.json")), true);
+    const restored = await callLocal(socket, {
+      id: "settings-restore",
+      operation: "shortcuts.reset",
+      params: {},
+    });
+    assert.equal(restored.ok, true, JSON.stringify(restored));
+    assert.equal(restored.data.bindings["capture.startOrStop"].keys, "option+shift+s");
+    assert.equal(restored.data.bindings["capture.restart"].keys, "option+shift+r");
+    assert.equal(existsSync(join(home, "shortcuts.json")), false);
     instance.kill("SIGTERM");
     await instance.exited;
   },

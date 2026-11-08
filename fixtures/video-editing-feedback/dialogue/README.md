@@ -11,5 +11,4 @@ an authored level control, not a replay of the removed trailer mix.
 [Derivation](derive.mjs) takes the exact retained source Float32 file and a new
 fixture destination, verifies the input/crop hashes and writes deterministic WAVs.
 It performs no resampling, compression, transcription or source mutation. Its
-usage owns the arguments. WAVs use the existing fixture LFS rule; fetch only these
-two selected files for the [public matching check](../../../packages/test-harness/editing/dialogue-matching.mjs).
+usage owns the arguments. WAVs use the existing fixture LFS rule.

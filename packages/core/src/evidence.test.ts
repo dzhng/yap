@@ -3,12 +3,135 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { CaptureStore } from "./capture-store.js";
-import { cameraProofIntervals, recordingEvidenceOwner, SourceEvidenceStore } from "./evidence.js";
+import {
+  cameraProofIntervals,
+  recordingEvidenceOwner,
+  SourceEvidenceStore,
+  sourceEvidenceRecords,
+  validateSourceReceipt,
+  validateRecord,
+} from "./evidence.js";
+import { EVIDENCE_BATCH_BYTES } from "./evidence-read.js";
 const roots: string[] = [];
 const stores: CaptureStore[] = [];
 afterEach(() => {
   stores.splice(0).forEach((s) => s.close());
   roots.splice(0).forEach((p) => rmSync(p, { recursive: true, force: true }));
+});
+
+test("schema 3 mark fixture is accepted and counted in the evidence receipt", () => {
+  const fixture = readFileSync(
+    new URL("../../../fixtures/journal/schema3-marks.jsonl", import.meta.url),
+    "utf8",
+  );
+  const records = fixture
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line));
+  const marks = records.filter((record) => record.event === "mark");
+  expect(marks).toHaveLength(4);
+  for (const record of marks) validateRecord("mark", record.data);
+});
+
+test("portable schema 3 receipts retain the acquisition journal contract", () => {
+  expect(() =>
+    validateSourceReceipt(
+      {
+        file: "source.jsonl",
+        journal: "capture.journal.jsonl",
+        header: { sessionID: "schema3-marks", schemaVersion: 3, source: { kind: "display" } },
+        cursorSamples: 0,
+        geometryRecords: 2,
+        displaySpaces: 0,
+        pauseEvents: 1,
+        audioIntervals: 0,
+        markEvents: 4,
+        lastSequence: 9,
+        incompleteTail: false,
+        finished: false,
+        publications: {},
+        bytes: 1,
+      },
+      "schema3-marks",
+    ),
+  ).not.toThrow();
+});
+
+test("journal sampling rejects invalid cadence rather than misreading a take", () => {
+  const receipt = {
+    file: "source.jsonl",
+    journal: "capture.journal.jsonl",
+    header: {
+      sessionID: "sampling",
+      schemaVersion: 4,
+      cursorSampling: { intervalUs: 0, holds: false },
+    },
+    cursorSamples: 0,
+    geometryRecords: 0,
+    displaySpaces: 0,
+    pauseEvents: 0,
+    audioIntervals: 0,
+    markEvents: 0,
+    lastSequence: 1,
+    incompleteTail: false,
+    finished: false,
+    publications: {},
+    bytes: 1,
+  };
+  expect(() => validateSourceReceipt(receipt, "sampling")).toThrow(/cursor sampling/i);
+});
+
+test("normalized mark evidence matches the markEvents receipt count", async () => {
+  const f = fixture();
+  const body = [
+    {
+      event: "mark",
+      data: {
+        hostUs: 10,
+        sourceUs: 0,
+        epoch: 1,
+        id: "m1",
+        kind: "click",
+        points: [{ hostUs: 10, globalX: 1, globalY: 2, x: 1, y: 2 }],
+      },
+    },
+    {
+      event: "mark",
+      data: {
+        hostUs: 20,
+        sourceUs: 10,
+        epoch: 1,
+        id: "undo",
+        kind: "click",
+        points: [],
+        retracts: "m1",
+      },
+    },
+  ]
+    .map((record) => JSON.stringify(record) + "\n")
+    .join("");
+  writeFileSync(f.file, body);
+  const receipt = {
+    ...f.receipt,
+    header: { sessionID: f.identity.sourceId, schemaVersion: 3, source: { kind: "display" } },
+    cursorSamples: 0,
+    firstCursorSourceUs: null,
+    lastCursorSourceUs: null,
+    markEvents: 2,
+    lastSequence: 2,
+    bytes: Buffer.byteLength(body),
+  };
+  const rows = [];
+  for await (const row of sourceEvidenceRecords(f.file, receipt)) rows.push(row);
+  expect(rows.map((row) => row.event)).toEqual(["mark", "mark"]);
+  await expect(
+    (async () => {
+      const legacy = { ...receipt, header: { sessionID: f.identity.sourceId, schemaVersion: 2 } };
+      for await (const _row of sourceEvidenceRecords(f.file, legacy)) {
+        // The stream must reject before exposing a legacy mark.
+      }
+    })(),
+  ).rejects.toThrow("carries marks");
 });
 function fixture(times = [0, 10, 10, 20]) {
   const root = mkdtempSync(join(tmpdir(), "evidence-"));
@@ -21,7 +144,7 @@ function fixture(times = [0, 10, 10, 20]) {
   stores.push(store);
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
     generation: "attempt-1",
   };
@@ -58,6 +181,7 @@ function fixture(times = [0, 10, 10, 20]) {
     bytes: Buffer.byteLength(body),
   };
   return {
+    root,
     store,
     evidence: new SourceEvidenceStore(store, recordingEvidenceOwner(store)),
     identity,
@@ -66,6 +190,46 @@ function fixture(times = [0, 10, 10, 20]) {
     samples,
   };
 }
+test("export batches fill the content-byte budget, isolate oversized rows and keep ordered progress", async () => {
+  const f = fixture([]);
+  const budget = EVIDENCE_BATCH_BYTES;
+  const sizes = [budget / 2, budget / 2, budget + 1, ...Array<number>(300).fill(256)];
+  const marks = sizes.map((size, i) => {
+    const data = {
+      hostUs: i,
+      sourceUs: Math.floor(i / 2),
+      epoch: 1,
+      id: "",
+      kind: "stroke",
+      points: [{ hostUs: i, globalX: 1, globalY: 2, x: 1, y: 2 }],
+    };
+    const padding = size - Buffer.byteLength(JSON.stringify(data));
+    data.id = "é".repeat(Math.floor(padding / 2)) + "x".repeat(padding % 2);
+    expect(Buffer.byteLength(JSON.stringify(data))).toBe(size);
+    return data;
+  });
+  const body = marks.map((data) => JSON.stringify({ event: "mark", data }) + "\n").join("");
+  writeFileSync(f.file, body);
+  await f.evidence.ingest({
+    ...f.identity,
+    file: f.file,
+    receipt: {
+      ...f.receipt,
+      header: { sessionID: f.identity.sourceId, schemaVersion: 3 },
+      markEvents: marks.length,
+      bytes: Buffer.byteLength(body),
+      publications: {},
+    },
+  });
+  const batches = [...f.evidence.exportRecords(f.identity, "marks")];
+  expect(batches.map((batch) => batch.length)).toEqual([2, 1, 256, 44]);
+  for (const batch of batches) {
+    const bytes = batch.reduce((sum, row) => sum + Buffer.byteLength(row.content), 0);
+    expect(bytes <= budget || (batch.length === 1 && bytes > budget)).toBe(true);
+  }
+  expect(batches.flat().map((row) => JSON.parse(row.content))).toEqual(marks);
+  expect(batches.flat().map((row) => row.sequence)).toEqual(marks.map((_, i) => i + 1));
+});
 test("pages equal-time raw samples with explicit range and stable continuation", async () => {
   const f = fixture();
   await f.evidence.ingest({ ...f.identity, file: f.file, receipt: f.receipt });
@@ -81,23 +245,27 @@ test("pages equal-time raw samples with explicit range and stable continuation",
   ).toEqual({ samples: [{ sequence: 3, ...f.samples[2] }], nextSequence: null });
 });
 
-test("layout-2 primary camera evidence retains unbound device provenance", async () => {
-  const f = fixture();
-  const receipt = {
-    ...f.receipt,
-    header: { sessionID: f.identity.sourceId, schemaVersion: 2, source: { kind: "camera" } },
-    publications: {},
-  };
-  const admitted = await f.evidence.ingest({ ...f.identity, file: f.file, receipt });
-  expect(admitted.receipt).toEqual(receipt);
-  expect(f.evidence.page({ ...f.identity, range: { startUs: 0, endUs: 30 } }).samples).toEqual(
-    f.samples.map((sample, i) => ({ sequence: i + 1, ...sample })),
-  );
-});
+// The native writer gives every primary take, a camera-only one included, the packed layout.
+test.each([2, 3, 4])(
+  "layout-%i primary camera evidence retains unbound device provenance",
+  async (schemaVersion) => {
+    const f = fixture();
+    const receipt = {
+      ...f.receipt,
+      header: { sessionID: f.identity.sourceId, schemaVersion, source: { kind: "camera" } },
+      publications: {},
+    };
+    const admitted = await f.evidence.ingest({ ...f.identity, file: f.file, receipt });
+    expect(admitted.receipt).toEqual(receipt);
+    expect(f.evidence.page({ ...f.identity, range: { startUs: 0, endUs: 30 } }).samples).toEqual(
+      f.samples.map((sample, i) => ({ sequence: i + 1, ...sample })),
+    );
+  },
+);
 
 test("unbound camera evidence refuses missing and unsupported primary layouts", async () => {
   const f = fixture();
-  for (const schemaVersion of [undefined, 3]) {
+  for (const schemaVersion of [undefined, 1, 5]) {
     const receipt = {
       ...f.receipt,
       header: { sessionID: f.identity.sourceId, schemaVersion, source: { kind: "camera" } },
@@ -116,7 +284,7 @@ test("declared camera evidence cannot be indexed without its verified publicatio
       schemaVersion: 1,
       source: { kind: "camera" },
       cameraBinding: {
-        recordingId: f.identity.owner.recordingId,
+        recordingId: f.identity.owner.id,
         sourceId: f.identity.sourceId,
         deviceId: "fixture-camera",
       },
@@ -164,7 +332,7 @@ test("camera proof intervals are support minus gaps; a proof without gaps is one
   ]);
 });
 
-test("a take carries at most 499 camera gaps, one fewer than its 500 runs", async () => {
+test("camera gap inventories preserve every interval beyond five hundred transitions", async () => {
   const f = fixture();
   const gaps = (count: number) =>
     Array.from({ length: count }, (_, i) => ({ startUs: 102 + 2 * i, endUs: 103 + 2 * i }));
@@ -180,7 +348,7 @@ test("a take carries at most 499 camera gaps, one fewer than its 500 runs", asyn
   };
   await expect(
     f.evidence.ingest({ ...f.identity, generation: "beyond", file: f.file, receipt: beyond }),
-  ).rejects.toMatchObject({ code: "INVALID_EVIDENCE", message: "Invalid verified camera gaps" });
+  ).resolves.toMatchObject({ receipt: beyond });
 });
 
 test("malformed camera gaps refuse the whole receipt", async () => {
@@ -214,7 +382,7 @@ test("malformed camera gaps refuse the whole receipt", async () => {
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE", message: "Invalid verified camera gaps" });
     expect(() =>
       f.evidence.page({ ...f.identity, generation, range: { startUs: 0, endUs: 100 } }),
-    ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+    ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   }
 });
 
@@ -421,7 +589,7 @@ test("large streamed evidence pages seek through SQLite without reading the file
       "EXPLAIN QUERY PLAN SELECT sequence,content FROM source_evidence_records WHERE ownerKind='recording' AND ownerId=? AND sourceId=? AND generation=? AND event='cursorSample' AND sourceUs>=? AND sourceUs<? AND (sourceUs,sequence)>(?,?) ORDER BY sourceUs,sequence LIMIT ?",
     )
     .all(
-      f.identity.owner.recordingId,
+      f.identity.owner.id,
       f.identity.sourceId,
       f.identity.generation,
       24900,
@@ -578,7 +746,7 @@ test("malformed overlapping audio intervals and wrong timing receipts never beco
       }),
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE" });
     expect(() => f.evidence.audio(f.identity, "narration", { startUs: 0, endUs: 200 })).toThrow(
-      expect.objectContaining({ code: "NOT_READY" }),
+      expect.objectContaining({ code: "PREREQUISITE_MISSING" }),
     );
   }
 });
@@ -681,7 +849,7 @@ test("geometry reads preserve nullable placements, epoch identity and same-time 
   expect(unknown.evidence.timedGeometryAt(unknown.identity, 10000)).toBeNull();
 });
 
-test("bounded geometry and pause reads reject excess rather than truncating resets", async () => {
+test("geometry and pause reads traverse every index batch without truncating resets", async () => {
   for (const kind of ["timed", "unplaced", "pause"] as const) {
     const f = fixture([]);
     const records = Array.from({ length: 1001 }, (_, i) =>
@@ -696,7 +864,7 @@ test("bounded geometry and pause reads reject excess rather than truncating rese
         : kind === "timed"
           ? f.evidence.geometryChanges(f.identity, { startUs: 0, endUs: 1000 })
           : f.evidence.unplacedGeometry(f.identity, { afterSequence: 0 });
-    expect(read).toThrow(expect.objectContaining({ code: "LIMIT_EXCEEDED" }));
+    expect(read()).toEqual(records.map((record, i) => ({ ...record.data, sequence: i + 1 })));
     const bounded =
       kind === "pause"
         ? f.evidence.pauseBoundaries(f.identity, { startUs: 1000, endUs: 1000 })
@@ -750,10 +918,12 @@ test("production geometry reads and export batches seek indexes without full sor
     ] as const) {
       plans.length = 0;
       read();
-      expect(plans).toHaveLength(1);
-      expect(plans[0]).toContain(`SEARCH source_evidence_records USING INDEX ${index}`);
-      expect(plans[0]).toContain(seek);
-      expect(plans[0]).not.toContain("TEMP B-TREE");
+      expect(plans.length).toBeGreaterThan(0);
+      for (const plan of plans) {
+        expect(plan).toContain(`SEARCH source_evidence_records USING INDEX ${index}`);
+        expect(plan).toContain(seek);
+        expect(plan).not.toContain("TEMP B-TREE");
+      }
     }
   } finally {
     spy.mockRestore();
@@ -766,11 +936,11 @@ test("recording purge reclaims complete and unfinished generations across restar
   const sibling = f.store.allocate().recording;
   f.store.catalog
     .prepare("INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)")
-    .run(f.identity.owner.recordingId, f.identity.sourceId, "unfinished");
+    .run(f.identity.owner.id, f.identity.sourceId, "unfinished");
   f.store.catalog
     .prepare("INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)")
-    .run(sibling.recordingId, sibling.sourceId, "sibling");
-  f.store.markDeleting(f.identity.owner.recordingId);
+    .run(sibling.id, sibling.sourceId, "sibling");
+  f.store.markDeleting(f.identity.owner.id);
   f.store.close();
   const reopened = new CaptureStore(join(dirname(f.file), "library.sqlite"), {
     now: () => "",
@@ -784,7 +954,7 @@ test("recording purge reclaims complete and unfinished generations across restar
     reopened.catalog
       .prepare("SELECT ownerId AS recordingId,generation FROM source_evidence_generations")
       .all(),
-  ).toEqual([{ recordingId: sibling.recordingId, generation: "sibling" }]);
+  ).toEqual([{ recordingId: sibling.id, generation: "sibling" }]);
   expect(reopened.catalog.prepare("SELECT * FROM source_evidence_records").all()).toEqual([]);
 });
 
@@ -795,7 +965,7 @@ test("purge yields even for empty generations and aborted cleanup can resume", a
       "INSERT INTO source_evidence_generations VALUES('recording',?,?,?,NULL)",
     );
     for (let i = 0; i < 130; i++)
-      insert.run(f.identity.owner.recordingId, f.identity.sourceId, `unfinished-${i}`);
+      insert.run(f.identity.owner.id, f.identity.sourceId, `unfinished-${i}`);
   });
   const controller = new AbortController();
   setImmediate(() => controller.abort());
@@ -816,7 +986,7 @@ test("source purge retains unfinished generation identity across an interrupted 
     .prepare(
       "UPDATE source_evidence_generations SET receipt=NULL WHERE ownerKind='recording' AND ownerId=?",
     )
-    .run(f.identity.owner.recordingId);
+    .run(f.identity.owner.id);
   const original = readFileSync(f.file);
   const controller = new AbortController();
   setImmediate(() => controller.abort());
@@ -826,7 +996,7 @@ test("source purge retains unfinished generation identity across an interrupted 
       .prepare("SELECT ownerId AS recordingId,sourceId,generation FROM source_evidence_generations")
       .get(),
   ).toEqual({
-    recordingId: f.identity.owner.recordingId,
+    recordingId: f.identity.owner.id,
     sourceId: f.identity.sourceId,
     generation: f.identity.generation,
   });
@@ -835,7 +1005,7 @@ test("source purge retains unfinished generation identity across an interrupted 
       "SELECT ownerId AS recordingId,sequence FROM source_evidence_records ORDER BY sequence LIMIT 1",
     )
     .get() as { recordingId: string; sequence: number };
-  expect(remaining.recordingId).toBe(f.identity.owner.recordingId);
+  expect(remaining.recordingId).toBe(f.identity.owner.id);
   expect(remaining.sequence).toBeGreaterThan(1);
   await f.evidence.purge(f.identity.owner, new AbortController().signal);
   expect(f.store.catalog.prepare("SELECT sequence FROM source_evidence_records").all()).toEqual([]);
@@ -903,7 +1073,6 @@ test("malformed terminal provenance refuses evidence publication", async () => {
     ].map((change) => ({ finished: true, completion: { ...completion, ...change } })),
     { lastLifecycle: { state: 7 } },
     { lastLifecycle: { state: "interrupted", reason: 7 } },
-    { lastLifecycle: { state: "interrupted", reason: "x".repeat(32768) } },
   ];
   for (const [i, change] of cases.entries()) {
     const identity = { ...f.identity, generation: `invalid-${i}` };
@@ -916,6 +1085,52 @@ test("malformed terminal provenance refuses evidence publication", async () => {
     ).rejects.toMatchObject({ code: "INVALID_EVIDENCE" });
     expect(() =>
       f.evidence.page({ ...identity, range: { startUs: 0, endUs: 100 }, limit: 10 }),
-    ).toThrow(expect.objectContaining({ code: "NOT_READY" }));
+    ).toThrow(expect.objectContaining({ code: "PREREQUISITE_MISSING" }));
   }
 });
+
+test.each(["schema4-marks", "schema4-undone"])(
+  "shared %s fixture reads through portable evidence",
+  async (name) => {
+    const records = readFileSync(
+      new URL(`../../../fixtures/journal/${name}.jsonl`, import.meta.url),
+      "utf8",
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const header = records[0].data;
+    const marks = records.filter((record) => record.event === "mark");
+    const f = fixture();
+    const body = marks.map(({ event, data }) => JSON.stringify({ event, data }) + "\n").join("");
+    writeFileSync(f.file, body);
+    const receipt = validateSourceReceipt(
+      {
+        ...f.receipt,
+        header,
+        publications: {},
+        cursorSamples: 0,
+        firstCursorSourceUs: null,
+        lastCursorSourceUs: null,
+        markEvents: marks.length,
+        lastSequence: records.length,
+        bytes: Buffer.byteLength(body),
+      },
+      header.sessionID,
+    );
+    const values = [];
+    for await (const row of sourceEvidenceRecords(f.file, receipt))
+      values.push(JSON.parse(row.content));
+    expect(values).toEqual(marks.map((record) => record.data));
+    expect(values.slice(0, 2).map((mark) => mark.id)).toEqual(["pin", "stroke"]);
+    expect(values.flatMap((mark) => mark.retracts ?? [])).toEqual(
+      name === "schema4-undone" ? ["pin", "stroke"] : [],
+    );
+    expect(() =>
+      validateSourceReceipt(
+        { ...receipt, header: { ...header, schemaVersion: 5 } },
+        header.sessionID,
+      ),
+    ).toThrow("Unsupported evidence journal schema 5");
+  },
+);

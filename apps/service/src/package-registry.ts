@@ -28,7 +28,6 @@ import type { MediaWorker } from "./worker.js";
 import type { DerivativeDelivery } from "./delivery.js";
 
 const packageRegistryLimits = Object.freeze({
-  bytes: 64 * 1024 ** 3,
   owners: 4,
   terminal: 32,
 });
@@ -57,7 +56,7 @@ type Work<T extends ArchiveManifest> = (
 type Workspace = Awaited<ReturnType<typeof provisionPackageWorkspace>>;
 type Entry<T extends ArchiveManifest> = Admission & {
   terminal: "failed" | "canceled" | "closed";
-  budget: number;
+  admittedBytes: number;
   input: AdmittedArchive;
   context: JobContext;
   requests: Map<string, Work<T>>;
@@ -86,7 +85,6 @@ export class PackageRegistry<
   private recovering: Promise<void> | undefined;
   private recoveryError: string | null = null;
   private readonly limits: ArchiveLimits;
-  private readonly bytes: number;
   constructor(
     private readonly options: PackageManifestResolution<T, Parsed> & {
       parent: { directory: string; handle: FileHandle };
@@ -99,28 +97,21 @@ export class PackageRegistry<
       worker: MediaWorker;
       delivery: DerivativeDelivery;
       limits?: ArchiveLimits;
-      bytes?: number;
       inlineRevisions?: boolean;
     },
   ) {
     this.limits = { ...(options.limits ?? archiveLimits) };
     validateArchiveLimits(this.limits);
-    this.bytes = options.bytes ?? packageRegistryLimits.bytes;
-    if (
-      !Number.isSafeInteger(this.bytes) ||
-      this.bytes < 1 ||
-      this.bytes > packageRegistryLimits.bytes
-    )
-      throw new RangeError(
-        "Package pool must be a positive safe byte count within its supported maximum",
-      );
   }
   usage() {
     return {
       state: this.phase,
       error: this.recoveryError,
       owners: this.entries.size,
-      budgetBytes: [...this.entries.values()].reduce((sum, entry) => sum + entry.budget, 0),
+      admittedBytes: [...this.entries.values()].reduce(
+        (sum, entry) => sum + entry.admittedBytes,
+        0,
+      ),
       confirmedBytes: [...this.entries.values()].reduce(
         (sum, entry) =>
           sum +
@@ -134,14 +125,13 @@ export class PackageRegistry<
   }
   recover(): Promise<void> {
     if (this.phase === "disposed")
-      return Promise.reject(new CatalogError("SERVICE_STOPPED", "Package registry is closed"));
+      return Promise.reject(new CatalogError("OWNER_CLOSED", "Package registry is closed"));
     if (this.entries.size)
       return Promise.reject(
         new CatalogError(
           "PROCESSING_BUSY",
           "Package resources must close before startup recovery",
           {},
-          true,
         ),
       );
     if (this.recovering) return this.recovering;
@@ -162,26 +152,13 @@ export class PackageRegistry<
   }
   async open(path: string): Promise<PackageAdmission> {
     if (this.phase === "disposed")
-      throw new CatalogError("SERVICE_STOPPED", "Package registry is closed");
+      throw new CatalogError("OWNER_CLOSED", "Package registry is closed");
     if (this.phase !== "ready")
-      throw new CatalogError("PROCESSING_BUSY", "Package admission awaits recovery", {}, true);
+      throw new CatalogError("PROCESSING_BUSY", "Package admission awaits recovery", {});
     if (this.entries.size >= packageRegistryLimits.owners)
-      throw new CatalogError("LIMIT_EXCEEDED", "Too many package resources are owned", {}, true);
+      throw new CatalogError("CAPACITY_EXCEEDED", "Too many package resources are owned", {});
     const input = admitArchive(path);
-    if (input.bytes > this.limits.compressedBytes) {
-      input.close();
-      throw new CatalogError("LIMIT_EXCEEDED", "Archive exceeds admission copy limit");
-    }
-    const budget = input.bytes + this.limits.expandedBytes;
-    if (this.usage().budgetBytes + budget > this.bytes) {
-      input.close();
-      throw new CatalogError(
-        "LIMIT_EXCEEDED",
-        "Package pool cannot reserve this admission",
-        {},
-        true,
-      );
-    }
+    const admittedBytes = input.bytes;
     let entry!: Entry<T>;
     let context: JobContext;
     try {
@@ -199,7 +176,7 @@ export class PackageRegistry<
       jobId: "",
       error: null,
       terminal: "closed",
-      budget,
+      admittedBytes,
       input,
       context,
       requests: new Map(),
@@ -315,7 +292,7 @@ export class PackageRegistry<
       if (signal.aborted || entry.state !== "opening")
         throw new CatalogError("CANCELED", "Package opening canceled");
       const { copiedBytes, expandedBytes } = entry.retained.archiveUsage;
-      entry.budget = copiedBytes + expandedBytes;
+      entry.admittedBytes = copiedBytes + expandedBytes;
       entry.input.close();
       entry.packageHandle = randomUUID();
       entry.state = "ready";
@@ -350,7 +327,7 @@ export class PackageRegistry<
           this.options.worker,
         );
       entry.input.close();
-      entry.budget = 0;
+      entry.admittedBytes = 0;
       entry.state = entry.terminal;
       this.entries.delete(entry.id);
       this.onUpdateProgress?.();

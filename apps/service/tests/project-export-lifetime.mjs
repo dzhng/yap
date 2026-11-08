@@ -53,7 +53,7 @@ test("project deletion needs no removed, moved or replaced export destination", 
   await mkdir(foreign, { recursive: true, mode: 0o700 });
   await writeFile(join(foreign, "payload"), "not this export's");
   assert.equal((await f.storage.usage()).otherBytes, 0);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
   assert.equal(await readFile(join(foreign, "payload"), "utf8"), "not this export's");
@@ -96,7 +96,7 @@ test("abandonment fences retries and project deletion joins its drain after exte
   removing.then(() => {
     abandoned = true;
   });
-  const deleting = f.deletion.delete(f.projectId).then(() => {
+  const deleting = f.deletion.delete({ kind: "project", id: f.projectId }).then(() => {
     deleted = true;
   });
   let cleanupClosed = false;
@@ -154,7 +154,7 @@ test("a committed export remains authoritative when cancellation discards its la
   assert.equal(f.jobs.job(status.jobId).state, "canceled");
   assert.equal(
     f.jobs.status({
-      target: { kind: "project", projectId: f.projectId, revisionId: f.placed.revision.id },
+      target: { kind: "project", id: f.projectId, revisionId: f.placed.revision.id },
       artifact: "export-media",
       input: exportId,
     }).published,
@@ -194,7 +194,7 @@ test("deletion drains the exporter and its validated cache descriptor before rem
     (e) => e.code === "CACHE_BUSY",
   );
   let deleted = false;
-  const done = f.deletion.delete(f.projectId).then(() => {
+  const done = f.deletion.delete({ kind: "project", id: f.projectId }).then(() => {
     deleted = true;
   });
   await new Promise(setImmediate);
@@ -227,7 +227,7 @@ test("committed history survives external removal or replacement without silentl
   const replaced = await f.exports.retry(exportId);
   assert.deepEqual(replaced.receipt, committed.receipt);
   assert.equal(await readFile(file, "utf8"), "user replacement");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.equal(await readFile(file, "utf8"), "user replacement");
 });
 
@@ -249,10 +249,13 @@ test("one unsafe export staging entry does not prevent retiring independent inte
   await rename(stage, stage + "-original");
   await mkdir(stage, { mode: 0o700 });
   await writeFile(join(stage, "sentinel"), "keep");
-  await assert.rejects(f.deletion.delete(f.projectId), (e) => e.code === "DELETE_FAILED");
+  await assert.rejects(
+    f.deletion.delete({ kind: "project", id: f.projectId }),
+    (e) => e.code === "DELETE_FAILED",
+  );
   const discovery = f.exports.list({}).exports;
   assert.deepEqual(
-    discovery.map((row) => row.exportId),
+    discovery.map((row) => row.id),
     [ids[0]],
   );
   const [discovered] = discovery;
@@ -282,7 +285,7 @@ test("an unreadable unrelated destination never prevents deleting owned private 
   });
   await f.jobs.idle();
   assert.equal(f.exports.status(exportId).state, "failed");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(await readdir(f.output), ["unreadable.mp4"]);
   const after = await stat(destination, { bigint: true });
   assert.equal(after.ino, before.ino);
@@ -327,12 +330,12 @@ test("lost retirement acknowledgement resumes real project deletion after the st
   await f.jobs.idle();
   assert.equal(f.exports.status(exportId).cleanupPending, true);
   await assert.rejects(
-    f.deletion.delete(f.projectId),
+    f.deletion.delete({ kind: "project", id: f.projectId }),
     (e) => e.code === "DELETE_FAILED" && /lost retirement response/.test(e.message),
   );
   assert.deepEqual(f.projects.deletionsPage().projectIds, [f.projectId]);
   assert.deepEqual(await readdir(f.output), ["retained.mp4"]);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
 });
@@ -366,7 +369,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
     directory: f.output,
     leaf: "overflow.mp4",
   };
-  await assert.rejects(f.exports.create(overflow), { code: "LIMIT_EXCEEDED" });
+  await assert.rejects(f.exports.create(overflow), { code: "CAPACITY_EXCEEDED" });
   assert.equal(
     f.catalog.catalog
       .prepare("SELECT COUNT(*) AS count FROM export_intents WHERE receipt IS NULL")
@@ -378,7 +381,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
   await f.exports.create(overflow);
   f.exports.cancel(overflow.exportId);
   await assert.rejects(f.exports.create({ ...overflow, exportId: randomUUID() }), {
-    code: "LIMIT_EXCEEDED",
+    code: "CAPACITY_EXCEEDED",
   });
   await f.jobs.closeContext(hold);
   await f.exports.retry(ids[0]);
@@ -387,7 +390,7 @@ test("canceled intents keep exact-retry pins within a bounded uncommitted allowa
   await f.exports.retry(overflow.exportId);
   await f.jobs.idle();
   assert.equal(f.exports.status(overflow.exportId).state, "committed");
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual((await readdir(f.output)).sort(), ["bounded-0.mp4", "overflow.mp4"]);
 });
 
@@ -405,7 +408,7 @@ test("managed source directories cannot be selected as allegedly external export
     (e) => e.code === "INVALID_STORAGE",
   );
   assert.equal(f.catalog.catalog.prepare("SELECT COUNT(*) AS n FROM export_intents").get().n, 0);
-  await f.deletion.delete(f.projectId);
+  await f.deletion.delete({ kind: "project", id: f.projectId });
   assert.deepEqual(f.projects.deletionsPage().projectIds, []);
   assert.deepEqual(await readdir(f.output), []);
 });
@@ -524,7 +527,7 @@ test(
         leaf: "other.mp4",
       });
       assert.equal(other.state, "queued", "an unrelated admission must remain independent");
-      await f.exports.abandon(other.exportId);
+      await f.exports.abandon(other.id);
     } finally {
       release();
       await removing;
@@ -599,7 +602,7 @@ test("late package commit releases resource pins while failed abandonment keeps 
   assert.equal(admitted(), 0);
   assert.deepEqual(await readdir(f.output), [request.leaf]);
   assert.deepEqual(await readFile(join(f.output, request.leaf)), output);
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
 });
 
@@ -631,7 +634,7 @@ test("unsafe package staging keeps abandonment fence resource pins and capacity 
   assert.deepEqual(
     f.exports
       .list({ unfinishedOnly: true })
-      .exports.map((row) => [row.exportId, row.abandoning, row.cleanupPending]),
+      .exports.map((row) => [row.id, row.abandoning, row.cleanupPending]),
     [[request.exportId, true, true]],
   );
   const unfinished = f.exports.status(request.exportId);
@@ -654,7 +657,7 @@ test("unsafe package staging keeps abandonment fence resource pins and capacity 
   assert.equal(await readFile(join(substitute, "foreign"), "utf8"), "preserve substitute");
   assert.equal(await readFile(join(f.output, request.leaf), "utf8"), "foreign output");
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
 });
 
 test("package abandonment forgets failed identity and permits clean export-id reuse without stale publication", async (t) => {
@@ -679,7 +682,7 @@ test("package abandonment forgets failed identity and permits clean export-id re
   assert.throws(() => f.jobs.job(failed.jobId), { code: "NOT_FOUND" });
   assert.equal(f.jobs.status(identity).published, null);
   assert.deepEqual(pins(), []);
-  assert.equal(f.projects.get(f.projectId).projectId, f.projectId);
+  assert.equal(f.projects.get(f.projectId).id, f.projectId);
   assert.equal(await readFile(f.assets.path(f.asset.id), "utf8"), "source identity");
   assert.equal(await readFile(join(f.output, request.leaf), "utf8"), "foreign output");
   assert.deepEqual(await readdir(f.output), [request.leaf]);

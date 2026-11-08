@@ -52,19 +52,7 @@ test("a repeated ready transcript cursor stops the caller before another page re
     calls
       .filter((call) => call.operation === "transcript.get")
       .map((call) => call.params.cursor ?? null),
-    [
-      null,
-      {
-        assetId: "audio-asset",
-        streamId: "audio-stream",
-        acquisitionId: "fixture-acquisition",
-        generation: "transcript-generation",
-        supportDigest: "fixture-support",
-        afterSourceUs: 5200000,
-        afterOrdinal: 1,
-        range: null,
-      },
-    ],
+    [null, "fixture-transcript-cursor"],
   );
   assert.equal(
     calls.some((call) => call.operation === "project.create"),
@@ -490,7 +478,7 @@ test("personal release keeps search evidence separate from its explicit source-r
     (call) => call.operation === "audio.get" && call.params.assetId === "audio-asset",
   );
   assert.deepEqual(
-    preCutAudio.params.range,
+    preCutAudio.params.sourceRange,
     { startUs: 3800000, endUs: 6900000 },
     "before-cut padding keeps its requested context across an unavailable interval",
   );

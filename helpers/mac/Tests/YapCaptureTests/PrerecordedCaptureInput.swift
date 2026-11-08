@@ -23,12 +23,12 @@ final class PrerecordedCaptureInput: CaptureInputSession {
     var companionFailure: CaptureFailure?
     var probeDirectory: URL?
     var cameraBinding: CameraCaptureBinding?
-    var probeMaximumRows = 5_000_000
     var probe: CaptureClockIngress?
     var sharedIngress: CaptureClockIngress?
     var fixtureOrigin: Int64?
     var cursorSamplingStarts = 0
     var cursorFixture = false
+    var markSamples: [MarkSample] = []
     var cameraFramesEnabled = true
     var primaryFramesEnabled = true
     var primaryVideoIngress = false
@@ -67,7 +67,7 @@ final class PrerecordedCaptureInput: CaptureInputSession {
         if let probeDirectory {
             let camera = try CameraWriter(directory: probeDirectory.appendingPathComponent("camera"), framesPerSecond: 30, binding: cameraBinding)
             probe = try CaptureClockIngress(writer: writer, destination: .companion(camera),
-                observations: probeDirectory.appendingPathComponent("timestamps.jsonl"), failure: onFailure, maximumRows: probeMaximumRows)
+                observations: probeDirectory.appendingPathComponent("timestamps.jsonl"), failure: onFailure)
         }
         let asset = AVURLAsset(url: source)
         let track = try await asset.loadTracks(withMediaType: .video).first!
@@ -221,6 +221,16 @@ final class PrerecordedCaptureInput: CaptureInputSession {
     }
     func startCursorSampling(writer: CaptureWriter) {
         cursorSamplingStarts += 1
+        if let fixtureOrigin {
+            let samples = markSamples
+            writer.queue.sync {
+                for sample in samples {
+                    writer.accept(CursorReading(hostUs: fixtureOrigin + sample.hostUs,
+                        global: sample.point, buttons: sample.buttonDown ? 1 : 0, zeroOriginHeight: 120,
+                        shift: sample.shift, otherModifiers: sample.otherModifiers))
+                }
+            }
+        }
         if cursorFixture, let fixtureOrigin {
             writer.queue.sync { writer.accept(CursorReading(hostUs: fixtureOrigin + 150000,
                 global: CGPoint(x: 50, y: 40), buttons: 0, zeroOriginHeight: 120)) }

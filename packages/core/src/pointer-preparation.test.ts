@@ -23,7 +23,7 @@ async function fixture(budget: number) {
   const acquisitions = new AcquisitionStore(catalog);
   const evidence = new SourceEvidenceStore(catalog, (identity) => {
     if (identity.owner.kind !== "acquisition") throw Error("Wrong evidence owner");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const importer = new AcquisitionImporter(catalog, acquisitions, assets, evidence, home);
   await importer.recover(new AbortController().signal);
@@ -32,7 +32,7 @@ async function fixture(budget: number) {
     home,
     (owner) => {
       if (owner.kind !== "acquisition") throw Error("Wrong cache owner");
-      acquisitions.get(owner.acquisitionId);
+      acquisitions.get(owner.id);
     },
     budget,
   );
@@ -45,7 +45,7 @@ async function fixture(budget: number) {
     targets: {
       pin: (target) => {
         if (target.kind !== "acquisition") throw Error("Wrong job owner");
-        acquisitions.get(target.acquisitionId);
+        acquisitions.get(target.id);
         return target;
       },
       isAvailable: () => true,
@@ -203,7 +203,7 @@ test("retained history sizes terminate an impossible aggregate instead of evicti
   expect(f.cache.bytes).toBeLessThan(900);
   for (let i = 0; i < 3; i++) {
     expect(() => f.pointers.admit([first, second])).toThrowError(
-      expect.objectContaining({ code: "LIMIT_EXCEEDED", retryable: false }),
+      expect.objectContaining({ code: "LIMIT_EXCEEDED", retryable: true }),
     );
   }
   await f.jobs.idle();

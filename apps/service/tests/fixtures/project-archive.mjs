@@ -55,7 +55,7 @@ export async function projectArchiveContents(store, home, contents = ["generated
       background: "#000000ff",
     },
   });
-  projects.apply(created.project.projectId, {
+  projects.apply(created.project.id, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
     operations: [
@@ -72,14 +72,14 @@ export async function projectArchiveContents(store, home, contents = ["generated
       })),
     ],
   });
-  const snapshot = JSON.parse(JSON.stringify(projects.snapshot(created.project.projectId)));
+  const snapshot = JSON.parse(JSON.stringify(projects.snapshot(created.project.id)));
   const resources = imported.map((value) => ({ kind: "asset", ...assets.portable(value.id) }));
   const mediaPath = `assets/${asset.fileName}`;
   const files = {};
   for (const [index, resource] of resources.entries()) {
     const metadata = resourceMetadataMember(resource);
     files[`assets/${resource.asset.fileName}`] = contents[index];
-    files[metadata.reference.metadata.path] = metadata.body;
+    files[metadata.reference.metadata.path] = [...metadata.chunks()].join("");
   }
   for (const [ordinal, revision] of snapshot.revisions.entries())
     files[`revisions/${ordinal}.json`] = JSON.stringify(revision);

@@ -83,7 +83,7 @@ export class SourceSceneRead {
     limit = 1,
   ) {
     if (!context.evidence)
-      throw new CatalogError("NOT_READY", "Scene coverage has no published generation");
+      throw new CatalogError("PREREQUISITE_MISSING", "Scene coverage has no published generation");
     return this.options.records.sourceWindowPage({
       identity: context.evidence,
       range,

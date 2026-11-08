@@ -16,6 +16,7 @@ import { CatalogError } from "./catalog.js";
 import {
   retainedPublicationSchema,
   type JobExecution,
+  type JobPriority,
   type JobQueue,
   type StagedJobResult,
 } from "./jobs.js";
@@ -26,6 +27,9 @@ import {
   historicalSpeechExecutionSchema,
   currentTranscript,
   portableTranscript,
+  publicTranscriptMetadata,
+  parsePublicTranscriptMetadata,
+  publicTranscriptIssues,
   type PortableTranscript,
   type SpeechTranscriber,
   type TranscriptStore,
@@ -83,13 +87,13 @@ export function assetTranscriptOwner(assets: AssetStore, acquisitions: Acquisiti
     if (
       identity.owner.kind !== "asset" ||
       source.kind !== "asset" ||
-      identity.sourceId !== identity.owner.assetId
+      identity.sourceId !== identity.owner.id
     )
       throw new CatalogError("INVALID_EVIDENCE", "Asset transcript requires an asset source");
     const selected = selectedAudio(
       { assets, acquisitions },
       {
-        assetId: identity.owner.assetId,
+        assetId: identity.owner.id,
         streamId: source.streamId,
         ...(source.acquisitionId === undefined ? {} : { acquisitionId: source.acquisitionId }),
       },
@@ -134,7 +138,7 @@ export class TranscriptProcessing {
     scope: SpeechExecution,
   ) {
     return {
-      target: { kind: "asset" as const, assetId: selected.selection.assetId },
+      target: { kind: "asset" as const, id: selected.selection.assetId },
       artifact,
       input: JSON.stringify({
         selection: selected.selection,
@@ -150,7 +154,7 @@ export class TranscriptProcessing {
 
   private portableSelection(value: PortableTranscript) {
     const selected = selectedAudio(this.asset, {
-      assetId: value.owner.assetId,
+      assetId: value.owner.id,
       streamId: value.source.streamId,
       ...(value.source.acquisitionId === undefined
         ? {}
@@ -250,7 +254,7 @@ export class TranscriptProcessing {
         "Transcript publication differs from source or engine identity",
       );
     this.jobs.adoptArtifact(
-      { ...identity, ...publication, result: JSON.stringify(metadata) },
+      { ...identity, ...publication, result: JSON.stringify(publicTranscriptMetadata(metadata)) },
       issues,
     );
   }
@@ -275,7 +279,7 @@ export class TranscriptProcessing {
     const { selected, scope, issues } = this.admitSource(selection);
     let status = this.jobs.status(this.sourceIdentity(selected, this.execution(), scope));
     if (selection.generation !== undefined) {
-      const owner = { kind: "asset" as const, assetId: selection.assetId };
+      const owner = { kind: "asset" as const, id: selection.assetId };
       const retained = this.jobs.retainedArtifact(owner, artifact, selection.generation);
       const stale = this.transcripts.isStale({ owner, generation: selection.generation });
       if (!retained || stale)
@@ -283,7 +287,7 @@ export class TranscriptProcessing {
           generation: selection.generation,
           ...(stale ? { stale: true } : {}),
         });
-      const metadata = JSON.parse(retained.result) as TranscriptMetadata;
+      const metadata = parsePublicTranscriptMetadata(JSON.parse(retained.result));
       if (!isDeepStrictEqual(metadata.source, sourceDescriptor(selected)))
         throw new CatalogError(
           "ARTIFACT_CHANGED",
@@ -315,21 +319,27 @@ export class TranscriptProcessing {
           : {
               generation: status.published.generation,
               issues: status.published.issues,
-              transcript: JSON.parse(status.published.result) as TranscriptMetadata,
+              transcript: parsePublicTranscriptMetadata(JSON.parse(status.published.result)),
             },
-      models,
+      models: { ...models, jobId: null },
       dependencies: [],
       issues,
     };
   }
 
-  prepareSource(selection: TranscriptPreparation): void {
+  prepareSource(selection: TranscriptPreparation, priority: JobPriority = "interactive"): void {
     const status = this.sourceStatus(selection);
-    if (status.state !== "not_requested" || status.reason !== null) return;
+    if (status.reason !== null || status.state === "ready") return;
+    if (status.state !== "not_requested" && !(priority === "interactive" && status.jobId !== null))
+      return;
     this.jobs.submit(
       () => {
         const { selected, scope } = this.admitSource(selection);
-        return { ...this.sourceIdentity(selected, this.execution(), scope), lane: "heavy" };
+        return {
+          ...this.sourceIdentity(selected, this.execution(), scope),
+          lane: "heavy",
+          priority,
+        };
       },
       (job) => {
         const owner = { kind: "job" as const, id: job.jobId };
@@ -340,31 +350,9 @@ export class TranscriptProcessing {
     );
   }
 
-  retrySource(selection: TranscriptPreparation) {
-    const status = this.sourceStatus(selection);
-    if (!status.jobId && status.state === "ready") return status;
-    if (!status.jobId)
-      throw new CatalogError(
-        status.reason === "model_not_prepared" ? "MODEL_NOT_PREPARED" : "UNAVAILABLE",
-        status.reason ?? "Source transcript has not been requested; use transcript.transcribe",
-        status.reason === "model_not_prepared" ? (this.models.notPrepared?.().details ?? {}) : {},
-        status.retryable,
-      );
-    if (
-      ["failed", "unavailable", "canceled"].includes(this.jobs.job(status.jobId).state) &&
-      this.models.status().state !== "ready"
-    )
-      throw (
-        this.models.notPrepared?.() ??
-        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true)
-      );
-    this.jobs.retry(status.jobId);
-    return this.sourceStatus(selection);
-  }
-
   /** A stale publication is forgotten with its job, so its generation is reclaimed unless a revision pins it. */
   private cleanupAsset(assetId: string, signal: AbortSignal) {
-    const owner = { kind: "asset" as const, assetId };
+    const owner = { kind: "asset" as const, id: assetId };
     return this.transcripts.reclaim(
       owner,
       (generation) =>
@@ -382,12 +370,12 @@ export class TranscriptProcessing {
     if (this.models.status().state !== "ready")
       throw (
         this.models.notPrepared?.() ??
-        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true)
+        new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {})
       );
     await this.cleanupAsset(selection.assetId, signal);
     return this.transcribeSource(
       {
-        owner: { kind: "asset", assetId: selection.assetId },
+        owner: { kind: "asset", id: selection.assetId },
         sourceId: selection.assetId,
         generation,
       },
@@ -406,17 +394,17 @@ export class TranscriptProcessing {
     const scope = historicalSpeechExecutionSchema.parse(JSON.parse(job.input).execution);
     const selected = selectedAudio(this.asset, selection);
     if (
-      job.target.assetId !== selection.assetId ||
+      job.target.id !== selection.assetId ||
       job.input !== this.sourceIdentity(selected, this.execution(), scope).input
     )
       throw new CatalogError("ARTIFACT_CHANGED", "Transcript source or model inputs changed");
     if (!selected.track.available.length) throw new CatalogError("UNAVAILABLE", "no_audio");
     if (this.models.status().state !== "ready")
-      throw new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {}, true);
+      throw new CatalogError("MODEL_NOT_PREPARED", "Speech models are not prepared", {});
     await this.cleanupAsset(selection.assetId, signal);
     const { transcript, issues } = await this.transcribeSource(
       {
-        owner: { kind: "asset", assetId: selection.assetId },
+        owner: { kind: "asset", id: selection.assetId },
         sourceId: selection.assetId,
         generation: job.attemptId,
       },
@@ -425,7 +413,10 @@ export class TranscriptProcessing {
       scope,
       signal,
     );
-    return { result: JSON.stringify(transcript), issues };
+    return {
+      result: JSON.stringify(publicTranscriptMetadata(transcript)),
+      issues: publicTranscriptIssues(issues),
+    };
   }
 
   private async transcribeSource(
@@ -458,11 +449,11 @@ export class TranscriptProcessing {
   }
 
   async cleanup(signal: AbortSignal): Promise<void> {
-    let afterSequence = 0;
+    let cursor: string | undefined;
     let failure: unknown;
     for (;;) {
       signal.throwIfAborted();
-      const page = this.asset.assets.list({ afterSequence, limit: 100 });
+      const page = this.asset.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
       for (const asset of page.assets) {
         try {
           await this.cleanupAsset(asset.id, signal);
@@ -472,7 +463,7 @@ export class TranscriptProcessing {
         }
       }
       if (!page.nextCursor) break;
-      afterSequence = page.nextCursor.afterSequence;
+      cursor = page.nextCursor;
       await setImmediate(undefined, { signal });
     }
     if (failure) throw failure;

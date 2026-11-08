@@ -1,7 +1,8 @@
+import { RESPONSE_PAGE_BYTES } from "@yap/protocol";
 import {
   compare,
   fromTime,
-  toTime,
+  round,
   floor,
   ceil,
   type TimeValue,
@@ -116,7 +117,7 @@ export function mergeEvents(
           : compare(mapped.project, fromTime(plan.query.range.endUs)) >= 0)
       )
         continue;
-      const projectAtUs = toTime(mapped.project);
+      const projectAtUs = round(mapped.project);
       return {
         key: {
           projectStartUs: projectAtUs,
@@ -173,6 +174,7 @@ export function mergeEvents(
     }
   };
   const rows: ProjectEventRow[] = [];
+  let bytes = 0;
   mergeHeads(
     state,
     manifest.tracks,
@@ -180,9 +182,16 @@ export function mergeEvents(
     fill,
     (index) => state.tracks[index]!.head?.key,
     (index) => {
-      rows.push(state.tracks[index]!.head!.row);
+      const row = state.tracks[index]!.head!.row;
+      bytes += Buffer.byteLength(JSON.stringify(row)) + 1;
+      rows.push(row);
       state.tracks[index]!.head = null;
     },
+    // A page stays below the transport frame after its response envelope.
+    (index) =>
+      !rows.length ||
+      bytes + Buffer.byteLength(JSON.stringify(state.tracks[index]!.head!.row)) + 1 <=
+        RESPONSE_PAGE_BYTES,
   );
   return rows;
 }

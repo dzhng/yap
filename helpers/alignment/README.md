@@ -14,13 +14,5 @@ uses the native ordered all-optimal owner after core text folding. Physical
 admission remains separate from textual correspondence and never clamps a native
 token cell into source support.
 
-[Entry parity](../../packages/test-harness/editing/alignment-entry-parity.py)
-controls only the provider response while executing the production parser and
-real pinned path arithmetic. [Correspondence parity](../../packages/test-harness/editing/alignment-correspondence-parity.mjs)
-compares complete possible-pair and omission operands through the native wire.
-[Prepared runtime parity](../../packages/test-harness/editing/alignment-runtime-parity.mjs)
-reads an existing verified Models preparation and compares actual native matrices
-and complete conditional paths without acquiring inputs. Its optional sandbox
-profile can deny donor directories as well as networking.
 The [frozen reference](../../specs/done/video-editing-feedback/assets/09-local-alignment/README.md)
 owns the accepted recipe, independent controls and interpretation limits.

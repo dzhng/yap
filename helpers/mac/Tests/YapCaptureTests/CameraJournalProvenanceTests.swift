@@ -12,7 +12,7 @@ func runCameraJournalProvenanceTests() throws {
     defer { journal.lease.release() }
     try journal.recordOrigin(hostUs: 1_000_000)
     func read(retain: Bool = false, through prefix: JournalPrefix? = nil) throws -> CaptureJournalSummary {
-        try CaptureJournal.readEvidence(directory: directory.path, maximumBytes: 268_435_456, retainTiming: false,
+        try CaptureJournal.readEvidence(directory: directory.path, retainTiming: false,
             geometry: { _ in }, samples: { _ in }, displaySpace: { _ in }, retainPrefix: retain,
             through: prefix, descriptor: journal.lease.descriptor)
     }

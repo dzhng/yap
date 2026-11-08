@@ -90,7 +90,7 @@ test("join repair can prepare the changed tap with a bounded status poll", async
       if (operation === "audio.prepare") {
         preparationReads++;
         return preparationReads === 1
-          ? { state: "processing", jobId: "job" }
+          ? { state: "running", jobId: "job" }
           : { state: "ready", published: { output: { resourceId: "new-audio" } } };
       }
       expect(operation).toBe("join.verify");

@@ -1,5 +1,10 @@
+import { round, fromTime } from "@yap/composition";
+import { selectSource, type SourceSelection } from "./source-selection.js";
+import type { AssetStore } from "./assets.js";
+import type { AcquisitionStore } from "./acquisitions.js";
+import type { CaptureMark, CaptureSourceRead } from "./capture-source-read.js";
+import type { SourceVisualSampler } from "./source-scenes.js";
 import { maximumPointerTrailUs } from "@yap/composition";
-import { evidenceRecordingId } from "./evidence.js";
 import { isDeepStrictEqual } from "node:util";
 import { CatalogError } from "./catalog.js";
 import type { EvidenceIdentity, RawCursorSample, SourceTrailRead } from "./evidence.js";
@@ -20,7 +25,21 @@ import {
 import type { TimeRange } from "./presentation-time.js";
 
 export type CursorPoint = { atSourceUs: number; x: number; y: number };
-export type FrameOverlay = { trail: CursorPoint[][]; trailUs: number; pointer: CursorPoint | null };
+/** A stroke or pin on the person's screen at the requested moment, in source pixels. */
+export type FrameMark = {
+  kind: "stroke" | "pin";
+  pin?: number;
+  runs: { x: number; y: number }[][];
+  /** When it faded on screen; null while a stroke is still being drawn at full strength. */
+  fade: { fromUs: number; untilUs: number } | null;
+};
+export type FrameOverlay = {
+  trail: CursorPoint[][];
+  trailUs: number;
+  pointer: CursorPoint | null;
+  /** Source pixels per screen point, and the marks on screen; absent when none were. */
+  ink?: { scale: number; marks: FrameMark[] };
+};
 export type TrailCutoff = {
   reason:
     | "kept_start"
@@ -38,15 +57,46 @@ export const trailPolicy = Object.freeze({
   id: "requested-time-trail-v1",
   defaultUs: 2_000_000,
   maximumUs: maximumPointerTrailUs,
-  maximumPoints: 1200,
-  maximumObservations: 5000,
 });
 export type PointerResetFloor = {
   atSourceUs: number;
+  /** Hard resets (physical gaps) also invalidate a held pointer. */
+  pointerAtSourceUs?: number;
   allowAtBoundary: boolean;
   reason: TrailCutoff["reason"];
 };
 type CursorObservation = RawCursorSample & { sequence: number };
+
+/** Held positions have temporal extent; repeated storage observations add no geometry. */
+export function cursorTrail(holds: boolean) {
+  const runs: CursorPoint[][] = [];
+  let run: CursorPoint[] = [];
+  const extend = (atSourceUs: number) => {
+    const last = run.at(-1);
+    if (holds && last && last.atSourceUs < atSourceUs) run.push({ ...last, atSourceUs });
+  };
+  return {
+    append(point: CursorPoint | null, atSourceUs: number) {
+      if (!point) {
+        extend(atSourceUs - 1);
+        if (run.length) runs.push(run);
+        run = [];
+        return;
+      }
+      const last = run.at(-1);
+      if (holds && last) {
+        if (last.x === point.x && last.y === point.y) return;
+        extend(point.atSourceUs - 1);
+      }
+      run.push(point);
+    },
+    finish(atSourceUs: number) {
+      extend(atSourceUs);
+      if (run.length) runs.push(run);
+      return runs;
+    },
+  };
+}
 
 /** Core selects temporal evidence; the native overlay only draws these already-clipped points. */
 export async function planFrameTrail(
@@ -61,7 +111,7 @@ export async function planFrameTrail(
   const { evidence, identity, sample } = dependencies;
   const trailUs = request.trailUs ?? trailPolicy.defaultUs;
   const scene = await analyzeFrameScene(
-    { ...request, recordingId: evidenceRecordingId(identity), trailUs },
+    { ...request, ownerId: identity.owner.id, trailUs },
     sample,
     signal,
   );
@@ -75,7 +125,7 @@ export async function planFrameTrail(
         scene: await analyzeFrameScene(
           {
             ...request,
-            recordingId: evidenceRecordingId(identity),
+            ownerId: identity.owner.id,
             requestedSourceUs: at,
             trailUs,
           },
@@ -105,6 +155,7 @@ export async function planVisualTrail(
   signal: AbortSignal,
 ) {
   const { evidence, identity, scene, readScene, resetFloor, presentationClock } = dependencies;
+  const holds = evidence.cursorSampling(identity).holds;
   const at = request.requestedSourceUs;
   const trailUs = request.trailUs ?? trailPolicy.defaultUs;
   const actual = scene.lastSample.actualSourceUs;
@@ -203,8 +254,8 @@ export async function planVisualTrail(
   let stalePointerScene: VisualScene | null = null;
   let missingPriorPicture = false;
   let stalePointerComparison: ReturnType<typeof compareVisualSamples> | null = null;
-  const eligible = (observation: CursorObservation) =>
-    observation.sourceUs >= reset &&
+  const eligible = (observation: CursorObservation, pointer = false) =>
+    observation.sourceUs >= (holds && pointer ? (resetFloor?.pointerAtSourceUs ?? 0) : reset) &&
     observation.sourceUs > pauseReset &&
     observation.geometryEpoch === requestedGeometry.epoch &&
     observation.eligibility === "inside" &&
@@ -225,35 +276,37 @@ export async function planVisualTrail(
   };
   if (!veto) {
     if (trailUs > 0) {
-      const page = evidence.page({
-        ...identity,
-        range: { startUs: start, endUs: at + 1 },
-        limit: trailPolicy.maximumObservations,
-      });
-      if (page.nextSequence !== null)
-        throw new CatalogError("LIMIT_EXCEEDED", "Too many raw cursor observations for one trail");
-      let run: CursorPoint[] = [];
-      let total = 0;
-      for (let i = 0; i < page.samples.length; i++) {
-        const observation = page.samples[i]!;
-        // Duplicate source times use the final normalized observation, just like the pointer read.
-        if (page.samples[i + 1]?.sourceUs === observation.sourceUs) continue;
-        if (!eligible(observation)) {
-          if (run.length) overlay.trail.push(run);
-          run = [];
-          continue;
+      const trail = cursorTrail(holds);
+      const consume = (observation: CursorObservation) =>
+        trail.append(eligible(observation) ? point(observation) : null, observation.sourceUs);
+      const held = holds ? evidence.latestCursor(identity, start) : null;
+      if (held && held.sourceUs < start && eligible(held, true))
+        consume({ ...held, sourceUs: start });
+      let buffered: CursorObservation | null = null;
+      for (const rows of evidence.exportRecords(identity, "cursor", {
+        startUs: start,
+        endUs: at + 1,
+      })) {
+        signal.throwIfAborted();
+        for (const row of rows) {
+          const observation: CursorObservation = {
+            ...JSON.parse(row.content),
+            sequence: row.sequence,
+          };
+          // Equal times use the final normalized observation, including across page boundaries.
+          if (buffered && buffered.sourceUs !== observation.sourceUs) consume(buffered);
+          buffered = observation;
         }
-        if (++total > trailPolicy.maximumPoints)
-          throw new CatalogError("LIMIT_EXCEEDED", "Trail exceeds the native point budget");
-        run.push(point(observation));
       }
-      if (run.length) overlay.trail.push(run);
+      if (buffered) consume(buffered);
+      overlay.trail = trail.finish(at);
     }
-    if (latest && eligible(latest)) {
+    if (latest && eligible(latest, true)) {
       if (
-        presentationClock
+        !holds &&
+        (presentationClock
           ? comparePresentationTimes(microsecondTime(latest.sourceUs), presentationClock.at) < 0
-          : latest.sourceUs < scene.range.startUs
+          : latest.sourceUs < scene.range.startUs)
       ) {
         geometryAt(latest.sourceUs);
         const prior = await readScene(latest.sourceUs, 0);
@@ -307,4 +360,137 @@ export async function planVisualTrail(
     stalePointerScene,
     stalePointerComparison,
   };
+}
+
+export function sourceCursorOverlay(dependencies: {
+  assets: AssetStore;
+  acquisitions: AcquisitionStore;
+  capture: CaptureSourceRead;
+  evidence: SourceTrailRead;
+  sample: SourceVisualSampler;
+}) {
+  const { assets, acquisitions, capture, evidence } = dependencies;
+  return async (
+    input: SourceSelection & { atUs: number; trailUs?: number },
+    signal: AbortSignal,
+  ) => {
+    const { atUs, trailUs, ...selection } = input;
+    const selected = selectSource(assets, acquisitions, selection);
+    const context = capture.resolve(selection, "cursor");
+    if (!context.evidence)
+      throw new CatalogError("UNAVAILABLE", "Cursor rendering requires captured-video authority");
+    const offset = round(fromTime(context.sourceToAssetOffsetUs));
+    const available = selected.track.available;
+    const support = available
+      .map((range) => ({
+        startUs: round(fromTime(range.startUs)),
+        endUs: round(fromTime(range.endUs)),
+      }))
+      .find((range) => range.startUs <= atUs && atUs < range.endUs);
+    if (!support)
+      throw new CatalogError("UNAVAILABLE", "Cursor time has no physical source support");
+    const asset = assets.get(selection.assetId);
+    const sourceAsset = {
+      assetId: selection.assetId,
+      streamId: selection.streamId,
+      path: selected.track.source,
+      originUs: asset.originUs,
+    };
+    const plan = await planFrameTrail(
+      {
+        source: selected.track.source,
+        kept: { startUs: Math.max(0, support.startUs - offset), endUs: support.endUs - offset },
+        requestedSourceUs: atUs - offset,
+        ...(trailUs === undefined ? {} : { trailUs }),
+      },
+      {
+        evidence,
+        identity: context.evidence,
+        sample: async (request) => {
+          const result = await dependencies.sample(
+            {
+              asset: sourceAsset,
+              available,
+              atSourceUs: request.atSourceUs.map((at) => at + offset),
+            },
+            signal,
+          );
+          return {
+            ...result,
+            samples: result.samples
+              .filter((sample) => sample.status === "available")
+              .map((sample) => ({
+                ...sample,
+                requestedSourceUs: sample.requestedSourceUs - offset,
+                actualSourceUs: sample.actualSourceUs - offset,
+                distanceUs: Math.abs(sample.requestedSourceUs - sample.actualSourceUs),
+              })),
+          };
+        },
+      },
+      signal,
+    );
+    const point = (value: NonNullable<typeof plan.overlay.pointer>) => ({
+      ...value,
+      atSourceUs: value.atSourceUs + offset,
+    });
+    const { requested, selected: decoded } = plan.geometry;
+    // Import validated both as finite numbers; a global point spans this many pixels per point.
+    const { contentScale, scaleFactor } = requested.geometry as Record<string, number>;
+    // Ink is placed through the frame's own geometry; a picture decoded under another one, a
+    // moved or resized window, gets none, as the trail does.
+    const marks =
+      requested.epoch === decoded.epoch
+        ? inkAt(capture.marks(selection), atUs, requested.epoch)
+        : [];
+    return {
+      ...plan.overlay,
+      pointer: plan.overlay.pointer ? point(plan.overlay.pointer) : null,
+      trail: plan.overlay.trail.map((run) => run.map(point)),
+      ...(marks.length
+        ? {
+            ink: {
+              scale: contentScale! * scaleFactor!,
+              marks,
+            },
+          }
+        : {}),
+    };
+  };
+}
+
+/**
+ * The marks on the person's screen at `atUs`, as they saw them: a stroke only as far as it was
+ * drawn, at full strength until released, and nothing that had faded or been cleared. Points are
+ * the pixels each was projected to, so only marks of the frame's own geometry epoch are placed.
+ */
+function inkAt(marks: CaptureMark[], atUs: number, epoch: number): FrameMark[] {
+  return marks.flatMap((mark): FrameMark[] => {
+    const drawing = mark.drawing;
+    if (mark.kind === "click" || mark.shownForUs === undefined || !drawing) return [];
+    if (mark.epoch !== epoch || atUs < mark.assetUs || atUs >= mark.assetUs + mark.shownForUs)
+      return [];
+    const runs: { x: number; y: number }[][] = [[]];
+    for (const [index, point] of mark.points.entries()) {
+      if (mark.assetUs + drawing.pointsUs[index]! > atUs) break;
+      if (point.x === null || point.y === null) runs.push([]);
+      else runs.at(-1)!.push({ x: point.x, y: point.y });
+    }
+    const drawn = runs.filter((run) => run.length);
+    if (!drawn.length) return [];
+    const released = mark.assetUs + drawing.pointsUs.at(-1)! <= atUs;
+    return [
+      {
+        kind: mark.kind,
+        ...(mark.pin === undefined ? {} : { pin: mark.pin }),
+        runs: drawn,
+        fade: released
+          ? {
+              fromUs: mark.assetUs + drawing.fade.fromUs,
+              untilUs: mark.assetUs + drawing.fade.untilUs,
+            }
+          : null,
+      },
+    ];
+  });
 }

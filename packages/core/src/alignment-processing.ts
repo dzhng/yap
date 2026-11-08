@@ -11,6 +11,7 @@ import {
   type JobQueue,
   type JobExecution,
   type StagedJobResult,
+  type Owner,
 } from "./jobs.js";
 import type { Models, PreparedRuntime } from "./models.js";
 import {
@@ -97,7 +98,7 @@ export class AlignmentProcessing {
   private identity(input: AlignmentSourceInput, decoder = this.options.decoder) {
     const { source } = this.descriptor(input);
     return {
-      target: { kind: "asset" as const, assetId: input.assetId },
+      target: { kind: "asset" as const, id: input.assetId },
       artifact,
       input: JSON.stringify({
         request: alignmentSourceSchema.parse(input),
@@ -154,7 +155,7 @@ export class AlignmentProcessing {
       identity = {
         target: {
           kind: "project" as const,
-          projectId: resolved.projectId,
+          id: resolved.projectId,
           revisionId: resolved.revisionId,
         },
         artifact: projectArtifact,
@@ -228,7 +229,7 @@ export class AlignmentProcessing {
     let input: AlignmentSourceInput,
       selected: ReturnType<typeof selectAlignmentSource>,
       source: AlignmentDescriptorSource,
-      projectOwner: { kind: "project"; projectId: string } | undefined;
+      projectOwner: Owner<"project"> | undefined;
     if (project) {
       if (!this.options.project)
         throw new CatalogError("UNSUPPORTED_JOB", "Project alignment is unavailable");
@@ -244,11 +245,11 @@ export class AlignmentProcessing {
         );
       if (
         job.target.kind !== "project" ||
-        job.target.projectId !== resolved.projectId ||
+        job.target.id !== resolved.projectId ||
         job.target.revisionId !== resolved.revisionId
       )
         throw new CatalogError("ARTIFACT_CHANGED", "Prepared project revision changed");
-      projectOwner = { kind: "project", projectId: resolved.projectId };
+      projectOwner = { kind: "project", id: resolved.projectId };
       input = alignmentSourceSchema.parse(resolved.source);
       ({ selected, source } = this.descriptor(input));
     } else {
@@ -257,11 +258,11 @@ export class AlignmentProcessing {
     }
     const decoder = this.options.decoder;
     if (!decoder)
-      throw new CatalogError("NOT_READY", "Native alignment decoder is unavailable", {}, true);
+      throw new CatalogError("NOT_READY", "Native alignment decoder is unavailable", {});
     if (
       !project &&
       (job.target.kind !== "asset" ||
-        job.target.assetId !== input.assetId ||
+        job.target.id !== input.assetId ||
         this.identity(input).input !== job.input)
     )
       throw new CatalogError("ARTIFACT_CHANGED", "Alignment source or execution inputs changed");
@@ -298,14 +299,14 @@ export class AlignmentProcessing {
     );
     signal.throwIfAborted();
     const identity = {
-        owner: { kind: "asset" as const, assetId: input.assetId },
+        owner: { kind: "asset" as const, id: input.assetId },
         generation: job.attemptId,
         policy: "alignment-v1" as const,
       },
       descriptor = { ...source, decoder, pcm: observed.pcm };
     if (
       !isDeepStrictEqual(observed.pcm.sampleRate, selected.expectedPCM.sampleRate) ||
-      observed.pcm.frames !== selected.expectedPCM.frames
+      observed.pcm.frameCount !== selected.expectedPCM.frames
     )
       throw new CatalogError(
         "INVALID_EVIDENCE",
@@ -338,7 +339,7 @@ export class AlignmentProcessing {
     assetId: string,
     signal?: AbortSignal,
     keep: (generation: string) => boolean = (generation) =>
-      this.options.jobs.retainsAttempt({ kind: "asset", assetId }, artifact, generation),
+      this.options.jobs.retainsAttempt({ kind: "asset", id: assetId }, artifact, generation),
   ) {
     return this.options.evidence.reclaim(assetId, keep, signal);
   }
@@ -372,7 +373,7 @@ export class AlignmentProcessing {
     const identity = this.identity(parsed.data, metadata.source.decoder),
       source = alignmentEvidenceSourceSchema.omit({ pcm: true }).strip().parse(metadata.source);
     if (
-      metadata.owner.assetId !== parsed.data.assetId ||
+      metadata.owner.id !== parsed.data.assetId ||
       publication.attemptId !== metadata.generation ||
       publication.input !== identity.input ||
       !isDeepStrictEqual(value?.source, source)
@@ -388,11 +389,11 @@ export class AlignmentProcessing {
     );
   }
   async cleanup(signal: AbortSignal) {
-    let afterSequence = 0;
+    let cursor: string | undefined;
     let failure: unknown;
     for (;;) {
       signal.throwIfAborted();
-      const page = this.options.assets.list({ afterSequence, limit: 100 });
+      const page = this.options.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
       for (const asset of page.assets) {
         try {
           await this.cleanupAsset(asset.id, signal);
@@ -402,7 +403,7 @@ export class AlignmentProcessing {
         }
       }
       if (!page.nextCursor) break;
-      afterSequence = page.nextCursor.afterSequence;
+      cursor = page.nextCursor;
       await setImmediate(undefined, { signal });
     }
     if (failure) throw failure;

@@ -1,10 +1,12 @@
+import { PROCESS_START_ALLOWANCE_MS } from "./worker.js";
+import { join } from "node:path";
 import { constants } from "node:fs";
 import { lstat, open, realpath, type FileHandle } from "node:fs/promises";
 import { CatalogError } from "@yap/core/catalog";
 import type { DirectoryIdentity } from "@yap/core/cache";
 import { O_EXLOCK, O_NOFOLLOW_ANY } from "@yap/core/open-flags";
 import { isPrivateDirectory } from "./managed-files.js";
-import { MAX_MEDIA_TIMEOUT_MS, nativeConfirmed, nativeResult, type MediaWorker } from "./worker.js";
+import { nativeConfirmed, nativeResult, type MediaWorker } from "./worker.js";
 
 type PublicationState =
   | "unprepared"
@@ -87,13 +89,20 @@ export class Publication {
   ): Promise<PublicationFile | null> {
     const parent = await open(await realpath(directory), directoryFlags);
     try {
+      const bytes = await lstat(join(directory, leaf)).then(
+        (info) => info.size,
+        (error) => {
+          if (error.code === "ENOENT") return 0;
+          throw error;
+        },
+      );
       const value = this.data(
         await worker(
           "publication.inspect",
           { destination, leaf },
           {
             descriptors: [parent.fd],
-            timeoutMs: MAX_MEDIA_TIMEOUT_MS,
+            timeoutMs: publicationDeadlineMs(bytes),
             ...(signal ? { signal } : {}),
           },
         ),
@@ -145,7 +154,6 @@ export class Publication {
             "PUBLICATION_BUSY",
             "A publisher still owns this staging directory",
             {},
-            true,
           );
         throw error;
       },
@@ -170,7 +178,6 @@ export class Publication {
               "PUBLICATION_BUSY",
               "Another publisher holds this destination",
               {},
-              true,
             );
           throw error;
         },
@@ -283,7 +290,7 @@ export class Publication {
       return Promise.reject(new CatalogError("INVALID_STATE", "Publication is closed"));
     if (this.pending)
       return Promise.reject(
-        new CatalogError("PUBLICATION_BUSY", "Publication operation is still running", {}, true),
+        new CatalogError("PUBLICATION_BUSY", "Publication operation is still running", {}),
       );
     const pending = action();
     this.pending = pending;
@@ -426,18 +433,51 @@ export class Publication {
   }
 }
 
-/** Budget payload validation and pinned-victim hashing at 4 MiB/s plus startup.
- * The existing worker cap remains authoritative; this is not a throughput guarantee. */
+/** Three payload passes and two displaced-destination passes at inferred 4 MiB/s, 2× margin.
+ * Includes one process startup allowance; this is work, not a file ceiling. */
 export function publicationDeadlineMs(bytes: number, replacementBytes = 0): number {
-  if (
-    !Number.isSafeInteger(bytes) ||
-    bytes < 0 ||
-    !Number.isSafeInteger(replacementBytes) ||
-    replacementBytes < 0
-  )
+  if (![bytes, replacementBytes].every((value) => Number.isSafeInteger(value) && value >= 0))
     throw new CatalogError("INVALID_STORAGE", "Publication byte count is invalid");
-  return Math.min(
-    MAX_MEDIA_TIMEOUT_MS,
-    30_000 + Math.ceil(((bytes * 3 + replacementBytes * 2) / (4 * 1024 * 1024)) * 1000),
+  // Publication planning uses 4 MiB/s: three payload passes and two displaced
+  // destination passes, with a 2× margin. The take requirement cancels from this byte formula.
+  return (
+    PROCESS_START_ALLOWANCE_MS +
+    Math.max(1, Math.ceil(((bytes * 3 + replacementBytes * 2) / 4_194_304) * 1000 * 2))
+  );
+}
+
+// Measured by specs/long-takes-and-retries/assets/probes/results.json (12-hour combined typical).
+const journalPassMsPerByte = (51.863325166 * 1000) / 1_392_503_313;
+
+/** Six stop-time journal passes at the slice-00 measured cost per byte, with 2× margin.
+ * Scale by actual bytes; pauses, extra roles and callbacks can grow the journal independently. */
+export function journalWorkDeadlineMs(bytes: number): number {
+  // Six journal traversals at the measured per-pass rate, with 2× margin.
+  return Math.max(1, Math.ceil(6 * journalPassMsPerByte * bytes * 2));
+}
+
+/** Shared capture budget: journal and bytes plus explicit media traversals at the selected duration. */
+export function captureWorkDeadlineMs(input: {
+  journalBytes: number;
+  bytes: number;
+  audioRoles: number;
+  extraTraversals: number;
+  durationUs: number;
+}): number {
+  if (
+    ![
+      input.journalBytes,
+      input.bytes,
+      input.audioRoles,
+      input.extraTraversals,
+      input.durationUs,
+    ].every((value) => Number.isSafeInteger(value) && value >= 0)
+  )
+    throw new CatalogError("INVALID_STORAGE", "Capture work budget inputs are invalid");
+  const duration = Math.max(1, Math.ceil((input.durationUs / 1_000_000) * 2 * 1000));
+  return (
+    journalWorkDeadlineMs(input.journalBytes) +
+    publicationDeadlineMs(input.bytes) +
+    (input.audioRoles * 4 + input.extraTraversals) * duration
   );
 }

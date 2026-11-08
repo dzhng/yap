@@ -30,6 +30,24 @@ or make continuous input appear to overlap; actual gaps, backward overlaps and
 pause exclusions remain distinct. The journal retains the callback timestamps
 independently of their admitted placement.
 
+Marks a person makes during a screen take (strokes while ⇧ is held, ⇧-click pins, plain
+clicks) are capture evidence like the pointer, so they live in the same schema-4 journal
+with the same clock and geometry epoch. The [recognizer](MarkRecognizer.swift) owns the gesture
+rules and stays free of AppKit; the writer feeds it modifier state and pointer readings, never
+keys, and projects each point through the same placement cursor samples use.
+
+A mark is a moment, not a lasting state. [InkLifetimes](InkLifetimes.swift) decides how long
+each stroke and pin stays on the person's screen, and the writer journals that window with the
+mark, so every reader and every drawing of it agrees with what the person saw. Undo Mark clears
+the newest mark still showing and appends a row whose `retracts` names it: when it left the
+screen early. No row removes a mark; the journal keeps every one.
+
+Take and stroke endings follow the shared
+[requirements and derived-bound rule](../../../../DEVELOPMENT.md#limits-come-from-requirements).
+Capture ends through the ordinary finish path at twelve hours of recorded time; paused time
+does not count. A held stroke is committed at five minutes and a new stroke begins, so no
+single stroke grows without bound.
+
 A healthy ending can hold proven last-picture support through stop. Interrupted
 capture stops at available support instead of fabricating a tail. Hidden windows
 may deliver blank frames; pixel color cannot distinguish that from source loss.
@@ -48,6 +66,10 @@ screen capture. Only that requested system-audio path requires screen access.
 Camera-primary capture without system audio reaches no screen or cursor boundary.
 
 ## Closure is separate from publication
+
+Native lifecycle records originate the
+[completion fact](../../../../packages/core/README.md#transactions-replay-and-lifetime)
+forwarded by the app and service.
 
 Closed source descriptors retain physical media and journal authority after inputs
 and encoders stop. Primary and camera publication can succeed independently; final
@@ -106,6 +128,13 @@ write durability. A torn final record is a crash boundary; malformed content or
 broken sequence invalidates the following suffix. A clean ending alone does not
 prove media completion. Streaming readers retain observations without materializing
 an entire pointer history in memory.
+
+Schema 4 records cursor sampling in its header. The sampler still observes at 60 Hz,
+but writes only changes in projected position, buttons, eligibility or geometry epoch;
+each sample holds until the next one, and readers carry that held value forward. A
+sample is written at the first reading and after each resume. The take summary records
+optional capture kind and whether the take recorded any pins or strokes. Older
+journals omit these fields and keep their prior every-tick semantics.
 
 Fragmented media can preserve a decodable process-crash prefix. A crash before the
 opening fragment may leave none; these guarantees do not establish power-loss

@@ -10,16 +10,44 @@ paths remain diagnostics rather than product controls.
 The capture popover, Settings and recording panels consume one controls state and dispatch
 the same actions. A running take retains its selected inputs; changing a preference
 cannot rewrite that selection. Countdown precedes the service start request, so
-canceling it creates no take. Recorder-owned controls stay outside recorded media
+canceling it creates no take. Starting a take or its countdown closes the capture
+panel, which hangs where the countdown and floating controls appear. Recorder-owned controls stay outside recorded media
 and do not activate the app over the source being recorded. Opening the capture
 panel from the menu bar activates its window, so its native glass and controls
 are ready before the first content click.
 
+## Show your agent
+
+The global shortcuts are one catalog, [ShortcutBindings](Sources/YapControls/ShortcutBindings.swift),
+shared by Settings, registration and the `shortcuts.get`/`shortcuts.set` app operations, so a key
+means the same thing however it was set. A binding is a physical key code and Carbon modifier mask;
+callers name keys (`ctrl+cmd+r`), and [ShortcutKeys](Sources/YapControls/ShortcutKeys.swift) is the
+one owner of key names and labels, through the current keyboard layout. Bindings apply as soon as
+they change. A set names only the actions it changes and keeps every other binding; one invalid
+entry refuses the whole set. A key macOS refuses is reported by its action, never by its label. Start and paste are held for the app's lifetime; the in-take keys (undo a mark, cancel,
+pause, restart) only while a take or countdown is live, so they take no characters away otherwise.
+A hotkey start records the display under the pointer, whatever the menu has selected, and a
+restart reuses the running take's own source; the menu's Start keeps the menu's source. The
+countdown is off unless someone turns it on.
+
+Marks are drawn and recorded without any new permission: ⇧ is read with the pointer, and clicks
+come from a global mouse monitor, which needs no Accessibility. The recognizer and the journal
+live in [native capture](../../helpers/mac/Sources/YapCapture/README.md); the app only draws what
+it is told and hides that ink from every capture.
+
 The floating take controls show a recording camera's live picture. Minimizing it
 only hides the picture; the camera keeps recording. Settings and the floating
 controls share that one preference.
+No capture sees the floating controls: not Yap's own recording, screenshots or screen sharing.
+The ink and numbered pins a person draws during a screen take float over every display and
+are never visible to any capture either. They draw only the mark stream the capture recognizes
+(the live stroke and recorded marks) and decide nothing: capture stamps each mark with when it
+shows, and Undo Mark asks capture to clear the latest mark still showing. The recording keeps
+every mark, with when it left the screen. [Ink](../../helpers/mac/Sources/YapInk/README.md)
+owns how the ink looks, here and in review frames of the recording.
 A screen take reserves a camera whenever camera access is granted, so the camera can be
-turned on and off during the take; the menu's switch only decides how it starts. The menu's
+turned on and off during the take; the menu's switch only decides how it starts. A reserved
+camera that starts off is not opened, so its light stays off until it is turned on. The menu's
 switch and the floating controls' camera button send one action, which during a take is the
 same `capture.setCamera` the CLI calls. Native's live report, never the start selection, says
 whether the camera is on, and a camera that is off shows no picture, not even its last one.
@@ -35,6 +63,22 @@ Authorization is read from native capture and requested only through an explicit
 action. Screen source controls remain disabled until access is granted and explain
 which permission enables them; camera-only capture stays independent of screen access.
 Permission denial remains actionable without choosing another device.
+Accessibility is optional and only ever granted in System Settings: with it the paste shortcut
+presses ⌘V in the front app once the person lets go of the shortcut, since an app that reads the
+keyboard as it is would take ⌘V under a held ⌥⇧ for ⌥⇧⌘V and paste nothing; without it, or
+with the keys still held a second later, the prompt is copied and a non-activating notice says to
+press ⌘V. macOS reports a grant made
+while Yap runs at once but drops the keystrokes Yap sends until it reopens, so until then the
+paster keeps copying and the notice and Settings say to reopen Yap. A take the person stops from
+the app (shortcut, menu or floating controls) copies its own prompt once it is complete, with the
+same notice; a take stopped through the service, as an agent stops one, leaves the clipboard
+alone. Every prompt, button, shortcut or finished take, is handed over by one
+[handoff](Sources/Yap/PromptHandoff.swift) through one [paster](Sources/YapControls/Paster.swift),
+and its text comes from the service's `recording.prompt`, so the app never writes a prompt of its
+own. A launch a check drives copies to a pasteboard of its own, never the person's.
+Idle display selection follows the system's main display when its selected monitor
+disconnects, without an error to dismiss. A running take keeps its original source;
+automatic selection only prepares the next recording.
 Camera and microphone discovery do not depend on screen authorization. Missing
 screen access produces empty screen choices, while an actual discovery failure
 retains the last-good catalog and reports the error. A camera choice preserves
@@ -79,6 +123,11 @@ source facts and caller-created projects separately, with project pages ordered 
 Last-good observations survive
 read errors; generations fence delayed replies after deletion, page changes or
 service replacement. A recording becoming ready cannot silently create a composition.
+Recordings come from `media.list`, so an imported video sits beside the takes with its
+own badge. Every delete goes through one [confirmation](Sources/YapControls/DeleteConfirmation.swift)
+and asks the service for a plain delete. When the service refuses with `IN_USE`, the
+refusal's own list of projects becomes a second confirmation, and only an explicit yes
+sends the cascade: the app never decides to delete a project on its own.
 
 A [preview controller](Sources/Yap/PreviewController.swift) pins identity
 and holds the renewable service lease; its presentation window owns platform
@@ -171,9 +220,10 @@ and the installed-update gate.
 The [capture view](Sources/Yap/CaptureView.swift) consumes immutable
 rendering facts and emits supplied intents. It holds no capture selection, service
 state or recording clock. The controls owner admits those intents; the popover owns explicit dismissal
-and leaves capture selection with the shared controls state. Enabling camera capture offers the
-system's default camera when no device has been chosen; an existing choice never substitutes a
-disconnected device. The capture panel requests a dark native appearance; menu-bar opening establishes
+and leaves capture selection with the shared controls state. The camera menu only picks which
+camera, the system's default until a person picks another; its switch alone turns it on, and an
+existing choice never substitutes a disconnected device. A Mac with no camera or no microphone
+shows that row disabled and off, and a take records without it. The capture panel requests a dark native appearance; menu-bar opening establishes
 key-window focus. Status stays outside the scrolling controls.
 The native popover frame owns the backdrop and arrow together; content adds no
 outer panel or stroke. Library has one entry point in the capture header, and its
@@ -186,7 +236,7 @@ shows what would be recorded rather than Yap's own panel. The window list, in th
 [window rule](Sources/YapControls/WindowSource.swift) owns what that means, and takes Yap's own
 windows from the same exclusion.
 When a recording is available, the popover appends the latest library item below its transport
-actions and routes Play and Copy agent prompt through the same controls actions as Library.
+actions and routes Play and **Copy prompt** through the same controls actions, and the same label, as Library.
 
 Run `node apps/macos/tests/capture-view-shots.mjs` from the repository root for
 focused native interaction, applicability and scroll checks plus offscreen images.
@@ -195,6 +245,12 @@ leave out their "synthetic presentation fixture" label for site and video shots;
 owns synthetic scenarios; its images and metadata record native size, appearance
 and backing scale. This renderer never enumerates devices, inspects permissions,
 starts capture or activates the app.
+
+Action failures retain their originating surface and request until that action succeeds or
+its notice is dismissed. Background observations and unrelated controls cannot clear them.
+An import Retry acts on the primary source's admitted job and is shown only when that failed job carries `details.retry`; playback and prompt handoff remain
+available while import needs repair. The ledger owns plain-language causes. Existing permission
+controls supply fixes; errors without a simple supported action remain status text.
 
 The [Library view](Sources/Yap/LibraryView.swift) consumes shared
 saved-item facts from the controls presentation owners. Those owners retain title,

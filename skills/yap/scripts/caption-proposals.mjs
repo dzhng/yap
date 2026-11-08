@@ -379,8 +379,11 @@ export function captionProposals(request) {
         ? null
         : {
             trackId: request.trackId,
-            source: {
-              ...style,
+            source: (() => {
+              const { size, ...publicStyle } = style;
+              return {
+              ...publicStyle,
+              sizePx: size,
               kind: "text",
               text,
               ...(style.highlight
@@ -392,7 +395,8 @@ export function captionProposals(request) {
                     ),
                   }
                 : {}),
-            },
+              };
+            })(),
             seed: {
               kind: "transcript",
               source: {

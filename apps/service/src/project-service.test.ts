@@ -13,7 +13,18 @@ import { ProjectStore } from "@yap/core/projects";
 import { TranscriptStore } from "@yap/core/transcript";
 import { assetTranscriptOwner } from "@yap/core/transcript-processing";
 import { ResourceReferences } from "@yap/core/references";
-import { mkdtemp, writeFile, rm, readdir, readFile, mkdir, stat, realpath } from "node:fs/promises";
+import {
+  mkdtemp,
+  writeFile,
+  rm,
+  readdir,
+  readFile,
+  mkdir,
+  stat,
+  realpath,
+  chmod,
+  appendFile,
+} from "node:fs/promises";
 import { fork } from "node:child_process";
 import { once } from "node:events";
 import { tmpdir } from "node:os";
@@ -21,20 +32,547 @@ import { join, dirname } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterEach, expect, test, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
+import { fstatSync } from "node:fs";
 import { AssetStore } from "@yap/core/assets";
-import { Catalog, catalogFormat } from "@yap/core/catalog";
+import { Catalog } from "@yap/core/catalog";
 import { callLocal } from "@yap/client";
 import { startProjectService } from "./project-service.js";
 import { PassThrough, Writable } from "node:stream";
 import { EventEmitter } from "node:events";
-import { projectPackageManifest } from "@yap/core/project-package";
-import { fileIdentity } from "@yap/core/files";
-import type { ProjectSnapshot } from "@yap/core/projects";
-import { CONTROL_FRAME_BYTES, appOperations, updatePreparationSchema } from "@yap/protocol";
+import {
+  CONTROL_FRAME_BYTES,
+  appOperations,
+  modelStatusSchema,
+  updatePreparationSchema,
+} from "@yap/protocol";
+import { controlledSpeech, modelMetadata } from "./transcript.fixture.js";
+import { sourceWorker, captureFixture } from "./project-capture.fixture.js";
+import { mediaWorker, type MediaWorker } from "./worker.js";
+const { writeNativeCaptureFixture } = await import(
+  new URL("../../../packages/core/src/capture-native.fixture.ts", import.meta.url).href
+);
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
+
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
+});
+
+test("recording.get without an id resolves the latest take and removed recording.latest is unknown", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(await f.call("recording.get", {})).toMatchObject({
+    ok: false,
+    error: { code: "NOT_READY", retryable: true, retryAfterMs: 15000 },
+  });
+  const older = f.service.captures.allocate({ requestId: "older", arguments: "{}" }).recording;
+  const latest = f.service.captures.allocate({ requestId: "latest", arguments: "{}" }).recording;
+  expect(await f.call("recording.latest", {})).toMatchObject({
+    ok: false,
+    error: { code: "UNKNOWN_OPERATION" },
+  });
+  expect(await f.call("recording.get", {})).toMatchObject({
+    ok: true,
+    data: { id: latest.id },
+  });
+  expect(latest.id).not.toBe(older.id);
+});
+
+test("recording.prompt hands off projects and imports by their own ID", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const created = await f.call("project.create", {
+    requestId: "prompt-project",
+    title: "Prompt project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  expect(await f.call("recording.prompt", { projectId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this project with this ID with the Yap CLI: ${projectId}`,
+      facts: { projectId },
+    },
+  });
+  const imported = await f.call("asset.import", { requestId: "prompt-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  expect(await f.call("recording.prompt", { assetId })).toMatchObject({
+    ok: true,
+    data: {
+      text: `I want you to use this imported video with this asset ID with the Yap CLI: ${assetId}`,
+      facts: { assetId },
+    },
+  });
+  expect(await f.call("recording.prompt", { projectId: assetId })).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+});
+
+test("recording.prompt describes the latest unpublished take without waiting", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(await f.call("recording.prompt", {})).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND" },
+  });
+  f.service.captures.allocate({ requestId: "prompt-older", arguments: "{}" });
+  const latest = f.service.captures.allocate({
+    requestId: "prompt-latest",
+    arguments: "{}",
+  }).recording;
+  for (const params of [{}, { recordingId: latest.id }])
+    expect(await f.call("recording.prompt", params)).toMatchObject({
+      ok: true,
+      data: { facts: { recordingId: latest.id, live: true } },
+    });
+});
+
+it("finished-take reads return a timed NOT_READY while the acquisition is importing", async () => {
+  const f = await captureFixture(cleanups, undefined, mediaWorker());
+  const take = f.service.captures.allocate().recording;
+  const directory = join(f.home, "source");
+  const publication = writeNativeCaptureFixture(directory, {
+    kind: "display",
+    recordingId: take.id,
+    sourceId: take.sourceId,
+  });
+  f.service.captures.ingestLifecycle(take.id, {
+    sourceId: take.sourceId,
+    state: "finalizing",
+    sequence: 1,
+    publication,
+  });
+  const acquisitions = new AcquisitionStore(f.service.captures);
+  const { acquisitionId } = acquisitions.admitCapture(f.service.captures, take.id, directory);
+  const imported = await f.call("asset.import", {
+    path: join(directory, "video.mov"),
+    requestId: "pending-selector",
+  });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  let assetId: string;
+  await expect
+    .poll(async () => {
+      const result = await f.call("job.get", {
+        jobId: (imported.data as { jobId: string }).jobId,
+      });
+      if (!result.ok) throw new Error(JSON.stringify(result));
+      const job = result.data as {
+        state: string;
+        published: { output: { assetId: string } } | null;
+      };
+      if (job.published) assetId = job.published.output.assetId;
+      return job.state;
+    })
+    .toBe("ready");
+  const asset = f.service.assets.get(assetId!);
+  const streamId = asset.streams.find((stream) => stream.kind === "video")!.id;
+  for (const request of [
+    { operation: "acquisition.get", params: { acquisitionId } },
+    { operation: "timeline.events", params: { acquisitionId, assetId: asset.id, streamId } },
+  ]) {
+    expect(await f.call(request.operation, request.params)).toMatchObject({
+      ok: false,
+      error: {
+        code: "NOT_READY",
+        retryable: true,
+        retryAfterMs: 15000,
+        message: expect.stringMatching(/importing.*Retry in 15 seconds\./),
+        details: { retry: request },
+      },
+    });
+  }
+});
+
+it.each([false, true])(
+  "recording.prompt succeeds during import and after a failed import without retrying it (mic=%s)",
+  async (microphone) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const native = mediaWorker();
+    const f = await captureFixture(
+      cleanups,
+      undefined,
+      async (operation, params, options) => {
+        if (operation === "media.sourceEvidence") await held;
+        return native(operation, params, options);
+      },
+      undefined,
+      undefined,
+      true,
+    );
+    cleanups.push(async () => {
+      release();
+    });
+    const started = await f.call("capture.start", {
+      requestId: "prompt-import-fails",
+      source: { kind: "display", id: 1 },
+      microphone,
+    });
+    if (!started.ok) throw new Error(JSON.stringify(started));
+    const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+    const directory = join(f.home, "library", "recordings", recordingId, "source");
+    const publication = writeNativeCaptureFixture(directory, {
+      kind: "display",
+      mic: microphone,
+      recordingId,
+      sourceId,
+    });
+    await f.call("capture.stop", { recordingId });
+    const reported = await f.report(
+      {
+        recordingId,
+        sourceId,
+        sequence: 3,
+        state: "complete",
+        sourceDurationUs: 190_000_000,
+        publication,
+      },
+      true,
+    );
+    if (!reported.ok) throw new Error(JSON.stringify(reported));
+    const admission = reported.data as { sourceAdmissions: { job: { id: string } }[] };
+    const take = { recordingId, job: { id: admission.sourceAdmissions[0]!.job.id } };
+    const expected = [
+      microphone
+        ? "I recorded my screen to show you something. Watch it with Yap and act on what I asked for."
+        : "I recorded my screen without narration. Watch what happens with Yap.",
+      `Recording: ${take.recordingId} (3:10, screen, ${microphone ? "microphone, no camera" : "no camera, no microphone"}, no system audio).`,
+      "Use the yap skill to work with this recording (or run `yap --help`).",
+    ].join("\n");
+    expect(await f.call("recording.prompt", { recordingId: take.recordingId })).toMatchObject({
+      ok: true,
+      data: {
+        text: microphone
+          ? expected.replace(
+              "Use the yap skill",
+              "The transcript is being prepared automatically.\nUse the yap skill",
+            )
+          : expected,
+      },
+    });
+    await appendFile(join(directory, "video.mov"), "changed after publication");
+    release();
+    await expect
+      .poll(async () => {
+        const result = await f.call("job.get", { jobId: take.job.id });
+        return result.ok ? (result.data as { state: string }).state : null;
+      })
+      .toBe("failed");
+    expect(await f.call("recording.prompt")).toMatchObject({ ok: true, data: { text: expected } });
+    expect(await f.call("job.get", { jobId: take.job.id })).toMatchObject({
+      ok: true,
+      data: { state: "failed", attemptGeneration: 1 },
+    });
+  },
+);
+
+test("project.duplicate copies a revision, replays, and survives source deletion", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  const canvas = {
+    width: 16,
+    height: 16,
+    fps: { numerator: 30, denominator: 1 },
+    background: "#000000ff",
+  };
+  const created = await f.call("project.create", {
+    requestId: "duplicate-source",
+    title: "Source",
+    canvas,
+  });
+  expect(created).toMatchObject({ ok: true });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const source = created.data as {
+    project: { id: string };
+    revision: { id: string; document: unknown };
+  };
+  const duplicated = await f.call("project.duplicate", {
+    requestId: "duplicate-project",
+    projectId: source.project.id,
+  });
+  expect(duplicated).toMatchObject({
+    ok: true,
+    data: { project: { title: "Source copy" }, revision: { document: source.revision.document } },
+  });
+  if (!duplicated.ok) throw new Error(JSON.stringify(duplicated));
+  const copy = duplicated.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
+  expect(
+    await f.call("project.duplicate", {
+      requestId: "duplicate-project",
+      projectId: source.project.id,
+    }),
+  ).toEqual(duplicated);
+  expect(
+    await f.call("project.duplicate", {
+      requestId: "duplicate-project",
+      projectId: source.project.id,
+      title: "Different",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
+  expect(await f.call("revision.history", { projectId: copy.project.id })).toMatchObject({
+    ok: true,
+    data: { revisions: [{ id: copy.revision.id, ordinal: 0 }], nextCursor: null },
+  });
+  expect(
+    await f.call("project.delete", {
+      requestId: "delete-duplicate-source",
+      projectId: source.project.id,
+    }),
+  ).toMatchObject({ ok: true, data: { id: source.project.id, deleted: true } });
+  expect(await f.call("revision.get", { projectId: copy.project.id })).toMatchObject({
+    ok: true,
+    data: { projectId: copy.project.id, revision: { id: copy.revision.id } },
+  });
+  expect(await f.call("inspect.open", { projectId: copy.project.id })).toMatchObject({
+    ok: true,
+    data: { projectId: copy.project.id, revision: { id: copy.revision.id } },
+  });
+  expect(f.service.libraryUsers!.usersOf({ kind: "project", id: copy.project.id })).toMatchObject({
+    usedBy: [],
+  });
+});
+
+test("asset.list rows name themselves id and carry sizeBytes, not bytes", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const imported = await f.call("asset.import", { requestId: "asset-list-contract", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const listed = await f.call("asset.list", {});
+  expect(listed).toMatchObject({ ok: true, data: { assets: expect.any(Array) } });
+  if (listed.ok) {
+    const row = (listed.data as { assets: Record<string, unknown>[] }).assets[0]!;
+    expect(row).toHaveProperty("id");
+    expect(row).toHaveProperty("sizeBytes");
+    expect(row).not.toHaveProperty("bytes");
+  }
+});
+
+test("media.list exposes imported titles and measured fields", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation) =>
+    operation === "media.probe"
+      ? {
+          ok: true,
+          data: {
+            originUs: 0,
+            streams: [
+              { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+            ],
+          },
+        }
+      : { ok: true, data: {} },
+  );
+  const imported = await f.call("asset.import", { requestId: "media-list-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const listed = await f.call("media.list", { limit: 10 });
+  expect(listed).toMatchObject({ ok: true, data: { media: expect.any(Array), nextCursor: null } });
+  if (!listed.ok) return;
+  const media = (listed.data as { media: Record<string, unknown>[] }).media;
+  expect(media).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "asset",
+        title: "source.png",
+        durationUs: 0,
+        sizeBytes: 11,
+      }),
+    ]),
+  );
+  expect(media.every((row) => typeof row.id === "string" && !("bytes" in row))).toBe(true);
+});
+
+test("media.list sizeBytes uses the same measured bytes as deletion", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.recordingDirectory") {
+      const info = fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "storage.removeRecordingDirectory")
+      return { ok: true, data: { removed: true } };
+    if (operation === "media.probe")
+      return {
+        ok: true,
+        data: {
+          originUs: 0,
+          streams: [
+            { id: "image", kind: "image", codec: "png", decodable: true, width: 1, height: 1 },
+          ],
+        },
+      };
+    return { ok: true, data: {} };
+  });
+  const imported = await f.call("asset.import", { requestId: "media-size-import", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  await chmod(f.service.assets.path(assetId), 0o600);
+  await writeFile(f.service.assets.path(assetId), "asset bytes changed on disk");
+
+  const recording = f.service.captures.allocate({
+    requestId: "media-size-recording",
+    arguments: "{}",
+  }).recording;
+  f.service.captures.ingestLifecycle(recording.id, {
+    sourceId: recording.sourceId,
+    sequence: 1,
+    state: "recording",
+  });
+  f.service.captures.ingestLifecycle(recording.id, {
+    sourceId: recording.sourceId,
+    sequence: 2,
+    state: "finalizing",
+  });
+  f.service.captures.ingestLifecycle(recording.id, {
+    sourceId: recording.sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: 1,
+  });
+  const recordingPath = join(f.home, "library", "recordings", recording.id, "source");
+  await mkdir(recordingPath, { recursive: true, mode: 0o700 });
+  await writeFile(join(recordingPath, "measured.bin"), "recording bytes on disk");
+
+  const assetMeasured = f.service.libraryUsers!.usersOf({ kind: "asset", id: assetId }).freesBytes;
+  const recordingMeasured = f.service.libraryUsers!.usersOf({
+    kind: "recording",
+    id: recording.id,
+  }).freesBytes;
+  const listed = await f.call("media.list", { limit: 100 });
+  if (!listed.ok) throw new Error(JSON.stringify(listed));
+  const media = (
+    listed.data as {
+      media: { kind: string; id: string; sizeBytes: number }[];
+    }
+  ).media;
+  expect(media.find((row) => row.id === assetId)?.sizeBytes).toBe(assetMeasured);
+  expect(media.find((row) => row.id === recording.id)?.sizeBytes).toBe(recordingMeasured);
+
+  const assetDeleted = await f.call("asset.delete", {
+    requestId: "media-size-delete-asset",
+    assetId,
+  });
+  expect(assetDeleted).toMatchObject({ ok: true, data: { freedBytes: assetMeasured } });
+  const recordingDeleted = await f.call("recording.delete", {
+    requestId: "media-size-delete-recording",
+    recordingId: recording.id,
+  });
+  if (!recordingDeleted.ok) throw new Error(JSON.stringify(recordingDeleted));
+  expect(recordingDeleted).toMatchObject({ ok: true, data: { freedBytes: recordingMeasured } });
+});
+
+test("export.create replays by requestId and refuses a conflicting request", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.externalDirectory") {
+      const info = (await import("node:fs")).fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "publication.inspect") return { ok: true, data: { file: null } };
+    return { ok: true, data: {} };
+  });
+  const created = await f.call("project.create", {
+    requestId: "export-replay-project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  const request = {
+    requestId: "export-replay",
+    projectId,
+    kind: "processed-package",
+    directory: f.home,
+    leaf: "replay.zip",
+  };
+  const first = await f.call("export.create", request);
+  if (!first.ok) throw new Error(JSON.stringify(first));
+  expect(first).toMatchObject({ ok: true });
+  const replay = await f.call("export.create", request);
+  expect(replay).toMatchObject({
+    ok: true,
+    data: { id: (first.data as { id: string }).id },
+  });
+  expect(await f.call("export.create", { ...request, leaf: "different.zip" })).toMatchObject({
+    ok: false,
+    error: { code: "REQUEST_CONFLICT" },
+  });
+});
+
+test("export.recover replays by requestId and refuses a different export", async () => {
+  const f = await projectServiceFixture(cleanups, async (operation, _params, options) => {
+    if (operation === "storage.externalDirectory") {
+      const info = (await import("node:fs")).fstatSync(options!.descriptors![0]!, { bigint: true });
+      return { ok: true, data: { dev: String(info.dev), ino: String(info.ino) } };
+    }
+    if (operation === "publication.inspect") return { ok: true, data: { file: null } };
+    return { ok: true, data: {} };
+  });
+  const created = await f.call("project.create", {
+    requestId: "recover-replay-project",
+    canvas: {
+      width: 16,
+      height: 16,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  const exported = await f.call("export.create", {
+    requestId: "recover-replay-export",
+    projectId,
+    kind: "processed-package",
+    directory: f.home,
+    leaf: "recover-replay.zip",
+  });
+  if (!exported.ok) throw new Error(JSON.stringify(exported));
+  const exportId = (exported.data as { id: string }).id;
+  const request = { requestId: "recover-replay", exportId };
+  const first = await f.call("export.recover", request);
+  expect(first).toMatchObject({ ok: true, data: { id: exportId } });
+  expect(await f.call("export.recover", request)).toEqual(first);
+  expect(await f.call("export.recover", { ...request, exportId: "other-export" })).toMatchObject({
+    ok: false,
+    error: { code: "REQUEST_CONFLICT" },
+  });
 });
 const metadata = {
   originUs: 0,
@@ -54,6 +592,82 @@ const metadata = {
 };
 const setup = projectServiceFixture.bind(undefined, cleanups);
 
+test("wired LibraryUsers reports the project bytes that real project deletion removes", async () => {
+  let home = "";
+  const f = await setup(async (operation, params) => {
+    if (operation === "storage.clearRenderWorkspace") return { ok: true, data: { removed: true } };
+    if (operation === "storage.removeCacheFiles") {
+      for (const id of params.ids as string[])
+        await rm(join(home, "library/cache/derived", `${id}.cache`), { force: true });
+      return { ok: true, data: { removed: true } };
+    }
+    return { ok: true, data: {} };
+  });
+  home = f.home;
+  const created = await f.call("project.create", {
+    requestId: "users-project",
+    canvas: {
+      width: 64,
+      height: 32,
+      fps: { numerator: 30, denominator: 1 },
+      background: "#000000ff",
+    },
+  });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const { project, revision } = created.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
+  const catalog = new Catalog(join(home, "library/catalog.sqlite"));
+  const cacheId = randomUUID();
+  try {
+    catalog.catalog
+      .prepare("INSERT INTO acquisitions(id,requestId,admission,metadata) VALUES(?,?,?,?)")
+      .run(
+        "acquisition-capture",
+        "capture-request",
+        JSON.stringify({ kind: "capture", recordingId: "recording-1" }),
+        "{}",
+      );
+    catalog.catalog
+      .prepare("INSERT INTO resource_references VALUES(?,?,?,?)")
+      .run("acquisition", "acquisition-capture", "revision", revision.id);
+    catalog.catalog
+      .prepare(
+        "INSERT INTO derived_cache(id,ownerKind,ownerId,touched,bytes) VALUES (?,'project',?,1,?)",
+      )
+      .run(cacheId, project.id, 1);
+  } finally {
+    catalog.close();
+  }
+  const cachePath = join(home, "library/cache/derived", `${cacheId}.cache`);
+  await writeFile(cachePath, "cached render");
+  const before = Number((await stat(cachePath)).size);
+  const details = f.service.libraryUsers!.usersOf({ kind: "recording", id: "recording-1" });
+  expect(details.usedBy).toEqual([
+    { kind: "project", id: project.id, title: "Untitled", revisions: 1 },
+  ]);
+  expect(details.cascadeFreesBytes).toBe(before);
+  const totalBefore = Number((await stat(cachePath)).size);
+  const deleted = await f.call("project.delete", {
+    requestId: "test-delete",
+    projectId: project.id,
+  });
+  expect(deleted).toMatchObject({
+    ok: true,
+    data: { id: project.id, deleted: true },
+  });
+  if (deleted.ok) expect((deleted.data as { freedBytes: number }).freedBytes).toBe(totalBefore);
+  expect(
+    await f.call("project.delete", { requestId: "test-delete", projectId: project.id }),
+  ).toEqual(deleted);
+  expect(
+    await f.call("project.delete", { requestId: "test-delete", projectId: "different-project" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
+  await expect(stat(cachePath)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(totalBefore).toBe(before);
+});
+
 test("correspondence receipts are admitted and paged without declaring an edit", async () => {
   const f = await setup(async () => ({ ok: true, data: {} }));
   const endpoint = (assetId: string) => ({
@@ -61,7 +675,7 @@ test("correspondence receipts are admitted and paged without declaring an edit",
     assetId,
     streamId: "audio-1",
     channel: 0,
-    range: { startUs: 0, endUs: 4_000_000 },
+    sourceRange: { startUs: 0, endUs: 4_000_000 },
   });
   const measurement = {
     verdict: "accepted",
@@ -106,7 +720,7 @@ test("correspondence receipts are admitted and paged without declaring an edit",
   });
   expect(prepared).toMatchObject({
     ok: true,
-    data: { state: "ready", published: { output: { evidenceId: "e1" } } },
+    data: { state: "ready", published: { output: { id: "e1" } } },
   });
   expect(
     await f.call("correspondence.get", { evidenceId: "e1", generation: "g1", limit: 1 }),
@@ -162,8 +776,9 @@ test("health projects strict native update reports without exposing private coor
   expect(
     await f.control("update.report", {
       update: {
-        state: "waiting",
+        state: "queued",
         availableVersion: "2.0.0",
+        availability: "available",
         blockers: ["native.preview"],
         error: null,
         extra: true,
@@ -171,7 +786,9 @@ test("health projects strict native update reports without exposing private coor
     }),
   ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   const update = {
-    state: "waiting",
+    state: "queued",
+    jobId: null,
+    availability: "available",
     availableVersion: "2.0.0",
     blockers: ["native.preview"],
     error: null,
@@ -212,7 +829,9 @@ test("lifetime progress coalesces in one event turn and stops when the candidate
   });
   await f.control("update.report", {
     update: {
-      state: "waiting",
+      state: "queued",
+      jobId: null,
+      availability: "available",
       availableVersion: "2.0.0",
       blockers: ["native.preview"],
       error: null,
@@ -228,7 +847,14 @@ test("lifetime progress coalesces in one event turn and stops when the candidate
   await new Promise((resolve) => setImmediate(resolve));
   expect(notifications).toBe(1);
   await f.control("update.report", {
-    update: { state: "disabled", availableVersion: null, blockers: [], error: null },
+    update: {
+      state: "unavailable",
+      jobId: null,
+      availability: "unavailable",
+      availableVersion: null,
+      blockers: [],
+      error: null,
+    },
   });
   await Promise.all([f.control("project.list"), f.control("service.health")]);
   await new Promise((resolve) => setImmediate(resolve));
@@ -400,94 +1026,24 @@ test("complete socket frames racing a private fence either commit owned work or 
     expect(creation).toMatchObject({
       id: "racing-creation",
       ok: true,
-      data: { project: { projectId: expect.any(String) } },
+      data: { project: { id: expect.any(String) } },
     });
   }
 });
 
-test("a ready package handle blocks until retained files and asynchronous cleanup close", async () => {
+it("a ready package handle blocks until retained files and asynchronous cleanup close", async () => {
   const events = new EventEmitter();
   const cleanupHeld = once(events, "cleanup"),
     release = once(events, "release");
-  let home = "",
-    workspace = "";
-  let snapshot: ProjectSnapshot;
-  const f = await projectServiceControlFixture(cleanups, async (operation, params) => {
-    if (operation === "packageWorkspace.recover") return { ok: true, data: { recovered: 0 } };
-    if (operation === "packageWorkspace.create") {
-      workspace = join(home, "library/packages", params.name as string);
-      await mkdir(workspace, { mode: 0o700 });
-      const identity = await stat(workspace, { bigint: true });
-      return {
-        ok: true,
-        data: {
-          name: params.name,
-          identity: { dev: String(identity.dev), ino: String(identity.ino) },
-        },
-      };
-    }
-    if (operation === "packageWorkspace.admit") return { ok: true, data: {} };
-    if (operation === "archive.prepare") return { ok: true, data: { empty: true } };
-    if (operation === "archive.extract") {
-      const revision = JSON.stringify(snapshot.revisions[0]);
-      const path = "revisions/0.json";
-      const manifest = JSON.stringify(
-        projectPackageManifest(
-          snapshot,
-          [],
-          [
-            {
-              path,
-              bytes: Buffer.byteLength(revision),
-              sha256: createHash("sha256").update(revision).digest("hex"),
-            },
-          ],
-        ),
-      );
-      await mkdir(join(workspace, "content/revisions"), { recursive: true, mode: 0o700 });
-      const members = [];
-      for (const [path, text] of [
-        ["manifest.json", manifest],
-        ["revisions/0.json", revision],
-      ]) {
-        const file = join(workspace, "content", path!);
-        await writeFile(file, text!);
-        members.push({
-          path,
-          directory: false,
-          bytes: Buffer.byteLength(text!),
-          sha256: createHash("sha256").update(text!).digest("hex"),
-          identity: fileIdentity(await stat(file, { bigint: true })),
-        });
-      }
-      return {
-        ok: true,
-        data: {
-          manifest,
-          revisions: {},
-          members,
-          archiveSha256: "0".repeat(64),
-          expandedBytes: members.reduce((total, member) => total + member.bytes, 0),
-          copiedBytes: 1,
-          initialReadBytes: 0,
-          peakResidentBytes: 0,
-          parser: "fixture",
-        },
-      };
-    }
-    if (operation === "archive.cleanup") {
+  const native = mediaWorker();
+  let holdCleanup = false;
+  const f = await projectServiceControlFixture(cleanups, async (operation, params, options) => {
+    if (operation === "archive.cleanup" && holdCleanup) {
       events.emit("cleanup");
       await release;
-      await rm(join(workspace, "content"), { recursive: true });
-      return { ok: true, data: { removed: true } };
     }
-    if (operation === "packageWorkspace.remove") {
-      await rm(workspace, { recursive: true });
-      return { ok: true, data: { removed: true } };
-    }
-    throw new Error(`Unexpected package worker operation ${operation}`);
+    return native(operation, params, options);
   });
-  home = await realpath(f.home);
   cleanups.push(async () => {
     events.emit("release");
   });
@@ -501,13 +1057,21 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const data = created.data as {
-    project: ProjectSnapshot["project"];
-    revision: ProjectSnapshot["revisions"][number];
-  };
-  snapshot = { project: data.project, revisions: [data.revision], undo: [], references: [] };
+  const projectId = (created.data as { project: { id: string } }).project.id;
+  const home = await realpath(f.home);
   const archive = join(home, "package.zip");
-  await writeFile(archive, "x");
+  const exported = await f.control("export.create", {
+    requestId: "empty-package",
+    projectId,
+    kind: "processed-package",
+    directory: home,
+    leaf: "package.zip",
+  });
+  if (!exported.ok) throw new Error(JSON.stringify(exported));
+  await expect
+    .poll(() => f.control("export.status", { exportId: "empty-package" }), { timeout: 5_000 })
+    .toMatchObject({ ok: true, data: { state: "ready", cleanupPending: false } });
+  holdCleanup = true;
   const opened = await f.control("package.open", { path: archive });
   if (!opened.ok) throw new Error(JSON.stringify(opened));
   const id = (opened.data as { id: string }).id;
@@ -527,9 +1091,12 @@ test("a ready package handle blocks until retained files and asynchronous cleanu
   });
   const progress = once(f.events, "update.progress");
   events.emit("release");
-  expect(await closing).toMatchObject({ ok: true, data: { state: "closed" } });
+  expect(await closing).toMatchObject({ ok: true, data: { state: "idle" } });
   await progress;
-  expect(await f.control("update.prepare")).toMatchObject({ ok: true, data: { kind: "prepared" } });
+  expect(await f.control("update.prepare")).toMatchObject({
+    ok: true,
+    data: { kind: "prepared" },
+  });
 });
 
 test("observing export admission never cancels its held publication owner", async () => {
@@ -565,10 +1132,10 @@ test("observing export admission never cancels its held publication owner", asyn
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const exporting = f.control("export.create", {
     projectId,
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     kind: "processed-package",
     directory: f.home,
     leaf: "package.zip",
@@ -610,7 +1177,7 @@ test("deletion cleanup remains owned through disconnect until its storage worker
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   const cacheId = randomUUID();
   catalog.catalog
@@ -623,7 +1190,11 @@ test("deletion cleanup remains owned through disconnect until its storage worker
   const cancel = new AbortController();
   const deleting = callLocal(
     f.service.socketPath,
-    { id: "delete", operation: "project.delete", params: { projectId } },
+    {
+      id: "delete",
+      operation: "project.delete",
+      params: { projectId, requestId: "disconnect-delete" },
+    },
     { signal: cancel.signal },
   ).catch((error) => error);
   await entered;
@@ -721,7 +1292,7 @@ test("capture preparation, reports and finalization block without interrupting t
   const nativeCall = once(f.events, "call");
   const start = f.control("capture.start", {
     requestId: "take",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   const [native] = await nativeCall;
   expect(native.request.operation).toBe("capture.start");
@@ -836,7 +1407,10 @@ test("project service delivers complete operation results through its shared art
     resultDelivery: { inlineBytes: 100 },
   });
   if (!("resultDelivery" in answer)) throw Error("Missing project result delivery");
-  const read = await f.call("artifact.read", { token: answer.resultDelivery.token, offset: 0 });
+  const read = await f.call("artifact.read", {
+    token: answer.resultDelivery.token,
+    offsetBytes: 0,
+  });
   if (!read.ok) throw Error(read.error.message);
   const chunk = read.data as { data: string };
   const bytes = Buffer.from(chunk.data, "base64");
@@ -855,19 +1429,19 @@ test("fresh service owns capture facts without enabling capture or creating span
   });
   const start = {
     requestId: "not-wired",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     microphone: false,
     systemAudio: false,
   };
   expect(await f.call("capture.start", start)).toMatchObject({
     ok: false,
-    error: { code: "NOT_READY" },
+    error: { code: "PREREQUISITE_MISSING" },
   });
   expect(
     await f.call("capture.start", { ...start, cameraDeviceId: "selected-camera" }),
   ).toMatchObject({
     ok: false,
-    error: { code: "NOT_READY" },
+    error: { code: "PREREQUISITE_MISSING" },
   });
   await f.service.close();
   const database = new DatabaseSync(join(f.home, "library/catalog.sqlite"), { readOnly: true });
@@ -907,9 +1481,12 @@ test("audio preparation pins its revision and reuses failed work until explicit 
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const initial = created.data as { project: { projectId: string }; revision: { id: string } };
+  const initial = created.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
+    projectId: initial.project.id,
     expectedRevisionId: initial.revision.id,
     requestId: "silence",
     operations: [
@@ -926,7 +1503,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const selection = {
-    projectId: initial.project.projectId,
+    projectId: initial.project.id,
     revisionId: (edited.data as { revision: { id: string } }).revision.id,
   };
   const pending = await f.call("audio.prepare", selection);
@@ -952,7 +1529,7 @@ test("audio preparation pins its revision and reuses failed work until explicit 
     data: { ...selection, state: "failed", jobId, retryable: true, published: null },
   });
   expect(attempts).toBe(1);
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   await f.job(jobId, "failed");
   expect(attempts).toBe(2);
   expect(await f.call("revision.get", selection)).toMatchObject({
@@ -985,7 +1562,7 @@ test("failed probe retries through the shared job and publishes immutable media 
   const { jobId } = accepted.data as { jobId: string };
   expect((await f.job(jobId, "failed")).errorCode).toBe("MEDIA_WORKER_UNAVAILABLE");
   expect(await f.call("asset.list", {})).toMatchObject({ ok: true, data: { assets: [] } });
-  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { jobId } });
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   const ready = await f.job(jobId, "ready");
   expect(ready.published?.output.assetId).toMatch(/^[a-f0-9]{64}$/);
   expect(attempts).toBe(2);
@@ -1118,7 +1695,7 @@ test("queue capacity refusal leaves no frozen import receipt to poison a later a
     const requestId = `capacity-${index}`;
     const response = await f.call("asset.import", { requestId, path: f.path });
     if (!response.ok) {
-      expect(response.error.code).toBe("LIMIT_EXCEEDED");
+      expect(response.error.code).toBe("CAPACITY_EXCEEDED");
       refusedRequest = requestId;
       break;
     }
@@ -1179,7 +1756,13 @@ test("large provenance history cannot hide metadata and every origin remains pag
     operation: "asset.get",
     params: { assetId },
   });
-  expect(get).toMatchObject({ ok: true, data: { id: assetId, streams: metadata.streams } });
+  expect(get).toMatchObject({
+    ok: true,
+    data: {
+      id: assetId,
+      streams: metadata.streams,
+    },
+  });
   expect(Buffer.byteLength(JSON.stringify(get))).toBeLessThan(1024);
   const observed: ReturnType<AssetStore["origins"]>["origins"] = [];
   let cursor: ReturnType<AssetStore["origins"]>["nextCursor"] = null;
@@ -1218,7 +1801,7 @@ test("startup resumes a committed project deletion marker before serving request
   const created = await f.call("project.create", creation);
   expect(created.ok).toBe(true);
   if (!created.ok) return;
-  const { project } = created.data as { project: { projectId: string } };
+  const { project } = created.data as { project: { id: string } };
   await f.service.close();
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   const projects = projectStoreFixture(
@@ -1226,7 +1809,7 @@ test("startup resumes a committed project deletion marker before serving request
     new AssetStore(catalog, join(f.home, "library")),
     join(f.home, "library"),
   );
-  expect(projects.markDeleting(project.projectId)).toBe(true);
+  expect(projects.markDeleting(project.id)).toBe(true);
   catalog.close();
   const restarted = await startProjectService({ home: f.home });
   cleanups.push(() => restarted.close());
@@ -1234,7 +1817,7 @@ test("startup resumes a committed project deletion marker before serving request
     await callLocal(restarted.socketPath, {
       id: "get",
       operation: "project.get",
-      params: { projectId: project.projectId },
+      params: { projectId: project.id },
     }),
   ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
   await restarted.close();
@@ -1290,12 +1873,12 @@ test("shutdown aborts an in-flight export destination admission before draining 
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   expect(
     await f.call("edit.apply", {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: "place",
       expectedRevisionId: revision.id,
       operations: [
@@ -1315,8 +1898,8 @@ test("shutdown aborts an in-flight export destination admission before draining 
   ).toMatchObject({ ok: true });
   const pending = f
     .call("export.create", {
-      projectId: project.projectId,
-      exportId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
+      projectId: project.id,
+      requestId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
       kind: "video",
       directory: f.home,
       leaf: "output.mp4",
@@ -1341,6 +1924,347 @@ test("shutdown aborts an in-flight export destination admission before draining 
     catalog.close();
   }
 });
+
+test("audio imports persist one pending transcript per audio stream without a model", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), undefined, {
+    autoTranscribe: true,
+  });
+  const imported = await f.call("asset.import", { requestId: "backlog", path: f.path });
+  expect(imported).toMatchObject({ ok: true });
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const database = new Catalog(join(f.home, "library/catalog.sqlite"));
+  try {
+    expect(
+      database.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+    ).toEqual({ count: 2 });
+    expect(
+      database.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    ).toEqual({ count: 0 });
+  } finally {
+    database.close();
+  }
+  expect(requests).toHaveLength(0);
+});
+
+test("a ready model submits one background transcript per audio stream and clears backlog rows", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-ready-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await modelMetadata(await realpath(join(f.home, "library")));
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { state: "ready" },
+  });
+  const imported = await f.call("asset.import", { requestId: "ready", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  await expect
+    .poll(() =>
+      f.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT priority FROM jobs WHERE artifact='transcript' ORDER BY targetId")
+      .all(),
+  ).toEqual([{ priority: "background" }, { priority: "background" }]);
+  await expect
+    .poll(() =>
+      f.service.captures.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+    )
+    .toEqual({ count: 0 });
+});
+
+test("model.prepare drains pending transcript rows", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-prepare-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await modelMetadata(await realpath(join(home, "library")));
+  const imported = await f.call("asset.import", { requestId: "prepare-backlog", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await f.job((imported.data as { jobId: string }).jobId, "ready");
+  expect(await f.call("model.prepare", { modelId: "parakeet" })).toMatchObject({ ok: true });
+  await expect
+    .poll(() =>
+      f.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT DISTINCT priority FROM jobs WHERE artifact='transcript'")
+      .all(),
+  ).toEqual([{ priority: "background" }]);
+});
+
+test("service restart drains pending transcript rows when the model is already ready", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-restart-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const first = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  const imported = await first.call("asset.import", {
+    requestId: "restart-backlog",
+    path: first.path,
+  });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  await first.job((imported.data as { jobId: string }).jobId, "ready");
+  expect(
+    first.service.captures.catalog
+      .prepare("SELECT COUNT(*) AS count FROM transcript_backlog")
+      .get(),
+  ).toEqual({ count: 2 });
+  await first.service.close();
+  await modelMetadata(await realpath(join(home, "library")));
+  const second = await projectServiceFixture(cleanups, controlledSpeech(requests), home, {
+    autoTranscribe: true,
+  });
+  await expect
+    .poll(() => second.call("model.status", { modelId: "parakeet" }))
+    .toMatchObject({ ok: true, data: { state: "ready" } });
+  await expect
+    .poll(() =>
+      second.service.captures.catalog
+        .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+        .get(),
+    )
+    .toEqual({ count: 2 });
+});
+
+test("explicit transcript transcription joins the queued background job and promotes it", async () => {
+  const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const controlled = controlledSpeech(requests);
+  const worker = async (...args: Parameters<typeof controlled>) => {
+    const [operation] = args;
+    if (operation === "speech.transcribe") {
+      entered();
+      await gate;
+    }
+    return controlled(...args);
+  };
+  const home = await mkdtemp(join(tmpdir(), "transcript-backlog-join-"));
+  cleanups.push(() => rm(home, { recursive: true, force: true }));
+  const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
+  await modelMetadata(await realpath(join(home, "library")));
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { state: "ready" },
+  });
+  const imported = await f.call("asset.import", { requestId: "join-backlog", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const importedJob = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = importedJob.published!.output.assetId;
+  await f.call("model.prepare", { modelId: "parakeet" });
+  await started;
+  const explicit = await f.call("transcript.transcribe", { assetId, streamId: "track:1" });
+  expect(explicit).toMatchObject({ ok: true, data: { jobId: expect.any(String) } });
+  const jobId = (explicit as { data: { jobId: string } }).data.jobId;
+  release();
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript'")
+      .get(),
+  ).toEqual({ count: 2 });
+  expect(
+    f.service.captures.catalog.prepare("SELECT jobId,priority FROM jobs WHERE jobId=?").get(jobId),
+  ).toMatchObject({ jobId, priority: "interactive" });
+  await f.job(jobId, "ready");
+});
+
+test("asset conversion does not enqueue transcript work for a conversion output", async () => {
+  const worker: MediaWorker = async (operation, params, options) => {
+    if (operation === "media.probe")
+      return {
+        ok: true as const,
+        data: {
+          originUs: 0,
+          streams: [
+            {
+              id: "video",
+              kind: "video" as const,
+              codec: "fixture",
+              decodable: true,
+              width: 16,
+              height: 16,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+            {
+              id: "audio",
+              kind: "audio" as const,
+              codec: "fixture",
+              decodable: true,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+          ],
+        },
+      };
+    return { ok: true as const, data: {} };
+  };
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
+  const imported = await f.call("asset.import", { requestId: "convert-source", path: f.path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const ready = await f.job((imported.data as { jobId: string }).jobId, "ready");
+  const assetId = ready.published!.output.assetId;
+  expect(
+    await f.call("asset.convert", {
+      assetId,
+      streamIds: ["video", "audio"],
+      recipe: "hdr-to-sdr-hable-1000nit-v1",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "PREREQUISITE_MISSING" } });
+  expect(
+    f.service.captures.catalog.prepare("SELECT COUNT(*) AS count FROM transcript_backlog").get(),
+  ).toEqual({ count: 1 });
+});
+
+test("acquisition publication enqueues audio streams with its acquisition selection", async () => {
+  const worker: MediaWorker = async (operation, params, options) => {
+    if (operation === "media.probe")
+      return {
+        ok: true as const,
+        data: {
+          originUs: 0,
+          streams: [
+            {
+              id: "video",
+              kind: "video" as const,
+              codec: "fixture",
+              decodable: true,
+              width: 16,
+              height: 16,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+            {
+              id: "audio",
+              kind: "audio" as const,
+              codec: "fixture",
+              decodable: true,
+              startUs: 0,
+              endUs: 1000000,
+              segments: [{ startUs: 0, endUs: 1000000, empty: false }],
+            },
+          ],
+        },
+      };
+    return sourceWorker(operation, params, options);
+  };
+  const f = await projectServiceFixture(cleanups, worker, undefined, { autoTranscribe: true });
+  const path = join(f.home, "acquisition-source");
+  await mkdir(path);
+  await writeFile(join(path, "capture.journal.jsonl"), JSON.stringify({ sessionID: "acquired" }));
+  await writeFile(join(path, "video.mov"), "video");
+  await writeFile(join(path, "narration.mov"), "audio");
+  const imported = await f.call("acquisition.import", { requestId: "acquisition-audio", path });
+  expect(imported.ok).toBe(true);
+  if (!imported.ok) return;
+  const jobId = (imported.data as { jobId: string }).jobId;
+  const done = await f.job(jobId, "ready");
+  const acquisitionId = (done.published!.output as unknown as { acquisitionId: string })
+    .acquisitionId;
+  const row = f.service.captures.catalog
+    .prepare("SELECT metadata FROM acquisitions WHERE id=?")
+    .get(acquisitionId) as { metadata: string };
+  const acquisition = JSON.parse(row.metadata) as {
+    bindings: { assetId: string; streamId: string; sourceRoles: string[] }[];
+  };
+  const binding = acquisition.bindings.find((value) => value.sourceRoles.includes("narration"))!;
+  expect(binding).toMatchObject({ sourceRoles: ["narration"] });
+  expect(
+    f.service.captures.catalog
+      .prepare("SELECT assetId,streamId,acquisitionId FROM transcript_backlog")
+      .all(),
+  ).toEqual([{ assetId: binding.assetId, streamId: binding.streamId, acquisitionId }]);
+});
+
+test.each(["INVALID_REQUEST", "MEDIA_WORKER_FAILED"])(
+  "%s transcript failure is left for explicit retry",
+  async (code) => {
+    const requests: import("@yap/core/transcript").SpeechTranscriptionRequest[] = [];
+    const base = controlledSpeech(requests);
+    let attempts = 0;
+    const worker = async (...args: Parameters<typeof base>) => {
+      if (args[0] === "speech.transcribe") {
+        attempts++;
+        return {
+          ok: false as const,
+          error: {
+            code,
+            message: "fixture refusal",
+            retryable: false,
+            details: {},
+          },
+        };
+      }
+      return base(...args);
+    };
+    const home = await mkdtemp(join(tmpdir(), "transcript-backlog-failure-"));
+    cleanups.push(() => rm(home, { recursive: true, force: true }));
+    const f = await projectServiceFixture(cleanups, worker, home, { autoTranscribe: true });
+    await modelMetadata(await realpath(join(home, "library")));
+    expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+      ok: true,
+      data: { state: "ready" },
+    });
+    const imported = await f.call("asset.import", { requestId: "nonretryable", path: f.path });
+    expect(imported.ok).toBe(true);
+    if (!imported.ok) return;
+    await f.job((imported.data as { jobId: string }).jobId, "ready");
+    await f.call("model.prepare", { modelId: "parakeet" });
+    await expect
+      .poll(() =>
+        f.service.captures.catalog
+          .prepare(
+            "SELECT COUNT(*) AS count FROM jobs WHERE artifact='transcript' AND state='failed'",
+          )
+          .get(),
+      )
+      .toEqual({ count: 2 });
+    const failures = () =>
+      f.service.captures.catalog
+        .prepare(
+          "SELECT jobId,attemptId,generation,state,errorCode FROM jobs WHERE artifact='transcript' ORDER BY jobId",
+        )
+        .all();
+    const before = failures();
+    await expect
+      .poll(() =>
+        f.service.captures.catalog.prepare("SELECT assetId FROM transcript_backlog").all(),
+      )
+      .toEqual([]);
+    await f.call("model.prepare", { modelId: "parakeet" });
+    expect(failures()).toEqual(before);
+    expect(attempts).toBe(2);
+  },
+);
 
 test("selected-source transcript reads report unprepared models without downloading or inventing a recording", async () => {
   const requests: string[] = [];
@@ -1371,8 +2295,23 @@ test("selected-source transcript reads report unprepared models without download
   const selection = { assetId: ready.published!.output.assetId, streamId: "track:1" };
   expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
     ok: true,
-    data: { state: "absent" },
+    data: { state: "unavailable" },
   });
+  expect(
+    await f.call("model.remove", { modelId: "parakeet", requestId: "remove-before-transcribe" }),
+  ).toMatchObject({
+    ok: true,
+    data: { id: "parakeet", deleted: true, freedBytes: 0 },
+  });
+  expect(await f.call("transcript.transcribe", selection)).toMatchObject({
+    ok: true,
+    data: { state: "unavailable", reason: "model_not_prepared", retryable: true },
+  });
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { presence: "absent" },
+  });
+  expect(requests.filter((operation) => operation === "speech.transcribe")).toEqual([]);
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
     data: {
@@ -1381,31 +2320,29 @@ test("selected-source transcript reads report unprepared models without download
       reason: "model_not_prepared",
       retryable: true,
       jobId: null,
-      page: null,
     },
   });
   expect(
-    await f.call("transcript.review", { ...selection, range: { startUs: 0, endUs: 1_000_000 } }),
+    await f.call("transcript.review", {
+      ...selection,
+      sourceRange: { startUs: 0, endUs: 1_000_000 },
+    }),
   ).toMatchObject({
     ok: true,
-    data: { state: "preparing", model: { state: "preparing" }, page: null },
+    data: { state: "running", model: { state: "running" } },
   });
   expect(await f.call("transcript.search", { ...selection, text: "hello" })).toMatchObject({
     ok: true,
-    data: { reason: "model_not_prepared", page: null },
-  });
-  expect(await f.call("transcript.retry", selection)).toMatchObject({
-    ok: false,
-    error: { code: "MODEL_NOT_PREPARED" },
+    data: { reason: "model_not_prepared" },
   });
   expect(await f.call("transcript.get", { ...selection, acquisitionId: "missing" })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
-  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
-    ok: true,
-    data: { state: "preparing" },
-  });
+  const preparing = await f.call("model.status", { modelId: "parakeet" });
+  expect(preparing).toMatchObject({ ok: true, data: { state: "running", presence: "absent" } });
+  // Presence reports the installed files, never the lifecycle word.
+  expect(modelStatusSchema.safeParse((preparing as { data: unknown }).data).success).toBe(true);
   expect(requests.filter((operation) => operation === "speech.transcribe")).toEqual([]);
 });
 
@@ -1450,11 +2387,11 @@ test("project transcript review reports a failed default model download as faile
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   const placed = await f.call("edit.apply", {
-    projectId: project.projectId,
+    projectId: project.id,
     requestId: "place",
     expectedRevisionId: revision.id,
     operations: [
@@ -1473,13 +2410,13 @@ test("project transcript review reports a failed default model download as faile
   });
   if (!placed.ok) throw new Error(JSON.stringify(placed));
   const review = {
-    projectId: project.projectId,
+    projectId: project.id,
     revisionId: (placed.data as { revision: { id: string } }).revision.id,
   };
   // The default model is fetched without asking; here the fetch fails.
   expect(await f.call("transcript.review", review)).toMatchObject({
     ok: true,
-    data: { state: "preparing" },
+    data: { state: "running" },
   });
   await expect
     .poll(
@@ -1488,6 +2425,9 @@ test("project transcript review reports a failed default model download as faile
           .data?.state,
     )
     .toBe("failed");
+  const failed = await f.call("model.status", { modelId: "parakeet" });
+  expect(failed).toMatchObject({ ok: true, data: { state: "failed", presence: "absent" } });
+  expect(modelStatusSchema.safeParse((failed as { data: unknown }).data).success).toBe(true);
   expect(await f.call("transcript.review", review)).toMatchObject({
     ok: true,
     data: { state: "failed", model: { state: "failed" } },
@@ -1510,10 +2450,10 @@ test("project transcript paging uses shared jobs and returns an empty historical
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
-  const params = { projectId: project.projectId, revisionId: revision.id, limit: 1 };
+  const params = { projectId: project.id, revisionId: revision.id, limit: 1 };
   const pending = await f.call("transcript.get", params);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
@@ -1521,11 +2461,12 @@ test("project transcript paging uses shared jobs and returns an empty historical
   expect(await f.call("transcript.get", params)).toMatchObject({
     ok: true,
     data: {
-      projectId: project.projectId,
+      projectId: project.id,
       revisionId: revision.id,
       state: "ready",
       dependencies: [],
-      page: { rows: [], nextCursor: null },
+      rows: [],
+      nextCursor: null,
     },
   });
   const searching = await f.call("transcript.search", { ...params, text: "missing words" });
@@ -1534,10 +2475,11 @@ test("project transcript paging uses shared jobs and returns an empty historical
   expect(await f.call("transcript.search", { ...params, text: "missing words" })).toMatchObject({
     ok: true,
     data: {
-      projectId: project.projectId,
+      projectId: project.id,
       revisionId: revision.id,
       state: "ready",
-      page: { entries: [], nextCursor: null },
+      entries: [],
+      nextCursor: null,
     },
   });
   expect(await f.call("transcript.get", { projectId: "missing" })).toMatchObject({
@@ -1608,7 +2550,7 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
   const selection = {
     assetId: admitted.published!.output.assetId,
     streamId: "audio:1",
-    range: { startUs: 0, endUs: 21 },
+    sourceRange: { startUs: 0, endUs: 21 },
   };
   const pending = await f.call("audio.get", selection);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
@@ -1621,7 +2563,7 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
       published: {
         output: {
           ...selection,
-          frames: 1,
+          frameCount: 1,
           sampleRate: 48000,
           channels: 1,
           unavailable: [],
@@ -1631,10 +2573,10 @@ test("selected-source audio publishes verified WAV bytes through artifact delive
   });
   if (!ready.ok) throw new Error(JSON.stringify(ready));
   const { token } = (ready.data as { delivery: { token: string } }).delivery;
-  const read = await f.call("artifact.read", { token, offset: 0 });
+  const read = await f.call("artifact.read", { token, offsetBytes: 0 });
   expect(read).toMatchObject({
     ok: true,
-    data: { data: wave.toString("base64"), eof: true, nextOffset: wave.length },
+    data: { data: wave.toString("base64"), eof: true, nextOffsetBytes: wave.length },
   });
   expect(await f.call("artifact.close", { token })).toMatchObject({ ok: true });
 });
@@ -1652,13 +2594,13 @@ test("project export refuses a dangling prepared audio reference before native w
   });
   if (!created.ok) throw Error(JSON.stringify(created));
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   await f.service.close();
   const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
   new ResourceReferences(catalog).retain("prepared-audio", { kind: "revision", id: revision.id }, [
-    JSON.stringify([project.projectId, "prepared-attempt"]),
+    JSON.stringify([project.id, "prepared-attempt"]),
   ]);
   catalog.close();
   const service = await startProjectService({
@@ -1673,8 +2615,8 @@ test("project export refuses a dangling prepared audio reference before native w
     id: "export",
     operation: "export.create",
     params: {
-      projectId: project.projectId,
-      exportId: "7c3f4225-31f5-4467-9bb5-4f82d2ddf0d5",
+      requestId: "dangling-prepared-export",
+      projectId: project.id,
       kind: "processed-package",
       directory: f.home,
       leaf: "prepared.zip",
@@ -1777,8 +2719,8 @@ test("asset job and cache presence checks preserve source validation without hyd
     if (!frame.ok) throw new Error(JSON.stringify(frame));
     jobId = (frame.data as { jobId: string }).jobId;
     expect(await f.job(jobId, "failed")).toMatchObject({
-      jobId,
-      target: { kind: "asset", assetId },
+      id: jobId,
+      target: { kind: "asset", id: assetId },
       reason: "offline",
       retryable: true,
       errorCode: "MEDIA_WORKER_UNAVAILABLE",
@@ -1816,17 +2758,17 @@ test("asset job and cache presence checks preserve source validation without hyd
       atUs: 0,
       maxLongEdge: 2,
       supportDigest: createHash("sha256").update(JSON.stringify(available)).digest("hex"),
-      implementationId: "native-source-picture-v7-cursor",
+      implementationId: "native-source-picture-v12-ink",
     });
     reads = vi.spyOn(DatabaseSync.prototype, "prepare");
     try {
       expect(await f.call("job.retry", { jobId: jobId! })).toMatchObject({
         ok: true,
-        data: { jobId: jobId! },
+        data: { id: jobId! },
       });
       expect(await f.job(jobId!, "ready")).toMatchObject({
-        jobId: jobId!,
-        target: { kind: "asset", assetId },
+        id: jobId!,
+        target: { kind: "asset", id: assetId },
         published: {
           output: {
             assetId,
@@ -1836,7 +2778,7 @@ test("asset job and cache presence checks preserve source validation without hyd
             actualSourceUs: 0,
             width: 2,
             height: 1,
-            bytes: payload.length,
+            sizeBytes: payload.length,
           },
         },
       });
@@ -1854,13 +2796,15 @@ test("asset job and cache presence checks preserve source validation without hyd
     const ready = await f.call("frame.get", selection);
     if (!ready.ok) throw new Error(JSON.stringify(ready));
     const token = (ready.data as { delivery: { token: string } }).delivery.token;
-    expect(await f.call("artifact.read", { token, offset: 0, maxBytes: payload.length })).toEqual({
+    expect(
+      await f.call("artifact.read", { token, offsetBytes: 0, maxBytes: payload.length }),
+    ).toEqual({
       id: "test",
       ok: true,
       data: {
         data: payload.toString("base64"),
-        offset: 0,
-        nextOffset: payload.length,
+        offsetBytes: 0,
+        nextOffsetBytes: payload.length,
         eof: true,
       },
     });
@@ -1873,7 +2817,7 @@ test("asset job and cache presence checks preserve source validation without hyd
       .run("not parsed", assetId);
     expect
       .soft(await f.call("job.retry", { jobId: jobId! }))
-      .toMatchObject({ ok: true, data: { jobId: jobId!, state: "ready" } });
+      .toMatchObject({ ok: true, data: { id: jobId!, state: "ready" } });
     expect(await f.call("frame.get", selection)).toMatchObject({
       ok: false,
       error: { code: "INTERNAL_ERROR" },
@@ -1969,30 +2913,142 @@ test("model discovery crosses the public wire before either model is prepared", 
   const f = await setup(async () => ({ ok: true, data: {} }));
   expect(await f.call("model.list", {})).toMatchObject({
     ok: true,
-    data: expect.arrayContaining([
-      expect.objectContaining({
-        modelId: "parakeet",
-        purpose: "transcription",
-        descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
-      }),
-      expect.objectContaining({
-        modelId: "qwen3-tts-icl-v1",
-        purpose: "voice",
-        preparation: expect.objectContaining({ runtimeSourceRequired: true }),
-      }),
-    ]),
+    data: {
+      models: expect.arrayContaining([
+        expect.objectContaining({
+          id: "parakeet",
+          purpose: "transcription",
+          descriptorDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+        expect.objectContaining({
+          id: "qwen3-tts-icl-v1",
+          purpose: "voice",
+          preparation: expect.objectContaining({ runtimeSourceRequired: true }),
+        }),
+      ]),
+    },
   });
   expect(await f.call("model.status", { modelId: "qwen3-tts-icl-v1" })).toMatchObject({
     ok: true,
-    data: { state: "absent" },
+    data: { state: "unavailable" },
   });
 });
 
-test("preset reads cross the public wire without changing the catalog format", async () => {
+test("model.remove reports exact model bytes, fences running requests, and rejects unknown models", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  const modelRoot = join(f.home, "library", "models");
+  for (const [relative, bytes] of [
+    ["parakeet/revision/model.bin", 13],
+    [".cache/parakeet/compiler.bin", 17],
+    [".staging/parakeet/flight/model.bin", 19],
+  ] as const) {
+    const path = join(modelRoot, relative);
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, Buffer.alloc(bytes));
+  }
+  const before = await f.call("storage.usage", {});
+  if (!before.ok) throw new Error(JSON.stringify(before));
+  expect(before.data).toMatchObject({ modelBytes: 49 });
+  const catalog = new Catalog(join(f.home, "library/catalog.sqlite"));
+  const listed = await f.call("model.list", { limit: 1000 });
+  if (!listed.ok) throw new Error(JSON.stringify(listed));
+  const { models } = listed.data as { models: { id: string; modelDigest: string }[] };
+  const digestOf = (modelId: string) => models.find((model) => model.id === modelId)!.modelDigest;
+  // Stored the way transcription stores its job input: the model by content digest and repo pin.
+  const input = JSON.stringify({
+    selection: { assetId: "asset" },
+    modelDigest: digestOf("parakeet"),
+    pins: { model: "FluidInference/parakeet-tdt-0.6b-v3" },
+  });
+  const otherInput = JSON.stringify({ engine: { modelDigest: digestOf("qwen3-tts-icl-v1") } });
+  catalog.catalog
+    .prepare(
+      "INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,errorCode,errorDetails,retryable,generation,queuedSequence,deferred,readmitted,inputSha256,input) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      "running-model",
+      "attempt",
+      "asset",
+      "asset",
+      "",
+      "fixture",
+      "heavy",
+      "running",
+      null,
+      null,
+      null,
+      1,
+      1,
+      999,
+      0,
+      0,
+      createHash("sha256").update(input).digest("hex"),
+      input,
+    );
+  expect(
+    await f.call("model.remove", { requestId: "remove-in-use", modelId: "parakeet" }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "MODEL_IN_USE", retryable: true, details: { modelId: "parakeet" } },
+  });
+  // A running job that uses a different model does not hold this one.
+  catalog.catalog
+    .prepare("UPDATE jobs SET input=?, inputSha256=? WHERE jobId=?")
+    .run(otherInput, createHash("sha256").update(otherInput).digest("hex"), "running-model");
+  const removed = await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" });
+  expect(removed).toEqual({
+    id: "test",
+    ok: true,
+    data: { id: "parakeet", deleted: true, freedBytes: 49 },
+  });
+  catalog.catalog
+    .prepare(
+      "INSERT INTO jobs(jobId,attemptId,targetKind,targetId,revisionId,artifact,lane,state,reason,errorCode,errorDetails,retryable,generation,queuedSequence,deferred,readmitted,inputSha256,input) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      "running-after-removal",
+      "attempt",
+      "asset",
+      "asset",
+      "",
+      "fixture",
+      "heavy",
+      "running",
+      null,
+      null,
+      null,
+      1,
+      1,
+      999,
+      0,
+      0,
+      createHash("sha256").update(input).digest("hex"),
+      input,
+    );
+  expect(await f.call("model.remove", { requestId: "remove-model", modelId: "parakeet" })).toEqual(
+    removed,
+  );
+  expect(
+    await f.call("model.remove", { requestId: "remove-model", modelId: "qwen3-tts-icl-v1" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
+  expect(await f.call("storage.usage", {})).toMatchObject({ ok: true, data: { modelBytes: 0 } });
+  expect(await f.call("model.status", { modelId: "parakeet" })).toMatchObject({
+    ok: true,
+    data: { id: "parakeet", presence: "absent" },
+  });
+  expect(
+    await f.call("model.remove", { requestId: "unknown-model", modelId: "missing" }),
+  ).toMatchObject({
+    ok: false,
+    error: { code: "NOT_FOUND", details: { kind: "model" } },
+  });
+  catalog.close();
+});
+
+test("preset reads cross the public wire", async () => {
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { bundled: join(import.meta.dirname, "../../../presets") },
   });
-  expect(catalogFormat).toBe(29);
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
     data: {
@@ -2005,7 +3061,7 @@ test("preset reads cross the public wire without changing the catalog format", a
       instructions: expect.any(Array),
     },
   });
-  expect(await f.call("preset.get", { id: "tactile-launch-film" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "tactile-launch-film" })).toMatchObject({
     ok: true,
     data: {
       id: "tactile-launch-film",
@@ -2016,7 +3072,7 @@ test("preset reads cross the public wire without changing the catalog format", a
       instructions: expect.arrayContaining([expect.stringContaining("tactile-launch-film")]),
     },
   });
-  expect(await f.call("preset.get", { id: "missing-preset" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "missing-preset" })).toMatchObject({
     ok: false,
     error: { code: "PRESET_NOT_FOUND" },
   });
@@ -2061,11 +3117,16 @@ test("presets refresh at startup and on preset.update, pinned to one commit, ove
   const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }), undefined, {
     presets: { refresh: { apiBase: "https://api.test", rawBase: "https://raw.test", fetch } },
   });
-  expect(await f.call("preset.update", {})).toMatchObject({
+  const updated = await f.call("preset.update", { requestId: "preset-update-replay" });
+  expect(updated).toMatchObject({
     ok: true,
     // The startup refresh may already have installed it; either way the result says what to do.
     data: { refresh: { commit, error: null }, instructions: [expect.any(String)] },
   });
+  expect(await f.call("preset.update", { requestId: "preset-update-replay" })).toEqual(updated);
+  expect(
+    await f.call("preset.update", { requestId: "preset-update-replay", presetId: "other" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.list", {})).toMatchObject({
     ok: true,
     data: { presets: [expect.objectContaining({ id: "wire-demo", source: "downloaded" })] },
@@ -2086,6 +3147,7 @@ test("a local preset is created, read and trashed over the public wire", async (
     },
   });
   const created = await f.call("preset.create", {
+    requestId: "preset-create-replay",
     name: "Vertical explainer",
     references: ["https://example.com/v"],
   });
@@ -2097,6 +3159,16 @@ test("a local preset is created, read and trashed over the public wire", async (
       instructions: expect.any(Array),
     },
   });
+  expect(
+    await f.call("preset.create", {
+      requestId: "preset-create-replay",
+      name: "Vertical explainer",
+      references: ["https://example.com/v"],
+    }),
+  ).toEqual(created);
+  expect(
+    await f.call("preset.create", { requestId: "preset-create-replay", name: "Different" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(await f.call("preset.create", { name: "Vertical explainer" })).toMatchObject({
     ok: true,
     data: { id: "vertical-explainer-2" },
@@ -2109,7 +3181,7 @@ test("a local preset is created, read and trashed over the public wire", async (
       ]),
     },
   });
-  expect(await f.call("preset.get", { id: "vertical-explainer" })).toMatchObject({
+  expect(await f.call("preset.get", { presetId: "vertical-explainer" })).toMatchObject({
     ok: true,
     data: { source: "local", text: expect.stringContaining("https://example.com/v") },
   });
@@ -2117,16 +3189,28 @@ test("a local preset is created, read and trashed over the public wire", async (
     ok: false,
     error: { code: "PRESET_REFERENCE_INVALID" },
   });
-  expect(await f.call("preset.delete", { id: "studio-podcast" })).toMatchObject({
+  expect(await f.call("preset.delete", { presetId: "studio-podcast" })).toMatchObject({
     ok: false,
     error: { code: "PRESET_NOT_LOCAL" },
   });
-  expect(await f.call("preset.delete", { id: "vertical-explainer" })).toMatchObject({
+  const deletedPreset = await f.call("preset.delete", {
+    presetId: "vertical-explainer",
+    requestId: "preset-delete-replay",
+  });
+  expect(deletedPreset).toMatchObject({
     ok: true,
     data: { trashedPaths: [expect.stringContaining("vertical-explainer")] },
   });
+  expect(
+    await f.call("preset.delete", {
+      presetId: "vertical-explainer",
+      requestId: "preset-delete-replay",
+    }),
+  ).toEqual(deletedPreset);
+  expect(
+    await f.call("preset.delete", { presetId: "other", requestId: "preset-delete-replay" }),
+  ).toMatchObject({ ok: false, error: { code: "REQUEST_CONFLICT" } });
   expect(trashed).toHaveLength(1);
-  expect(catalogFormat).toBe(29);
 });
 
 test("a persisted queued voice request reaches its initialized owner after startup recovery", async () => {
@@ -2137,8 +3221,8 @@ test("a persisted queued voice request reaches its initialized owner after start
   const library = join(f.home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
-    registry = new Models(library);
-  const model = registry.list().find((value) => value.modelId === voiceProfile.id)!;
+    registry = new Models(library, globalThis.fetch, undefined, catalog);
+  const model = registry.list().find((value) => value.id === voiceProfile.id)!;
   const bytes = Buffer.alloc(44 + 24000 * 4);
   bytes.write("RIFF");
   bytes.writeUInt32LE(bytes.length - 8, 4);
@@ -2178,7 +3262,7 @@ test("a persisted queued voice request reaches its initialized owner after start
     targets: {
       pin: (target) => {
         if (target.kind !== "asset") throw Error("asset");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
       isAvailable: () => true,
@@ -2213,7 +3297,7 @@ test("a persisted queued voice request reaches its initialized owner after start
     },
   });
   const request = await owner.request({
-    modelId: model.modelId,
+    modelId: model.id,
     reference: { assetId: reference.id, streamId: "track:1" },
     referenceText: "A complete reference sentence.",
     text: "A complete desired sentence.",
@@ -2270,10 +3354,21 @@ test("an agent's inspect.open hands the app the project's name for its preview w
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   expect(await f.call("inspect.open", { projectId })).toMatchObject({
     ok: true,
     data: { native: { opened: true } },
   });
   expect(forwarded).toMatchObject([{ projectId, title: "Launch video" }]);
+});
+
+test("unsupported service-local correspondence package reads are permanent input refusals", async () => {
+  const f = await projectServiceFixture(cleanups, async () => ({ ok: true, data: {} }));
+  expect(
+    await f.call("correspondence.get", {
+      packageHandle: "caller-package",
+      evidenceId: "evidence",
+      generation: "generation",
+    }),
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS", retryable: false } });
 });

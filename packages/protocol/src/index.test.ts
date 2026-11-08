@@ -1,18 +1,190 @@
 import { describe, expect, it } from "vitest";
+import ledger from "./refusal-ledger.json" with { type: "json" };
 import { readFileSync } from "node:fs";
+import { z } from "zod";
 import {
   ARTIFACT_CHUNK_BYTES,
   captureDeviceSchema,
-  captureSelectionSchema,
   captureReportSchema,
+  captureSelectionSchema,
   nativeStartSchema,
   admitOperation,
   operationSchema,
   operationNames,
+  readOnlyOperations,
+  idempotentOperations,
   appOperations,
   parseRequest,
   responseSchema,
+  operationWaitMs,
+  operationError,
+  refusalRetryAfterMs,
 } from "./index.js";
+import { workStateSchema } from "./work.js";
+import {
+  artifactStatusSchema,
+  cliStatusSchema,
+  jobStatusSchema,
+  modelStatusSchema,
+  skillStatusSchema,
+} from "./work.js";
+import { updateStatusSchema } from "./update.js";
+
+function allEnums(
+  value: unknown,
+  path: string[] = [],
+): Array<{ path: string[]; values: string[] }> {
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  const values = Array.isArray(record.enum)
+    ? record.enum.filter((item): item is string => typeof item === "string")
+    : typeof record.const === "string"
+      ? [record.const]
+      : [];
+  return (values.length ? [{ path, values }] : []).concat(
+    Object.entries(record).flatMap(([key, child]) => allEnums(child, [...path, key])),
+  );
+}
+
+const oldStateWords = new Set([
+  "waiting",
+  "queued",
+  "running",
+  "ready",
+  "failed",
+  "unavailable",
+  "canceled",
+  "not_requested",
+  "not_ready",
+  "processing",
+  "preparing",
+  "absent",
+  "updating",
+  "opening",
+  "closing",
+  "cleanup_pending",
+  "pending",
+  "checking",
+  "downloading",
+  "installing",
+  "complete",
+  "completed",
+  "committed",
+  "installed",
+  "missing",
+  "unmanaged",
+  "disabled",
+  "different",
+  "invalid",
+  "needs_attention",
+]);
+function scanProtocolStateEnums(
+  schemas: readonly z.ZodType[],
+): Array<{ path: string[]; values: string[] }> {
+  const workWords = new Set(workStateSchema.options);
+  const factSets = [
+    new Set(["installed", "missing", "unmanaged", "disabled", "needs_attention"]),
+    new Set(["installed", "missing", "different", "unavailable", "needs_attention"]),
+    new Set(["absent", "ready", "invalid"]),
+    new Set(["available", "disabled", "unavailable"]),
+  ];
+  return schemas.flatMap((schema, index) =>
+    allEnums(z.toJSONSchema(schema, { reused: "ref" }), [`schema${index}`]).filter(
+      ({ path, values }) =>
+        !factSets.some(
+          (facts) => values.length === facts.size && values.every((value) => facts.has(value)),
+        ) &&
+        values.filter((value) => oldStateWords.has(value)).length >= 2 &&
+        !(
+          values.length === workWords.size && values.every((value) => workWords.has(value as never))
+        ),
+    ),
+  );
+}
+
+it("scans operation and status schemas for a second async state vocabulary", () => {
+  expect(
+    scanProtocolStateEnums([
+      operationSchema,
+      captureReportSchema,
+      captureDeviceSchema,
+      updateStatusSchema,
+      skillStatusSchema,
+      cliStatusSchema,
+      modelStatusSchema,
+      jobStatusSchema,
+      artifactStatusSchema,
+    ]),
+  ).toEqual([]);
+  expect(
+    scanProtocolStateEnums([z.object({ state: z.enum(["processing", "ready"]) })]),
+  ).toHaveLength(1);
+});
+
+it("advertises shortcut bindings as synchronous app operations", () => {
+  expect(appOperations.has("shortcuts.get")).toBe(true);
+  expect(appOperations.has("shortcuts.set")).toBe(true);
+  expect(readOnlyOperations.has("shortcuts.get")).toBe(true);
+  expect(idempotentOperations.has("shortcuts.set")).toBe(true);
+  expect(operationSchema.parse({ operation: "shortcuts.get", params: {} })).toMatchObject({
+    operation: "shortcuts.get",
+    params: {},
+  });
+  expect(
+    operationSchema.parse({
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": "ctrl+cmd+r" },
+      },
+    }).operation,
+  ).toBe("shortcuts.set");
+  // Raw key codes are the app's to derive from the keys a caller names.
+  expect(
+    operationSchema.safeParse({
+      operation: "shortcuts.set",
+      params: {
+        bindings: { "capture.startOrStop": { keyCode: 1, modifiers: 2560, label: "⌥⇧S" } },
+      },
+    }).success,
+  ).toBe(false);
+  expect(operationWaitMs("shortcuts.set")).toBe(operationWaitMs("update.setEnabled"));
+});
+
+it("advertises recording.prompt as a read-only operation naming at most one media owner", () => {
+  expect(operationNames.has("recording.prompt")).toBe(true);
+  expect(readOnlyOperations.has("recording.prompt")).toBe(true);
+  expect(operationSchema.parse({ operation: "recording.prompt", params: {} })).toEqual({
+    operation: "recording.prompt",
+    params: {},
+  });
+  for (const params of [{ recordingId: "rec-1" }, { projectId: "p-1" }, { assetId: "a-1" }])
+    expect(operationSchema.parse({ operation: "recording.prompt", params })).toEqual({
+      operation: "recording.prompt",
+      params,
+    });
+  expect(
+    operationSchema.safeParse({
+      operation: "recording.prompt",
+      params: { recordingId: "rec-1", projectId: "p-1" },
+    }).success,
+  ).toBe(false);
+});
+
+it("has no per-item retry operations", () => {
+  for (const operation of [
+    "index.retry",
+    "transcript.retry",
+    "transcript.render.retry",
+    "cursor.render.retry",
+    "preview.retry",
+    "audio.retry",
+    "frame.retry",
+    "waveform.retry",
+    "spectrogram.retry",
+    "export.retry",
+  ])
+    expect(operationNames.has(operation)).toBe(false);
+});
 
 type AppCaptureContract = {
   operations: { name: string; params: Record<string, unknown> }[];
@@ -35,7 +207,16 @@ it("keeps app capture controls in the public catalog and decodes lifecycle recei
 
   for (const { name, params } of fixture.operations) {
     expect(operationNames.has(name), `${name} is missing from the public catalog`).toBe(true);
-    expect(operationSchema.parse({ operation: name, params })).toMatchObject({ operation: name });
+    const admitted =
+      readOnlyOperations.has(name as never) || idempotentOperations.has(name as never)
+        ? params
+        : {
+            ...params,
+            requestId: (params as Record<string, unknown>).requestId ?? `fixture-${name}`,
+          };
+    expect(operationSchema.parse({ operation: name, params: admitted })).toMatchObject({
+      operation: name,
+    });
   }
 
   for (const { id, report: value } of fixture.reports) {
@@ -94,10 +275,10 @@ it("advertises strict service-routed preset reads", () => {
     params: {},
   });
   expect(
-    operationSchema.parse({ operation: "preset.get", params: { id: "studio-podcast" } }),
+    operationSchema.parse({ operation: "preset.get", params: { presetId: "studio-podcast" } }),
   ).toMatchObject({
     operation: "preset.get",
-    params: { id: "studio-podcast" },
+    params: { presetId: "studio-podcast" },
   });
   expect(
     operationSchema.safeParse({ operation: "preset.list", params: { extra: true } }).success,
@@ -105,7 +286,7 @@ it("advertises strict service-routed preset reads", () => {
   expect(
     operationSchema.safeParse({
       operation: "preset.get",
-      params: { id: "studio-podcast", extra: true },
+      params: { presetId: "studio-podcast", extra: true },
     }).success,
   ).toBe(false);
   expect(operationNames.has("preset.list")).toBe(true);
@@ -126,9 +307,14 @@ it("reads authored project revisions while recording identities retain only sour
     success: true,
     data: { operation: "revision.get", params: { projectId: "project", revisionId: "revision" } },
   });
-  expect(request("recording.delete", { recordingId: "take" })).toMatchObject({
+  expect(
+    request("recording.delete", { recordingId: "take", requestId: "delete-take" }),
+  ).toMatchObject({
     success: true,
-    data: { operation: "recording.delete", params: { recordingId: "take" } },
+    data: {
+      operation: "recording.delete",
+      params: { recordingId: "take", requestId: "delete-take" },
+    },
   });
 });
 
@@ -136,13 +322,21 @@ it("advertises feedback review operations with shared selectors and bounded curs
   expect(
     operationSchema.parse({
       operation: "transcript.review",
-      params: { assetId: "a", streamId: "audio", range: { startUs: 0, endUs: 1_000_000 } },
+      params: {
+        assetId: "a",
+        streamId: "audio",
+        sourceRange: { startUs: 0, endUs: 1_000_000 },
+      },
     }).operation,
   ).toBe("transcript.review");
   expect(
     operationSchema.parse({
       operation: "cursor.render",
-      params: { projectId: "p", atUs: [0, 1_000_000], trailUs: 600_000 },
+      params: {
+        projectId: "p",
+        atUs: [0, 1_000_000],
+        trailUs: 600_000,
+      },
     }).operation,
   ).toBe("cursor.render");
   expect(
@@ -154,18 +348,18 @@ it("advertises feedback review operations with shared selectors and bounded curs
 });
 
 describe("capture selection", () => {
-  const source = { kind: "window", windowId: 7 } as const;
+  const source = { kind: "window", id: 7 } as const;
   it("admits an explicitly selected camera as primary video with the shared audio defaults", () => {
     expect(
       operationSchema.parse({
         operation: "capture.start",
-        params: { requestId: "camera-take", source: { kind: "camera", deviceId: "camera-2" } },
+        params: { requestId: "camera-take", source: { kind: "camera", id: "camera-2" } },
       }),
     ).toMatchObject({
       operation: "capture.start",
       params: {
         requestId: "camera-take",
-        source: { kind: "camera", deviceId: "camera-2" },
+        source: { kind: "camera", id: "camera-2" },
         microphone: true,
         systemAudio: false,
       },
@@ -188,11 +382,11 @@ describe("capture selection", () => {
   });
   it("refuses companion camera authority on a primary camera and malformed device identities", () => {
     for (const params of [
-      { source: { kind: "camera", deviceId: "primary" }, cameraDeviceId: "companion" },
+      { source: { kind: "camera", id: "primary" }, cameraDeviceId: "companion" },
       { source: { kind: "camera" } },
-      { source: { kind: "camera", deviceId: "" } },
-      { source: { kind: "camera", deviceId: "c".repeat(257) } },
-      { source: { kind: "camera", deviceId: "primary", displayId: 7 } },
+      { source: { kind: "camera", id: "" } },
+      { source: { kind: "camera", id: "c".repeat(257) } },
+      { source: { kind: "camera", id: "primary", displayId: 7 } },
     ]) {
       expect(
         operationSchema.safeParse({
@@ -206,7 +400,7 @@ describe("capture selection", () => {
         recordingId: "r",
         sourceId: "s",
         outputDirectory: "/tmp/source",
-        source: { kind: "camera", deviceId: "primary" },
+        source: { kind: "camera", id: "primary" },
         cameraDeviceId: "companion",
         cameraSourceId: "c",
         cameraDirectory: "/tmp/camera",
@@ -220,7 +414,7 @@ describe("capture selection", () => {
           recordingId: "r",
           sourceId: "s",
           outputDirectory: "/tmp/source",
-          source: { kind: "camera", deviceId: "primary" },
+          source: { kind: "camera", id: "primary" },
           ...companion,
         }).success,
       ).toBe(false);
@@ -236,7 +430,7 @@ describe("capture selection", () => {
     for (const selection of [
       { source, cameraAtStart: "off" },
       { source, cameraAtStart: "on" },
-      { source: { kind: "camera", deviceId: "primary" }, cameraAtStart: "off" },
+      { source: { kind: "camera", id: "primary" }, cameraAtStart: "off" },
       { ...companion, cameraAtStart: "paused" },
     ]) {
       expect(captureSelectionSchema.safeParse(selection).success).toBe(false);
@@ -261,7 +455,7 @@ describe("capture selection", () => {
 it("artifact reads ask for one bounded chunk at a whole offset", () => {
   const read = (params: Record<string, unknown>) =>
     operationSchema.safeParse({ operation: "artifact.read", params: { token: "t", ...params } });
-  expect(read({ offset: 0 })).toMatchObject({
+  expect(read({ offsetBytes: 0 })).toMatchObject({
     success: true,
     data: { params: { maxBytes: ARTIFACT_CHUNK_BYTES } },
   });
@@ -287,12 +481,11 @@ it("project indexes use picture taps and retained references across paging and d
     { operation: "index.get", params: { projectId: "project" } },
     {
       operation: "index.get",
-      params: { projectId: "project", cursor: { ...reference, afterOrdinal: 0 } },
+      params: { projectId: "project", cursor: "opaque" },
     },
-    { operation: "index.retry", params: { projectId: "project", tap: reference.tap } },
     {
       operation: "index.coverage",
-      params: { ...reference, cursor: { ...reference, afterSequence: 0, candidateOrdinal: null } },
+      params: { ...reference, cursor: "opaque" },
     },
     { operation: "index.frame", params: { ...reference, ordinal: 0 } },
     { operation: "index.frames", params: { ...reference, ordinals: [1, 0, 1] } },
@@ -319,7 +512,7 @@ it("retained index requests bound paging, references and media batches", () => {
   expect(
     operationSchema.safeParse({
       operation: "index.get",
-      params: { ...source, limit: 201 },
+      params: { ...source, limit: 1001 },
     }).success,
   ).toBe(false);
   expect(
@@ -347,7 +540,7 @@ it("retained index requests bound paging, references and media batches", () => {
   expect(
     operationSchema.safeParse({
       operation: "index.coverage",
-      params: { ...reference, cursor: { ...reference, afterSequence: 0, candidateOrdinal: null } },
+      params: { ...reference, cursor: "opaque" },
     }).success,
   ).toBe(true);
 });
@@ -367,7 +560,7 @@ it("package handles do not authorize managed media inspection", () => {
     ])
       expect(operationSchema.safeParse({ operation, params }).success).toBe(false);
   }
-  for (const operation of ["index.retry", "recording.delete"])
+  for (const operation of ["recording.delete"])
     expect(
       operationSchema.safeParse({ operation, params: { packageHandle: "open-1", atUs: 0 } })
         .success,
@@ -375,12 +568,15 @@ it("package handles do not authorize managed media inspection", () => {
 });
 
 it("arbitrary frame operations require a project or selected asset", () => {
-  for (const operation of ["frame.get", "frame.retry", "frame.batch"]) {
+  for (const operation of ["frame.get", "frame.batch"]) {
     const atUs = operation === "frame.batch" ? [0, 1] : 0;
     expect(
       operationSchema.safeParse({
         operation,
-        params: { assetId: "asset", streamId: "video", atUs },
+        params:
+          operation === "frame.batch"
+            ? { assetId: "asset", streamId: "video", atUs }
+            : { assetId: "asset", streamId: "video", atUs },
       }).success,
     ).toBe(true);
     expect(
@@ -394,8 +590,12 @@ it("arbitrary frame operations require a project or selected asset", () => {
 });
 
 it("audio inspection selects exactly one project or asset stream", () => {
-  for (const operation of ["audio.get", "audio.retry"]) {
-    const params = { assetId: "asset", streamId: "audio", range: { startUs: 0, endUs: 1000 } };
+  for (const operation of ["audio.get"]) {
+    const params = {
+      assetId: "asset",
+      streamId: "audio",
+      sourceRange: { startUs: 0, endUs: 1000 },
+    };
     expect(operationSchema.parse({ operation, params })).toBeTruthy();
     expect(() =>
       operationSchema.parse({ operation, params: { ...params, recordingId: "library" } }),
@@ -405,17 +605,12 @@ it("audio inspection selects exactly one project or asset stream", () => {
 
 it("raw cursor target and continuation namespaces are exclusive", () => {
   const fields = { sourceRange: { startUs: 0, endUs: 1000 }, limit: 1 };
-  const position = {
-    cursor: { after: null, done: false },
-    pause: { after: null, done: false },
-    geometry: { after: null, done: false },
-    interruption: { after: null, done: false },
-  };
+  const position = "opaque";
   const source = { assetId: "asset", streamId: "video", acquisitionId: "capture" };
   expect(
     operationSchema.safeParse({
       operation: "cursor.raw",
-      params: { ...source, ...fields, cursor: { reference: "pinned", position } },
+      params: { ...source, ...fields, cursor: position },
     }).success,
   ).toBe(true);
   for (const params of [
@@ -423,8 +618,8 @@ it("raw cursor target and continuation namespaces are exclusive", () => {
     { ...fields, recordingId: "library", packageHandle: "package" },
     { ...fields, packageHandle: "package", latest: true },
     { ...fields, packageHandle: "package", revisionId: "r1" },
-    { ...fields, packageHandle: "package", cursor: { recordingId: "library", ...position } },
-    { ...fields, recordingId: "library", cursor: { packageHandle: "package", ...position } },
+    { ...fields, packageHandle: "package", cursor: { recordingId: "library", position } },
+    { ...fields, recordingId: "library", cursor: { packageHandle: "package", position } },
     ...["recordingId", "packageHandle"].flatMap((field) => [
       { ...source, ...fields, [field]: "foreign-owner" },
       {
@@ -443,7 +638,7 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
       operation,
       params: { assetId: "asset", streamId: "audio", ...params },
     });
-  expect(parse("transcript.get", {})).toMatchObject({ data: { params: { limit: 250 } } });
+  expect(parse("transcript.get", {})).toMatchObject({ data: { params: { limit: 100 } } });
   expect(parse("transcript.search", { text: "hello" })).toMatchObject({
     data: { params: { limit: 100 } },
   });
@@ -458,7 +653,7 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
     streamId: "speaker-audio",
     channel: 0,
     modelId: "parakeet-speaker",
-    observationRange: { startUs: 0, endUs: 30_000_000 },
+    sourceRange: { startUs: 0, endUs: 30_000_000 },
     generation: "speaker-generation",
   };
   const accepted: [string, Record<string, unknown>][] = [
@@ -468,30 +663,18 @@ it("transcript pages and searches are bounded and their cursors name the pinned 
       "transcript.get",
       {
         speaker,
-        cursor: {
-          ...position,
-          afterSourceUs: 0,
-          afterOrdinal: null,
-          range: null,
-          speaker: { ...speaker, bindingDigest: "a".repeat(64) },
-        },
+        cursor: "opaque",
       },
     ],
     ["transcript.search", { text: "x".repeat(200), limit: 500 }],
-    [
-      "transcript.search",
-      { text: "hello", cursor: { ...position, afterSourceUs: 0, afterOrdinal: 3, text: "hello" } },
-    ],
+    ["transcript.search", { text: "hello", cursor: "opaque" }],
   ];
   for (const [operation, params] of accepted)
     expect(parse(operation, params).success, JSON.stringify(params)).toBe(true);
   const refused: [string, Record<string, unknown>][] = [
     ["transcript.get", { limit: 1001 }],
-    ["transcript.get", { cursor: { ...position, afterSourceUs: 0, afterOrdinal: null } }],
     ["transcript.search", { text: "" }],
     ["transcript.search", { text: "x".repeat(201) }],
-    ["transcript.search", { text: "hello", limit: 501 }],
-    ["transcript.search", { text: "hello", cursor: { ...position, afterSourceUs: 0 } }],
   ];
   for (const [operation, params] of refused)
     expect(parse(operation, params).success, JSON.stringify(params)).toBe(false);
@@ -506,7 +689,7 @@ it("project transcript reads admit explicit speaker-generation joins", () => {
         streamId: "speaker-audio",
         channel: 0,
         modelId: "sortformer",
-        observationRange: { startUs: 0, endUs: 30_000_000 },
+        sourceRange: { startUs: 0, endUs: 30_000_000 },
         generation: "speaker-generation",
       },
     ],
@@ -522,7 +705,7 @@ it("project transcript reads admit explicit speaker-generation joins", () => {
 
 it("project exports preserve their target and refuse ambiguous owners", () => {
   const destination = {
-    exportId: "67a0c032-a3ee-44b9-81f8-7269f0f3195e",
+    requestId: "export-request",
     directory: "/tmp/exports",
     leaf: "tutorial.mp4",
     kind: "video",
@@ -548,6 +731,7 @@ it("source capture continuations retain every reader head through both public op
     cursor: { after: null, done: true },
     pause: { after: [999, 1], done: false },
     geometry: { after: null, done: true },
+    mark: { after: [700, 4], done: false },
     interruption: { after: null, done: false },
   };
   for (const operation of ["cursor.raw", "timeline.events"]) {
@@ -557,16 +741,7 @@ it("source capture continuations retain every reader head through both public op
       acquisitionId: "capture",
       sourceRange: { startUs: 0, endUs: 1000 },
       limit: 1,
-      cursor: {
-        reference: "pinned",
-        position:
-          operation === "timeline.events"
-            ? {
-                capture: position,
-                scene: { after: { actualSourceUs: 999, ordinal: 0 }, done: false },
-              }
-            : position,
-      },
+      cursor: "opaque",
     };
     expect(operationSchema.parse({ operation, params })).toEqual({ operation, params });
     expect(
@@ -578,10 +753,10 @@ it("source capture continuations retain every reader head through both public op
 it("caption sidecar export requires pinned revision and explicit unique placements without media settings", () => {
   const params = {
     kind: "srt",
+    requestId: "sidecar-request",
     projectId: "p",
     revisionId: "r",
     placementIds: ["caption"],
-    exportId: "11111111-1111-4111-8111-111111111111",
     directory: "/tmp",
     leaf: "selected.srt",
   };
@@ -635,6 +810,17 @@ it("loudness admission keeps source/project selectors exclusive and channel inte
     ).toBe(false);
 });
 
+it("uses sourceRange for rational source-clock audio selections", () => {
+  const source = { assetId: "asset", streamId: "audio", sourceRange: { startUs: 0, endUs: 1000 } };
+  expect(operationSchema.safeParse({ operation: "audio.get", params: source }).success).toBe(true);
+  expect(
+    operationSchema.safeParse({
+      operation: "audio.get",
+      params: { assetId: "asset", streamId: "audio", range: source.sourceRange },
+    }).success,
+  ).toBe(false);
+});
+
 it("pause evidence accepts source and project selections with optional detector overrides", () => {
   expect(
     operationSchema.safeParse({
@@ -650,7 +836,7 @@ it("pause evidence accepts source and project selections with optional detector 
         revisionId: "revision",
         range: { startUs: 0, endUs: 1_000_000 },
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
-        cursor: { offset: 100 },
+        cursor: "opaque",
         limit: 50,
       },
     }).success,
@@ -715,7 +901,7 @@ it("admits alignment preparation over a pinned project tap", () => {
         revisionId: "revision",
         preparedResourceId: "prepared",
         tap: { target: { kind: "output" }, point: { kind: "processed" } },
-        range: { startUs: 0, endUs: 1_000_000 },
+        sourceRange: { startUs: 0, endUs: 1_000_000 },
         channel: 0,
         text: "hello world",
         modelId: "nemo-ctc110",
@@ -733,9 +919,11 @@ it("admits generation-pinned caller speaker label bindings", () => {
       params: {
         assetId: "a".repeat(64),
         streamId: "audio",
+        requestId: "speaker-bind-request",
+        expectedBindingDigest: "0".repeat(64),
         channel: 0,
         modelId: "speaker-model",
-        observationRange: { startUs: 0, endUs: 30000000 },
+        sourceRange: { startUs: 0, endUs: 30000000 },
         generation: "speaker-generation",
         bindings: [{ slot: 0, displayName: "Ada" }],
       },
@@ -750,9 +938,11 @@ it("rejects unknown fields on speaker label bindings", () => {
       params: {
         assetId: "a".repeat(64),
         streamId: "audio",
+        requestId: "speaker-bind-invalid",
+        expectedBindingDigest: "0".repeat(64),
         channel: 0,
         modelId: "speaker-model",
-        observationRange: { startUs: 0, endUs: 30000000 },
+        sourceRange: { startUs: 0, endUs: 30000000 },
         generation: "speaker-generation",
         bindings: [{ slot: 0, displayName: "Ada", inferred: true }],
       },
@@ -782,7 +972,7 @@ it("admits long-form continuity preparation and exact receipt reads", () => {
         streamId: common.streamId,
         channel: common.channel,
         modelId: common.modelId,
-        observationRange: common.sourceRange,
+        sourceRange: common.sourceRange,
         generation: "attempt-1",
       },
     }).success,
@@ -801,7 +991,7 @@ it("ordinary project index references remain usable without face observations", 
     { operation: "index.frame", params: { ...reference, ordinal: 0 } },
     {
       operation: "index.get",
-      params: { projectId: "p", cursor: { ...reference, afterOrdinal: 0 } },
+      params: { projectId: "p", cursor: "opaque" },
     },
   ])
     expect(operationSchema.parse(request).params).toMatchObject(request.params);
@@ -814,9 +1004,9 @@ describe("invalid params", () => {
         operation: "export.create",
         params: {
           projectId: "p",
-          exportId: "not-a-uuid",
+          requestId: "export-request",
           directory: "/tmp",
-          leaf: "a.mp4",
+          leaf: "",
           kind: "video",
         },
       }),
@@ -825,7 +1015,9 @@ describe("invalid params", () => {
       error: {
         code: "INVALID_PARAMS",
         details: {
-          invalid: expect.arrayContaining([{ path: "params.exportId", message: "Invalid UUID" }]),
+          invalid: expect.arrayContaining([
+            { path: "params.leaf", message: "Too small: expected string to have >=1 characters" },
+          ]),
         },
       },
     });
@@ -899,4 +1091,55 @@ it("admits the read-only review workflow operations", () => {
       },
     }).operation,
   ).toBe("layout.diagnostics");
+});
+
+it("refusal envelopes derive retry metadata from their ledger entry", () => {
+  const codes = ledger.codes as Record<
+    string,
+    { retryable: boolean; retryAfterMs?: number; cause?: string }
+  >;
+  codes.fixture = { retryable: true, retryAfterMs: 15000, cause: "Fixture is preparing" };
+  try {
+    expect(refusalRetryAfterMs("fixture")).toBe(15000);
+    const result = operationError("fixture", "Still preparing", {
+      retry: { operation: "job.get", params: { jobId: "missing" } },
+    });
+    expect(responseSchema.parse({ id: "fixture", ...result })).toEqual({
+      id: "fixture",
+      ok: false,
+      error: {
+        code: "fixture",
+        message: "Still preparing",
+        retryable: true,
+        retryAfterMs: 15000,
+        details: { retry: { operation: "job.get", params: { jobId: "missing" } } },
+      },
+    });
+  } finally {
+    delete codes.fixture;
+  }
+  expect(operationError("unregistered", "Unknown").error).toEqual({
+    code: "unregistered",
+    message: "Unknown",
+    retryable: false,
+    details: {},
+  });
+  expect(refusalRetryAfterMs("unregistered")).toBeUndefined();
+});
+
+it("rejects wire retry metadata that cannot describe a valid request or delay", () => {
+  const result = { id: "fixture", ...operationError("NOT_READY", "Still preparing") };
+  for (const retryAfterMs of [0, -1, 1.5])
+    expect(
+      responseSchema.safeParse({ ...result, error: { ...result.error, retryAfterMs } }).success,
+    ).toBe(false);
+  for (const retry of [
+    { operation: "missing", params: {} },
+    { operation: "job.get", params: {} },
+    { operation: "job.get", params: { jobId: "missing", requestId: "not-a-parameter" } },
+  ])
+    expect(
+      responseSchema.safeParse({ ...result, error: { ...result.error, details: { retry } } })
+        .success,
+    ).toBe(false);
 });

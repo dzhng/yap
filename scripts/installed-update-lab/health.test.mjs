@@ -11,10 +11,19 @@ const boundedWait = (predicate, label) =>
   });
 
 test("persisted Off observation waits past socket readiness for the native updater report", async () => {
-  const disabled = { status: "ready", update: { state: "disabled", error: null } };
+  const disabled = {
+    status: "ready",
+    update: { state: "unavailable", availability: "disabled", error: null },
+  };
   const replies = [
     { ok: false, error: { code: "CONNECTION_ERROR" } },
-    { ok: true, data: { status: "ready", update: { state: "unavailable", error: null } } },
+    {
+      ok: true,
+      data: {
+        status: "ready",
+        update: { state: "unavailable", availability: "unavailable", error: null },
+      },
+    },
     { ok: true, data: disabled },
   ];
   assert.deepEqual(await waitForHealth(() => replies.shift(), boundedWait, "disabled"), disabled);
@@ -27,6 +36,7 @@ test("a permanently unavailable updater fails within the bound and preserves its
       status: "ready",
       update: {
         state: "unavailable",
+        availability: "unavailable",
         error: { code: "UPDATE_UNAVAILABLE", message: "fixture SDK startup failure" },
       },
     },

@@ -26,7 +26,7 @@ test("admission publishes the real job and its references atomically, including 
   });
   try {
     const request = {
-      target: { kind: "asset" as const, assetId: "source" },
+      target: { kind: "asset" as const, id: "source" },
       artifact: "transcript",
       input: "pinned",
       lane: "heavy" as const,

@@ -4,7 +4,7 @@ import { readFile, writeFile, rename, rm } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { createCli } from "./yap-cli.mjs";
 
-const activeStates = new Set(["waiting", "queued", "running", "processing", "uncertain"]);
+const activeStates = new Set(["queued", "running", "uncertain"]);
 const failedStates = new Set(["failed", "unavailable", "canceled"]);
 const uncertainCodes = new Set([
   "CLI_TIMEOUT",
@@ -19,6 +19,10 @@ const uncertainCodes = new Set([
   "ABORTED",
   "INVALID_RESPONSE",
 ]);
+
+// Starting work reports a status naming its job `jobId`; job.get, job.retry and job.cancel
+// return the job record itself, which names itself `id`.
+const jobOf = (status) => status.jobId ?? status.id;
 
 export function createBatch(files) {
   if (!Array.isArray(files) || files.length < 1 || files.length > 1000)
@@ -43,7 +47,7 @@ export function createBatch(files) {
       path,
       requestId,
       transcriptStreamIds,
-      import: { state: "not_requested" },
+      import: { state: "idle" },
       asset: null,
       transcripts: [],
     };
@@ -124,7 +128,7 @@ export async function prepareBatch(
         !signal?.aborted
       ) {
         await delay(pollIntervalMs, undefined, { signal });
-        status = await invoke("job.get", { jobId: status.jobId }, { signal });
+        status = await invoke("job.get", { jobId: jobOf(status) }, { signal });
         polls++;
         update(status);
         await persist();
@@ -133,16 +137,16 @@ export async function prepareBatch(
     };
     item.error = null;
     if (retryFailed && failedStates.has(item.import.state)) {
-      if (item.import.jobId) {
+      if (jobOf(item.import)) {
         if (
-          !(await request("job.retry", { jobId: item.import.jobId }, (status) => {
+          !(await request("job.retry", { jobId: jobOf(item.import) }, (status) => {
             item.import = status;
           }))
         )
           return false;
-      } else item.import = { state: "not_requested" };
+      } else item.import = { state: "idle" };
     }
-    if (["not_requested", "uncertain"].includes(item.import.state)) {
+    if (["idle", "uncertain"].includes(item.import.state)) {
       if (
         !(await request(
           "asset.import",
@@ -175,7 +179,7 @@ export async function prepareBatch(
     for (const streamId of streams) {
       let entry = item.transcripts.find((candidate) => candidate.streamId === streamId);
       if (!entry) {
-        entry = { streamId, status: { state: "not_requested" } };
+        entry = { streamId, status: { state: "idle" } };
         item.transcripts.push(entry);
       }
       if (entry.status.state === "uncertain") {
@@ -194,16 +198,16 @@ export async function prepareBatch(
         retryFailed &&
         (failedStates.has(entry.status.state) || entry.status.state === "uncertain")
       ) {
-        if (entry.status.jobId) {
+        if (jobOf(entry.status)) {
           if (
-            !(await request("job.retry", { jobId: entry.status.jobId }, (status) => {
+            !(await request("job.retry", { jobId: jobOf(entry.status) }, (status) => {
               entry.status = status;
             }))
           )
             return false;
-        } else entry.status = { state: "not_requested" };
+        } else entry.status = { state: "idle" };
       }
-      if (entry.status.state === "not_requested") {
+      if (entry.status.state === "idle") {
         if (
           !(await request(
             "transcript.transcribe",

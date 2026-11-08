@@ -146,7 +146,7 @@ func runRetainedCameraPublicationCost(output: String, donorPath: String) async t
     let donorLease = try CaptureJournalLease(directory: donor.path)
     defer { donorLease.release() }
     func facts(_ lease: CaptureJournalLease, prefix: JournalPrefix? = nil) throws -> CaptureJournalSummary {
-        try CaptureJournal.readEvidence(directory: lease.directory, maximumBytes: 268435456,
+        try CaptureJournal.readEvidence(directory: lease.directory,
             retainTiming: true, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
             retainPrefix: true, through: prefix, descriptor: lease.descriptor)
     }

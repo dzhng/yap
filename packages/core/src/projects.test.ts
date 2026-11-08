@@ -42,59 +42,53 @@ test("project edits survive restart and replay before stale-head checks with com
       },
     ],
   };
-  const edited = store.apply(created.project.projectId, request);
+  const edited = store.apply(created.project.id, request);
   expect(edited.edit.labels.gain).toBeTruthy();
   expect(edited.edit).not.toHaveProperty("document");
   const saved = catalog.catalog
     .prepare("SELECT result FROM project_requests WHERE projectId=? AND requestId=?")
-    .get(created.project.projectId, request.requestId)!;
+    .get(created.project.id, request.requestId)!;
   expect(JSON.parse(saved.result as string)).toEqual(edited);
   const freshCatalog = new Catalog(path);
   try {
     const fresh = projectStoreFixture(freshCatalog, new AssetStore(freshCatalog, home), home);
-    expect(fresh.apply(created.project.projectId, request)).toEqual(edited);
+    expect(fresh.apply(created.project.id, request)).toEqual(edited);
   } finally {
     freshCatalog.close();
   }
-  // A pre-change persisted receipt projects to the same current response without re-execution.
-  const historical = JSON.stringify({
-    ...edited,
-    edit: { ...edited.edit, document: edited.revision.document },
-  });
-  catalog.catalog
-    .prepare("UPDATE project_requests SET result=? WHERE projectId=? AND requestId=?")
-    .run(historical, created.project.projectId, request.requestId);
   expect(edited.revision.document.processing[0]!.steps[0]!.processor).toEqual({
     type: "gain",
     gain: 0.5,
   });
-  expect(store.apply(created.project.projectId, request)).toEqual(edited);
+  expect(store.apply(created.project.id, request)).toEqual(edited);
   catalog.close();
   const nextCatalog = new Catalog(path);
   cleanup.push(async () => nextCatalog.close());
   const reopened = projectStoreFixture(nextCatalog, new AssetStore(nextCatalog, home), home);
-  expect(reopened.apply(created.project.projectId, request)).toEqual(edited);
+  expect(reopened.apply(created.project.id, request)).toEqual(edited);
   expect(
-    nextCatalog.catalog
-      .prepare("SELECT result FROM project_requests WHERE projectId=? AND requestId=?")
-      .get(created.project.projectId, request.requestId)!.result,
-  ).toBe(historical);
+    JSON.parse(
+      nextCatalog.catalog
+        .prepare("SELECT result FROM project_requests WHERE projectId=? AND requestId=?")
+        .get(created.project.id, request.requestId)!.result as string,
+    ),
+  ).toEqual(edited);
   expect(
     reopened.create({ canvas: { ...canvas }, title: "Tutorial", requestId: "create" }),
   ).toEqual(created);
-  expect(reopened.revision(created.project.projectId).id).toBe(edited.revision.id);
-  expect(() => reopened.apply(created.project.projectId, { ...request, operations: [] })).toThrow(
+  expect(reopened.revision(created.project.id).id).toBe(edited.revision.id);
+  expect(() => reopened.apply(created.project.id, { ...request, operations: [] })).toThrow(
     /different arguments/,
   );
-  expect(() =>
-    reopened.apply(created.project.projectId, { ...request, requestId: "other" }),
-  ).toThrow(/revision has changed/);
+  expect(() => reopened.apply(created.project.id, { ...request, requestId: "other" })).toThrow(
+    /revision has changed/,
+  );
 });
 
 test("no-op receipts do not grow history; undo and restore append identities and history pages stay pinned", async () => {
   const { store } = await setup();
   const original = store.create({ requestId: "create", canvas });
-  const id = original.project.projectId;
+  const id = original.project.id;
   const one = store.apply(id, {
     requestId: "one",
     expectedRevisionId: original.revision.id,
@@ -107,14 +101,24 @@ test("no-op receipts do not grow history; undo and restore append identities and
   });
   const page = store.history(id, null, 1);
   expect(page.revisions.map((r) => r.id)).toEqual([original.revision.id]);
-  const nothing = { requestId: "noop", expectedRevisionId: two.revision.id, operations: [] };
+  const nothing = {
+    requestId: "noop",
+    expectedRevisionId: two.revision.id,
+    operations: [],
+  };
   expect(store.apply(id, nothing).revision).toEqual(two.revision);
   expect(store.history(id).revisions.map((r) => r.ordinal)).toEqual([0, 1, 2]);
-  const undone = store.undo(id, { requestId: "undo-one", expectedRevisionId: two.revision.id });
+  const undone = store.undo(id, {
+    requestId: "undo-one",
+    expectedRevisionId: two.revision.id,
+  });
   expect(undone.document).toEqual(one.revision.document);
   expect(undone.id).not.toBe(one.revision.id);
   expect(store.apply(id, nothing).revision).toEqual(two.revision);
-  const undoneAgain = store.undo(id, { requestId: "undo-two", expectedRevisionId: undone.id });
+  const undoneAgain = store.undo(id, {
+    requestId: "undo-two",
+    expectedRevisionId: undone.id,
+  });
   expect(undoneAgain.document).toEqual(original.revision.document);
   expect(() =>
     store.undo(id, { requestId: "undo-empty", expectedRevisionId: undoneAgain.id }),
@@ -148,21 +152,21 @@ test("speaker corrections are one reversible revision with stale and replay-safe
       },
     ],
   };
-  const corrected = store.correctSpeakers(created.project.projectId, request);
+  const corrected = store.correctSpeakers(created.project.id, request);
   expect(corrected.speakerCorrections).toEqual(request.corrections);
-  expect(store.correctSpeakers(created.project.projectId, request)).toEqual(corrected);
+  expect(store.correctSpeakers(created.project.id, request)).toEqual(corrected);
   expect(() =>
-    store.correctSpeakers(created.project.projectId, {
+    store.correctSpeakers(created.project.id, {
       ...request,
       requestId: "stale-speaker",
     }),
   ).toThrow(/revision has changed/);
-  const undone = store.undo(created.project.projectId, {
+  const undone = store.undo(created.project.id, {
     requestId: "undo-speaker",
     expectedRevisionId: corrected.id,
   });
   expect(undone.speakerCorrections).toBeUndefined();
-  const restored = store.restore(created.project.projectId, {
+  const restored = store.restore(created.project.id, {
     requestId: "restore-speaker",
     expectedRevisionId: undone.id,
     targetRevisionId: corrected.id,
@@ -193,7 +197,7 @@ test("late failed edits retain no partial state; historical revisions retain adm
     ],
   }));
   const created = store.create({ requestId: "create", canvas });
-  const id = created.project.projectId;
+  const id = created.project.id;
   const operations = [
     { operation: "track.add", track: { kind: "audio", order: 0 }, label: "audio" },
     {
@@ -233,7 +237,10 @@ test("late failed edits retain no partial state; historical revisions retain adm
   });
   expect(removed.revision.document.clips).toEqual([]);
   expect(assets.references(asset.id)).toEqual([{ kind: "revision", id: placed.revision.id }]);
-  const restored = store.undo(id, { requestId: "undo", expectedRevisionId: removed.revision.id });
+  const restored = store.undo(id, {
+    requestId: "undo",
+    expectedRevisionId: removed.revision.id,
+  });
   expect(restored.document).toEqual(placed.revision.document);
   expect(
     assets
@@ -255,26 +262,18 @@ test("independent catalog writers reject a stale head and keep project paginatio
     expectedRevisionId: original.revision.id,
     operations: [{ operation: "canvas.set", canvas: { width: 320 } }],
   };
-  const changed = store.apply(original.project.projectId, request);
+  const changed = store.apply(original.project.id, request);
   expect(() =>
-    competitor.apply(original.project.projectId, { ...request, requestId: "writer-two" }),
+    competitor.apply(original.project.id, { ...request, requestId: "writer-two" }),
   ).toThrow(/revision has changed/);
-  expect(competitor.revision(original.project.projectId)).toEqual(changed.revision);
-  expect(() => competitor.revision(second.project.projectId, changed.revision.id)).toThrow(
-    /in project/,
-  );
+  expect(competitor.revision(original.project.id)).toEqual(changed.revision);
+  expect(() => competitor.revision(second.project.id, changed.revision.id)).toThrow(/in project/);
   const page = store.list({ limit: 1 });
   expect(page.projects.map((p) => p.title)).toEqual(["Two"]);
-  expect(store.list({ ...page.nextCursor!, limit: 1 }).projects.map((p) => p.title)).toEqual([
+  expect(store.list({ cursor: page.nextCursor!, limit: 1 }).projects.map((p) => p.title)).toEqual([
     "One",
   ]);
-  expect(() =>
-    store.history(second.project.projectId, {
-      projectId: original.project.projectId,
-      afterOrdinal: -1,
-      throughOrdinal: 0,
-    }),
-  ).toThrow(/cursor/);
+  expect(() => store.history(second.project.id, "foreign-cursor")).toThrow(/cursor/);
 });
 
 test("project pages are newest first and continue below the last project", async () => {
@@ -284,21 +283,47 @@ test("project pages are newest first and continue below the last project", async
   const third = store.create({ requestId: "third", title: "Third", canvas });
 
   const page = store.list({ limit: 2 });
-  expect(page.projects.map((project) => project.projectId)).toEqual([
-    third.project.projectId,
-    second.project.projectId,
-  ]);
-  expect(page.nextCursor).toEqual({ afterSequence: 2 });
+  expect(page.projects.map((project) => project.id)).toEqual([third.project.id, second.project.id]);
+  expect(page.nextCursor).toEqual(expect.any(String));
   expect(
-    store.list({ ...page.nextCursor!, limit: 2 }).projects.map((project) => project.projectId),
-  ).toEqual([first.project.projectId]);
+    store.list({ cursor: page.nextCursor!, limit: 2 }).projects.map((project) => project.id),
+  ).toEqual([first.project.id]);
+});
+
+test("project continuation at the oldest sequence does not reverse back to the head", async () => {
+  const { store } = await setup();
+  const projects = ["one", "two", "three", "four"].map(
+    (requestId) => store.create({ requestId, title: requestId, canvas }).project.id,
+  );
+  const seen: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = store.list({ limit: 1, ...(cursor ? { cursor } : {}) });
+    seen.push(...page.projects.map((project) => project.id));
+    cursor = page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(seen).toEqual([...projects].reverse());
+  expect(new Set(seen).size).toBe(projects.length);
+});
+
+test("listable hides a project after its deletion marker is set", async () => {
+  const { store } = await setup();
+  const created = store.create({ requestId: "listable-project", canvas });
+  expect(store.listable(created.project.id)).toBe(true);
+  store.markDeleting(created.project.id);
+  expect(store.listable(created.project.id)).toBe(false);
+  expect(store.list().projects).toEqual([]);
 });
 
 test("deletion fences reads and replayed edits, survives restart, and retains creation identity", async () => {
   const { home, path, catalog, store } = await setup();
   const created = store.create({ requestId: "delete-me", canvas });
-  const id = created.project.projectId;
-  const request = { requestId: "noop", expectedRevisionId: created.revision.id, operations: [] };
+  const id = created.project.id;
+  const request = {
+    requestId: "noop",
+    expectedRevisionId: created.revision.id,
+    operations: [],
+  };
   store.apply(id, request);
   expect(store.markDeleting(id)).toBe(true);
   expect(store.list().projects).toEqual([]);
@@ -328,7 +353,7 @@ test("large deleted histories retire in restartable pages without losing the tom
   const created = store.create({ requestId: "paged", canvas });
   let head = created.revision.id;
   for (let i = 0; i < 1500; i++) {
-    head = store.apply(created.project.projectId, {
+    head = store.apply(created.project.id, {
       requestId: `edit-${i}`,
       expectedRevisionId: head,
       operations: [{ operation: "canvas.set", canvas: { width: 200 + i } }],
@@ -352,8 +377,8 @@ test("large deleted histories retire in restartable pages without losing the tom
   expect(
     catalog.catalog.prepare("SELECT COUNT(*) AS count FROM project_requests").get()!.count,
   ).toBe(1500);
-  expect(store.revision(created.project.projectId).id).toBe(head);
-  const id = created.project.projectId;
+  expect(store.revision(created.project.id).id).toBe(head);
+  const id = created.project.id;
   store.markDeleting(id);
   let complete = false,
     restarted = false;
@@ -384,7 +409,7 @@ test("portable adoption preserves history and active undo independently and publ
   const donor = await setup(),
     receiver = await setup();
   const initial = donor.store.create({ requestId: "donor", title: "Portable", canvas });
-  const id = initial.project.projectId;
+  const id = initial.project.id;
   const first = donor.store.apply(id, {
     requestId: "first",
     expectedRevisionId: initial.revision.id,
@@ -395,7 +420,10 @@ test("portable adoption preserves history and active undo independently and publ
     expectedRevisionId: first.revision.id,
     operations: [{ operation: "canvas.set", canvas: { height: 240 } }],
   });
-  donor.store.undo(id, { requestId: "undo-second", expectedRevisionId: second.revision.id });
+  donor.store.undo(id, {
+    requestId: "undo-second",
+    expectedRevisionId: second.revision.id,
+  });
   const snapshot = donor.store.snapshot(id);
   const input = { requestId: "adopt", packageIdentity: "verified-archive", snapshot };
   expect(() =>
@@ -409,23 +437,23 @@ test("portable adoption preserves history and active undo independently and publ
   expect(receiver.assets.list().assets).toEqual([]);
   expect(receiver.store.list().projects).toEqual([]);
   const adopted = receiver.store.prepareAdoption(input).publish(() => {});
-  expect(adopted.project.projectId).not.toBe(id);
-  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(adopted.revision.id);
+  expect(adopted.project.id).not.toBe(id);
+  expect(receiver.store.get(adopted.project.id).currentRevisionId).toBe(adopted.revision.id);
   expect(
     receiver.store.prepareAdoption(input).publish(() => {
       throw new Error("must not publish twice");
     }),
   ).toEqual(adopted);
-  expect(
-    receiver.store.history(adopted.project.projectId).revisions.map((r) => r.document),
-  ).toEqual(snapshot.revisions.map((r) => r.document));
+  expect(receiver.store.history(adopted.project.id).revisions.map((r) => r.document)).toEqual(
+    snapshot.revisions.map((r) => r.document),
+  );
   donor.store.markDeleting(id);
-  const undone = receiver.store.undo(adopted.project.projectId, {
+  const undone = receiver.store.undo(adopted.project.id, {
     requestId: "undo-first",
     expectedRevisionId: adopted.revision.id,
   });
   expect(undone.document).toEqual(initial.revision.document);
-  expect(receiver.store.get(adopted.project.projectId).currentRevisionId).toBe(undone.id);
+  expect(receiver.store.get(adopted.project.id).currentRevisionId).toBe(undone.id);
   expect(() =>
     receiver.store.prepareAdoption({ ...input, packageIdentity: "other" }).publish(() => {}),
   ).toThrow(/another package/);
@@ -458,7 +486,7 @@ test("portable adoption retains media used only by a past revision and restores 
     ],
   }));
   const created = donor.store.create({ requestId: "create", canvas });
-  const placed = donor.store.apply(created.project.projectId, {
+  const placed = donor.store.apply(created.project.id, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
     operations: [
@@ -476,7 +504,7 @@ test("portable adoption retains media used only by a past revision and restores 
       },
     ],
   });
-  donor.store.apply(created.project.projectId, {
+  donor.store.apply(created.project.id, {
     requestId: "remove",
     expectedRevisionId: placed.revision.id,
     operations: [{ operation: "remove", clipIds: [placed.edit.labels.voice], ripple: "none" }],
@@ -491,7 +519,7 @@ test("portable adoption retains media used only by a past revision and restores 
     .prepareAdoption({
       requestId: "copy",
       packageIdentity: "verified",
-      snapshot: donor.store.snapshot(created.project.projectId),
+      snapshot: donor.store.snapshot(created.project.id),
     })
     .publish(() => staged.publish());
   await staged.close();
@@ -504,13 +532,13 @@ test("portable adoption retains media used only by a past revision and restores 
   ).toEqual(
     [adopted.revisionIds[placed.revision.id], adopted.revisionIds[created.revision.id]].sort(),
   );
-  expect(receiver.store.snapshot(adopted.project.projectId).references).toContainEqual({
+  expect(receiver.store.snapshot(adopted.project.id).references).toContainEqual({
     revisionId: adopted.revisionIds[created.revision.id],
     resources: [{ kind: "asset", id: asset.id }],
   });
   await rm(source);
   await rm(donor.assets.path(asset.id));
-  const undone = receiver.store.undo(adopted.project.projectId, {
+  const undone = receiver.store.undo(adopted.project.id, {
     requestId: "undo",
     expectedRevisionId: adopted.revision.id,
   });
@@ -525,13 +553,13 @@ test("prepared adoption stays invisible and concurrent publication uses the winn
   const input = {
     requestId: "race",
     packageIdentity: "archive",
-    snapshot: donor.store.snapshot(created.project.projectId),
+    snapshot: donor.store.snapshot(created.project.id),
   };
   const first = receiver.store.prepareAdoption(input);
   const second = receiver.store.prepareAdoption(input);
-  expect(first.project.projectId).not.toBe(second.project.projectId);
+  expect(first.project.id).not.toBe(second.project.id);
   expect(receiver.store.list().projects).toEqual([]);
-  expect(() => receiver.store.revision(first.project.projectId)).toThrow();
+  expect(() => receiver.store.revision(first.project.id)).toThrow();
   const winner = first.publish(() => {});
   const loser = second.publish(() => {
     throw new Error("loser must not publish dependencies");
@@ -556,7 +584,7 @@ test("historical snapshots pin their own history and undo before later restore a
   const donor = await setup(),
     receiver = await setup();
   const initial = donor.store.create({ requestId: "historical", canvas });
-  const id = initial.project.projectId;
+  const id = initial.project.id;
   const first = donor.store.apply(id, {
     requestId: "one",
     expectedRevisionId: initial.revision.id,
@@ -592,19 +620,23 @@ test("historical snapshots pin their own history and undo before later restore a
         .map((r) => r.id),
     );
     const adopted = receiver.store
-      .prepareAdoption({ requestId: selected.id, packageIdentity: selected.id, snapshot })
+      .prepareAdoption({
+        requestId: selected.id,
+        packageIdentity: selected.id,
+        snapshot,
+      })
       .publish(() => {});
     let head = adopted.revision;
     expect(head.document).toEqual(selected.document);
     for (const target of targets) {
-      head = receiver.store.undo(adopted.project.projectId, {
+      head = receiver.store.undo(adopted.project.id, {
         requestId: target.id,
         expectedRevisionId: head.id,
       });
       expect(head.document).toEqual(target.document);
     }
     expect(() =>
-      receiver.store.undo(adopted.project.projectId, {
+      receiver.store.undo(adopted.project.id, {
         requestId: "empty",
         expectedRevisionId: head.id,
       }),
@@ -618,7 +650,7 @@ test("historical snapshots pin their own history and undo before later restore a
 test("shared state membership survives replay, undo and restored history without reusing old tokens", async () => {
   const { store } = await setup();
   const original = store.create({ requestId: "state-project", canvas });
-  const id = original.project.projectId;
+  const id = original.project.id;
   const placed = store.apply(id, {
     requestId: "state-place",
     expectedRevisionId: original.revision.id,
@@ -651,7 +683,10 @@ test("shared state membership survives replay, undo and restored history without
   const token = split.revision.document.processing[0]!.steps[0]!.stateKey;
   expect(token).toBeTruthy();
   expect(store.apply(id, request)).toEqual(split);
-  const undone = store.undo(id, { requestId: "state-undo", expectedRevisionId: split.revision.id });
+  const undone = store.undo(id, {
+    requestId: "state-undo",
+    expectedRevisionId: split.revision.id,
+  });
   expect(undone.document).toEqual(placed.revision.document);
   const fresh = store.apply(id, {
     ...request,
@@ -672,7 +707,7 @@ test("pinned revision availability respects exact membership and deletion withou
   const { store, catalog } = await setup();
   const first = store.create({ requestId: "first", title: "first", canvas });
   const second = store.create({ requestId: "second", title: "second", canvas });
-  const id = first.project.projectId;
+  const id = first.project.id;
   expect(store.hasRevision(id, first.revision.id)).toBe(true);
   expect(store.hasRevision(id, second.revision.id)).toBe(false);
   expect(store.hasRevision("missing", first.revision.id)).toBe(false);
@@ -689,7 +724,7 @@ test("pinned revision ownership preserves missing, foreign and deleted project r
   const { store } = await setup();
   const first = store.create({ requestId: "first", canvas });
   const second = store.create({ requestId: "second", canvas });
-  const projectId = first.project.projectId,
+  const projectId = first.project.id,
     revisionId = first.revision.id;
   expect(store.requireRevision(projectId, revisionId)).toBeUndefined();
   expect(store.revisionDependencies(projectId, revisionId)).toEqual([]);
@@ -733,7 +768,7 @@ test("LUT-only revision dependencies survive cleared stacks, relocation and rest
     lut: { format: "cube-3d", size: 2, domain: "unit", ordering: "red-fastest" },
   }));
   const original = donor.store.create({ requestId: "create", canvas });
-  const id = original.project.projectId;
+  const id = original.project.id;
   const authored = donor.store.apply(id, {
     requestId: "look",
     expectedRevisionId: original.revision.id,
@@ -777,7 +812,7 @@ test("LUT-only revision dependencies survive cleared stacks, relocation and rest
     .publish(() => staged.publish());
   await staged.close();
   await rm(donor.assets.path(lut.id));
-  const undone = receiver.store.undo(adopted.project.projectId, {
+  const undone = receiver.store.undo(adopted.project.id, {
     requestId: "restore-look",
     expectedRevisionId: adopted.revision.id,
   });

@@ -1,6 +1,6 @@
 ---
 name: yap
-description: Work with video for the user through the yap CLI — understand a recording they show you, or edit their footage end to end from a one-line prompt and optional inspiration into a finished, exported video. Use for launch/demo videos, podcasts, episode introductions, teasers and trailers; when the user shows you a recording (a bug, feedback, a walkthrough) to understand; wants a recording made, cut, tightened, captioned, reframed, cleaned up, restyled after a reference video or exported; for transcript/audio/frame inspection of their media; and on first-run setup, missing yap installation, skill installation/comparison or explicit refresh, and update-health questions.
+description: Work with video for the user through the yap CLI — understand a recording they show you, or edit their footage end to end from a one-line prompt and optional inspiration into a finished, exported video. Use for launch/demo videos, podcasts, episode introductions, teasers and trailers; when the user shows you a recording (a bug, feedback, a walkthrough) to understand; wants a recording made, cut, tightened, captioned, reframed, cleaned up, restyled after a reference video or exported; for transcript/audio/frame inspection of their media; and on first-run setup, missing yap installation, skill installation/comparison or explicit refresh, update-health questions, and changing Yap's own settings such as its shortcuts.
 ---
 
 # Yap
@@ -10,6 +10,33 @@ you a recording to explain something (a bug, design feedback, "watch me do
 this"), read it as instructions: find what they said and what was on screen at
 that moment, then act on that, without editing it. When they want something
 worth sending to other people, you are the editor.
+
+**A pasted recording prompt.** The user's `⌥⇧V` pastes a short text that starts
+like "I recorded my screen to show you something" and names a `Recording:` ID.
+It describes what was captured (screen, camera, microphone, system audio), whether
+they left pins or drawings, and transcript readiness. It lists no individual
+marks, clicks or windows, and may arrive while the take is still recording or
+importing. It names no operations; exploring is yours:
+- Resolve the `Recording:` ID with `recording.get --wait` before reading its
+  evidence. Waiting observes capture and every source import; it never retries.
+  A retryable failed import exits 1 and carries `details.retry` on its failed job. Inspect
+  that failure and use its named resolving call only when you choose to retry.
+- Read what they said first. With microphone capture and automatic transcription
+  enabled, the prompt says whether the transcript is being prepared or ready.
+  `transcript.review` returns it, or reports it pending, without starting a second run.
+- Each mark is a moment they point at, not a lasting note: a pin or drawing was on
+  their screen for a few seconds (`shownForUs`), so read it with what they said and
+  showed around that time. Once imported, `timeline.events` lists the marks for the
+  recording's acquisition (pin numbers match the badges they saw), and `index.get`
+  has a frame at every mark, pin and click when its selection names that
+  `acquisitionId`. `cursor.render` around a mark shows the pointer and the marks on
+  their screen at that moment, as they saw them.
+- Retry is always explicit, except that a `JOB_INTERRUPTED` transcript attempt is resumed once
+  when the automatic transcription backlog is restored after a restart. A retryable refusal identifies itself with
+  `error.retryable`; when it carries `retryAfterMs`, wait that long before trying
+  again. Follow the exact `{operation, params}` in `details.retry`; reads and waits
+  never retry a failure on their own.
+- Act on what they asked. A shown recording is evidence, not footage to edit.
 
 The user does not want to edit video. They record, then hand you a prompt —
 "turn this into a tight 60-second demo with captions" — and maybe a reference
@@ -35,7 +62,9 @@ those alternatives open.
 **Evidence requests include readiness.** Call the requested capability directly.
 Do not call `model.prepare` as a preflight: status reads never download, and the
 default transcript model is the only one Yap fetches on its own, reported as
-`preparing`. If a call returns `MODEL_NOT_PREPARED` or
+`running`. Once it is ready, every recording and import is transcribed in the
+background, so a transcript is usually waiting before you ask; an explicit request
+for the same source joins that work. If a call returns `MODEL_NOT_PREPARED` or
 `unavailable:model_not_prepared`, read its details and explain to the user which
 optional model/runtime is missing, what it is for, what will be downloaded and the
 reported size or scope. Ask whether they want that download. Only after an explicit
@@ -44,6 +73,24 @@ original capability with the same selection. `model.prepare` acquires and verifi
 model/runtime files; it does not run transcription, alignment, speaker analysis or
 voice generation. If the error does not include the details needed for that
 question, report the exact error instead of guessing or downloading.
+
+## Removing media and reclaiming space
+
+1. Delete what the user named with `asset.delete`, `recording.delete`,
+   `project.delete` or `model.remove`. Yap always keeps a transcription model:
+   removing `parakeet` frees its space only until the next `transcript.review`
+   prepares it again, so tell the user that before removing it.
+2. An `IN_USE` refusal lists the projects using the item and the bytes each
+   choice frees. Report those users and byte totals to the user. Use
+   `cascade: true` or delete a project only when the user asked for it.
+3. To free a clip that only a project's history holds:
+   - use `edit.apply` to remove the clip;
+   - use `project.duplicate` at the head revision;
+   - check the copy with a preview or `revision.get`;
+   - use `project.delete` on the original;
+   - use `asset.delete` on the clip.
+4. Package adoption can bring a deleted item back. Original files and committed
+   exports are never touched.
 
 ## Installation
 
@@ -92,8 +139,8 @@ including with automatic updates off; it leaves that preference unchanged.
 Follow `update.status` for the effective preference, progress and result. The app's
 Settings → General → Check for Updates uses this same operation. An update check
 returns before installation; existing CLI clients must finish before replacement.
-Explain advertised waiting/disabled state and blockers literally;
-waiting for idle does not authorize stopping work, and disabled automatic updates
+Explain `queued` progress and the update `availability` fact (`disabled` or `unavailable`) literally;
+queued work waiting for idle does not authorize stopping work, and disabled automatic updates
 do not prove the service is unhealthy. Do not invent an updater command or kill,
 cancel, close or stop work to obtain idle. Older releases may not advertise update
 state; say so. Fixture health JSON is interpretation evidence, not native proof.
@@ -171,10 +218,15 @@ unavailable; do not claim it reopened or retry writes blindly.
    content the brief needs. Treat readiness as a bounded state machine:
    `unavailable:model_not_prepared` means read the model details, ask the user
    before downloading an optional model/runtime, then use `model.prepare` only
-   after consent and retry; `processing` means poll the same request; `failed` means
-   diagnose the returned reason and use the advertised retry only after the cause
+   after consent and retry; `running` means poll the same request; `failed` means
+   diagnose the returned reason and use `job.retry` with the returned `jobId` after the cause
    is resolved. Follow returned pagination cursors, including empty pages with a
    next cursor. Preserve the transcript generation when using word identities. An
+   opaque base64url cursor is operation- and filter-specific; pass it unchanged in
+   the next request's `cursor` with every other parameter repeated (only `limit`
+   may change), and read the collection plus `nextCursor` at the response top
+   level. Another filter set is `INVALID_PARAMS`; `ARTIFACT_CHANGED` means the
+   pinned evidence changed, so start a fresh traversal.
    empty transcript range does not prove silence, and an omitted filler does not
    prove the speaker did not say it.
    Before assembly, save a task-side selection sheet with asset/stream IDs,
@@ -230,7 +282,7 @@ unavailable; do not claim it reopened or retry writes blindly.
 
 6. **Review it yourself.** Inspect the returned revision and request its audio,
    frames, or playable preview around changed joins. Poll the same pinned request
-   without `--output` while processing is pending; deliver once ready. A directory
+   without `--output` while work is queued or running; deliver once ready. A directory
    destination must not already exist, including when repeating an inspection.
    Check the returned job state and reason: `ok: true` and exit zero can report a
    failed job. Diagnose failures before an explicit supported retry. Compare the
@@ -302,7 +354,7 @@ for virtual-camera framing and editorial defaults.
 
 **Presets.** When the user names a style, asks for a video "like" a kind they've
 seen, or asks how to shoot for a style, run `yap preset.list`. Read the preset whose
-description matches with `yap preset.get --params '{"id":"…"}'` and follow its
+description matches with `yap preset.get --params '{"presetId":"…"}'` and follow its
 `instructions`. A preset is a mood the user chose, not a footage requirement: apply
 it to whatever footage they gave and never reject it; give its Shoot advice only
 when they ask what to film or have not recorded yet. It is also not permission to
@@ -326,6 +378,10 @@ don't answer, drop it.
   attempts; do not overwrite them with a corrected request. Programmatically reuse
   their opaque IDs; do not retype them from memory. On `NOT_FOUND`, compare the
   submitted ID against the saved receipt before diagnosing lost service state.
+- A returned record names itself `id`; a reference to another record is
+  `<noun>Id`, so a project's `id` is the next call's `projectId`. A reference that
+  can point at several kinds is `{kind, id}`. Starting work reports its `jobId`;
+  `job.get` returns the job itself as `{id, state, …}`.
 - Parse the JSON envelope even on a nonzero exit. `--output` writes delivered
   media or JSON evidence to a file or directory according to the operation.
 - Read `issues` on every result and on its published output before trusting it.
@@ -342,6 +398,6 @@ don't answer, drop it.
   after cuts; use the reported mapping and retained fragments.
 - For operations accepting `params.requestId`, reuse it with identical arguments
   when retrying an uncertain write. A new intended mutation or recomputed edit
-  needs a new request ID. Export creation instead uses `exportId`; preserve it
-  and its arguments on retries. Follow each operation's advertised retry contract.
+  needs a new request ID. Export creation also keys replay on `requestId`; preserve
+  it and its arguments on retries, then use the returned export `id` for status.
   The CLI `--id` is a transport identifier, not the durable mutation identity.

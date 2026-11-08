@@ -32,7 +32,7 @@ const worker = async (operation, params, options) => {
       error: {
         code: "NOT_READY",
         message: "Deliberately unavailable fixture operation",
-        retryable: false,
+        retryable: true,
         details: {},
       },
     };

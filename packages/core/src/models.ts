@@ -11,10 +11,21 @@ import {
   rmSync,
   type BigIntStats,
 } from "node:fs";
-import { mkdir, open, rename, rm, realpath, type FileHandle } from "node:fs/promises";
+import {
+  mkdir,
+  open,
+  rename,
+  rm,
+  rmdir,
+  realpath,
+  readdir,
+  lstat,
+  type FileHandle,
+} from "node:fs/promises";
 import { dirname, join, isAbsolute } from "node:path";
 import { O_NOFOLLOW_ANY } from "./open-flags.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, type Catalog } from "./catalog.js";
+import { pageCursor } from "./page-cursor.js";
 import type {
   SpeechModelFile,
   SpeechEnginePins,
@@ -73,6 +84,31 @@ function privateDirectory(path: string): void {
 async function writeAll(handle: FileHandle, data: Uint8Array): Promise<void> {
   for (let offset = 0; offset < data.byteLength;)
     offset += (await handle.write(data, offset)).bytesWritten;
+}
+async function fileBytes(path: string): Promise<number> {
+  let total = 0;
+  try {
+    const stat = await lstat(path, { bigint: true });
+    if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return Number(stat.size);
+    if (!stat.isDirectory()) return 0;
+    for (const name of await readdir(path)) total += await fileBytes(join(path, name));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return total;
+}
+function fileBytesSync(path: string): number {
+  try {
+    const stat = lstatSync(path, { bigint: true });
+    if (stat.isSymbolicLink()) return 0;
+    if (stat.isFile()) return Number(stat.size);
+    if (!stat.isDirectory()) return 0;
+    return readdirSync(path).reduce((total, name) => total + fileBytesSync(join(path, name)), 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
 }
 /** Creates a new regular file that cannot land through a symlinked path component. */
 const createFile = (path: string) =>
@@ -161,7 +197,6 @@ class Preparation {
         retryable: true,
         retryOperation: operation,
       },
-      true,
     );
   }
 
@@ -183,7 +218,7 @@ class Preparation {
         state: "failed",
         code: unsupported.code,
         message: unsupported.message,
-        retryable: false,
+        retryable: unsupported.retryable,
       };
     if (this.flight)
       return (() => {
@@ -263,6 +298,20 @@ class Preparation {
 
   async settled(): Promise<void> {
     await Promise.allSettled([this.flight?.done, this.verification]);
+  }
+
+  async cancel(): Promise<void> {
+    this.flight?.controller.abort(new Error("Model preparation was removed"));
+    await this.settled();
+  }
+
+  validate(signal: AbortSignal, sources: ModelSources): void {
+    const unsupported = this.platformFailure();
+    if (unsupported) throw unsupported;
+    signal.throwIfAborted();
+    for (const path of [sources.runtimeSource, sources.modelSource])
+      if (path !== undefined && !isAbsolute(path))
+        throw new CatalogError("INVALID_REQUEST", "Model source paths must be absolute");
   }
 
   async runtime(purpose: "voice" | "speaker" | "alignment"): Promise<PreparedRuntime> {
@@ -376,6 +425,10 @@ class Preparation {
     }
   }
 
+  /** Whether the installed files match the receipt, by metadata, whatever preparation is doing. */
+  presence() {
+    return this.inspect();
+  }
   private inspect(): "absent" | "ready" | "invalid" {
     const root = this.root;
     try {
@@ -459,7 +512,8 @@ class Preparation {
         "MODEL_RUNTIME_UNAVAILABLE",
         "Runtime preparation requires its owned execution adapter",
       );
-    const staging = join(this.models, ".staging", randomUUID());
+    privateDirectory(dirname(this.root));
+    const staging = join(this.models, ".staging", this.manifest.name, randomUUID());
     try {
       const folder = join(staging, this.manifest.folderName);
       await stored(() => mkdir(folder, { recursive: true, mode: 0o700 }));
@@ -542,6 +596,7 @@ class Preparation {
       });
     } finally {
       await rm(staging, { recursive: true, force: true }).catch(() => {});
+      await rmdir(dirname(staging)).catch(() => {});
     }
   }
 
@@ -554,12 +609,10 @@ class Preparation {
     const target = join(folder, file.path);
     await stored(() => mkdir(dirname(target), { recursive: true, mode: 0o700 }));
     const failed = (reason: string, details: Record<string, unknown> = {}) =>
-      new CatalogError(
-        "MODEL_DOWNLOAD_FAILED",
-        `Model download failed: ${reason}`,
-        { path: file.path, ...details },
-        true,
-      );
+      new CatalogError("MODEL_DOWNLOAD_FAILED", `Model download failed: ${reason}`, {
+        path: file.path,
+        ...details,
+      });
     const mismatch = (details: Record<string, unknown>) =>
       new CatalogError("MODEL_HASH_MISMATCH", "Downloaded model file does not match its pin", {
         path: file.path,
@@ -627,32 +680,65 @@ export class Models {
     return [...this.preparations.values()].some((preparation) => preparation.updateBlocked);
   }
   private readonly preparations = new Map<string, Preparation>();
+  private readonly removals = new Map<string, Promise<unknown>>();
+  private readonly directory: string;
   constructor(
     home: string,
     fetch: typeof globalThis.fetch = globalThis.fetch,
     manifests: readonly ModelManifest[] = registeredModels,
+    private readonly catalog: Catalog,
     materializeRuntime?: RuntimeMaterializer,
   ) {
-    const directory = join(realpathSync(home), "models");
-    privateDirectory(directory);
-    rmSync(join(directory, ".staging"), { recursive: true, force: true });
-    privateDirectory(join(directory, ".staging"));
+    this.directory = join(realpathSync(home), "models");
+    privateDirectory(this.directory);
+    rmSync(join(this.directory, ".staging"), { recursive: true, force: true });
+    privateDirectory(join(this.directory, ".staging"));
+    this.catalog.catalog.exec(`CREATE TABLE IF NOT EXISTS model_removals (
+      modelId TEXT NOT NULL,
+      requestId TEXT NOT NULL UNIQUE,
+      removedAtMs INTEGER NOT NULL,
+      freedBytes INTEGER NOT NULL,
+      completedAtMs INTEGER,
+      clearedAtMs INTEGER,
+      PRIMARY KEY(modelId, requestId)
+    ) STRICT`);
     for (const manifest of manifests) {
       if (this.preparations.has(manifest.name)) throw new Error("Duplicate registered model ID");
       this.preparations.set(
         manifest.name,
-        new Preparation(directory, fetch, manifest, materializeRuntime),
+        new Preparation(this.directory, fetch, manifest, materializeRuntime),
       );
     }
+    // A removal the last service run did not finish completes now, before any preparation can
+    // start, so its later replay can never undo a model prepared after the restart.
+    const interrupted = this.catalog.catalog
+      .prepare("SELECT modelId, requestId FROM model_removals WHERE completedAtMs IS NULL")
+      .all() as { modelId: string; requestId: string }[];
+    for (const { modelId, requestId } of interrupted) {
+      const paths = this.removalPaths(modelId);
+      const freedBytes = paths.reduce((total, path) => total + fileBytesSync(path), 0);
+      for (const path of paths) rmSync(path, { recursive: true, force: true });
+      this.catalog.catalog
+        .prepare("UPDATE model_removals SET freedBytes=?, completedAtMs=? WHERE requestId=?")
+        .run(freedBytes, Date.now(), requestId);
+    }
+  }
+  private removalPaths(modelId: string): string[] {
+    return [
+      join(this.directory, modelId),
+      join(this.directory, ".cache", modelId),
+      join(this.directory, ".staging", modelId),
+    ];
   }
   private selected(modelId: string): Preparation {
     const model = this.preparations.get(modelId);
-    if (!model) throw new CatalogError("UNKNOWN_MODEL", "Model is not registered", { modelId });
+    if (!model)
+      throw new CatalogError("NOT_FOUND", "Model is not registered", { modelId, kind: "model" });
     return model;
   }
   list() {
-    return [...this.preparations].map(([modelId, model]) => ({
-      modelId,
+    return [...this.preparations].map(([id, model]) => ({
+      id,
       purpose: model.manifest.purpose,
       platform: model.manifest.platform,
       descriptorDigest: model.descriptorDigest,
@@ -677,6 +763,25 @@ export class Models {
       },
     }));
   }
+  page(input: { cursor?: string; limit?: number } = {}) {
+    const limit = input.limit ?? 100;
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Model page limit must be 1–1000");
+    const position =
+      input.cursor === undefined ? undefined : pageCursor.decode("model.list", input.cursor, {});
+    const index = position === undefined ? 0 : (position as { index?: unknown }).index;
+    if (!Number.isSafeInteger(index) || (index as number) < 0)
+      throw new CatalogError("INVALID_PARAMS", "Invalid model cursor");
+    const models = this.list();
+    const rows = models.slice(index as number, (index as number) + limit + 1);
+    return {
+      models: rows.slice(0, limit),
+      nextCursor:
+        rows.length > limit
+          ? pageCursor.encode("model.list", { index: (index as number) + limit }, {})
+          : null,
+    };
+  }
   async settled(): Promise<void> {
     await Promise.all([...this.preparations.values()].map((model) => model.settled()));
   }
@@ -691,12 +796,20 @@ export class Models {
       [...this.preparations.values()]
         .filter((model) => model.manifest.autoPrepare)
         .map(async (model) => {
-          if (!(await model.intact(signal))) await model.prepare(signal, {});
+          if (this.removed(model.manifest.name)) return;
+          if (!(await model.intact(signal))) {
+            await this.removals.get(model.manifest.name);
+            if (this.removed(model.manifest.name)) return;
+            await this.prepare(model.manifest.name, signal, {}, { clearRemoval: false });
+          }
         }),
     );
   }
   async status(modelId: string) {
     return this.selected(modelId).status();
+  }
+  presence(modelId: string) {
+    return this.selected(modelId).presence();
   }
   /**
    * Readiness from each preparation receipt, for the cheap service health check. Runtime bytes
@@ -704,14 +817,98 @@ export class Models {
    * full hash grows with the installed runtime and would make health as slow as the largest one.
    */
   statuses() {
-    return [...this.preparations].map(([modelId, model]) => ({
-      modelId,
+    return [...this.preparations].map(([id, model]) => ({
+      id,
       purpose: model.manifest.purpose,
       status: model.snapshot(),
     }));
   }
-  prepare(modelId: string, signal: AbortSignal, sources: ModelSources = {}) {
-    return this.selected(modelId).prepare(signal, sources);
+  prepare(
+    modelId: string,
+    signal: AbortSignal,
+    sources: ModelSources = {},
+    options: { clearRemoval?: boolean } = {},
+  ) {
+    const model = this.selected(modelId);
+    model.validate(signal, sources);
+    const wait = this.removals.get(modelId);
+    if (!wait) {
+      if (options.clearRemoval !== false) this.clearRemoved(modelId);
+      return model.prepare(signal, sources);
+    }
+    return wait.then(() => {
+      if (options.clearRemoval !== false) this.clearRemoved(modelId);
+      return model.prepare(signal, sources);
+    });
+  }
+  /** `inUse` is asked inside this model's flight, after any earlier removal and replay. */
+  async remove(modelId: string, requestId: string, inUse: (modelDigest: string) => boolean) {
+    const previous = this.removals.get(modelId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => {})
+      .then(async () => {
+        const model = this.selected(modelId);
+        const prior = this.catalog.catalog
+          .prepare(
+            "SELECT modelId, freedBytes, completedAtMs FROM model_removals WHERE requestId=?",
+          )
+          .get(requestId) as
+          | { modelId: string; freedBytes: number; completedAtMs: number | null }
+          | undefined;
+        if (prior) {
+          if (prior.modelId !== modelId)
+            throw new CatalogError("REQUEST_CONFLICT", "Removal request ID names another model");
+          if (prior.completedAtMs !== null)
+            return { id: modelId, deleted: true as const, freedBytes: prior.freedBytes };
+          return this.finishRemoval(model, requestId);
+        }
+        if (inUse(model.modelDigest))
+          throw new CatalogError("MODEL_IN_USE", "A running job is using this model", { modelId });
+        this.catalog.transaction(() => {
+          this.catalog.catalog
+            .prepare(
+              "INSERT INTO model_removals(modelId,requestId,removedAtMs,freedBytes,completedAtMs,clearedAtMs) VALUES(?,?,?,0,NULL,NULL)",
+            )
+            .run(modelId, requestId, Date.now());
+        });
+        return this.finishRemoval(model, requestId);
+      });
+    this.removals.set(modelId, run);
+    try {
+      return await run;
+    } finally {
+      if (this.removals.get(modelId) === run) this.removals.delete(modelId);
+    }
+  }
+  private async finishRemoval(model: Preparation, requestId: string) {
+    await model.cancel();
+    const paths = this.removalPaths(model.manifest.name);
+    let freedBytes = 0;
+    for (const path of paths) freedBytes += await fileBytes(path);
+    this.catalog.catalog
+      .prepare("UPDATE model_removals SET freedBytes=? WHERE requestId=? AND completedAtMs IS NULL")
+      .run(freedBytes, requestId);
+    for (const path of paths) await rm(path, { recursive: true, force: true });
+    this.catalog.catalog
+      .prepare(
+        "UPDATE model_removals SET completedAtMs=? WHERE requestId=? AND completedAtMs IS NULL",
+      )
+      .run(Date.now(), requestId);
+    return { id: model.manifest.name, deleted: true as const, freedBytes };
+  }
+  private removed(modelId: string): boolean {
+    return !!this.catalog.catalog
+      .prepare(
+        "SELECT 1 FROM model_removals WHERE modelId=? AND (completedAtMs IS NULL OR clearedAtMs IS NULL) LIMIT 1",
+      )
+      .get(modelId);
+  }
+  private clearRemoved(modelId: string): void {
+    this.catalog.catalog
+      .prepare(
+        "UPDATE model_removals SET clearedAtMs=? WHERE modelId=? AND completedAtMs IS NOT NULL AND clearedAtMs IS NULL",
+      )
+      .run(Date.now(), modelId);
   }
   runtime(modelId: string, purpose: "voice" | "speaker" | "alignment") {
     return this.selected(modelId).runtime(purpose);

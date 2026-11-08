@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { retryable } from "./refusal.mjs";
 const native =
   process.env.YAP_NATIVE ?? fileURLToPath(new URL("../.build/debug/yap-native", import.meta.url));
 function run(file, args, options = {}) {
@@ -134,7 +135,11 @@ test("selected source pictures preserve explicit streams, physical sample clocks
       assert.equal(failed.reply.ok, false);
       assert.equal(
         failed.reply.error.code,
-        changes.atUs === 450000 ? "SOURCE_PICTURE_UNAVAILABLE" : "UNAVAILABLE",
+        changes.atUs === 450000
+          ? "SOURCE_PICTURE_UNAVAILABLE"
+          : changes.available
+            ? "UNAVAILABLE_SUPPORT"
+            : "NOT_FOUND",
       );
       assert.equal(existsSync(failed.params.output), false);
     }
@@ -192,17 +197,17 @@ test("selected frame wire refuses malformed requests and preserves source and ou
       .split("\n")
       .map(JSON.parse);
     assert.equal(replies.length, requests.length);
-    for (const [index, [code, retryable]] of [
+    for (const [index, [code, expected]] of [
       ["INVALID_REQUEST", false],
       ["INVALID_REQUEST", false],
       ["INVALID_REQUEST", false],
       ["NATIVE_DECODE_FAILED", true],
-      ["INVALID_OUTPUT", false],
+      ["INVALID_OUTPUT", true],
     ].entries()) {
       assert.equal(replies[index].id, String(index));
       assert.equal(replies[index].ok, false);
       assert.equal(replies[index].error.code, code, JSON.stringify(replies[index]));
-      assert.equal(replies[index].error.retryable, retryable);
+      assert.equal(retryable(replies[index].error), expected);
     }
     const frame = replies[5];
     assert.equal(frame.id, "5");

@@ -1,7 +1,8 @@
 import { ceil, fromTime, type TimeValue, type SelectionRange } from "@yap/composition";
+import { indexCaptureEvidence, type IndexCaptureOwners } from "./index-capture-evidence.js";
 import { SourceIndexStillness, sourceIndexPoints } from "./source-index-equality.js";
 import { waitForIndexFrame, retainIndexFrame } from "./index-frame.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import type { DerivedCache } from "./cache.js";
 import type {
   MediaFrameInspection,
@@ -21,6 +22,8 @@ import {
   selectSourceIndex,
   type SourceIndexRequest,
 } from "./source-index-selection.js";
+import type { AcquisitionStore } from "./acquisitions.js";
+import type { SourceEvidenceReader } from "./evidence-read.js";
 
 type Resolved = { request: SourceIndexRequest } & (
   | { ordinal: number; frame: SourceFrameArtifact }
@@ -37,6 +40,9 @@ export async function materializeSourceIndex(
   owners: {
     index: ScreenshotIndexStore<SourceIndexRecords>;
     records: SceneEvidenceStore;
+    acquisitions: AcquisitionStore;
+    evidence?: SourceEvidenceReader;
+    capture?: IndexCaptureOwners["capture"];
     frames: MediaFrameInspection;
     cache: DerivedCache;
   },
@@ -44,6 +50,7 @@ export async function materializeSourceIndex(
   signal: AbortSignal,
 ) {
   const { index, records, frames, cache } = owners;
+  const { moments, pointerSamples } = indexCaptureEvidence(identity, owners);
   const stillness = new SourceIndexStillness(sourceIndexPoints(records, identity, signal));
   let ordinal = 0,
     through = 0,
@@ -80,8 +87,8 @@ export async function materializeSourceIndex(
           observation: { kind: "frame", frame: frames.sourceUnavailable(input) },
         };
       } catch (error) {
-        if (error instanceof CatalogError && error.code === "NOT_READY")
-          throw new CatalogError(
+        if (error instanceof CatalogError && error.code === "PREREQUISITE_MISSING")
+          throw dependencyRefusal(
             "FRAME_FAILED",
             status.reason ?? "Picture unavailable without physical observation",
             { dependency },
@@ -91,13 +98,13 @@ export async function materializeSourceIndex(
       }
     }
     if (!status.published)
-      throw new CatalogError(
+      throw dependencyRefusal(
         "FRAME_FAILED",
         status.reason ?? "Picture preparation did not publish",
         { dependency },
         status.retryable,
       );
-    const frame = status.published.frame;
+    const frame = status.published.frame as SourceFrameArtifact;
     if (frame.implementationId !== identity.implementationId)
       throw new CatalogError("ARTIFACT_CHANGED", "Pinned picture renderer changed");
     await retainIndexFrame(
@@ -114,7 +121,10 @@ export async function materializeSourceIndex(
             support: request.support,
             reasons: request.reasons,
           },
-          retained,
+          {
+            ...(retained as any),
+            sizeBytes: (retained as any).sizeBytes ?? (retained as any).bytes,
+          },
         );
       },
     );
@@ -150,6 +160,8 @@ export async function materializeSourceIndex(
     for await (const request of selectSourceIndex(
       sourceIndexQueryRanges(source.support),
       sourceIndexChunks(records, identity.scenes, signal),
+      moments,
+      pointerSamples,
       signal,
     )) {
       if (previous && previous.request.support !== request.support) {

@@ -15,7 +15,9 @@ import YapControls
         model.preview = cameraFrame()
         let host = NSHostingView(rootView: RecordingOverlayView(model: model, perform: { performed.append($0) }))
         host.sizingOptions = [.intrinsicContentSize]
-        let window = NSWindow(contentRect: NSRect(x: -10000, y: -10000, width: 10, height: 10),
+        // Liquid Glass is composited by the window server, so the controls are drawn by it too: the
+        // window sits on a screen, behind everything, and is captured from there.
+        let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: 10, height: 10),
                               styleMask: .borderless, backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.isOpaque = false
@@ -29,9 +31,20 @@ import YapControls
             window.setContentSize(host.fittingSize)
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
+        // Checked before anything is drawn: without it the capture is empty, not wrong.
+        precondition(CGPreflightScreenCaptureAccess(),
+                     "The controls must be captured; allow screen recording for this terminal")
         func capture() -> NSBitmapImageRep {
-            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds)!
-            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let file = NSTemporaryDirectory() + "overlay-\(UUID().uuidString).png"
+            let shot = Process()
+            shot.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            shot.arguments = ["-x", "-o", "-l\(window.windowNumber)", file]
+            try! shot.run()
+            shot.waitUntilExit()
+            defer { try? FileManager.default.removeItem(atPath: file) }
+            guard let data = FileManager.default.contents(atPath: file), let bitmap = NSBitmapImageRep(data: data) else {
+                preconditionFailure("The controls must be captured; allow screen recording for this terminal")
+            }
             return bitmap
         }
         /// Every action a sweep of clicks across a strip of the controls sends, in order.
@@ -178,7 +191,9 @@ import YapControls
     }
 
     static func isFrameBorder(_ color: NSColor?) -> Bool {
-        guard let c = color?.usingColorSpace(.deviceRGB) else { return false }
+        // The capture's own components: converting them between colour spaces moves a saturated
+        // yellow past the limits that tell it apart.
+        guard let c = color, c.type == .componentBased, c.colorSpace.colorSpaceModel == .rgb else { return false }
         return c.redComponent > 0.8 && c.greenComponent > 0.8 && c.blueComponent < 0.35 && c.alphaComponent > 0.9
     }
 

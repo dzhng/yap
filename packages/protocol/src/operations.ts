@@ -20,6 +20,7 @@ import {
 } from "./correspondence.js";
 import { captureSelectionSchema } from "./capture.js";
 import { DEFAULT_CALL_TIMEOUT_MS, MEDIA_WORKER_TIMEOUT_MS } from "./framing.js";
+import { pageParams } from "./paging.js";
 
 const id = z.string().min(1);
 /** The most bytes one artifact.read returns. */
@@ -35,13 +36,14 @@ export function isArtifactMaintenance(operation: string): boolean {
 const time = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const range = z.object({ startUs: time, endUs: time }).strict();
 const recording = z.object({ recordingId: id }).strict();
+const recordingDelete = recording.extend({ cascade: z.boolean().optional() }).strict();
 const sourceSelection = mediaClipSchema.pick({
   assetId: true,
   streamId: true,
   acquisitionId: true,
 });
 const transcriptExecutionSelection = {
-  executionRange: selectionRangeSchema.optional(),
+  sourceRange: selectionRangeSchema.optional(),
   context: z
     .strictObject({
       beforeUs: z.int().min(0).max(4_000_000),
@@ -49,7 +51,9 @@ const transcriptExecutionSelection = {
     })
     .optional(),
 };
-const sourceTranscriptPreparation = sourceSelection.extend(transcriptExecutionSelection).strict();
+const sourceTranscriptPreparation = sourceSelection
+  .extend({ ...transcriptExecutionSelection })
+  .strict();
 const sourceTranscriptReference = {
   assetId: id,
   streamId: id,
@@ -64,7 +68,7 @@ const transcriptSpeaker = z
     acquisitionId: id.optional(),
     channel: z.int().nonnegative(),
     modelId: id,
-    observationRange: selectionRangeSchema,
+    sourceRange: selectionRangeSchema,
     generation: id,
   })
   .describe("A generation-pinned speaker observation used only for transcript attribution");
@@ -76,8 +80,8 @@ const continuityDigest = z.string().regex(/^[a-f0-9]{64}$/);
 const continuityMetrics = z.strictObject({
   inputFrames: z.int().positive(),
   scoredFrames: z.int().nonnegative(),
-  durationSeconds: z.number().finite().positive(),
-  inferenceSeconds: z.number().finite().nonnegative(),
+  durationUs: z.number().finite().positive(),
+  inferenceUs: z.number().finite().nonnegative(),
   peakRssBytes: z.int().nonnegative(),
   expectedSpeakerCount: z.int().positive().max(8),
   observedSpeakerCount: z.int().nonnegative().max(8),
@@ -104,27 +108,17 @@ const continuityCandidate = z.strictObject({
   }),
 });
 const project = z.object({ projectId: id }).strict();
-const projectEvidenceParams = project
-  .extend({
-    revisionId: id.optional(),
-    range: range.optional(),
-    trackIds: z.array(id).optional(),
-    limit: z.int().min(1).max(1000).optional(),
-    cursor: z
-      .strictObject({
-        projectId: id,
-        revisionId: id,
-        manifestId: z.uuid(),
-        checkpointId: z.uuid(),
-        queryDigest: z.string().regex(/^[a-f0-9]{64}$/),
-      })
-      .optional(),
-  })
-  .strict();
+const projectEvidenceParams = pageParams({
+  projectId: id,
+  revisionId: id.optional(),
+  range: range.optional(),
+  trackIds: z.array(id).optional(),
+});
 const projectTranscriptParams = projectEvidenceParams
   .extend({
+    cursor: z.string().min(1).optional(),
     sourceGenerations: z
-      .array(sourceSelection.extend({ generation: z.uuid() }).strict())
+      .array(sourceSelection.extend({ generation: id }).strict())
       .min(1)
       .max(10000)
       .optional(),
@@ -139,40 +133,14 @@ const captureHeads = z.strictObject({
   cursor: capturePosition,
   pause: capturePosition,
   geometry: capturePosition,
+  mark: capturePosition,
   interruption: capturePosition,
 });
 const sourceCaptureParams = (maximum: number, events = false) =>
-  sourceSelection
-    .extend({
-      sourceRange: range.optional(),
-      limit: z.int().min(1).max(maximum).optional(),
-      cursor: z
-        .strictObject({
-          reference: id,
-          position: events
-            ? z.strictObject({
-                capture: captureHeads,
-                scene: z.strictObject({
-                  after: z
-                    .strictObject({
-                      actualSourceUs: z
-                        .int()
-                        .min(-Number.MAX_SAFE_INTEGER)
-                        .max(Number.MAX_SAFE_INTEGER),
-                      ordinal: time,
-                    })
-                    .nullable(),
-                  done: z.boolean(),
-                }),
-              })
-            : captureHeads,
-        })
-        .optional(),
-    })
-    .strict();
+  pageParams({ sourceRange: range.optional(), ...sourceSelection.shape });
 const projectEdit = project.extend({ requestId: id, expectedRevisionId: id });
 const exportDestination = {
-  exportId: z.uuid(),
+  requestId: id,
   revisionId: id.optional(),
   directory: z.string().min(1),
   leaf: z.string().min(1),
@@ -248,18 +216,14 @@ const layoutDiagnosticParams = project
       )
       .min(1)
       .max(32),
-    maxIssues: z.int().min(1).max(100).optional(),
+    maxIssueCount: z.int().min(1).max(100).optional(),
   })
   .strict();
-const historyPosition = {
-  afterOrdinal: z.int().min(-1),
-  throughOrdinal: z.int().min(-1),
-};
 const historyParams = <T extends z.ZodRawShape>(target: z.ZodObject<T>) =>
   target
     .extend({
-      cursor: target.extend(historyPosition).strict().nullable().optional(),
-      limit: z.int().min(1).max(500).optional(),
+      cursor: z.string().min(1).optional(),
+      limit: z.int().min(1).max(1000).default(100),
     })
     .strict();
 
@@ -296,14 +260,21 @@ const frameParams = z.union([
 ]);
 const reviewTrailUs = z.int().min(0).max(10_000_000);
 const cursorRenderParams = z.union([
-  projectFrameParams.extend({ atUs: z.array(time).min(1).max(8), trailUs: reviewTrailUs }),
-  sourceFrameParams.extend({ atUs: z.array(time).min(1).max(8), trailUs: reviewTrailUs }),
+  projectFrameParams.extend({
+    atUs: z.array(time).min(1).max(8),
+    trailUs: reviewTrailUs,
+  }),
+  sourceFrameParams.extend({
+    atUs: z.array(time).min(1).max(8),
+    trailUs: reviewTrailUs,
+  }),
 ]);
 const transcriptReviewParams = z.union([
   projectTranscriptParams,
-  sourceSelection
-    .extend({ range: range.optional(), limit: z.int().min(1).max(1000).default(250) })
-    .strict(),
+  pageParams({
+    ...sourceSelection.shape,
+    sourceRange: selectionRangeSchema.optional(),
+  }),
 ]);
 
 const audioRange = range.refine(({ startUs, endUs }) => endUs > startUs, {
@@ -317,7 +288,7 @@ const projectAudioParams = project
   })
   .strict();
 const sourceAudioParams = sourceSelection
-  .extend({ range: selectionRangeSchema.optional() })
+  .extend({ sourceRange: selectionRangeSchema.optional() })
   .strict();
 const extractedAudioRendition = z.strictObject({
   sampleRate: z.int().min(1).max(192000),
@@ -337,8 +308,11 @@ const loudnessFields = {
   truePeak: z.boolean().optional(),
 };
 const loudnessParams = z.union([
-  projectAudioParams.extend({ ...loudnessFields, preparedResourceId: id.optional() }),
-  sourceAudioParams.extend(loudnessFields),
+  projectAudioParams.extend({
+    ...loudnessFields,
+    preparedResourceId: id.optional(),
+  }),
+  sourceAudioParams.extend({ ...loudnessFields }),
 ]);
 const waveformFields = {
   bucketFrames: z.int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
@@ -361,12 +335,10 @@ const pauseFields = {
   thresholdRMS: z.number().finite().nonnegative().optional(),
   minDurationUs: z.int().positive().optional(),
   channel: z.int().nonnegative().optional(),
-  limit: z.int().min(1).max(500).optional(),
-  cursor: z.strictObject({ offset: z.int().nonnegative() }).optional(),
 };
 const pauseParams = z.union([
-  projectAudioParams.extend(pauseFields),
-  sourceAudioParams.extend(pauseFields),
+  pageParams({ ...projectAudioParams.shape, ...pauseFields }),
+  pageParams({ ...sourceAudioParams.shape, ...pauseFields }),
 ]);
 
 const projectIndexParams = projectFrameParams.omit({ atUs: true });
@@ -374,11 +346,10 @@ const projectIndexReference = projectIndexParams
   .required()
   .partial({ observations: true, faceObservations: true })
   .extend({ generation: id });
-const paged = <T extends z.ZodRawShape, S extends z.ZodRawShape, C extends z.ZodRawShape>(
+const paged = <T extends z.ZodRawShape, S extends z.ZodRawShape>(
   target: z.ZodObject<T>,
   fields: S,
-  position: C,
-) => target.extend({ ...fields, cursor: target.extend(position).strict().optional() }).strict();
+) => target.extend({ ...fields, cursor: z.string().min(1).optional() }).strict();
 // Adapters derive their advertised tools from the same schemas the service validates.
 export const operationSchema = z.discriminatedUnion("operation", [
   z
@@ -397,10 +368,21 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Create an empty managed project with an explicit canvas; replay requestId to recover the same project.",
     ),
   z
-    .object({ operation: z.literal("project.delete"), params: project })
+    .object({ operation: z.literal("project.delete"), params: project.extend({ requestId: id }) })
     .strict()
     .describe(
       "Delete a project and drain its work while preserving original assets. Repeating deletion succeeds; creation retries never recreate it.",
+    ),
+  z
+    .object({
+      operation: z.literal("project.duplicate"),
+      params: project
+        .extend({ requestId: id, revisionId: id.optional(), title: z.string().optional() })
+        .strict(),
+    })
+    .strict()
+    .describe(
+      "Duplicate a project revision into a new independent project; replay requestId for the same copy, and use revisionId to choose a historical document. This is a project copy, distinct from the clip-level duplicate edit.",
     ),
   z
     .object({ operation: z.literal("project.get"), params: project })
@@ -409,12 +391,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("project.list"),
-      params: z
-        .object({
-          cursor: z.object({ afterSequence: z.int().nonnegative() }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams(),
     })
     .strict()
     .describe("Read a bounded page of managed projects, newest first."),
@@ -424,10 +401,6 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .describe(
       "Open a read-only native inspection session for a pinned project revision. This convenience operation combines revision resolution, bounded revision.history and native preview opening; it returns the resolved revision and app-open acknowledgement without editing, exporting or starting capture.",
     ),
-  z
-    .object({ operation: z.literal("inspect"), params: inspectParams })
-    .strict()
-    .describe("Alias for inspect.open for the CLI and MCP adapters."),
   z
     .object({ operation: z.literal("caption.propose"), params: captionProposalParams })
     .strict()
@@ -536,7 +509,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Adopt an explicitly named captured-source directory and its journal through a durable job. Own copied media and evidence independently of the donor; inspect job.get and use job.retry/job.cancel for preparation.",
+      "Adopt an explicitly named captured-source directory and its journal through a durable job. Own copied media and evidence independently of the donor. Returns the status of that work with its jobId; follow it with job.get and use job.retry/job.cancel for preparation.",
     ),
   z
     .object({
@@ -555,7 +528,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Admit local media, a font file or a bounded 3D .cube LUT as an immutable asset through a durable job. Fonts retain all explicitly named faces without installation or playable streams. LUTs retain byte identity and typed non-playable grid metadata; use processing.set with an explicit LUT asset, colorSpace and interpolation. Replay requestId to recover the same import; inspect job.get, retry failed work with job.retry and cancel with job.cancel.",
+      "Admit local media, a font file or a bounded 3D .cube LUT as an immutable asset through a durable job. Fonts retain all explicitly named faces without installation or playable streams. LUTs retain byte identity and typed non-playable grid metadata; use processing.set with an explicit LUT asset, colorSpace and interpolation. Replay requestId to recover the same import. Returns the status of that work with its jobId; follow it with job.get, retry failed work with job.retry and cancel with job.cancel.",
     ),
   z
     .object({
@@ -580,18 +553,17 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("asset.delete"),
+      params: z.object({ assetId: id, requestId: id, cascade: z.boolean().optional() }).strict(),
+    })
+    .strict()
+    .describe(
+      "Delete an asset and its retained evidence after checking library users. Without cascade, an asset used by a project, acquisition or derived asset refuses with IN_USE details; cascade explicitly retires those users. Replay requestId to recover the same result.",
+    ),
+  z
+    .object({
       operation: z.literal("asset.segments"),
-      params: z
-        .object({
-          assetId: id,
-          streamId: z.string().min(1),
-          cursor: z
-            .object({ assetId: id, streamId: z.string().min(1), afterOrdinal: z.int().min(-1) })
-            .strict()
-            .optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams({ assetId: id, streamId: z.string().min(1) }),
     })
     .strict()
     .describe(
@@ -600,13 +572,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("asset.origins"),
-      params: z
-        .object({
-          assetId: id,
-          cursor: z.object({ afterProvenance: z.string() }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams({ assetId: id }),
     })
     .strict()
     .describe(
@@ -615,16 +581,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("asset.list"),
-      params: z
-        .object({
-          cursor: z.object({ afterSequence: time }).strict().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-        })
-        .strict(),
+      params: pageParams(),
     })
     .strict()
     .describe(
-      "Read a bounded page of admitted assets. streamCount/mediaKinds describe media streams; fontFaceCount identifies non-timed font assets, which have no streams.",
+      "Read admitted assets newest first with an opaque continuation. streamCount/mediaKinds describe media streams; fontFaceCount identifies non-timed font assets, which have no streams.",
     ),
   z
     .object({ operation: z.literal("job.get"), params: z.object({ jobId: id }).strict() })
@@ -671,35 +632,21 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Export a pinned revision to an existing absolute directory. A new intent atomically replaces an unchanged file matching a trusted Yap publication receipt; replacing another regular file requires overwrite:true. Symlink and original-source destinations are refused at admission and the commit check. Replacement pins destination identity and bytes; concurrent Yap publishers serialize. A noncooperating external writer racing the atomic swap can leave a conflict with displaced bytes retained in private staging; no rollback over a successor is attempted. Reuse exportId only for the same request to recover a lost response; poll export.status. Managed projects export video, standalone audio (Float32 WAV or AAC/M4A), an editable processed-package ZIP, or plain SRT/VTT sidecars; sidecars require revisionId and explicit unique text placementIds, use displayed corrected text and exact surviving support, round outward to milliseconds, and carry styling-free text. Export status issues report introduced overlaps, omitted placements, SRT markup a reader may render as formatting, and transcripts a package left out because an older recipe made them stale. They require no video/audio encoder or ASR. A timing line inside an SRT cue and resource limits refuse rather than rewrite text; audio defaults to lossless 48kHz stereo WAV, pins the full processed mix, and requires no video preparation. Export never removes video or changes the project. Project packaging selects the requested revision and retained history through it; later donor edits are excluded. Project package JSON uses inventory members with a 128 MiB aggregate working-memory admission. Package export requires all acquired evidence: acquired narration waits for its transcript, reports MODEL_NOT_PREPARED until model.prepare has completed, and fails if transcription failed until an explicit source job retry succeeds.",
+      "Export a pinned revision to an existing absolute directory. Replay is keyed by requestId; pass the returned export id as exportId for status and recovery. A new intent atomically replaces an unchanged file matching a trusted Yap publication receipt; replacing another regular file requires overwrite:true.",
     ),
   z
     .object({
       operation: z.literal("export.list"),
-      params: z
-        .object({
-          projectId: id.optional(),
-          unfinishedOnly: z.boolean().optional(),
-          limit: z.int().min(1).max(500).optional(),
-          cursor: z
-            .object({
-              projectId: id.nullable(),
-              unfinishedOnly: z.boolean(),
-              afterExportId: z.uuid(),
-            })
-            .strict()
-            .optional(),
-        })
-        .strict(),
+      params: pageParams({ projectId: id.optional(), unfinishedOnly: z.boolean().optional() }),
     })
     .strict()
     .describe(
-      "Discover persisted export summaries after restart without starting work. Defaults to 100, maximum 500. unfinishedOnly includes uncommitted exports, abandonment and private cleanup. Filter by projectId. Cursor binds the project filter and unfinishedOnly. Pages follow live lexical export IDs; start a fresh traversal for new arrivals before your cursor. Use export.status for details.",
+      "Discover persisted export summaries after restart without starting work. The page limit is 1–1000 (default 100). unfinishedOnly includes uncommitted exports, abandonment and private cleanup. Filter by projectId. The opaque cursor binds the project filter and unfinishedOnly. Pages are newest first. Use export.status for details.",
     ),
   z
     .object({
       operation: z.literal("export.status"),
-      params: z.object({ exportId: z.uuid() }).strict(),
+      params: z.object({ exportId: id }).strict(),
     })
     .strict()
     .describe(
@@ -707,17 +654,8 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
-      operation: z.literal("export.retry"),
-      params: z.object({ exportId: z.uuid() }).strict(),
-    })
-    .strict()
-    .describe(
-      "Explicitly retry the same pinned export. A committed export is never recreated if its external file moved or was removed.",
-    ),
-  z
-    .object({
       operation: z.literal("export.recover"),
-      params: z.object({ exportId: z.uuid() }).strict(),
+      params: z.object({ requestId: id, exportId: id }).strict(),
     })
     .strict()
     .describe(
@@ -726,7 +664,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("export.cancel"),
-      params: z.object({ exportId: z.uuid() }).strict(),
+      params: z.object({ exportId: id }).strict(),
     })
     .strict()
     .describe(
@@ -735,7 +673,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("export.abandon"),
-      params: z.object({ exportId: z.uuid() }).strict(),
+      params: z.object({ exportId: id }).strict(),
     })
     .strict()
     .describe(
@@ -744,7 +682,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("package.open"),
-      params: z.object({ path: z.string().startsWith("/") }).strict(),
+      params: z.object({ requestId: id, path: z.string().startsWith("/") }).strict(),
     })
     .strict()
     .describe(
@@ -778,10 +716,13 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Cancel or close a package admission, draining work and revoking its image deliveries before cleanup. Retry explicit cleanup failures with the same admissionId.",
     ),
   z
-    .object({ operation: z.literal("recording.delete"), params: recording })
+    .object({
+      operation: z.literal("recording.delete"),
+      params: recordingDelete.extend({ requestId: id }),
+    })
     .strict()
     .describe(
-      "Delete a recording with its media, evidence, caches and open deliveries once capture has proved the take stopped. Retrying joins the same deletion; deleting an absent recording succeeds.",
+      "Delete a recording after capture has proved the take stopped. Its capture-origin copies and their evidence, assets and managed files are retired with it; a copy used by a project refuses with IN_USE details unless cascade is true, which also retires those projects. Retrying the same requestId returns the saved result.",
     ),
   z
     .object({
@@ -790,28 +731,20 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes. Models and external exports are excluded; files may change while scanned.",
+      "Read live logical regular-file byte usage, including unfinished work and pending deletions. Includes all managed storage plus shared database/unattributed bytes; modelBytes counts every regular file under models/, including cache and staging. External exports are excluded; files may change while scanned.",
     ),
   z
     .object({
       operation: z.literal("index.get"),
       params: z.union([
         projectIndexParams.extend({
-          limit: z.int().min(1).max(200).default(50),
-          cursor: projectIndexReference.extend({ afterOrdinal: z.int().nonnegative() }).optional(),
+          ...pageParams().shape,
         }),
-        paged(
-          sourceSelection,
-          {
-            limit: z.int().min(1).max(200).default(50),
-            observations: pictureObservationRequestSchema.optional(),
-            faceObservations: faceObservationRequestSchema.optional(),
-          },
-          {
-            generation: id,
-            afterOrdinal: z.int().nonnegative(),
-          },
-        ),
+        paged(sourceSelection, {
+          ...pageParams().shape,
+          observations: pictureObservationRequestSchema.optional(),
+          faceObservations: faceObservationRequestSchema.optional(),
+        }),
       ]),
     })
     .strict()
@@ -826,11 +759,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           generation: id,
           maxGapUs: z.int().positive().max(1_000_000).optional(),
           prediction: z.enum(["none", "linear"]).optional(),
-          limit: z.int().min(1).max(200).optional(),
-          cursor: sourceSelection
-            .extend({ generation: id, afterOrdinal: z.int().nonnegative() })
-            .strict()
-            .optional(),
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -840,47 +769,17 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
-      operation: z.literal("index.retry"),
-      params: z.union([
-        projectIndexParams,
-        sourceSelection.extend({
-          observations: pictureObservationRequestSchema.optional(),
-          faceObservations: faceObservationRequestSchema.optional(),
-        }),
-      ]),
-    })
-    .strict()
-    .describe(
-      "Explicitly retry failed or canceled screenshot index processing. Project and source selectors also retry their retryable terminal scene or frame prerequisites; ordinary reads do not restart terminal work.",
-    ),
-  z
-    .object({
       operation: z.literal("index.coverage"),
       params: z.union([
-        paged(
-          projectIndexReference,
-          {
-            candidateOrdinal: z.int().nonnegative().optional(),
-            limit: z.int().min(1).max(200).default(50),
-          },
-          {
-            afterSequence: z.int().nonnegative(),
-            candidateOrdinal: z.int().nonnegative().nullable(),
-          },
-        ),
-        paged(
-          sourceSelection,
-          {
-            generation: id,
-            candidateOrdinal: z.int().nonnegative().optional(),
-            limit: z.int().min(1).max(200).default(50),
-          },
-          {
-            generation: id,
-            afterSequence: z.int().nonnegative(),
-            candidateOrdinal: z.int().nonnegative().nullable(),
-          },
-        ),
+        paged(projectIndexReference, {
+          candidateOrdinal: z.int().nonnegative().optional(),
+          ...pageParams().shape,
+        }),
+        paged(sourceSelection, {
+          generation: id,
+          candidateOrdinal: z.int().nonnegative().optional(),
+          ...pageParams().shape,
+        }),
       ]),
     })
     .strict()
@@ -981,7 +880,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           revisionId: id.optional(),
           preparedResourceId: id,
           tap: processingTapSchema,
-          range: selectionRangeSchema,
+          sourceRange: selectionRangeSchema,
           channel: z.int().nonnegative(),
           text: z
             .string()
@@ -1010,12 +909,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
           assetId: id,
           packageHandle: id.optional(),
           generation: id,
-          sourceRange: selectionRangeSchema.optional(),
+          range: range.optional(),
           view: z.enum(["words", "acoustic", "scores", "raw"]).optional(),
           thresholdRMS: z.number().finite().nonnegative().optional(),
           operand: z.enum(["nativeReceipt", "report", "correspondence"]).optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         }),
         z.strictObject({
           projectId: id,
@@ -1029,8 +927,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
           trackIds: z.array(id).optional(),
           view: z.enum(["words", "acoustic", "scores"]).optional(),
           thresholdRMS: z.number().finite().nonnegative().optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         }),
       ]),
     })
@@ -1060,7 +957,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
         .extend({
           channel: z.int().nonnegative(),
           modelId: id,
-          observationRange: selectionRangeSchema,
+          sourceRange: selectionRangeSchema,
           generation: id,
           view: z.literal("receipt").optional(),
           packageHandle: id.optional(),
@@ -1074,7 +971,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .strictObject({
       operation: z.literal("speaker.observe"),
       params: sourceSelection
-        .extend({ channel: z.int().nonnegative(), sourceRange: selectionRangeSchema, modelId: id })
+        .extend({
+          channel: z.int().nonnegative(),
+          sourceRange: selectionRangeSchema,
+          modelId: id,
+        })
         .strict(),
     })
     .describe(
@@ -1096,27 +997,27 @@ export const operationSchema = z.discriminatedUnion("operation", [
           .extend({
             channel: z.int().nonnegative(),
             modelId: id,
-            observationRange: selectionRangeSchema,
+            sourceRange: selectionRangeSchema,
             packageHandle: id.optional(),
-            sourceRange: selectionRangeSchema.optional(),
             view: z.enum(["intervals", "scores"]).optional(),
-            limit: z.int().min(1).max(1000).optional(),
-            cursor: z.string().min(1).max(8192).optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
     })
     .describe(
-      "Read immutable source observations or their source/project projection without preparing or invoking a model. Project selectors consume retained matching channel/model generations only; no project scores. Optional packageHandle reads the opened immutable package; package project metadata jobs and checkpoints share its bounded context lifetime. observationRange selects the generation; sourceRange only narrows display. Intervals retain complete exact source ranges, native ordinals and anonymous generation-local slots. Scores retain every original 80ms cell and are uncalibrated, never assignment confidence or silence. Continue while nextCursor exists, including empty pages. Continuations pin the original generation, decoder and display query; changed input refuses with ARTIFACT_CHANGED. Ready reads need neither the current native executable nor prepared runtime bytes.",
+      "Read immutable source observations or their source/project projection without preparing or invoking a model. Project selectors consume retained matching channel/model generations only; no project scores. Optional packageHandle reads the opened immutable package; package project metadata jobs and checkpoints share its bounded context lifetime. sourceRange selects the generation; sourceRange only narrows display. Intervals retain complete exact source ranges, native ordinals and anonymous generation-local slots. Scores retain every original 80ms cell and are uncalibrated, never assignment confidence or silence. Continue while nextCursor exists, including empty pages. Continuations pin the original generation and decoder: a different view, display range or selection refuses with INVALID_PARAMS, and a republished generation or decoder refuses with ARTIFACT_CHANGED. Ready reads need neither the current native executable nor prepared runtime bytes.",
     ),
   z
     .strictObject({
       operation: z.literal("speaker.bind"),
       params: sourceSelection
         .extend({
+          requestId: id,
+          expectedBindingDigest: z.string().regex(/^[a-f0-9]{64}$/),
           channel: z.int().nonnegative(),
           modelId: id,
-          observationRange: selectionRangeSchema,
+          sourceRange: selectionRangeSchema,
           generation: id,
           bindings: z
             .array(
@@ -1167,15 +1068,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
       params: renderedSpeechPreparation,
     })
     .describe(
-      "Recognize actual rendered PCM for an explicit project revision, processing tap, range and PCM rendition. This convenience preparation combines immutable audio extraction with fresh Parakeet inference in one project job; it never depends on source transcript readiness or reuses projected source text. A range that runs past the revision is clamped to it, shares the applied range's generation and reports range-clamped in the result's issues; one with no part inside refuses before any job. Missing source support refuses before recognition rather than treating unavailable samples as silence. Published output retains the PCM asset, conversion/origin, exact sample bounds, transcript and fresh generation. Repeat the same request to join/reuse work; models must be prepared through model.prepare. Reads stay offline. Use transcript.render.retry for failed/canceled extraction dependencies, or job.cancel to cancel the parent; shared extraction remains independently reusable.",
-    ),
-  z
-    .strictObject({
-      operation: z.literal("transcript.render.retry"),
-      params: renderedSpeechPreparation,
-    })
-    .describe(
-      "Explicitly retry previously requested rendered recognition and any failed/canceled extraction dependency for the same pinned project revision, tap, range and rendition. A fresh parent attempt produces fresh measured words; successful retained output is reused unchanged. This does not retry source transcription or prepare models.",
+      "Recognize actual rendered PCM for an explicit project revision, processing tap, range and PCM rendition. This convenience preparation combines immutable audio extraction with fresh Parakeet inference in one project job; it never depends on source transcript readiness or reuses projected source text. A range that runs past the revision is clamped to it, shares the applied range's generation and reports range-clamped in the result's issues; one with no part inside refuses before any job. Missing source support refuses before recognition rather than treating unavailable samples as silence. Published output retains the PCM asset, conversion/origin, exact sample bounds, transcript and fresh generation. Repeat the same request to join/reuse work; models must be prepared through model.prepare. Reads stay offline. Use job.retry for failed/canceled extraction dependencies, or job.cancel to cancel the parent; shared extraction remains independently reusable.",
     ),
   z
     .strictObject({
@@ -1183,18 +1076,8 @@ export const operationSchema = z.discriminatedUnion("operation", [
       params: project
         .extend({
           revisionId: id,
-          generation: z.uuid(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z
-            .strictObject({
-              generation: z.uuid(),
-              sourceCursor: z.strictObject({
-                ...sourceTranscriptReference,
-                afterOrdinal: time.nullable(),
-                range: range.nullable(),
-              }),
-            })
-            .optional(),
+          generation: id,
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -1207,7 +1090,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
       params: sourceTranscriptPreparation,
     })
     .describe(
-      "Explicitly request source speech inference. executionRange selects primary source-clock ownership; one that runs past the source is clamped to it, shares the applied range's generation and reports range-clamped in the result's issues, and one with no part inside is INVALID_RANGE. context adds decode-only outer support, never edits or retimes words. Full support and explicit ranges alike decode in bounded 20-second windows with 4-second internal context and unique shared-context word correspondence. Gaps remain gaps. Local problems never fail the transcript; each is an issue on the published output, and on the word it touches in transcript rows: boundary-unresolved (a seam word with no unique peer, published by the window whose core holds its start), timing-clamped (an estimate past the decoded window, clamped to its edge, original seconds in evidence) and word-dropped (a malformed engine word; its neighbours publish). An output keeps its first 1000 issues; when they end in issues-truncated, the omitted issues appear on no row either, and its count is the only signal. Retained raw evidence keeps every candidate, the original engine values and ownership/merge diagnostics. Models must already be prepared via model.prepare. Repeat identical requests join existing work; read bounded output with its retained generation.",
+      "Explicitly request source speech inference. sourceRange selects primary source-clock ownership; one that runs past the source is clamped to it, shares the applied range's generation and reports range-clamped in the result's issues, and one with no part inside is INVALID_RANGE. context adds decode-only outer support, never edits or retimes words. Full support and explicit ranges alike decode in bounded 20-second windows with 4-second internal context and unique shared-context word correspondence. Gaps remain gaps. Local problems never fail the transcript; each is an issue on the published output, and on the word it touches in transcript rows: boundary-unresolved (a seam word with no unique peer, published by the window whose core holds its start), timing-clamped (an estimate past the decoded window, clamped to its edge, original seconds in evidence) and word-dropped (a malformed engine word; its neighbours publish). An output keeps its first 1000 issues; when they end in issues-truncated, the omitted issues appear on no row either, and its count is the only signal. Retained raw evidence keeps every candidate, the original engine values and ownership/merge diagnostics. Models must already be prepared via model.prepare. Repeat identical requests join existing work; read bounded output with its retained generation.",
     ),
   z
     .object({
@@ -1217,18 +1100,9 @@ export const operationSchema = z.discriminatedUnion("operation", [
         sourceSelection
           .extend({
             speaker: transcriptSpeaker.optional(),
-            generation: z.uuid().optional(),
-            range: range.optional(),
-            limit: z.int().min(1).max(1000).default(250),
-            cursor: z
-              .object({
-                ...sourceTranscriptReference,
-                afterOrdinal: time.nullable(),
-                range: range.nullable(),
-                speaker: transcriptSpeakerCursor.optional(),
-              })
-              .strict()
-              .optional(),
+            generation: id.optional(),
+            sourceRange: selectionRangeSchema.optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
@@ -1241,7 +1115,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({ operation: z.literal("transcript.review"), params: transcriptReviewParams })
     .strict()
     .describe(
-      "Review a bounded source or pinned-project transcript in one agent-friendly call. This convenience operation combines transcript.transcribe when retained evidence is missing with transcript.get for the bounded page; it may return pending while transcription runs. If the optional model/runtime is unavailable, return retryable MODEL_NOT_PREPARED details so the agent can ask the user before model.prepare. The operation returns readiness, exact transcript rows, generation, continuation and the issues published with the transcript it reads. It never invents words or edits a project.",
+      "Review a bounded source or pinned-project transcript in one agent-friendly call. This convenience operation combines transcript.transcribe when retained evidence is missing with transcript.get for the bounded page; it may return pending while transcription runs. A missing parakeet transcription model is prepared automatically, even after model.remove, and the call reports pending meanwhile. If a model or runtime it needs is otherwise unavailable, return retryable MODEL_NOT_PREPARED details so the agent can ask the user before model.prepare. The operation returns readiness, exact transcript rows, generation, continuation and the issues published with the transcript it reads. It never invents words or edits a project.",
     ),
   z
     .object({
@@ -1250,8 +1124,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
         .extend({
           generation: id.optional(),
           range: range.optional(),
-          limit: z.int().min(1).max(1000).optional(),
-          cursor: z.string().min(1).max(8192).optional(),
+          ...pageParams().shape,
         })
         .strict(),
     })
@@ -1263,18 +1136,12 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({
       operation: z.literal("transcript.search"),
       params: z.union([
-        projectTranscriptParams
-          .extend({ text: z.string().min(1).max(200), limit: z.int().min(1).max(500).optional() })
-          .strict(),
+        projectTranscriptParams.extend({ text: z.string().min(1).max(200) }).strict(),
         sourceSelection
           .extend({
             text: z.string().min(1).max(200),
-            generation: z.uuid().optional(),
-            limit: z.int().min(1).max(500).default(100),
-            cursor: z
-              .object({ ...sourceTranscriptReference, afterOrdinal: time, text: z.string() })
-              .strict()
-              .optional(),
+            generation: id.optional(),
+            ...pageParams().shape,
           })
           .strict(),
       ]),
@@ -1284,22 +1151,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Search a project, selected source or ready narration transcript for literal, case-folded text over consecutive words, ignoring outer punctuation. This filtered convenience read searches retained transcript evidence without requiring the caller to page every word through transcript.get. Project matches follow consecutive whole words on each selected audio track, may cross contiguous clips, and stop at gaps or partial words. Each match carries all contributing word/clip identities and the widest exact projectRange across its word estimates; simultaneous speakers never form a shared phrase. Source entries carry word IDs and source range; phrases can cross accepted inference seams but stop at unavailable, unobserved or skipped support. Returns readiness like transcript.get until complete. Continue while nextCursor exists, even if entries is empty, to keep the same revision, generation and text.",
     ),
   z
-    .object({
-      operation: z.literal("transcript.retry"),
-      params: z.union([
-        sourceTranscriptPreparation,
-        projectTranscriptParams
-          .omit({ cursor: true, limit: true })
-          .extend({ text: z.string().min(1).max(200).optional() })
-          .strict(),
-      ]),
-    })
-    .strict()
-    .describe(
-      "Explicitly retry previously requested selected-source preparation with the same executionRange/context; initial work uses transcript.transcribe. Models must already be prepared. A project selector retries only its evidence manifest (include the same text to retry phrase search); source preparation failures must be retried with their returned asset-stream selection. Keep the same acquisition selection; preparation uses a fresh generation after failure.",
-    ),
-  z
-    .object({ operation: z.literal("preset.list"), params: z.object({}).strict() })
+    .object({ operation: z.literal("preset.list"), params: pageParams() })
     .strict()
     .describe(
       "List installed presets. A preset is a style bundle an agent follows to shoot and edit a kind of video. This is unrelated to settings.preset and to the preset field on voice.generate.",
@@ -1307,7 +1159,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("preset.get"),
-      params: z.object({ id: z.string().min(1) }).strict(),
+      params: z.object({ presetId: z.string().min(1) }).strict(),
     })
     .strict()
     .describe(
@@ -1316,7 +1168,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("preset.update"),
-      params: z.object({ id: z.string().min(1).optional() }).strict(),
+      params: z.object({ presetId: z.string().min(1).optional(), requestId: id }).strict(),
     })
     .strict()
     .describe(
@@ -1326,7 +1178,11 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({
       operation: z.literal("preset.create"),
       params: z
-        .object({ name: z.string().min(1), references: z.array(z.string()).optional() })
+        .object({
+          requestId: id,
+          name: z.string().min(1),
+          references: z.array(z.string()).optional(),
+        })
         .strict(),
     })
     .strict()
@@ -1336,17 +1192,17 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("preset.delete"),
-      params: z.object({ id: z.string().min(1) }).strict(),
+      params: z.object({ presetId: z.string().min(1), requestId: id }).strict(),
     })
     .strict()
     .describe(
       "Move a local preset to the macOS Trash so it can be restored from Finder. This is unrelated to settings.preset and to the preset field on voice.generate.",
     ),
   z
-    .object({ operation: z.literal("model.list"), params: z.object({}).strict() })
+    .object({ operation: z.literal("model.list"), params: pageParams() })
     .strict()
     .describe(
-      "Discover immutable registered model IDs, purpose, platform, content identities and preparation requirements without preparing anything.",
+      "Discover immutable registered model IDs, purpose, platform, content identities and preparation requirements without preparing anything. Results are paged newest first with an opaque cursor.",
     ),
   z
     .object({
@@ -1355,7 +1211,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Verify the selected registered model locally without network access. Returns absent, preparing with byte progress and etaMs, ready, invalid, or failed. While preparing, poll this operation; etaMs is a measured estimate and may be null before enough bytes arrive.",
+      "Verify the selected registered model locally without network access. Returns unavailable, running with byte progress and etaMs, ready, failed, or unavailable. While running, poll this operation; etaMs is a measured estimate and may be null before enough bytes arrive.",
     ),
   z
     .object({
@@ -1374,6 +1230,15 @@ export const operationSchema = z.discriminatedUnion("operation", [
     ),
   z
     .object({
+      operation: z.literal("model.remove"),
+      params: z.object({ modelId: id, requestId: id }).strict(),
+    })
+    .strict()
+    .describe(
+      "Remove every prepared file for the selected registered model, including its compiler cache and staging bytes. This is for a user who no longer wants the model, such as before uninstalling Yap. A running job that uses the model is a retryable MODEL_IN_USE refusal. Startup does not prepare a removed model again, but Yap always keeps a transcription model: transcript.review prepares parakeet again whenever it needs it. Call model.prepare to acquire any other removed model.",
+    ),
+  z
+    .object({
       operation: z.literal("frame.batch"),
       params: z.union([
         projectFrameParams.extend({ atUs: z.array(time).min(1).max(8) }),
@@ -1382,18 +1247,14 @@ export const operationSchema = z.discriminatedUnion("operation", [
     })
     .strict()
     .describe(
-      "Request one to eight ordered frames pinned to one revision. This batch convenience operation is equivalent to repeated frame.get calls while preserving order, per-item readiness/errors and shared work for duplicates. Poll the returned revision and retry individual failures with frame.retry. Optional observations measure the same delivered upright raster; rectangles use delivered top-left pixels and metrics include only fully opaque pixels.",
+      "Request one to eight ordered frames pinned to one revision. This batch convenience operation is equivalent to repeated frame.get calls while preserving order, per-item readiness/errors and shared work for duplicates. Poll the returned revision and retry individual failures with job.retry. Optional observations measure the same delivered upright raster; rectangles use delivered top-left pixels and metrics include only fully opaque pixels.",
     ),
   z
     .object({ operation: z.literal("cursor.render"), params: cursorRenderParams })
     .strict()
     .describe(
-      "Render one to eight source or pinned-project frames with an explicit capture cursor trail using an ephemeral review plan. This convenience operation combines cursor.raw observations with frame.get delivery and overlays the trail for review; it does not persist a project processing step. Trail duration is 0 through 10 seconds. Reuse per-item readiness/errors and pinned timing. Source selections require captured-video authority for cursor evidence. Use cursor.raw for exact observations and frame.get for clean overlay-free pictures.",
+      "Render one to eight source or pinned-project frames with an explicit capture cursor trail for review, combining cursor.raw with frame.get; no processing step persists. Source frames also draw the strokes and pins on the person's screen then, as they saw them. Trails span 0-10 s. Reuse per-item readiness/errors and pinned timing. Source selections need captured-video authority. Use cursor.raw for exact observations and frame.get for clean overlay-free pictures.",
     ),
-  z
-    .object({ operation: z.literal("cursor.render.retry"), params: cursorRenderParams })
-    .strict()
-    .describe("Explicitly retry failed cursor.render work with the same pinned request."),
   z
     .object({
       operation: z.literal("preview.get"),
@@ -1402,15 +1263,6 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .strict()
     .describe(
       "Request a playable MP4 of a pinned project. Projects accept an optional range in project microseconds and an optional maxLongEdge draft bound; omitted range renders the whole project. Returns readiness until complete; pin the returned revision when polling. CLI writes a file; MCP returns a delivery token for artifact.read/close.",
-    ),
-  z
-    .object({
-      operation: z.literal("preview.retry"),
-      params: previewParams,
-    })
-    .strict()
-    .describe(
-      "Explicitly retry failed preview rendering for the same pinned revision. Failed source dependencies require explicit job.retry.",
     ),
   z
     .object({
@@ -1484,10 +1336,6 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Measure the exact selected source PCM or pinned project processing tap without treatment. This convenience operation combines the audio.get selection with loudness analysis; optional preparedResourceId pins an existing prepared project signal. Omitted range means the full selected signal; an explicit smaller range is an excerpt. Returns readiness/jobId then published measurement with exact clock, source/revision/tap, PCM generation, recipe and meter identities, integrated LUFS, loudness range in LU, sample peak in dBFS and true peak in dBTP. Native channel interpretation is default; dual-mono is explicit and requires mono. True-peak libswresample analysis defaults on; false requests sample peak only. Missing support refuses with available/unavailable ranges; authored silence remains signal. Silence/below-gate or insufficient duration returns null loudness with a reason; never use the scanner's empty-gate sentinel as a finite measurement. Pin returned revision/range while polling; explicit job.retry recovers failed work. This does not normalize, edit, acquire tools or choose targets.",
     ),
   z
-    .object({ operation: z.literal("audio.retry"), params: audioParams })
-    .strict()
-    .describe("Explicitly retry failed audio excerpt processing for the same pinned request."),
-  z
     .object({
       operation: z.literal("frame.get"),
       params: frameParams,
@@ -1497,32 +1345,16 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Request a raw PNG/JPEG image with assetId, streamId and optional maxLongEdge; omit atUs and acquisitionId for images. The delivered PNG is upright; its receipt retains source orientation and has no sample clock. Request a selected video source picture with assetId, streamId, optional acquisitionId and source-clock atUs. Physical gaps return unavailable without a synthetic image. Or request a project picture at atUs with optional revisionId, maxLongEdge and video processing tap. Its global sample time can precede the requested time; the receipt separates compiled timing from actual decoded source samples. Project stills use the movie compositor and do not add capture pointer overlays. Pin the returned revision when polling. Optional observations:{} returns full/explicit-region encoded-sRGB luma and RGB histograms, endpoint fractions, alpha/clipping coverage and measured dark-edge candidates. Rectangles address delivered upright top-left pixels; candidates and caller region labels never establish letterboxing, face detection or an automatic grade.",
     ),
   z
-    .object({ operation: z.literal("frame.retry"), params: frameParams })
-    .strict()
-    .describe("Explicitly retry failed frame processing using the same pinned request."),
-  z
     .object({ operation: z.literal("waveform.get"), params: waveformParams })
     .strict()
     .describe(
       "Inspect a selected audio source or project processing tap as per-channel min/max/RMS JSON or a labeled image with format:image. This convenience operation combines the audio.get selection with waveform aggregation. Omit bucketFrames for an automatic overview; set a positive sample count for finer inspection (maximum 4096 buckets). Returned sample bounds and resolution are exact; unavailable support is not proof of silence. CLI writes JSON to --output; MCP returns its JSON text or image. Pin the returned project revision while polling. This measures audio and never edits it.",
     ),
   z
-    .object({ operation: z.literal("waveform.retry"), params: waveformParams })
-    .strict()
-    .describe(
-      "Explicitly retry waveform preparation and its audio prerequisite using the same pinned selection, range, tap and resolution.",
-    ),
-  z
     .object({ operation: z.literal("spectrogram.get"), params: spectrogramParams })
     .strict()
     .describe(
       "Inspect a bounded selected-source or project audio tap as a time/frequency image. This convenience operation combines the audio.get selection with spectrogram analysis. Defaults to fftFrames:1024 and hopFrames:512; FFT must be a power of two, hop no larger than FFT. Narrow the range when the 262144 channel/time/frequency-cell limit is exceeded. Surrounding PCM preserves range/full alignment; unavailable support is distinct from silence. Channels remain separate. Labels report density in dB relative to full-scale squared per Hz, with a fixed display floor; the image cannot establish speech quality. Pin revision while polling.",
-    ),
-  z
-    .object({ operation: z.literal("spectrogram.retry"), params: spectrogramParams })
-    .strict()
-    .describe(
-      "Explicitly retry the same spectrogram, including failed measurements and audio prerequisites.",
     ),
   z
     .object({ operation: z.literal("audio.pause.get"), params: pauseParams })
@@ -1536,7 +1368,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
       params: z
         .object({
           token: id,
-          offset: time,
+          offsetBytes: time,
           maxBytes: z.int().min(1).max(ARTIFACT_CHUNK_BYTES).default(ARTIFACT_CHUNK_BYTES),
         })
         .strict(),
@@ -1546,7 +1378,10 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Read a bounded base64 chunk from a media or complete JSON operation-result delivery; retrying an offset returns the same bytes.",
     ),
   z
-    .object({ operation: z.literal("artifact.renew"), params: z.object({ token: id }).strict() })
+    .object({
+      operation: z.literal("artifact.renew"),
+      params: z.object({ token: id, requestId: id }).strict(),
+    })
     .strict()
     .describe(
       "Extend a live delivery for an active consumer. Returns the same token and byte count with a new expiry. Expired, closed or deleted deliveries cannot be revived; close when finished.",
@@ -1558,26 +1393,20 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("timeline.events"),
-      params: z.union([
-        projectEvidenceParams.extend({ limit: z.int().min(1).max(500).optional() }),
-        sourceCaptureParams(500, true),
-      ]),
+      params: z.union([projectEvidenceParams, sourceCaptureParams(500, true)]),
     })
     .strict()
     .describe(
-      "Read measured source scene changes, captured pause/geometry and explicit capture-end interruption markers for a selected asset stream or project. Source selectors use sourceRange; project selectors use range/revisionId/trackIds. Capture identity requires explicit acquisitionId; missing metadata is unavailable, not an empty success. Timed geometry belongs to captured video; pauses follow each bound timed occurrence. Normal completion contributes no interruption marker. Capture-end markers require trustworthy timed completion; missing, damaged or conflicting termination is explicitly unavailable. These closing boundaries use left support and (start,end] query ownership; ordinary observations stay [start,end). A shorter selected audio stream never relocates the capture endpoint. Video scenes use retained physical picture clocks without requiring capture metadata. Initial reads may be not_ready during scene preparation; inspect returned dependency/job state and use job.retry for explicit recovery. Project cut rows describe track-local editorial mapping transitions with exact projectAtUs, audio/video mediaKind and nullable before/after sides; they are not measured scene changes or proof of a visible composite change. Continuous pure splits do not create cuts; internal entrances/exits and rate changes do. Cut queries use [start,end), while physical support gaps remain availability evidence. Cut coverage is supplied by the pinned project revision, independently of source cut availability. Preserve first-page coverage and exact projectAtUs values across continuations. Continue while nextCursor exists, even if rows is empty. Adjacent rows with equal atUs form one logical group and may span pages. A cursor pins its target, revision and source/scene generations.",
+      "Read measured source scene changes, captured pause/geometry, marks and explicit capture-end interruption markers for a selected asset stream or project. A drawing held past five minutes appears as consecutive strokes. Marks are moments the person pointed at, not lasting state: shownForUs is how long a stroke or pin stayed on screen, usually seconds; clicks are never drawn. All are listed, points projected through their geometry epoch. Source selectors use sourceRange; project selectors use range/revisionId/trackIds. Capture identity requires explicit acquisitionId; missing metadata is unavailable, not an empty success. Timed geometry belongs to captured video; pauses follow each bound timed occurrence. Normal completion contributes no interruption marker. Capture-end markers require trustworthy timed completion; missing, damaged or conflicting termination is explicitly unavailable. These closing boundaries use left support and (start,end] query ownership; ordinary observations stay [start,end). A shorter selected audio stream never relocates the capture endpoint. Video scenes use retained physical picture clocks without requiring capture metadata. Initial reads may be queued during scene preparation; inspect returned dependency/job state and use job.retry for explicit recovery. Project cut rows describe track-local editorial mapping transitions with exact projectAtUs, audio/video mediaKind and nullable before/after sides; they are not measured scene changes or proof of a visible composite change. Continuous pure splits do not create cuts; internal entrances/exits and rate changes do. Cut queries use [start,end), while physical support gaps remain availability evidence. Cut coverage is supplied by the pinned project revision, independently of source cut availability. Preserve first-page coverage and exact projectAtUs values across continuations. Continue while nextCursor exists, even if rows is empty. Adjacent rows with equal atUs form one logical group and may span pages. A cursor pins its target, revision and source/scene generations.",
     ),
   z
     .object({
       operation: z.literal("cursor.raw"),
-      params: z.union([
-        projectEvidenceParams.extend({ limit: z.int().min(1).max(5000).optional() }),
-        sourceCaptureParams(5000),
-      ]),
+      params: z.union([projectEvidenceParams, sourceCaptureParams(5000)]),
     })
     .strict()
     .describe(
-      "Page raw cursor observations with explicit capture authority. Selected assets use sourceRange and require acquisitionId for captured video; project selectors use range/revisionId/trackIds and return each retained occurrence with exact projectAtUs. Raw coordinates, captureAtUs and integrity receipt remain unchanged; this does not simulate crop/zoom. Missing capture metadata reports unavailable coverage. Keep first-page coverage and continue while nextCursor exists, even on empty pages.",
+      "Page raw cursor observations with explicit capture authority. Selected assets use sourceRange and require acquisitionId for captured video; project selectors use range/revisionId/trackIds and return each retained occurrence with exact projectAtUs. When the receipt sampling policy holds samples, each observation stays in force until the next change, pause or support boundary; a page includes the sample in force at its start. Raw coordinates, captureAtUs and integrity receipt remain unchanged; this does not simulate crop/zoom. Missing capture metadata reports unavailable coverage. Keep first-page coverage and continue while nextCursor exists, even on empty pages.",
     ),
   z
     .object({ operation: z.literal("login.status"), params: z.object({}).strict() })
@@ -1595,13 +1424,42 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Register or unregister Yap as a macOS login item after the user explicitly confirms the choice.",
     ),
   z
+    .object({ operation: z.literal("shortcuts.get"), params: z.object({}).strict() })
+    .strict()
+    .describe(
+      "Read Yap's global shortcuts: for each action its name, keys (as shortcuts.set takes them), label, during (app or recording) and state (active, refused_by_macos).",
+    ),
+  z
+    .object({
+      operation: z.literal("shortcuts.set"),
+      params: z
+        .object({
+          bindings: z
+            .record(z.string().min(1), z.string().min(1))
+            .describe(
+              'Action id to keys, e.g. {"capture.startOrStop": "ctrl+cmd+r"}. Modifiers ctrl, option, shift, cmd, then one key: a character the current keyboard layout types, or return, tab, space, delete, escape, forwarddelete, home, end, pageup, pagedown, left, right, up, down, f1–f20, keypad0–keypad9, keypadplus, keypadminus, keypadmultiply, keypaddivide, keypadequals, keypaddecimal, keypadenter, keypadclear, or keyNN for any physical key code. Anything but a function key needs ctrl, option or cmd.',
+            ),
+        })
+        .strict(),
+    })
+    .strict()
+    .describe(
+      "Bind the named actions, apply them immediately and persist them; other actions keep their keys. Answers like shortcuts.get, so a refused_by_macos state says another app or macOS holds those keys.",
+    ),
+  z
+    .object({ operation: z.literal("shortcuts.reset"), params: z.object({}).strict() })
+    .strict()
+    .describe(
+      "Put every shortcut back on Yap's default keys, as Settings' Reset All Shortcuts to Defaults does. Answers like shortcuts.get.",
+    ),
+  z
     .object({ operation: z.literal("update.status"), params: z.object({}).strict() })
     .strict()
     .describe(
       "Read the native updater's availability, automatic-update preference, manual-check readiness and current result without checking the feed.",
     ),
   z
-    .object({ operation: z.literal("update.check"), params: z.object({}).strict() })
+    .object({ operation: z.literal("update.check"), params: z.object({ requestId: id }).strict() })
     .strict()
     .describe(
       "Check immediately and download an available compatible update, even when automatic updates are disabled. Does not change that preference or interrupt work; installation waits for existing idle admission and CLI clients to finish. Follow update.status for progress.",
@@ -1625,19 +1483,19 @@ export const operationSchema = z.discriminatedUnion("operation", [
     .object({ operation: z.literal("skill.install"), params: z.object({}).strict() })
     .strict()
     .describe(
-      "Start a durable install/replace of the account-level Yap consumer skill through the app's bundled, pinned skills installer, allowing it to discover every supported agent harness. The response is an updating status with an operationId; poll skill.status for completion.",
+      "Start a durable install/replace of the account-level Yap consumer skill through the app's bundled, pinned skills installer, allowing it to discover every supported agent harness. The response is a running status with a jobId; poll skill.status for completion.",
     ),
   z
     .object({ operation: z.literal("skill.uninstall"), params: z.object({}).strict() })
     .strict()
     .describe(
-      "Start a durable removal of the account-level Yap consumer skill and its discovered harness links when Yap owns the installation; leaves project-local skills untouched. The response is an updating status with an operationId; poll skill.status for completion.",
+      "Start a durable removal of the account-level Yap consumer skill and its discovered harness links when Yap owns the installation; leaves project-local skills untouched. The response is a running status with a jobId; poll skill.status for completion.",
     ),
   z
     .object({ operation: z.literal("skill.update"), params: z.object({}).strict() })
     .strict()
     .describe(
-      "Start a durable refresh of the account-level Yap consumer skill through the app's bundled, pinned skills installer, replacing an existing global Yap skill and verifying all discovered harness destinations. The response is an updating status with an operationId; poll skill.status for completion.",
+      "Start a durable refresh of the account-level Yap consumer skill through the app's bundled, pinned skills installer, replacing an existing global Yap skill and verifying all discovered harness destinations. The response is a running status with a jobId; poll skill.status for completion.",
     ),
   z
     .object({ operation: z.literal("cli.status"), params: z.object({}).strict() })
@@ -1727,34 +1585,50 @@ export const operationSchema = z.discriminatedUnion("operation", [
       "Discard the named take and start a distinct new one. Pending recovery returns a retryable refusal and does not start a replacement; inspect the previous take before a new restart request.",
     ),
   z
-    .object({ operation: z.literal("recording.latest"), params: z.object({}).strict() })
-    .strict()
-    .describe("Read the newest discoverable take, including unfinished recordings."),
-  z
     .object({
-      operation: z.literal("recording.list"),
-      params: z
-        .object({
-          cursor: z.object({ beforeSequence: z.int().positive() }).strict().nullable().optional(),
-          limit: z.int().min(1).max(100).optional(),
-        })
-        .strict(),
+      operation: z.literal("media.list"),
+      params: pageParams(),
     })
     .strict()
     .describe(
-      "Page through discoverable recordings newest first; continuation excludes newer takes.",
+      "Page through recordings and imported originals newest first with one opaque cursor. Each item names its kind (recording or asset) and id. Capture copies, generated or derived assets, tombstoned items and canceled takes are excluded.",
+    ),
+  z
+    .object({
+      operation: z.literal("recording.list"),
+      params: pageParams(),
+    })
+    .strict()
+    .describe(
+      "Page through discoverable recordings newest first with the shared opaque cursor and 1–1000 limit (default 100).",
     ),
   z
     .object({ operation: z.literal("recording.cleanup"), params: recording })
     .strict()
     .describe(
-      "Explicitly reclaim verified publication working files from a settled recording. Returns a job; use job.get, job.retry and job.cancel. Unverified media remains retained; recording state and canonical media are unchanged.",
+      "Explicitly reclaim verified publication working files from a settled recording. Returns the status of that work with its jobId; follow it with job.get, job.retry and job.cancel. Unverified media remains retained; recording state and canonical media are unchanged.",
     ),
   z
-    .object({ operation: z.literal("recording.get"), params: recording })
+    .object({
+      operation: z.literal("recording.get"),
+      params: z.object({ recordingId: id.optional() }).strict(),
+    })
     .strict()
     .describe(
-      "Read one recording by its stable identity, including unfinished finalizationError and terminal interruptionReason. PUBLICATION_CONFLICT denotes conflicting publication media or proof identities; the code alone does not identify the particular file or establish which streams remain readable.",
+      "Read one recording by its stable identity, or omit recordingId to resolve the latest take. Includes unfinished finalizationError and terminal interruptionReason. PUBLICATION_CONFLICT denotes conflicting publication media or proof identities; the code alone does not identify the particular file or establish which streams remain readable.",
+    ),
+  z
+    .object({
+      operation: z.literal("recording.prompt"),
+      params: z.union([
+        z.object({ recordingId: id.optional() }).strict(),
+        z.object({ projectId: id }).strict(),
+        z.object({ assetId: id }).strict(),
+      ]),
+    })
+    .strict()
+    .describe(
+      "Return the text a person pastes to hand media to an agent, with the facts it was written from. For a recording (omit recordingId for the latest take) the text describes capture sources, duration or live status, pins/drawings presence and transcript readiness without listing individual evidence. Live, importing and failed-import takes receive a prompt without waiting for completion. A projectId or assetId returns that item's one-line ID handoff.",
     ),
   z
     .object({
@@ -1766,7 +1640,7 @@ export const operationSchema = z.discriminatedUnion("operation", [
   z
     .object({
       operation: z.literal("revision.history"),
-      params: historyParams(project).extend({ limit: z.int().min(1).max(1000).optional() }),
+      params: historyParams(project).extend(pageParams().shape),
     })
     .strict()
     .describe("Read a bounded page of history pinned to its initial revision ordinal."),
@@ -1788,13 +1662,117 @@ export const operationNames: ReadonlySet<string> = new Set(
   operationSchema.options.map((option) => option.shape.operation.value),
 );
 
+/** Operations that only return retained state or evidence and never change it. */
+export const readOnlyOperations: ReadonlySet<OperationName> = new Set<OperationName>([
+  "project.get",
+  "project.list",
+  "inspect.open",
+  "caption.propose",
+  "layout.diagnostics",
+  "processing.get",
+  "output.capabilities",
+  "processing.capabilities",
+  "acquisition.get",
+  "asset.get",
+  "asset.segments",
+  "asset.origins",
+  "asset.list",
+  "job.get",
+  "export.list",
+  "export.status",
+  "package.status",
+  "storage.usage",
+  "index.get",
+  "face.trajectory.get",
+  "index.coverage",
+  "index.frame",
+  "index.frames",
+  "correspondence.get",
+  "alignment.get",
+  "speaker.continuity.get",
+  "speaker.get",
+  "join.verify",
+  "transcript.render.get",
+  "transcript.get",
+  "transcript.disfluency.get",
+  "transcript.search",
+  "preset.list",
+  "preset.get",
+  "model.list",
+  "model.status",
+  "preview.get",
+  "audio.get",
+  "frame.get",
+  "waveform.get",
+  "spectrogram.get",
+  "audio.pause.get",
+  "artifact.read",
+  "timeline.events",
+  "cursor.raw",
+  "login.status",
+  "shortcuts.get",
+  "update.status",
+  "skill.status",
+  "cli.status",
+  "service.health",
+  "service.tools",
+  "capture.sources",
+  "capture.status",
+  "recording.list",
+  "media.list",
+  "recording.get",
+  "recording.prompt",
+  "revision.get",
+  "revision.history",
+]);
+
+/** Operations whose repeated input or target state joins existing work or changes nothing. */
+export const idempotentOperations: ReadonlySet<OperationName> = new Set<OperationName>([
+  "asset.convert", // same source streams and recipe join the same content-addressed conversion job.
+  "correspondence.prepare", // the supplied endpoint measurement has one content-addressed receipt.
+  "alignment.observe", // same source/project operands join the same retained alignment job.
+  "speaker.continuity.prepare", // the same candidate is evaluated into the same receipt.
+  "speaker.observe", // same source window/model joins the same speaker evidence job.
+  "transcript.render.prepare", // same revision/tap/range/rendition joins the same rendered transcript job.
+  "transcript.transcribe", // same source selection and context joins the same transcript job.
+  "transcript.review", // review reads or prepares the same bounded transcript selection.
+  "frame.batch", // the same frame selection joins the same per-frame deliveries.
+  "cursor.render", // the same cursor and frame selection produces the same ephemeral deliveries.
+  "voice.generate", // the same reference, text and generation settings join the same asset job.
+  "audio.extract", // the same source/tap/rendition joins the same extracted audio job.
+  "audio.prepare", // the same project tap joins the same prepared audio job.
+  "audio.measure", // the same selected signal joins the same measurement job.
+  "job.retry", // retrying a ready or already queued job leaves its target at the same work state.
+  "job.cancel", // canceling an already canceled or settled job changes nothing.
+  "export.cancel", // canceling an already canceled export is a no-op.
+  "export.abandon", // abandoning an already abandoned export is a no-op.
+  "package.close", // closing an already closed admission changes nothing.
+  "model.prepare", // preparing an already ready model reuses its receipt.
+  "artifact.close", // closing an already closed token changes nothing.
+  "login.setEnabled", // setting the existing login-item preference changes nothing.
+  "update.setEnabled", // setting the existing updater preference changes nothing.
+  "shortcuts.set", // setting the existing bindings changes nothing.
+  "shortcuts.reset", // restoring the defaults twice leaves the defaults.
+  "skill.install", // installing an already installed skill is a no-op.
+  "skill.uninstall", // uninstalling an absent skill is a no-op.
+  "skill.update", // updating an already current skill is a no-op.
+  "cli.install", // installing the matching launcher is a no-op.
+  "cli.uninstall", // uninstalling an absent launcher is a no-op.
+  "capture.pause", // pausing an already paused take changes nothing.
+  "capture.resume", // resuming an already recording take changes nothing.
+  "capture.setCamera", // setting the camera to its current state changes nothing.
+  "capture.stop", // stopping an already settled take returns its stored outcome.
+  "capture.cancel", // canceling an already canceled take changes nothing.
+  "recording.cleanup", // cleanup of already reclaimed files changes nothing.
+]);
+
 /**
  * Operations the native app owns and answers on its own socket: updating, the installed command
  * and skill, and the login item. They must keep working when the service cannot, since an update
  * is how a broken service gets fixed.
  */
 export const appOperations: ReadonlySet<string> = new Set(
-  [...operationNames].filter((name) => /^(update|skill|cli|login)\./.test(name)),
+  [...operationNames].filter((name) => /^(update|skill|cli|login|shortcuts)\./.test(name)),
 );
 
 const nativeCall = DEFAULT_CALL_TIMEOUT_MS;
@@ -1804,6 +1782,9 @@ const drain = 180_000;
 const waits: Partial<Record<OperationName, number>> = {
   "login.status": nativeCall,
   "login.setEnabled": nativeCall,
+  "shortcuts.get": nativeCall,
+  "shortcuts.set": nativeCall,
+  "shortcuts.reset": nativeCall,
   "update.status": nativeCall,
   "update.check": nativeCall,
   "update.setEnabled": nativeCall,
@@ -1831,6 +1812,7 @@ const waits: Partial<Record<OperationName, number>> = {
   "package.open": drain,
   "package.close": drain,
   "recording.delete": drain,
+  "asset.delete": drain,
   "job.cancel": drain,
   "project.delete": drain,
   "storage.usage": drain,

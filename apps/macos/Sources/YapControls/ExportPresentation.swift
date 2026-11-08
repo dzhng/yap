@@ -45,7 +45,7 @@ public enum ExportPresentation {
         // A committed export's retry finishes private cleanup; it never republishes output.
         if !record.abandoning && (record.committed ? record.cleanupPending : record.stopped) {
             actions.append(.init(.retryExport(record.exportId), acting == .retry ? "Retrying…" : record.committed ? "Retry Cleanup" : "Retry Export",
-                enabled: ready && acting == nil && (record.committed || record.retryable || record.state != "failed")))
+                enabled: ready && acting == nil && record.jobId != nil && (record.committed || record.retryable || record.state != "failed")))
         }
         if !record.committed || record.abandoning {
             actions.append(.init(.abandonExport(record.exportId), acting == .abandon ? "Abandoning…" : record.abandoning ? "Retry Abandon" : "Abandon Export", enabled: ready && acting == nil))
@@ -60,10 +60,10 @@ public enum ExportPresentation {
     public static func stateTitle(_ record: ExportsState.Record) -> String {
         if record.abandoning { return "abandoning" }
         switch record.state {
-        case "committed": return record.cleanupPending ? "exported, cleanup pending" : "exported"
+        case "ready": return record.cleanupPending ? "exported, cleanup pending" : "exported"
         case "queued": return "waiting"
         case "running": return "exporting…"
-        case "not_requested": return "not started"
+        case "idle": return "not started"
         default: return record.state
         }
     }

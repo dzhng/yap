@@ -15,7 +15,7 @@ test("public revision review distinguishes a pure silence split from a moved joi
     error: {
       code: "MEDIA_WORKER_UNAVAILABLE",
       message: "Controlled fixture has no native audio renderer",
-      retryable: false,
+      retryable: true,
       details: {},
     },
   }));
@@ -33,8 +33,8 @@ test("public revision review distinguishes a pure silence split from a moved joi
       fps: { numerator: 30, denominator: 1 },
       background: "#000000ff",
     },
-  })) as { project: { projectId: string }; revision: { id: string } };
-  const projectId = created.project.projectId;
+  })) as { project: { id: string }; revision: { id: string } };
+  const projectId = created.project.id;
   const placed = (await invoke("edit.apply", {
     projectId,
     expectedRevisionId: created.revision.id,

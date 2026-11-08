@@ -16,12 +16,12 @@ import { writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { setImmediate } from "node:timers/promises";
-import { CatalogError, type Catalog } from "@yap/core/catalog";
+import { CatalogError, dependencyRefusal, type Catalog } from "@yap/core/catalog";
 import type { DerivedCache, DirectoryIdentity } from "@yap/core/cache";
 import {
   JobDependencyLost,
   ownerIdentity,
-  type JobOwner,
+  type Owner,
   type Job,
   type JobAdmission,
   type JobExecution,
@@ -44,19 +44,15 @@ import {
 } from "./package-workspace.js";
 import type { ManagedFiles } from "./managed-files.js";
 import type { MediaWorker } from "./worker.js";
+import { pageCursor } from "@yap/core/page-cursor";
 
 import type { MediaAudioInspection, PinnedProjectAudioExport } from "@yap/core/audio-inspection";
 
 type Request = Extract<
   ReturnType<typeof operationSchema.parse>,
   { operation: "export.create" }
->["params"];
-type ExportOwner = Extract<JobOwner, { kind: "project" }>;
-type ExportCursor = {
-  projectId: string | null;
-  unfinishedOnly: boolean;
-  afterExportId: string;
-};
+>["params"] & { exportId: string };
+type ExportOwner = Owner<"project">;
 type ReadyRendition = {
   cacheId: string;
   bytes: number;
@@ -135,7 +131,6 @@ function snapshotIssues(kind: string, projected: string | null): Issue[] {
 }
 const artifact = "export-media",
   recoveryArtifact = "export-recovery";
-const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const stageName = (id: string) => `.yap-export-${id}`;
 
 /** The publication lock refuses a second holder of a destination directory. This service's
@@ -180,13 +175,14 @@ const unfinishedSql = `(receipt IS NULL OR abandoning=1 OR ${cleanupPendingSql})
 const admittedSql = "(receipt IS NULL OR abandoning=1 OR assembly IS NOT NULL)";
 
 /** The summary both discovery pages and status report for one intent. */
-function summarize(row: Lifecycle, job: Job["state"] | null) {
+function summarize(row: Lifecycle, job: Pick<Job, "state" | "jobId"> | null) {
   return {
+    jobId: job?.jobId ?? null,
     state: row.receipt
       ? ("committed" as const)
-      : job === "waiting"
+      : job?.state === "waiting"
         ? ("queued" as const)
-        : (job ?? ("not_requested" as const)),
+        : (job?.state ?? ("not_requested" as const)),
     abandoning: !!row.abandoning,
     cleanupPending: cleanupPending(row),
   };
@@ -199,10 +195,22 @@ export class MediaExports {
   get updateBlocked(): boolean {
     return this.creating.size > 0 || this.retiring.size > 0 || this.admittingRecovery;
   }
+  /** Export intents marked for abandonment are hidden from discoverable listings. */
+  listable(exportId: string): boolean {
+    return Boolean(
+      this.owners.catalog.catalog
+        .prepare("SELECT 1 FROM export_intents WHERE exportId=? AND abandoning=0")
+        .get(exportId),
+    );
+  }
   private readonly references: ResourceReferences;
   private readonly creating = new Map<Promise<unknown>, string>();
   private readonly lifetime = new AbortController();
   private readonly retiring = new Map<string, Promise<void>>();
+  private readonly recoveryRequests = new Map<
+    string,
+    { exportId: string; result: ReturnType<MediaExports["status"]> }
+  >();
   private closed = false;
   private admittingRecovery = false;
   constructor(
@@ -245,8 +253,7 @@ export class MediaExports {
   }
   private projectAudio() {
     const audio = this.owners.project.audio;
-    if (!audio)
-      throw new CatalogError("NOT_READY", "Project audio exports are unavailable", {}, true);
+    if (!audio) throw new CatalogError("NOT_READY", "Project audio exports are unavailable");
     return audio;
   }
   private prepareProjectMedia(
@@ -271,17 +278,20 @@ export class MediaExports {
   private projectPackage() {
     const packages = this.owners.project.package;
     if (!packages)
-      throw new CatalogError("NOT_READY", "Project packages are unavailable in this service");
+      throw new CatalogError(
+        "PREREQUISITE_MISSING",
+        "Project packages are unavailable in this service",
+      );
     return packages;
   }
   private owner(intent: Pick<Intent, "targetId">): ExportOwner {
-    return { kind: "project", projectId: intent.targetId };
+    return { kind: "project", id: intent.targetId };
   }
   private assertOwner(intent: Pick<Intent, "targetId">) {
     this.owners.project.store.get(intent.targetId);
   }
   private deleting(owner: ExportOwner) {
-    return this.owners.project.store.isDeleting(owner.projectId);
+    return this.owners.project.store.isDeleting(owner.id);
   }
   private matches(job: Job, intent: Intent) {
     return (
@@ -324,8 +334,7 @@ export class MediaExports {
   }
 
   abandon(exportId: string): Promise<void> {
-    if (this.closed)
-      throw new CatalogError("SERVICE_STOPPED", "Export cleanup is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Export cleanup is closed");
     this.owners.catalog.catalog
       .prepare("UPDATE export_intents SET abandoning=1 WHERE exportId=?")
       .run(exportId);
@@ -386,7 +395,9 @@ export class MediaExports {
         } catch (error) {
           if (
             error instanceof CatalogError &&
-            (error.code === "LIMIT_EXCEEDED" || error.code === "SERVICE_STOPPED")
+            (error.code === "LIMIT_EXCEEDED" ||
+              error.code === "CAPACITY_EXCEEDED" ||
+              error.code === "SERVICE_STOPPED")
           )
             break;
           errors.push(error);
@@ -425,7 +436,6 @@ export class MediaExports {
       state: string;
       reason: string | null;
       retryable: boolean;
-      jobId: string | null;
       published: {
         generation: number;
         issues: Issue[];
@@ -442,7 +452,14 @@ export class MediaExports {
           ? {
               generation: audio.published.generation,
               issues: audio.published.issues,
-              preview: audio.published.audio,
+              // A WAV export is the project's PCM receipt; any other container is its encoding.
+              preview: {
+                cacheId: audio.published.audio.cacheId,
+                bytes:
+                  "sizeBytes" in audio.published.audio
+                    ? audio.published.audio.sizeBytes
+                    : audio.published.audio.bytes,
+              },
             }
           : null,
       };
@@ -474,14 +491,14 @@ export class MediaExports {
         parent.identity.dev !== reservation.parent.dev ||
         parent.identity.ino !== reservation.parent.ino
       )
-        throw new CatalogError("INVALID_STORAGE", "Assembly parent changed");
+        throw new CatalogError("PACKAGE_STORAGE_UNAVAILABLE", "Assembly parent changed");
       for (const child of [reservation.input, reservation.zip])
         await removePackageWorkspace(parent, child.name, child.identity, this.owners.worker);
       intent.assembly = null;
       this.saveAssembly(intent);
     } catch (error) {
       if (error instanceof CatalogError)
-        throw new CatalogError(error.code, error.message, error.details, true);
+        throw dependencyRefusal(error.code, error.message, error.details, true);
       throw error;
     } finally {
       await parent?.handle.close();
@@ -539,7 +556,7 @@ export class MediaExports {
   }
   private dependency(status: {
     state: string;
-    jobId: string | null;
+    jobId?: string | null;
     reason: string | null;
     retryable: boolean;
   }): ReturnType<JobAdmission> {
@@ -548,7 +565,7 @@ export class MediaExports {
       status.state === "unavailable" ||
       status.state === "not_requested"
     )
-      throw new CatalogError(
+      throw dependencyRefusal(
         status.state === "unavailable" ? "UNAVAILABLE" : "DEPENDENCY_FAILED",
         status.reason ?? "Required evidence is unavailable",
         { dependency: status.jobId },
@@ -567,8 +584,7 @@ export class MediaExports {
     return pending;
   }
   private requireAdmission(exportId: string): void {
-    if (this.closed)
-      throw new CatalogError("SERVICE_STOPPED", "Export admission is closed", {}, true);
+    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Export admission is closed", {});
     if (this.retiring.has(exportId))
       throw new CatalogError("EXPORT_ABANDONING", "Export cleanup is pending; retry abandonment", {
         exportId,
@@ -577,7 +593,7 @@ export class MediaExports {
   private async prepareIntent(request: Request): Promise<ReturnType<MediaExports["status"]>> {
     this.requireAdmission(request.exportId);
     if (
-      !uuid.test(request.exportId) ||
+      !request.exportId ||
       !request.leaf ||
       [".", ".."].includes(request.leaf) ||
       /[/\0]/.test(request.leaf) ||
@@ -585,7 +601,7 @@ export class MediaExports {
     )
       throw new CatalogError(
         "INVALID_PARAMS",
-        "Export needs a UUID identity and destination filename",
+        "Export needs a request identity and destination filename",
       );
     const targetKind = "project";
     const targetId = request.projectId;
@@ -719,10 +735,9 @@ export class MediaExports {
         .get() as { count: number };
       if (pending.count >= 32)
         throw new CatalogError(
-          "LIMIT_EXCEEDED",
+          "CAPACITY_EXCEEDED",
           "Too many uncommitted exports retain their prerequisites",
           {},
-          true,
         );
       this.owners.catalog.catalog
         .prepare(
@@ -769,7 +784,7 @@ export class MediaExports {
       projectId?: string | undefined;
       unfinishedOnly?: boolean | undefined;
       limit?: number | undefined;
-      cursor?: ExportCursor | undefined;
+      cursor?: string | undefined;
     } = {},
   ) {
     const projectId = input.projectId ?? null,
@@ -777,57 +792,62 @@ export class MediaExports {
       limit = input.limit ?? 100;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
       throw new CatalogError("INVALID_PARAMS", "Export page limit must be1–1000");
-    if (
-      input.cursor &&
-      (input.cursor.projectId !== projectId || input.cursor.unfinishedOnly !== unfinishedOnly)
-    )
-      throw new CatalogError("INVALID_CURSOR", "Export cursor does not match filters");
+    const filters = { projectId, unfinishedOnly };
+    const decoded = (
+      input.cursor === undefined
+        ? undefined
+        : pageCursor.decode("export.list", input.cursor, filters)
+    ) as { rowid?: unknown } | undefined;
     const owner: ExportOwner | undefined =
-      projectId !== null ? { kind: "project", projectId } : undefined;
+      projectId !== null ? { kind: "project", id: projectId } : undefined;
     // Keep the bounded ID page outside the lookup; SQLite may otherwise scan every summary.
     const rows = this.owners.catalog.catalog
       .prepare(
-        `SELECT selected.*,j.state FROM (SELECT exportId,targetKind,targetId,kind,
+        `SELECT selected.*,j.state,j.jobId FROM (SELECT rowid,exportId,targetKind,targetId,kind,
       json_extract(${statusSnapshotSql},'$.revisionId') AS revisionId,receipt IS NOT NULL AS receipt,abandoning,
       assembly IS NOT NULL AS assembly,staging IS NOT NULL AS staging,stagingCleared
-      FROM (SELECT exportId AS selectedExportId FROM export_intents WHERE exportId>?
+      FROM (SELECT rowid AS selectedRowid,exportId AS selectedExportId FROM export_intents WHERE rowid<?
         ${owner ? "AND targetKind=? AND targetId=?" : ""}
-        ${unfinishedOnly ? `AND ${unfinishedSql}` : ""} ORDER BY exportId LIMIT ?) page
-      CROSS JOIN export_intents INDEXED BY export_intents_status_projection ON exportId=page.selectedExportId) selected
+        ${unfinishedOnly ? `AND ${unfinishedSql}` : ""} ORDER BY rowid DESC LIMIT ?) page
+      CROSS JOIN export_intents INDEXED BY export_intents_status_projection ON rowid=page.selectedRowid) selected
       LEFT JOIN jobs j ON j.targetKind=selected.targetKind AND j.targetId=selected.targetId AND j.revisionId=selected.revisionId
-      AND j.artifact=? AND j.inputSha256=job_input_digest(selected.exportId) AND j.input=selected.exportId ORDER BY selected.exportId`,
+      AND j.artifact=? AND j.inputSha256=job_input_digest(selected.exportId) AND j.input=selected.exportId ORDER BY selected.rowid DESC`,
       )
       .all(
-        input.cursor?.afterExportId ?? "",
+        (decoded?.rowid as number | undefined) ?? 9223372036854775807,
         ...(owner ? ownerIdentity(owner) : []),
         limit + 1,
         artifact,
       ) as (Lifecycle & {
+      rowid: number;
       exportId: string;
       targetKind: Intent["targetKind"];
       targetId: string;
       kind: Request["kind"];
       revisionId: string;
       state: Job["state"] | null;
+      jobId: string | null;
     })[];
     const exports = rows
       .slice(0, limit)
-      .map(({ exportId, targetId, kind, revisionId, state, ...lifecycle }) => ({
-        exportId,
-        projectId: targetId,
-        kind,
-        revisionId,
-        ...summarize(lifecycle, state),
-      }));
+      .map(
+        ({ rowid: _rowid, exportId, targetId, kind, revisionId, state, jobId, ...lifecycle }) => ({
+          id: exportId,
+          projectId: targetId,
+          kind,
+          revisionId,
+          ...summarize(lifecycle, state && jobId ? { state, jobId } : null),
+        }),
+      );
     return {
       exports,
       nextCursor:
         rows.length > limit
-          ? {
-              projectId,
-              unfinishedOnly,
-              afterExportId: exports.at(-1)!.exportId,
-            }
+          ? pageCursor.encode(
+              "export.list",
+              { rowid: (rows[limit - 1] as { rowid: number }).rowid },
+              filters,
+            )
           : null,
     };
   }
@@ -868,9 +888,9 @@ export class MediaExports {
       ? this.owners.jobs.status(this.recoveryIdentity(intent, current.attemptId))
       : null;
     return {
-      exportId,
+      id: exportId,
       kind: intent.kind,
-      ...summarize(intent, current?.state ?? null),
+      ...summarize(intent, current),
       recovery,
       projectId: intent.targetId,
       snapshot: intent.snapshot,
@@ -890,6 +910,22 @@ export class MediaExports {
       jobId: job.jobId,
       reason: intent.receipt ? null : job.reason,
       retryable: !intent.receipt && job.retryable,
+    };
+  }
+  publicStatus(exportId: string) {
+    const value = this.status(exportId) as Record<string, unknown>;
+    const receipt = value.receipt as Record<string, unknown> | null;
+    const { bytes, ...receiptWithoutBytes } = receipt ?? {};
+    return {
+      ...value,
+      ...(receipt
+        ? {
+            receipt: {
+              ...receiptWithoutBytes,
+              ...(bytes === undefined ? {} : { sizeBytes: bytes }),
+            },
+          }
+        : {}),
     };
   }
   /** Private staging remains attributed to its owner even when it lives beside an external destination. */
@@ -943,10 +979,15 @@ export class MediaExports {
     }
     if (intent.kind === "video" && !this.hasPreparedInput(intent)) {
       const pinned = intent.snapshot as PinnedProjectPreview;
-      const repairable = (job: Job) => {
-        if (job.state !== "failed" || !job.retryable) return false;
-        if (job.errorCode === "NOT_READY")
-          return job.errorDetails?.implementationId === pinned.implementationId;
+      const retryablePreviewDependency = (job: Job) => {
+        if (job.state !== "failed") return false;
+        if (job.errorCode === "PINNED_IMPLEMENTATION_UNAVAILABLE")
+          throw new CatalogError(
+            job.errorCode,
+            "The saved export's implementation is unavailable; explicitly request fresh work with a current implementation",
+            { exportId, implementationId: pinned.implementationId },
+          );
+        if (!job.retryable) return false;
         if (
           job.errorCode !== "DEPENDENCY_FAILED" ||
           typeof job.errorDetails?.dependency !== "string"
@@ -956,25 +997,24 @@ export class MediaExports {
           this.owners.jobs.job(job.errorDetails.dependency).artifact === "pointer-presentation"
         );
       };
+      const prior = this.owners.jobs.status(this.identity(intent));
+      let failure = prior.jobId ? this.owners.jobs.job(prior.jobId) : undefined;
+      if (
+        failure?.errorCode === "DEPENDENCY_FAILED" &&
+        typeof failure.errorDetails?.dependency === "string"
+      )
+        failure = this.owners.jobs.job(failure.errorDetails.dependency);
+      const retryPreview = failure !== undefined && retryablePreviewDependency(failure);
       const prepared = await this.owners.project.preview.prepare(pinned);
       prepared.submit(() => {
         this.requireAdmission(exportId);
         this.requireActive(this.require(exportId));
         this.assertOwner(intent);
       });
-      const prior = this.owners.jobs.status(this.identity(intent));
-      if (prior.jobId) {
-        let failure = this.owners.jobs.job(prior.jobId);
-        if (
-          failure.errorCode === "DEPENDENCY_FAILED" &&
-          typeof failure.errorDetails?.dependency === "string"
-        )
-          failure = this.owners.jobs.job(failure.errorDetails.dependency);
-        if (repairable(failure)) {
-          const current = await this.owners.project.preview.request(pinned);
-          if (current.jobId && repairable(this.owners.jobs.job(current.jobId)))
-            await this.owners.project.preview.retry(pinned);
-        }
+      if (retryPreview) {
+        const current = await this.owners.project.preview.request(pinned);
+        if (current.jobId && retryablePreviewDependency(this.owners.jobs.job(current.jobId)))
+          await this.owners.project.preview.retry(pinned);
       }
     }
     const job = this.owners.jobs.submitDeferred(
@@ -1213,11 +1253,26 @@ export class MediaExports {
     }
   }
   /** Status never observes publication files; this queues the job that does. */
-  recover(exportId: string) {
+  recover(exportId: string, requestId?: string) {
+    if (requestId) {
+      const prior = this.recoveryRequests.get(requestId);
+      if (prior) {
+        if (prior.exportId !== exportId)
+          throw new CatalogError(
+            "REQUEST_CONFLICT",
+            "Request identity names a different export recovery",
+          );
+        return prior.result;
+      }
+    }
     const intent = this.require(exportId);
     this.requireActive(intent);
     this.assertOwner(intent);
-    if (!cleanupPending(intent)) return this.status(exportId);
+    if (!cleanupPending(intent)) {
+      const result = this.status(exportId);
+      if (requestId) this.recoveryRequests.set(requestId, { exportId, result });
+      return result;
+    }
     const original = this.owners.jobs.status(this.identity(intent));
     if (!original.jobId)
       throw new CatalogError("INVALID_JOB", "Staged export has no publication job");
@@ -1227,7 +1282,9 @@ export class MediaExports {
     });
     if (job.state === "ready") this.owners.jobs.regenerate(job.jobId, job.generation);
     else this.owners.jobs.retry(job.jobId);
-    return this.status(exportId);
+    const result = this.status(exportId);
+    if (requestId) this.recoveryRequests.set(requestId, { exportId, result });
+    return result;
   }
 
   private async reconcile({ job, signal }: JobExecution): Promise<string> {
@@ -1247,7 +1304,6 @@ export class MediaExports {
           "DESTINATION_UNAVAILABLE",
           "Export destination directory is missing or replaced; restore it or abandon the export",
           { exportId },
-          true,
         );
       if (presence === "absent") this.markStagingCleared(exportId);
       else {
@@ -1301,12 +1357,11 @@ export class MediaExports {
       .then(() => this.remove(exportId))
       .catch((error) => {
         if (error instanceof CatalogError)
-          throw new CatalogError(error.code, error.message, { ...error.details, exportId }, true);
+          throw new CatalogError(error.code, error.message, { ...error.details, exportId });
         throw new CatalogError(
           "EXPORT_CLEANUP_FAILED",
           `Export cleanup could not finish: ${error instanceof Error ? error.message : String(error)}`,
           { exportId },
-          true,
         );
       })
       .finally(() => {

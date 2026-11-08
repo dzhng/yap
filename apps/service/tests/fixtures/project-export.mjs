@@ -7,7 +7,9 @@ import { TranscriptProcessing } from "@yap/core/transcript-processing";
 import { IndexProcessing } from "@yap/core/index-processing";
 import { sourceIndexDomain } from "@yap/core/source-index";
 import { Models } from "@yap/core/models";
-import { ProjectDeletion } from "../../dist/project-deletion.js";
+import { LibraryDeletion } from "../../dist/library-deletion.js";
+import { projectRetirement } from "../../dist/project-retirement.js";
+import { DeletionPlans } from "../../../../packages/core/dist/deletion-plans.js";
 import { DerivativeDelivery } from "../../dist/delivery.js";
 import { ManagedStorage } from "@yap/core/storage";
 import { ScreenshotIndexStore } from "@yap/core/screenshot-index";
@@ -94,10 +96,10 @@ export async function fixture(
   });
   const projects = new ProjectStore(catalog, assets, transcriptRecords, acquisitions),
     cache = new DerivedCache(catalog, home, (owner) => {
-      if (owner.kind === "asset") assets.get(owner.assetId);
+      if (owner.kind === "asset") assets.get(owner.id);
       else {
         assert.equal(owner.kind, "project");
-        projects.get(owner.projectId);
+        projects.get(owner.id);
       }
     });
   await cache.reconcile();
@@ -119,19 +121,19 @@ export async function fixture(
     targets: {
       pin(target) {
         if (target.kind === "asset") {
-          assets.get(target.assetId);
+          assets.get(target.id);
           return target;
         }
         assert.equal(target.kind, "project");
         return {
           ...target,
-          revisionId: projects.revision(target.projectId, target.revisionId).id,
+          revisionId: projects.revision(target.id, target.revisionId).id,
         };
       },
       isAvailable: (target) =>
-        (target.kind === "asset" && assets.has(target.assetId)) ||
-        (target.kind === "project" && !projects.isDeleting(target.projectId)),
-      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.projectId),
+        (target.kind === "asset" && assets.has(target.id)) ||
+        (target.kind === "project" && !projects.isDeleting(target.id)),
+      isDeleting: (owner) => owner.kind === "project" && projects.isDeleting(owner.id),
       isCapturing: () => false,
     },
     execute: (execution) =>
@@ -227,7 +229,7 @@ export async function fixture(
   const delivery = new DerivativeDelivery();
   const evidence = new SourceEvidenceStore(catalog, (identity) => {
     assert.equal(identity.owner.kind, "acquisition");
-    acquisitions.intent(identity.owner.acquisitionId);
+    acquisitions.intent(identity.owner.id);
   });
   const acquisitionImports = new AcquisitionImporter(catalog, acquisitions, assets, evidence, home);
   sceneProcessing = new SceneProcessing({
@@ -244,7 +246,7 @@ export async function fixture(
         }),
     },
   });
-  const models = new Models(home);
+  const models = new Models(home, globalThis.fetch, undefined, catalog);
   const speakerLabels = new SpeakerLabelStore(catalog);
   const speakerRecords = new SpeakerEvidenceStore(
     catalog,
@@ -356,7 +358,20 @@ export async function fixture(
     delivery,
   });
   domain.package = packages;
-  const deletion = new ProjectDeletion(projects, jobs, cache, files, delivery, exports, index);
+  const deletion = new LibraryDeletion(new DeletionPlans(catalog));
+  deletion.register(
+    projectRetirement({
+      catalog,
+      store: projects,
+      jobs,
+      cache,
+      files,
+      delivery,
+      exports,
+      index,
+      freedBytes: () => 0,
+    }),
+  );
   const storage = new ManagedStorage(null, cache, home, (signal) =>
     exports.usage(undefined, signal),
   );
@@ -411,7 +426,7 @@ export async function fixture(
         background: "#000000ff",
       },
     });
-    projectId = initial.project.projectId;
+    projectId = initial.project.id;
     placed = projects.apply(projectId, {
       requestId: "place",
       expectedRevisionId: initial.revision.id,
@@ -450,7 +465,9 @@ export async function fixture(
     placed,
     jobs,
     cache,
-    preview,
+    get preview() {
+      return preview;
+    },
     exports,
     binding,
     deletion,

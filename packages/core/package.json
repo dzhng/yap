@@ -48,10 +48,6 @@
       "types": "./dist/storage.d.ts",
       "default": "./dist/storage.js"
     },
-    "./evidence-pages": {
-      "types": "./dist/evidence-pages.d.ts",
-      "default": "./dist/evidence-pages.js"
-    },
     "./presentation-evidence": {
       "types": "./dist/presentation-evidence.d.ts",
       "default": "./dist/presentation-evidence.js"
@@ -88,14 +84,6 @@
       "types": "./dist/retained-image.d.ts",
       "default": "./dist/retained-image.js"
     },
-    "./raw-cursor": {
-      "types": "./dist/raw-cursor.d.ts",
-      "default": "./dist/raw-cursor.js"
-    },
-    "./ordered-pages": {
-      "types": "./dist/ordered-pages.d.ts",
-      "default": "./dist/ordered-pages.js"
-    },
     "./evidence-read": {
       "types": "./dist/evidence-read.d.ts",
       "default": "./dist/evidence-read.js"
@@ -119,6 +107,10 @@
     "./transcript-processing": {
       "types": "./dist/transcript-processing.d.ts",
       "default": "./dist/transcript-processing.js"
+    },
+    "./transcript-backlog": {
+      "types": "./dist/transcript-backlog.d.ts",
+      "default": "./dist/transcript-backlog.js"
     },
     "./transcript-import": {
       "types": "./dist/transcript-import.d.ts",
@@ -144,6 +136,10 @@
       "types": "./dist/assets.d.ts",
       "default": "./dist/assets.js"
     },
+    "./media-listing": {
+      "types": "./dist/media-listing.d.ts",
+      "default": "./dist/media-listing.js"
+    },
     "./hdr-conversion-facts": {
       "types": "./dist/hdr-conversion-facts.d.ts",
       "default": "./dist/hdr-conversion-facts.js"
@@ -151,6 +147,10 @@
     "./projects": {
       "types": "./dist/projects.d.ts",
       "default": "./dist/projects.js"
+    },
+    "./page-cursor": {
+      "types": "./dist/page-cursor.d.ts",
+      "default": "./dist/page-cursor.js"
     },
     "./project-preview": {
       "types": "./dist/project-preview.d.ts",
@@ -171,6 +171,10 @@
     "./capture-source-read": {
       "types": "./dist/capture-source-read.d.ts",
       "default": "./dist/capture-source-read.js"
+    },
+    "./recording-prompt": {
+      "types": "./dist/recording-prompt.d.ts",
+      "default": "./dist/recording-prompt.js"
     },
     "./frame-inspection": {
       "types": "./dist/frame-inspection.d.ts",
@@ -292,6 +296,14 @@
       "types": "./dist/capture-store.d.ts",
       "default": "./dist/capture-store.js"
     },
+    "./deletion-plans": {
+      "types": "./dist/deletion-plans.d.ts",
+      "default": "./dist/deletion-plans.js"
+    },
+    "./library-users": {
+      "types": "./dist/library-users.d.ts",
+      "default": "./dist/library-users.js"
+    },
     "./capture-publication": {
       "types": "./dist/capture-publication.d.ts",
       "default": "./dist/capture-publication.js"
@@ -383,6 +395,10 @@
     "./presets": {
       "types": "./dist/presets.d.ts",
       "default": "./dist/presets.js"
+    },
+    "./json-stream": {
+      "types": "./dist/json-stream.d.ts",
+      "default": "./dist/json-stream.js"
     }
   },
   "scripts": {
@@ -391,6 +407,7 @@
     "test": "vitest run --maxWorkers=4"
   },
   "dependencies": {
+    "@streamparser/json": "^0.0.26",
     "@yap/composition": "workspace:*",
     "@yap/protocol": "workspace:*",
     "zod": "4.6.5"

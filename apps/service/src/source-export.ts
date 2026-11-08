@@ -1,36 +1,25 @@
+import { MAXIMUM_TAKE_US } from "@yap/protocol";
 import { mediaProbeSchema } from "@yap/core/assets";
 import { constants } from "node:fs";
-import { lstat, open, type FileHandle } from "node:fs/promises";
+import { open, type FileHandle } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import { dirname, join } from "node:path";
 import { readMediaProbe } from "./media-probe.js";
-import { sourcePublicationMembers, type SourceExporter } from "@yap/core/source-admission";
-import { publicationDeadlineMs } from "./publication.js";
+import { type SourceExporter } from "@yap/core/source-admission";
+import { captureWorkDeadlineMs } from "./publication.js";
 import { CatalogError } from "@yap/core/catalog";
 import { fileIdentity } from "@yap/core/files";
 import type { SourceEvidenceReceipt } from "@yap/core/evidence";
-import { MAX_MEDIA_TIMEOUT_MS, nativeResult, type MediaWorker } from "./worker.js";
+import { nativeResult, type MediaWorker } from "./worker.js";
 
 /** Canonical verification budgets source work separately from file size: sparse media can
- * be tiny but expensive. The bounded allowance does not establish a capture-stop guarantee. */
+ * be tiny but expensive. Duration allowance is an inferred fallback until traversal throughput is measured. */
 async function verificationDeadline(
   directory: string,
   canonicalBytes: number | undefined,
-  captureAuthority: boolean,
+  canonical: Parameters<SourceExporter>[3],
+  mediaDurationUs: number,
 ) {
-  const published = await Promise.all(
-    sourcePublicationMembers.map(async (name) => ({
-      name,
-      exists: await lstat(join(directory, name)).then(
-        (info) => info.isFile(),
-        (error) => {
-          if (error.code === "ENOENT") return false;
-          throw error;
-        },
-      ),
-    })),
-  );
-  if (!captureAuthority && !published.some((member) => member.exists)) return undefined; // Preserve the legacy worker budget.
   const size = async (name: string) => {
     const file = await open(
       join(directory, name),
@@ -51,13 +40,32 @@ async function verificationDeadline(
     (await size("capture.journal.jsonl")) +
     (await size("camera.mapping.jsonl")) +
     (canonicalBytes ??
-      (await size("narration.mov")) +
-        (await size("system.mov")) +
-        (captureAuthority ||
-        published.some((member) => member.name === "camera.publication.json" && member.exists)
-          ? await size("video.mov")
-          : 0));
-  return Math.min(MAX_MEDIA_TIMEOUT_MS, 600_000 + publicationDeadlineMs(bytes));
+      (await size("narration.mov")) + (await size("system.mov")) + (await size("video.mov")));
+  const journalBytes = await size("capture.journal.jsonl");
+  // Verification traverses each selected canonical role twice. A primary video does
+  // not have a camera receipt; count media operands, never publication receipt names.
+  let mediaRoles = 0;
+  for (const role of ["video", "narration", "system"] as const) {
+    const operand = canonical?.[role];
+    if (canonical ? !operand : !(await size(`${role}.mov`))) continue;
+    const streams = operand?.metadata?.streams.filter(
+      (stream) => stream.kind === (role === "video" ? "video" : "audio"),
+    );
+    if (
+      !streams ||
+      streams.some(
+        (stream) => stream.decodable && stream.startUs !== undefined && stream.endUs !== undefined,
+      )
+    )
+      mediaRoles++;
+  }
+  return captureWorkDeadlineMs({
+    journalBytes,
+    bytes,
+    audioRoles: 0,
+    extraTraversals: mediaRoles * 2,
+    durationUs: mediaDurationUs,
+  });
 }
 
 /** Native verifies canonical bytes through the admitted inode, never a reopened donor path. */
@@ -93,7 +101,7 @@ export function sourceExporter(
             )
           )
             throw new CatalogError(
-              "NOT_READY",
+              "PREREQUISITE_MISSING",
               "Canonical video metadata lacks current native alpha facts; source re-admission is required",
             );
           const actual = mediaProbeSchema.parse(
@@ -107,7 +115,10 @@ export function sourceExporter(
               (stream) => stream.kind === "video" && stream.hasAlpha === undefined,
             )
           )
-            throw new CatalogError("NOT_READY", "Native worker lacks required video alpha facts");
+            throw new CatalogError(
+              "PREREQUISITE_MISSING",
+              "Native worker lacks required video alpha facts",
+            );
           if (!isDeepStrictEqual(actual, expected.metadata))
             throw new CatalogError(
               "INVALID_PACKAGE",
@@ -118,7 +129,8 @@ export function sourceExporter(
       const timeoutMs = await verificationDeadline(
         directory,
         canonical === undefined ? undefined : canonicalBytes,
-        sourceAuthority !== undefined,
+        canonical,
+        sourceAuthority?.source.sourceDurationUs ?? MAXIMUM_TAKE_US,
       );
       return nativeResult(
         await worker(
@@ -131,7 +143,7 @@ export function sourceExporter(
           },
           {
             signal,
-            ...(timeoutMs === undefined ? {} : { timeoutMs }),
+            timeoutMs,
             descriptors: [...handles.map((file) => file.fd), ...lifetimes],
           },
         ),
@@ -142,7 +154,7 @@ export function sourceExporter(
         !(error instanceof CatalogError) &&
         ["EACCES", "EPERM", "EIO"].includes((error as NodeJS.ErrnoException)?.code ?? "")
       )
-        throw new CatalogError("MEDIA_UNAVAILABLE", "Cannot read source evidence input", {}, true);
+        throw new CatalogError("MEDIA_UNAVAILABLE", "Cannot read source evidence input", {});
       throw error;
     } finally {
       await Promise.all(handles.map((file) => file.close()));

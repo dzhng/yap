@@ -4,8 +4,8 @@ import { evaluateSpeakerContinuity, speakerContinuityMetricsSchema } from "./spe
 const passing = {
   inputFrames: 9_600_000,
   scoredFrames: 9_600_000,
-  durationSeconds: 600,
-  inferenceSeconds: 9,
+  durationUs: 600_000_000,
+  inferenceUs: 9_000_000,
   peakRssBytes: 2_900_000_000,
   expectedSpeakerCount: 3,
   observedSpeakerCount: 3,
@@ -98,7 +98,7 @@ test("continuity refuses an edited duration receipt instead of promoting its met
       modelDigest: "b".repeat(64),
       runtimeDigest: "c".repeat(64),
     },
-    metrics: { ...passing, durationSeconds: 601 },
+    metrics: { ...passing, durationUs: 601_000_000 },
     controls: {
       shortWindow: true,
       transport: true,

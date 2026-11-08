@@ -1,4 +1,3 @@
-import { projectJsonBytes } from "./package-archive.js";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, open, rm } from "node:fs/promises";
@@ -47,15 +46,34 @@ export type PreparedAudio = Omit<ReturnType<typeof checkProjectAudioResult>, "fi
   identity: FileIdentity;
   sampleRange: { start: number; end: number };
 };
+function encodePreparedAudioReceipt(value: PreparedAudio) {
+  const { bytes, frames, sampleRange, ...rest } = value as any;
+  return {
+    ...rest,
+    sizeBytes: bytes,
+    frameCount: frames,
+    sampleRange: { startSamples: sampleRange.start, endSamples: sampleRange.end },
+  };
+}
+function decodePreparedAudioReceipt(value: unknown): PreparedAudio {
+  const record = value as Record<string, any>;
+  if ("bytes" in record || "frames" in record || record.sampleRange?.startSamples === undefined)
+    throw new CatalogError("ARTIFACT_CHANGED", "Prepared audio receipt uses an obsolete shape");
+  const { sizeBytes, frameCount, sampleRange, ...rest } = record;
+  return {
+    ...rest,
+    bytes: sizeBytes,
+    frames: frameCount,
+    sampleRange: { start: sampleRange.startSamples, end: sampleRange.endSamples },
+  } as PreparedAudio;
+}
 
 const portableSample = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const portablePreparedAudioSchema = z.strictObject({
   projectId: z.string().min(1),
   revisionId: z.string().min(1),
   publication: retainedPublicationSchema.extend({
-    input: z.string().refine((value) => Buffer.byteLength(value) <= projectJsonBytes, {
-      message: "Prepared recipe exceeds the project JSON budget",
-    }),
+    input: z.string(),
   }),
   audio: projectAudioReceiptSchema
     .omit({ file: true })
@@ -273,7 +291,7 @@ export class PreparedAudioStore {
     const identity = {
       target: {
         kind: "project" as const,
-        projectId: input.projectId,
+        id: input.projectId,
         revisionId: plan.window.manifest.revisionId,
       },
       artifact: "prepared-audio",
@@ -297,7 +315,8 @@ export class PreparedAudioStore {
     if (job.target.kind !== "project" || job.artifact !== "prepared-audio")
       throw new CatalogError("UNSUPPORTED_JOB", "Prepared audio requires a project revision");
     const plan = this.plan({
-      ...job.target,
+      projectId: job.target.id,
+      revisionId: job.target.revisionId,
       tap: readRecipe(job.input, "INVALID_STORAGE").tap,
     });
     if (JSON.stringify(plan.window.manifest) !== job.input)
@@ -338,7 +357,7 @@ export class PreparedAudioStore {
       const value: PreparedAudio = {
         ...audio,
         dependencies,
-        resourceId: preparedAudioResource(job.target.projectId, job.attemptId),
+        resourceId: preparedAudioResource(job.target.id, job.attemptId),
         assetId,
         bytes: audio.bytes,
         identity,
@@ -346,7 +365,7 @@ export class PreparedAudioStore {
       };
       const publication = staged;
       return {
-        result: JSON.stringify(value),
+        result: JSON.stringify(encodePreparedAudioReceipt(value)),
         issues: preparedAudioIssues(plan.window.manifest, value),
         publish: () => {
           publication.publish();
@@ -395,7 +414,7 @@ export class PreparedAudioStore {
       throw new CatalogError("INVALID_PARAMS", "Invalid prepared audio identity");
     const [projectId, attemptId] = parsed.data;
     const publication = this.owners.jobs.retainedArtifact(
-      { kind: "project", projectId },
+      { kind: "project", id: projectId },
       "prepared-audio",
       attemptId,
     );
@@ -411,7 +430,7 @@ export class PreparedAudioStore {
     try {
       const audio = omit(read.value, "resourceId", "identity");
       return portablePreparedAudioSchema.parse({
-        projectId: publication.target.projectId,
+        projectId: publication.target.id,
         revisionId: publication.target.revisionId,
         publication: {
           generation: publication.generation,
@@ -493,12 +512,12 @@ export class PreparedAudioStore {
             ...portable.publication,
             target: {
               kind: "project",
-              projectId: composition.projectId,
+              id: composition.projectId,
               revisionId: composition.revisionId,
             },
             artifact: "prepared-audio",
             input: JSON.stringify({ ...recipe, revisionId: composition.revisionId }),
-            result: JSON.stringify(value),
+            result: JSON.stringify(encodePreparedAudioReceipt(value)),
           },
           issues,
         );
@@ -509,7 +528,7 @@ export class PreparedAudioStore {
   /** Bounded PCM view of an already published result; never invokes the renderer or model. */
   open(resourceId: string, range?: { start: number; end: number }) {
     const publication = this.publication(resourceId);
-    const value = JSON.parse(publication.result) as PreparedAudio;
+    const value = decodePreparedAudioReceipt(JSON.parse(publication.result));
     const selection = range ?? value.sampleRange;
     if (
       !Number.isSafeInteger(selection.start) ||

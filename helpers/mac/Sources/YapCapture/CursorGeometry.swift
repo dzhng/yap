@@ -122,22 +122,28 @@ public struct CaptureGeometry: Codable, Sendable, Equatable {
 }
 
 /// One pointer reading, before it is placed in a take's source time.
+/// Modifier state and clicks only, never keys.
 public struct CursorReading: Sendable, Equatable {
     public init(
-        hostUs: Int64, global: CGPoint, buttons: Int, zeroOriginHeight: Double, skippedTicks: Int = 0
+        hostUs: Int64, global: CGPoint, buttons: Int, zeroOriginHeight: Double,
+        skippedTicks: Int = 0, shift: Bool = false, otherModifiers: Bool = false
     ) {
         self.hostUs = hostUs
         self.global = global
         self.buttons = buttons
         self.zeroOriginHeight = zeroOriginHeight
         self.skippedTicks = skippedTicks
+        self.shift = shift
+        self.otherModifiers = otherModifiers
     }
 
     public let hostUs: Int64
     /// Global display points with a top-left origin, converted from AppKit's bottom-left space.
     public let global: CGPoint
-    /// `NSEvent.pressedMouseButtons` bitmask. Button state only; no key or event-tap observation.
+    /// `NSEvent.pressedMouseButtons` bitmask.
     public let buttons: Int
+    public let shift: Bool
+    public let otherModifiers: Bool
     /// Height of the zero-origin display used for that conversion, retained as raw evidence.
     public let zeroOriginHeight: Double
     /// Cadence ticks missed before this reading. Missed ticks stay missing, never interpolated.
@@ -180,9 +186,10 @@ public struct CursorSample: Codable, Sendable, Equatable {
 
 public struct CursorStats: Codable, Sendable, Equatable {
     public init() {}
-    /// Readings placed in source time and handed to a batch. Counted on acceptance, before the
-    /// journal writes that batch, so a take whose journal failed reports more than the file holds.
+    /// Readings placed in source time, including unchanged readings.
     public var sampled = 0
+    /// Projected changes handed to the journal.
+    public var written = 0
     /// Readings that landed in a pause or before source zero: omitted, never backfilled.
     public var omittedPaused = 0
     /// Cadence ticks the sampler queue missed.
@@ -204,8 +211,9 @@ public struct CursorStats: Codable, Sendable, Equatable {
 /// arrival would credit readings taken after a window moved to the position it just left. It never
 /// invents a reading for a tick that did not happen, and a paused take records nothing.
 public struct CursorTrack: Sendable {
-    public init(batchSize: Int = 30, placementLimit: Int = 240) {
-        self.batchSize = batchSize
+    public static let defaultFlushIntervalUs: Int64 = 500_000
+    public init(placementLimit: Int = 240) {
+        self.nextFlushUs = Self.defaultFlushIntervalUs
         self.placementLimit = max(1, placementLimit)
     }
 
@@ -217,9 +225,13 @@ public struct CursorTrack: Sendable {
     private struct Pending {
         let reading: CursorReading
         let sourceUs: Int64
+        let force: Bool
     }
 
-    private let batchSize: Int
+    private var nextFlushUs: Int64
+    private var forceNext = true
+    private var lastWritten: CursorSample?
+    // Live working set only; forgotten placements remain explicit in the statistics.
     private let placementLimit: Int
     private var placements: [Placed] = []
     private var pending: [Pending] = []
@@ -230,6 +242,23 @@ public struct CursorTrack: Sendable {
     public private(set) var geometry: CaptureGeometry?
 
     private var geometryHasSourcePlacement = false
+
+    package struct Projection: Sendable {
+        package let pixel: CGPoint?
+        package let inside: Bool
+        package let epoch: Int
+    }
+
+    /// Projects a global point through the same geometry placement used for cursor samples.
+    package func projection(forGlobalPoint point: CGPoint, hostUs: Int64) -> Projection {
+        let placed = placements.last { $0.hostUs <= hostUs }
+        let pixel = placed?.geometry.outputPixel(forGlobalPoint: point)
+        guard let pixel, let placed else {
+            return Projection(pixel: nil, inside: false, epoch: 0)
+        }
+        return Projection(
+            pixel: pixel, inside: placed.geometry.contains(outputPixel: pixel), epoch: placed.epoch)
+    }
 
     /// Records geometry changes even before source zero or during a pause. An epoch first seen
     /// without source time gains one additional observation on a usable, clock-accepted frame.
@@ -251,20 +280,31 @@ public struct CursorTrack: Sendable {
         return JournalGeometry(epoch: epoch, hostUs: hostUs, sourceUs: sourceUs, geometry: observed)
     }
 
-    /// Accepts a reading already placed in source time, returning a batch once one is full.
+    /// Accepts every reading; elapsed take time, rather than changes, drives flushing.
     /// `sourceUs` is nil when the take's clock refuses the reading's host time.
     public mutating func accept(_ reading: CursorReading, sourceUs: Int64?) -> [CursorSample]? {
         lastReadingHostUs = reading.hostUs
         stats.skippedTicks += reading.skippedTicks
         guard let sourceUs else {
+            forceNext = true
             stats.omittedPaused += 1
             return nil
         }
-        pending.append(Pending(reading: reading, sourceUs: sourceUs))
+        pending.append(Pending(reading: reading, sourceUs: sourceUs, force: forceNext))
+        forceNext = false
         stats.sampled += 1
-        guard pending.count >= batchSize else { return nil }
+        guard sourceUs >= nextFlushUs else { return nil }
+        return flush(through: sourceUs)
+    }
+
+    /// The capture clock calls this even when no further readings arrive.
+    public mutating func flush(through sourceUs: Int64) -> [CursorSample] {
+        nextFlushUs = (sourceUs / Self.defaultFlushIntervalUs + 1) * Self.defaultFlushIntervalUs
         return writePending()
     }
+
+    /// Resume has its own first observation, even when its projected state is unchanged.
+    public mutating func resume() { forceNext = true }
 
     /// Records how many readings the sampler's bounded handoff refused, so one type reports the
     /// take's cursor evidence.
@@ -279,26 +319,32 @@ public struct CursorTrack: Sendable {
             pending = []
             forgetSupersededPlacements()
         }
-        return pending.map(project)
+        var samples: [CursorSample] = []
+        for item in pending {
+            let sample = project(item)
+            if !item.force, let last = lastWritten,
+                sample.x == last.x, sample.y == last.y, sample.buttons == last.buttons,
+                sample.eligibility == last.eligibility, sample.geometryEpoch == last.geometryEpoch {
+                continue
+            }
+            samples.append(sample)
+            lastWritten = sample
+        }
+        stats.written += samples.count
+        return samples
     }
 
     private func project(_ item: Pending) -> CursorSample {
-        let placed = placements.last { $0.hostUs <= item.reading.hostUs }
-        let pixel = placed?.geometry.outputPixel(forGlobalPoint: item.reading.global)
-        let eligibility: String
-        let geometryEpoch: Int
-        if let pixel, let placed {
-            eligibility = placed.geometry.contains(outputPixel: pixel) ? "inside" : "outside"
-            geometryEpoch = placed.epoch
-        } else {
-            eligibility = "unknownGeometry"
-            geometryEpoch = 0
-        }
+        let projection = projection(
+            forGlobalPoint: item.reading.global, hostUs: item.reading.hostUs)
+        let eligibility = projection.pixel == nil
+            ? "unknownGeometry" : (projection.inside ? "inside" : "outside")
         return CursorSample(
-            sourceUs: item.sourceUs, x: pixel.map { Double($0.x) }, y: pixel.map { Double($0.y) },
+            sourceUs: item.sourceUs, x: projection.pixel.map { Double($0.x) },
+            y: projection.pixel.map { Double($0.y) },
             globalX: item.reading.global.x, globalY: item.reading.global.y,
             buttons: item.reading.buttons, eligibility: eligibility,
-            geometryEpoch: geometryEpoch)
+            geometryEpoch: projection.epoch)
     }
 
     /// Sampler readings arrive in their own timestamp order, independently of frames. An empty
@@ -349,18 +395,18 @@ public enum GlobalPointSpace {
 
 /// Reads the pointer at a fixed cadence while a take is recording.
 ///
-/// Readings come from `NSEvent`'s current pointer state: no event tap, no keyboard observation and
+/// Readings come from `NSEvent`'s current pointer state: modifier state and clicks only, never keys;
 /// no Accessibility authorization. Sampling runs on its own queue so a busy capture queue delays
 /// the write, not the reading, and the handoff is bounded: once the capture queue is that far
 /// behind, further readings are refused and counted instead of queueing without limit.
 ///
-/// `NSEvent.mouseLocation` and `NSEvent.pressedMouseButtons` are read off the main thread. Both are
-/// current-state class reads rather than main-actor UI state, and AppKit does not document them as
+/// `NSEvent.mouseLocation`, `NSEvent.pressedMouseButtons` and modifier state are read off the main
+/// thread. All are current-state class reads rather than main-actor UI state, and AppKit does not document them as
 /// main-thread-only; the lab measured the cadence working from this queue, which is evidence that
 /// it works on this host rather than a guarantee from the platform.
 public final class CursorSampler: Sendable {
     public init(
-        intervalUs: Int64 = 16_667, pendingLimit: Int = 240, target: DispatchQueue,
+        intervalUs: Int64 = CursorSampling.defaultIntervalUs, pendingLimit: Int = 240, target: DispatchQueue,
         deliver: @escaping @Sendable (CursorReading) -> Void
     ) {
         self.intervalUs = intervalUs
@@ -374,6 +420,7 @@ public final class CursorSampler: Sendable {
     private let queue = DispatchQueue(label: "com.dzhng.yap.cursor-sampler")
     private let timer: any DispatchSourceTimer
     private let intervalUs: Int64
+    // Instantaneous backpressure: 240 / 60 = four seconds of in-flight readings.
     private let pendingLimit: Int
     private let target: DispatchQueue
     private let deliver: @Sendable (CursorReading) -> Void
@@ -432,7 +479,9 @@ public final class CursorSampler: Sendable {
         let reading = CursorReading(
             hostUs: hostUs,
             global: GlobalPointSpace.flip(appKit: NSEvent.mouseLocation, zeroOriginHeight: height),
-            buttons: NSEvent.pressedMouseButtons, zeroOriginHeight: height, skippedTicks: skipped)
+            buttons: NSEvent.pressedMouseButtons, zeroOriginHeight: height, skippedTicks: skipped,
+            shift: NSEvent.modifierFlags.contains(.shift),
+            otherModifiers: !NSEvent.modifierFlags.subtracting(.shift).isEmpty)
         target.async { [self] in
             deliver(reading)
             pending.wrappingSubtract(1, ordering: .sequentiallyConsistent)

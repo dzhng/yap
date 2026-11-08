@@ -76,7 +76,7 @@ async function fixture(render = renderer) {
   const projects = projectStoreFixture(catalog, assets, home);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new CatalogError("INVALID_TARGET", "Expected project");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   let frames!: MediaFrameInspection;
@@ -86,10 +86,13 @@ async function fixture(render = renderer) {
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.id, target.revisionId).id,
+        };
       },
-      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.projectId),
-      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
+      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.id),
+      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.id),
       isCapturing: () => false,
     },
     execute: (execution) => frames.execute(execution),
@@ -141,7 +144,7 @@ async function fixture(render = renderer) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   projects.apply(projectId, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
@@ -411,7 +414,11 @@ test("face observations measured on another raster cannot publish as the request
           height: 96,
           status: "available",
           faces: [
-            { id: "face-0", boundingBox: { x: 10, y: 10, width: 20, height: 30 }, confidence: 0.9 },
+            {
+              id: "face-0",
+              boundingBox: { x: 10, y: 10, width: 20, height: 30 },
+              confidence: 0.9,
+            },
           ],
         },
       };

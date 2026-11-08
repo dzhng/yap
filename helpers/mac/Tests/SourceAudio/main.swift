@@ -8,6 +8,9 @@ import YapMedia
 import YapAudio
 #endif
 
+let decodeFailure = NativeFailure.decodeFailed("fixture")
+precondition(decodeFailure.code == "NATIVE_DECODE_FAILED" && decodeFailure.message == "fixture")
+
 // These opt-in consumers execute only their selected source; the default suite stays small.
 if let plan = ProcessInfo.processInfo.environment["YAP_AUDIO_SELECTED_PLAN"] {
     try await writeSelectedReference(plan)

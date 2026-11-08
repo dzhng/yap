@@ -55,9 +55,10 @@ func runPCMJournalTests() throws {
   precondition(origin?.rawPTS.value == raw.value && origin?.rawPTS.epoch == raw.epoch)
   precondition(
     origin?.rawPTS.flags == raw.flags.rawValue && origin?.rawPTS.timescale == raw.timescale)
-  let legacy = try CaptureJournal.inspect(directory: directory.path)
-  precondition(
-    legacy.header == nil && legacy.invalidAtSequence == 1 && legacy.acquiredAudio.isEmpty)
+  let inspected = try CaptureJournal.inspect(directory: directory.path)
+  precondition(inspected.header?.sessionID == "offline-mapping" && inspected.invalidAtSequence == nil
+    && inspected.acquiredAudio.isEmpty && inspected.lastSequence == read.lastSequence,
+    "Inspection must accept the persisted packed layout without inventing legacy audio ranges")
   let path = directory.appendingPathComponent("capture.journal.jsonl")
   let frozen = try Data(contentsOf: path)
   func assertPrefix(_ actual: JournalPrefix?, bytes: Data) {
@@ -69,7 +70,7 @@ func runPCMJournalTests() throws {
   if retained != nil {
     try JSONEncoder().encode(read.validatedPrefix).write(to: directory.appendingPathComponent("validated-prefix.json"))
   }
-  precondition(legacy.validatedPrefix == nil)
+  precondition(inspected.validatedPrefix == nil)
   let serialized = try JSONSerialization.jsonObject(with: JSONEncoder().encode(read)) as! [String: Any]
   precondition(serialized["validatedPrefix"] == nil, "Mapping provenance must not change ordinary wire summaries")
   _ = try journal.recordLifecycle(state: "finalizing", reason: nil)
@@ -181,6 +182,6 @@ func runPCMJournalTests() throws {
   }
   precondition(roleRead.invalidAtSequence == nil && streamed == ["system": 1024, "narration": 1024])
   print(
-    "PASS accepted PCM journal retains exact raw fields and separate addresses; public inspection refuses schema2"
+    "PASS accepted PCM journal retains exact raw fields and separate addresses; public inspection accepts the persisted packed layout"
   )
 }

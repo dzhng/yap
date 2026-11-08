@@ -334,7 +334,8 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
         source,
         {
           asset: imported.get(source).asset,
-          streamId: imported.get(source).asset.streams.find((stream) => stream.kind === "video").id,
+          streamId: imported.get(source).asset.streams.find((stream) => stream.kind === "video")
+            .streamId,
         },
       ]),
     );
@@ -352,7 +353,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
       const member = members.get(source);
       for (const pictureSampleIndex of pictureSampleIndexes) {
         const frameRequest = {
-          assetId: member.asset.id,
+          assetId: member.asset.assetId,
           streamId: member.streamId,
           atUs: pictureSampleIndex * frameDurationUs + 500_000,
           maxLongEdge: width,
@@ -377,7 +378,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
     }
     const edited = await call("edit.apply", {
       projectId: project.project.projectId,
-      expectedRevisionId: project.revision.id,
+      expectedRevisionId: project.revision.revisionId,
       requestId: randomUUID(),
       operations: [
         { operation: "track.add", label: "retained-multicam", track: { kind: "video", order: 0 } },
@@ -388,7 +389,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
             label: `selection-${sequenceIndex}`,
             clip: {
               trackId: { label: "retained-multicam" },
-              assetId: member.asset.id,
+              assetId: member.asset.assetId,
               streamId: member.streamId,
               source: {
                 kind: "range",
@@ -410,7 +411,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
       ],
     });
     report.project.projectId = project.project.projectId;
-    report.project.revisionId = edited.revision.id;
+    report.project.revisionId = edited.revision.revisionId;
 
     for (const [sequenceIndex, selection] of selections.entries()) {
       const { source, pictureSampleIndex } = selection;
@@ -419,7 +420,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
       const atUs = sequenceIndex * frameDurationUs + 500_000;
       const frameRequest = {
         projectId: project.project.projectId,
-        revisionId: edited.revision.id,
+        revisionId: edited.revision.revisionId,
         atUs,
         maxLongEdge: width,
       };
@@ -459,7 +460,7 @@ export async function runRetainedMulticamNativeDelivery(outDirectory) {
           "preview.get",
           {
             projectId: project.project.projectId,
-            revisionId: edited.revision.id,
+            revisionId: edited.revision.revisionId,
             range: { startUs: 0, endUs: selections.length * frameDurationUs },
           },
           { output: previewPath },

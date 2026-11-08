@@ -1,7 +1,7 @@
 import { readFile, mkdir, cp, rm } from "node:fs/promises";
 import { spawn, execFileSync } from "node:child_process";
 import { agentResult } from "./agent-result.mjs";
-import { failedJobFixture } from "./fixture.mjs";
+import { deletionFixture, failedJobFixture } from "./fixture.mjs";
 import { contracts } from "./contracts.mjs";
 import { projectSnapshot } from "./skills.mjs";
 
@@ -57,7 +57,10 @@ async function execute(request) {
   const beforeProjectFiles = request.fixture
     ? await projectSnapshot("/sandbox/work", 500)
     : undefined;
-  const close = request.fixture === "failed-job" ? await failedJobFixture() : undefined;
+  const close =
+    request.fixture === "failed-job"
+      ? await failedJobFixture()
+      : await deletionFixture(request.fixture);
   try {
     // Docker isolates runners; its default restrictions prevent nested bwrap namespaces.
     const args =

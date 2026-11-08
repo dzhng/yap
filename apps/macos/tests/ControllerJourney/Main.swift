@@ -144,11 +144,8 @@ final class JourneyInputs {
                 device.reopen = { session(now: true) }
                 cameraDevice = device
                 current = input
-                let cameraDirectory = URL(fileURLWithPath: camera.outputDirectory)
                 return try await prepareFixtureCompanion(request, screen: input, device: device,
-                    selection: .init(id: camera.binding.deviceId, directory: cameraDirectory,
-                        observations: cameraDirectory.appendingPathComponent(CameraMedia.mappingFile),
-                        binding: camera.binding, startsOn: camera.startsOn))
+                    selection: camera.selection)
             }
             input.probeDirectory = directory
             input.cameraBinding = camera.binding

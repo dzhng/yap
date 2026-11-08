@@ -56,7 +56,11 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
           report: await operand(output),
         };
         return {
-          pcm: { sha256: receipt.sha256, sampleRate: receipt.sampleRate, frames: receipt.frames },
+          pcm: {
+            sha256: receipt.sha256,
+            sampleRate: receipt.sampleRate,
+            frameCount: receipt.frames,
+          },
           operands,
           ...(result.ok
             ? {}
@@ -65,7 +69,6 @@ export function speakerObserver(native: MediaWorker, workspace: string): Speaker
                   result.error.code,
                   result.error.message,
                   result.error.details,
-                  result.error.retryable,
                 ),
               }),
         };

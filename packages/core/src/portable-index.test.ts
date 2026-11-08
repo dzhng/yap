@@ -140,21 +140,21 @@ test(
     ).toBe(1);
     expect(() =>
       reader.get({ cursor: { ...firstRead.page.nextCursor!, streamId: "other" } }),
-    ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
     const coverage = reader.coverage({ candidateOrdinal: 1, limit: 1 });
     expect(coverage.nextCursor).toEqual({ ...reference, candidateOrdinal: 1, afterSequence: 2 });
     expect(
       reader.coverage({ candidateOrdinal: 1, cursor: coverage.nextCursor!, limit: 1 }).coverage[0],
     ).toMatchObject({ state: "available", equality: "unproven" });
     expect(() => reader.coverage({ candidateOrdinal: 0, cursor: coverage.nextCursor! })).toThrow(
-      expect.objectContaining({ code: "ARTIFACT_CHANGED" }),
+      expect.objectContaining({ code: "INVALID_PARAMS" }),
     );
     expect(() =>
       reader.coverage({
         candidateOrdinal: 1,
         cursor: { ...coverage.nextCursor!, streamId: "other" },
       }),
-    ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
+    ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
     expect(reader.frame(1)).toMatchObject({
       ...reference,
       ordinal: 1,

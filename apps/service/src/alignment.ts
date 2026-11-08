@@ -64,27 +64,32 @@ export function alignmentObserver(native: MediaWorker, workspace: string): Align
           report: await operand(output),
           correspondence: "",
         };
-        if (!result.ok)
+        if (!result.ok) {
+          const { frames: _frames, ...publicPcm } = pcm;
           return {
-            pcm,
+            pcm: { ...publicPcm, frameCount: pcm.frames },
             operands,
             failure: new CatalogError(
               result.error.code,
               result.error.message,
               result.error.details,
-              result.error.retryable,
             ),
           };
+        }
         try {
           const input = alignmentCorrespondenceInput(operands);
           operands.correspondence = JSON.stringify(
             nativeResult(await execute("speech.correspond", input, { signal, timeoutMs: 10000 })),
           );
-          return { pcm, operands };
+          const { frames: _frames, ...publicPcm } = pcm;
+          return { pcm: { ...publicPcm, frameCount: pcm.frames }, operands };
         } catch (error) {
           signal.throwIfAborted();
           return {
-            pcm,
+            pcm: (() => {
+              const { frames: _frames, ...publicPcm } = pcm;
+              return { ...publicPcm, frameCount: pcm.frames };
+            })(),
             operands,
             failure:
               error instanceof CatalogError

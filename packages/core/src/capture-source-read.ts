@@ -1,14 +1,17 @@
+import { RESPONSE_PAGE_BYTES } from "@yap/protocol";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   intervalIndex,
   fromTime,
+  timeUs,
   toTime,
   toSignedTime,
   subtract,
   add,
   compare,
   ceil,
+  floor,
   sourceAvailability,
   type TimeValue,
   type SignedTimeValue,
@@ -17,16 +20,16 @@ import {
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import type { SourceEvidenceReader } from "./evidence-read.js";
-import type { SourceEvidenceMetadata } from "./evidence.js";
+import { receiptCursorSampling, type SourceEvidenceMetadata } from "./evidence.js";
 import { CatalogError } from "./catalog.js";
 import { selectSource, SourceSelectionRead, type SourceSelection } from "./source-selection.js";
 
-// Leave headroom for transport envelopes beneath the public eight-MiB frame bound.
+// Keep page-sized responses below the transport frame after its control envelope.
 export function boundSourceEvidenceResponse(value: unknown): void {
-  if (Buffer.byteLength(JSON.stringify(value)) > 4 * 1024 * 1024)
+  if (Buffer.byteLength(JSON.stringify(value)) > RESPONSE_PAGE_BYTES)
     throw new CatalogError(
       "LIMIT_EXCEEDED",
-      "Source evidence response exceeds 4MiB; narrow the range, tracks or page limit",
+      "Source evidence response exceeds the transport page budget; narrow the range, tracks or page limit",
     );
 }
 export type CaptureSourceInput = SourceSelection & {
@@ -35,7 +38,7 @@ export type CaptureSourceInput = SourceSelection & {
   cursor?: unknown;
 };
 export type CaptureDomain = "events" | "cursor";
-type PointKind = "pause" | "geometry" | "cursor" | "interruption";
+type PointKind = "pause" | "geometry" | "cursor" | "mark" | "interruption";
 export type CaptureCoverage = {
   kind: string;
   state: "ready" | "unavailable";
@@ -49,7 +52,64 @@ export type CaptureContext = {
   supportDigest: string;
   evidence: SourceEvidenceMetadata | null;
   coverage: CaptureCoverage[];
+  marks: JournalMark[];
 };
+export type CaptureMarkPoint = {
+  hostUs: number;
+  globalX: number;
+  globalY: number;
+  x: number | null;
+  y: number | null;
+};
+/** A live mark as callers read it: `assetUs` is asset microseconds, the clock every reader uses. */
+export type CaptureMark = {
+  assetUs: number;
+  hostUs: number;
+  epoch: number;
+  id: string;
+  kind: "stroke" | "pin" | "click";
+  points: CaptureMarkPoint[];
+  pin?: number;
+  window?: Record<string, unknown>;
+  /**
+   * How long the mark stayed on the person's screen from `assetUs`, on the recording's clock:
+   * until it faded on its own, an undo cleared it, or the take paused. A click is never drawn,
+   * so it has none.
+   */
+  shownForUs?: number;
+  /**
+   * For drawing it as it was seen, in microseconds after `assetUs`: when each point was drawn,
+   * and its fade. The fade keeps its full length, so a pause that ends the mark mid-fade
+   * leaves it at the strength it had.
+   */
+  drawing?: { pointsUs: number[]; fade: { fromUs: number; untilUs: number } };
+};
+type Pause = { atSourceUs: number; elapsedPauseUs: number };
+
+/**
+ * Where a host time lands after a mark, on the capture clock and as an offset from the mark.
+ * Host time runs on through a pause and the capture clock does not, so a moment inside a pause
+ * lands where the pause began.
+ */
+function captureOffsetUs(
+  mark: { hostUs: number; sourceUs: number },
+  hostUs: number,
+  pauses: Pause[],
+) {
+  let host = mark.hostUs,
+    source = mark.sourceUs;
+  for (const pause of pauses) {
+    if (pause.atSourceUs < source) continue;
+    const pausedAt = host + pause.atSourceUs - source;
+    if (hostUs < pausedAt) break;
+    if (hostUs < pausedAt + pause.elapsedPauseUs) return pause.atSourceUs - mark.sourceUs;
+    host = pausedAt + pause.elapsedPauseUs;
+    source = pause.atSourceUs;
+  }
+  return source - mark.sourceUs + hostUs - host;
+}
+// The journal's own form: capture-clock `sourceUs` and the order it was written in.
+type JournalMark = Omit<CaptureMark, "assetUs"> & { sourceUs: number; sequence: number };
 export type CaptureRow = {
   kind: PointKind;
   sourceAtUs: TimeValue;
@@ -63,9 +123,10 @@ export const initialCapture = (): CapturePosition => ({
   cursor: { after: null, done: false, row: null },
   pause: { after: null, done: false, row: null },
   geometry: { after: null, done: false, row: null },
+  mark: { after: null, done: false, row: null },
   interruption: { after: null, done: false, row: null },
 });
-const index = { cursor: "cursor", pause: "pauses", geometry: "geometry" } as const;
+const index = { cursor: "cursor", pause: "pauses", geometry: "geometry", mark: "marks" } as const;
 const sourcePositionSchema = z.strictObject({
   after: z.tuple([z.number().int().nonnegative(), z.number().int().nonnegative()]).nullable(),
   done: z.boolean(),
@@ -74,9 +135,22 @@ export const capturePositionSchema = z.strictObject({
   cursor: sourcePositionSchema,
   pause: sourcePositionSchema,
   geometry: sourcePositionSchema,
+  mark: sourcePositionSchema,
   interruption: sourcePositionSchema,
 });
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+
+/** The one capture-to-asset clock conversion: assetUs = captureUs + sourceToAssetOffsetUs. */
+function captureToAsset(captureUs: number, sourceToAssetOffsetUs: SignedTimeValue): TimeValue {
+  return toTime(add(fromTime(captureUs), fromTime(sourceToAssetOffsetUs)));
+}
+/** The same conversion as a plain number, for readers that compare and sort times. */
+export function captureToAssetUs(
+  captureUs: number,
+  sourceToAssetOffsetUs: SignedTimeValue,
+): number {
+  return timeUs(captureToAsset(captureUs, sourceToAssetOffsetUs));
+}
 
 /** Explicit capture authority and clock conversion, shared by source and project inspection. */
 export class CaptureSourceRead {
@@ -95,6 +169,19 @@ export class CaptureSourceRead {
   resolveMany(selections: readonly SourceSelection[], domain: CaptureDomain): CaptureContext[] {
     const sources = new SourceSelectionRead(this.assets, this.acquisitions, selections);
     return selections.map((selection) => this.resolve(selection, domain, sources));
+  }
+  /** Every mark a take recorded, in capture order and asset time: the one reader of marks. */
+  marks(selection: SourceSelection): CaptureMark[] {
+    const context = this.resolve(selection, "events");
+    if (
+      !context.evidence ||
+      !context.coverage.some((item) => item.kind === "mark" && item.state === "ready")
+    )
+      return [];
+    return this.readMarks(context.evidence).map(({ sequence: _sequence, sourceUs, ...mark }) => ({
+      assetUs: captureToAssetUs(sourceUs, context.sourceToAssetOffsetUs),
+      ...mark,
+    }));
   }
   private context(
     selected: ReturnType<SourceSelectionRead["get"]>,
@@ -132,6 +219,7 @@ export class CaptureSourceRead {
         : [
             capability("pause"),
             capability("geometry", !!visual),
+            capability("mark", !!visual),
             { kind: "unplaced_geometry", state: "unavailable" as const, reason: "no_source_time" },
             {
               kind: "interruption",
@@ -144,6 +232,7 @@ export class CaptureSourceRead {
               reason: "unsupported",
             })),
           ];
+    const marks: JournalMark[] = [];
     return {
       selection: selected.selection,
       domain,
@@ -152,7 +241,68 @@ export class CaptureSourceRead {
       supportDigest: selected.supportDigest,
       evidence: acquisition?.evidence ?? null,
       coverage,
+      marks,
     };
+  }
+  private readMarks(identity: SourceEvidenceMetadata): JournalMark[] {
+    const read = (index: "marks" | "pauses") => {
+      const rows = [] as { sequence: number; sourceUs: number; data: Record<string, unknown> }[];
+      let after: [number, number] | null = null;
+      for (;;) {
+        const page = this.records.eventRecords(identity, index, after, 256);
+        if (!page.length) return rows;
+        for (const row of page)
+          rows.push({
+            sequence: row.sequence,
+            sourceUs: row.sourceUs!,
+            data: JSON.parse(row.content),
+          });
+        after = [page.at(-1)!.sourceUs!, page.at(-1)!.sequence];
+      }
+    };
+    const rows = read("marks");
+    const pauses = read("pauses").map((row) => row.data as Pause);
+    // A row carrying `retracts` is an undo: it says when the mark it names left the screen, and
+    // takes no mark away.
+    const cleared = new Map<string, number>();
+    for (const row of rows)
+      if (typeof row.data.retracts === "string" && !cleared.has(row.data.retracts))
+        cleared.set(row.data.retracts, row.sourceUs);
+    return rows
+      .filter((row) => row.data.retracts == null)
+      .map((row) => {
+        const data = row.data;
+        const anchor = { hostUs: data.hostUs as number, sourceUs: row.sourceUs };
+        const at = (hostUs: number) => captureOffsetUs(anchor, hostUs, pauses);
+        const screen = data.onScreen as { fadeHostUs: number; untilHostUs: number } | undefined;
+        const clearedAt = cleared.get(data.id as string);
+        const fadeFromUs = screen && at(screen.fadeHostUs);
+        const shown = screen && {
+          shownForUs: Math.min(
+            at(screen.untilHostUs),
+            clearedAt === undefined ? Infinity : Math.max(0, clearedAt - row.sourceUs),
+          ),
+          drawing: {
+            pointsUs: (data.points as CaptureMarkPoint[]).map((point) => at(point.hostUs)),
+            fade: {
+              fromUs: fadeFromUs!,
+              untilUs: fadeFromUs! + screen.untilHostUs - screen.fadeHostUs,
+            },
+          },
+        };
+        return {
+          sourceUs: row.sourceUs,
+          sequence: row.sequence,
+          hostUs: data.hostUs as number,
+          epoch: data.epoch as number,
+          id: data.id as string,
+          kind: data.kind as CaptureMark["kind"],
+          points: data.points as CaptureMarkPoint[],
+          ...(data.pin === undefined ? {} : { pin: data.pin as number }),
+          ...(data.window === undefined ? {} : { window: data.window as Record<string, unknown> }),
+          ...shown,
+        };
+      });
   }
   /** Pointer history keeps the acquisition clock, independently of an edited clip range.
    * assetUs = captureUs + sourceToAssetOffsetUs; containerUs = assetUs + originUs. */
@@ -194,6 +344,26 @@ export class CaptureSourceRead {
       evidence: context.evidence,
     };
   }
+  /** The observation in force at a cut opens that cut; its recorded clock stays explicit. */
+  private openingCursor(
+    context: CaptureContext,
+    range: { startUs: number; endUs: number },
+  ): CaptureRow | null {
+    if (!context.evidence || !receiptCursorSampling(context.evidence.receipt).holds) return null;
+    const start = subtract(fromTime(range.startUs), fromTime(context.sourceToAssetOffsetUs));
+    if (compare(start, fromTime(0)) < 0) return null;
+    const held = this.records.latestCursor(context.evidence, floor(start));
+    if (!held || compare(fromTime(held.sourceUs), start) >= 0) return null;
+    const { sequence, ...observation } = held;
+    return {
+      kind: "cursor",
+      sourceAtUs: range.startUs,
+      captureAtUs: held.sourceUs,
+      sourceSequence: sequence,
+      observation,
+    };
+  }
+
   /** undefined means bounded work exhausted; null means this source window is complete. */
   next(
     context: CaptureContext,
@@ -219,13 +389,46 @@ export class CaptureSourceRead {
       const position = state[kind];
       if (position.row || position.done) continue;
       if (budget.remaining-- <= 0) return undefined;
+      if (kind === "cursor" && position.after === null) {
+        const opening = this.openingCursor(context, range);
+        if (opening) {
+          position.row = opening;
+          continue;
+        }
+      }
+      if (kind === "mark") {
+        if (!context.marks.length && context.evidence)
+          context.marks = this.readMarks(context.evidence);
+        const next = context.marks.find(
+          (mark) =>
+            mark.sourceUs >= captureRange.startUs &&
+            mark.sourceUs < captureRange.endUs &&
+            (position.after === null ||
+              mark.sourceUs > position.after[0] ||
+              (mark.sourceUs === position.after[0] && mark.sequence > position.after[1])),
+        );
+        if (!next) {
+          position.done = true;
+          continue;
+        }
+        position.row = {
+          kind,
+          sourceAtUs: captureToAsset(next.sourceUs, context.sourceToAssetOffsetUs),
+          captureAtUs: next.sourceUs,
+          sourceSequence: next.sequence,
+          observation: (() => {
+            const { sequence: _sequence, drawing: _drawing, ...mark } = next;
+            return mark as Record<string, unknown>;
+          })(),
+        };
+        continue;
+      }
       if (kind === "interruption") {
         position.done = true;
         const completion = context.evidence.receipt.completion;
         if (completion?.state === "interrupted") {
-          const source = add(
-            fromTime(completion.durationUs),
-            fromTime(context.sourceToAssetOffsetUs),
+          const source = fromTime(
+            captureToAsset(completion.durationUs, context.sourceToAssetOffsetUs),
           );
           if (
             compare(source, fromTime(range.startUs)) > 0 &&
@@ -268,7 +471,7 @@ export class CaptureSourceRead {
       const captureAtUs = row.sourceUs!;
       position.row = {
         kind,
-        sourceAtUs: toTime(add(fromTime(captureAtUs), fromTime(context.sourceToAssetOffsetUs))),
+        sourceAtUs: captureToAsset(captureAtUs, context.sourceToAssetOffsetUs),
         captureAtUs,
         sourceSequence: row.sequence,
         observation: JSON.parse(row.content),
@@ -305,21 +508,25 @@ export class CaptureSourceRead {
     const whole = { startUs: 0, endUs: ceil(fromTime(context.durationUs)) },
       requested = input.sourceRange ?? whole;
     const limit = input.limit ?? (domain === "events" ? 100 : 1000),
-      maximum = domain === "events" ? 500 : 5000;
+      maximum = domain === "events" ? 1000 : 5000;
     const admitted = admitMicrosecondRange(requested, whole),
       range = admitted.range;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum)
       throw new CatalogError("INVALID_PARAMS", `Limit must be 1 to ${maximum}`);
-    const reference = digest({ context, range });
+    // The selection and range are the caller's filters; the resolved evidence is the pin.
+    const query = digest({ selection, range }),
+      reference = digest({ context, range });
     let position = initialCapture();
     if (input.cursor !== undefined) {
       const cursor = z
-        .strictObject({ reference: z.string(), position: capturePositionSchema })
+        .strictObject({ query: z.string(), reference: z.string(), position: capturePositionSchema })
         .safeParse(input.cursor);
       if (!cursor.success)
         throw new CatalogError("INVALID_PARAMS", "Invalid capture evidence cursor");
+      if (cursor.data.query !== query)
+        throw new CatalogError("INVALID_PARAMS", "Capture continuation used other filters");
       if (cursor.data.reference !== reference)
-        throw new CatalogError("ARTIFACT_CHANGED", "Capture evidence or filters changed");
+        throw new CatalogError("ARTIFACT_CHANGED", "Capture evidence changed");
       for (const kind of Object.keys(position) as PointKind[])
         position[kind] = { ...cursor.data.position[kind], row: null };
     }
@@ -331,7 +538,11 @@ export class CaptureSourceRead {
     const rows: CaptureRow[] = [];
     const budget = { remaining: 128 };
     let more = true;
+    let rowBytes = 0;
     while (rows.length < limit) {
+      const before = Object.fromEntries(
+        Object.entries(position).map(([kind, head]) => [kind, { ...head }]),
+      ) as CapturePosition;
       const row = this.next(context, range, position, budget);
       if (row === undefined) break;
       if (row === null) {
@@ -339,8 +550,15 @@ export class CaptureSourceRead {
         break;
       }
       const at = fromTime(row.sourceAtUs);
-      if ((row.kind === "interruption" ? available.before(at) : available(at)).length)
+      if ((row.kind === "interruption" ? available.before(at) : available(at)).length) {
+        const bytes = Buffer.byteLength(JSON.stringify(row)) + 1;
+        if (rows.length && rowBytes + bytes > RESPONSE_PAGE_BYTES) {
+          position = before;
+          break;
+        }
+        rowBytes += bytes;
         rows.push(row);
+      }
     }
     const ready = context.coverage.some((c) => c.state === "ready");
     const result = {
@@ -359,6 +577,7 @@ export class CaptureSourceRead {
             rows,
             nextCursor: more
               ? {
+                  query,
                   reference,
                   position: Object.fromEntries(
                     Object.entries(position).map(([kind, { after, done }]) => [

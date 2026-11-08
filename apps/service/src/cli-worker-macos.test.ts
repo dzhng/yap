@@ -9,19 +9,21 @@ let directory: string;
 let owner: string;
 let tool: string;
 const ownedPids: number[] = [];
+// Compiling the real Swift owner is setup, not the behavior under test, and takes seconds on a
+// loaded machine, so it has its own budget.
 beforeAll(async () => {
   directory = await mkdtemp("/tmp/yap-cli-native-");
   owner = await compileCliOwner(directory);
   tool = join(directory, "tool.cjs");
   await writeFile(
     tool,
-    `const {writeFileSync}=require('node:fs');const {spawn}=require('node:child_process');
+    `const {writeFileSync,renameSync}=require('node:fs');const {spawn}=require('node:child_process');
     const child=spawn(process.argv[3]==='no-pipes'?'/bin/sleep':process.execPath,process.argv[3]==='no-pipes'?['1000']:['-e','setInterval(()=>{},1000)'],{stdio:process.argv[3]==='no-pipes'?'ignore':'inherit'});
     if(process.argv[3]==='no-pipes')for(let n=0;n<31;n++)spawn('/bin/sleep',['1000'],{stdio:'ignore'});
     if(process.argv[3]==='descriptor')writeFileSync(3,'inherited bytes');
-    writeFileSync(process.argv[2],JSON.stringify({pid:process.pid,owner:process.ppid,child:child.pid}));setInterval(()=>{},1000);`,
+    writeFileSync(process.argv[2]+'.tmp',JSON.stringify({pid:process.pid,owner:process.ppid,child:child.pid}));renameSync(process.argv[2]+'.tmp',process.argv[2]);setInterval(()=>{},1000);`,
   );
-});
+}, 120_000);
 afterAll(async () => {
   for (const pid of ownedPids) {
     try {

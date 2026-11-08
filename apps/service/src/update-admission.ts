@@ -20,14 +20,14 @@ export class UpdateAdmission {
 
   refusal(): OperationFailure | undefined {
     return this.permit
-      ? operationError("UPDATING", "Service replacement is prepared; retry after the update", true)
+      ? operationError("UPDATING", "Service replacement is prepared; retry after the update")
       : undefined;
   }
   prepare() {
     if (this.permit)
       return {
         ok: false as const,
-        error: operationError("UPDATING", "A replacement permit is already held", true).error,
+        error: operationError("UPDATING", "A replacement permit is already held").error,
       };
     const id = randomUUID();
     const timer = setTimeout(() => this.release(id), this.timeoutMs);

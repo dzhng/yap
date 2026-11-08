@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -7,10 +8,7 @@ import { recordingEvidenceOwner, SourceEvidenceStore } from "./evidence.js";
 import type { VisualSampler } from "./scenes.js";
 import { planFrameTrail } from "./trails.js";
 import { PresentationEvidence } from "./presentation-evidence.js";
-import {
-  PresentationPointerHistory,
-  pointerHistoryBudget,
-} from "./presentation-pointer-history.js";
+import { PresentationPointerHistory } from "./presentation-pointer-history.js";
 import { PresentationPointer } from "./presentation-pointer.js";
 import { writePointerSchedule } from "./pointer-schedule.js";
 import { type TimeRange } from "./presentation-time.js";
@@ -36,7 +34,7 @@ const point = (sourceUs: number, x: number, y = 20, eligibility = "inside", geom
   event: "cursorSample",
   data: { sourceUs, x, y, globalX: x, globalY: y, buttons: 0, eligibility, geometryEpoch },
 });
-async function fixture(records: { event: string; data: Record<string, unknown> }[]) {
+async function fixture(records: { event: string; data: Record<string, unknown> }[], mode?: string) {
   const root = mkdtempSync(join(tmpdir(), "trail-plan-"));
   let next = 0;
   const store = new CaptureStore(join(root, "catalog.sqlite"), {
@@ -49,19 +47,50 @@ async function fixture(records: { event: string; data: Record<string, unknown> }
   });
   const recording = store.allocate().recording;
   const identity = {
-    owner: { kind: "recording" as const, recordingId: recording.recordingId },
+    owner: { kind: "recording" as const, id: recording.id },
     sourceId: recording.sourceId,
     generation: "fixture",
   };
   const file = join(root, "normalized.jsonl");
+  let nativeReceipt;
+  if (mode) {
+    execFileSync(
+      new URL("../../../helpers/mac/.build/debug/YapCaptureTests", import.meta.url).pathname,
+      [],
+      {
+        env: { ...process.env, YAP_CURSOR_HOLD_FIXTURES: root },
+      },
+    );
+    const result = JSON.parse(
+      execFileSync(
+        new URL("../../../helpers/mac/.build/debug/yap-native", import.meta.url).pathname,
+        [],
+        {
+          input:
+            JSON.stringify({
+              id: "held",
+              operation: "media.sourceEvidence",
+              params: { directory: join(root, mode), output: file },
+            }) + "\n",
+          encoding: "utf8",
+        },
+      ),
+    );
+    if (!result.ok) throw Error(JSON.stringify(result));
+    nativeReceipt = result.data;
+    records = readFileSync(file, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+  }
   const body = records.map((row) => JSON.stringify(row) + "\n").join("");
   writeFileSync(file, body);
   const cursors = records.filter((r) => r.event === "cursorSample");
   const evidence = new SourceEvidenceStore(store, recordingEvidenceOwner(store));
-  await evidence.ingest({
+  const metadata = await evidence.ingest({
     ...identity,
     file,
-    receipt: {
+    receipt: nativeReceipt ?? {
       file,
       journal: "capture.journal.jsonl",
       header: { sessionID: recording.sourceId },
@@ -98,7 +127,7 @@ async function fixture(records: { event: string; data: Record<string, unknown> }
         };
       }),
     });
-  return { evidence, identity, sample };
+  return { evidence, identity, sample, metadata };
 }
 const request = {
   source: "/generated/video.mov",
@@ -338,25 +367,13 @@ test("missing geometry, reference and generation remain explicit and scene cance
       },
       signal(),
     ),
-  ).rejects.toMatchObject({ code: "NOT_READY" });
+  ).rejects.toMatchObject({ code: "PREREQUISITE_MISSING" });
   const controller = new AbortController();
   const sample: VisualSampler = async (params) => {
     controller.abort();
     return valid.sample([[0, 0]])(params, controller.signal);
   };
   await expect(planFrameTrail(request, { ...valid, sample }, controller.signal)).rejects.toThrow();
-});
-
-test("point and observation budgets fail explicitly rather than dropping part of the gesture", async () => {
-  for (const count of [1200, 1201, 5001]) {
-    const f = await fixture([
-      geometry(),
-      ...Array.from({ length: count }, (_, i) => point(i * 100, 20)),
-    ]);
-    const pending = planFrameTrail(request, { ...f, sample: f.sample([[0, 0]]) }, signal());
-    if (count === 1200) expect((await pending).overlay.trail[0]).toHaveLength(1200);
-    else await expect(pending).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
-  }
 });
 
 test("native-normalized buffered pause fixture keeps only later source-time observations", async () => {
@@ -590,8 +607,6 @@ test("movie schedule keeps a pointer hidden through A-B-A until a fresh cursor o
           evidence: f.evidence,
           identity: f.identity,
           output,
-          maxBytes: 100_000,
-          maxEvents: 1000,
         },
         signal(),
       );
@@ -616,7 +631,7 @@ test("movie schedule keeps a pointer hidden through A-B-A until a fresh cursor o
 async function scheduled(
   presentation: PresentationEvidence,
   f: Awaited<ReturnType<typeof fixture>>,
-  options: { maxEvents?: number; maxBytes?: number; signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal } = {},
 ) {
   const output = join(dirname(presentation.receipt.file), "pointer.jsonl");
   const receipt = await writePointerSchedule(
@@ -626,8 +641,6 @@ async function scheduled(
       evidence: f.evidence,
       identity: f.identity,
       output,
-      maxBytes: options.maxBytes ?? 100_000,
-      maxEvents: options.maxEvents ?? 100_000,
     },
     options.signal ?? signal(),
   );
@@ -739,11 +752,11 @@ test("each kept span gets an initial state; deleted and empty observations canno
   );
 });
 
-test("schedule budgets, cancellation and publication races never publish partial output", async () => {
-  for (const mode of ["events", "bytes", "cancel", "existing"] as const) {
+test("schedule cancellation and publication races never publish partial output", async () => {
+  for (const mode of ["cancel", "existing"] as const) {
     const f = await fixture([
       geometry(),
-      ...Array.from({ length: 600 }, (_, i) => point(mode === "events" ? 1000 : 1000 + i, i % 80)),
+      ...Array.from({ length: 600 }, (_, i) => point(1000 + i, i % 80)),
     ]);
     const abort = new AbortController();
     if (mode === "cancel") {
@@ -770,14 +783,10 @@ test("schedule budgets, cancellation and publication races never publish partial
           };
         }
         const promise = scheduled(presentation, f, {
-          maxEvents: mode === "events" ? 20 : 10_000,
-          maxBytes: mode === "bytes" ? 1 : 100_000,
           signal: abort.signal,
         });
         await expect(promise).rejects.toMatchObject(
-          mode === "cancel"
-            ? { name: "AbortError" }
-            : { code: mode === "existing" ? "INVALID_OUTPUT" : "LIMIT_EXCEEDED" },
+          mode === "cancel" ? { name: "AbortError" } : { code: "INVALID_OUTPUT" },
         );
         if (mode === "existing") expect(readFileSync(output, "utf8")).toBe("unrelated");
         else expect(existsSync(output)).toBe(false);
@@ -804,7 +813,7 @@ test("a late kept span seeks past deleted cursor history while preserving geomet
     revision,
     [presentationRecord(750_000, 1_000_000, 500_000)],
     async (presentation) => {
-      const { events, receipt } = await scheduled(presentation, f, { maxEvents: 10 });
+      const { events, receipt } = await scheduled(presentation, f);
       expect(receipt.events).toBe(4);
       expect(
         events.map((e) => [Number(e.at.value) / e.at.timescale, e.pointer?.x ?? null]),
@@ -907,14 +916,7 @@ test("sampled pointers preserve immutable lookback, requested clock and held/bac
     { spans: [{ startUs: 0, endUs: 1_000_000 }], durationUs: 1_000_000 },
     [presentationRecord(0, 1_000_000, 0)],
     async (presentation) => {
-      const h = new PresentationPointerHistory(
-        { ...f, presentation },
-        signal(),
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 10,
-        }),
-      );
+      const h = new PresentationPointerHistory({ ...f, presentation }, signal());
       try {
         const first = await h.sample(0, 450_000, 300_000);
         expect(first.record).toMatchObject({ actualSourceUs: 0 });
@@ -976,14 +978,7 @@ test("sampled pointer visits intervening A-B-A scenes and physical gaps before a
       i === 3 ? { ...row, end: { value: "3000001", timescale: 3_000_000 } } : row,
     ),
     async (presentation) => {
-      const h = new PresentationPointerHistory(
-        { ...f, presentation },
-        signal(),
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 10,
-        }),
-      );
+      const h = new PresentationPointerHistory({ ...f, presentation }, signal());
       try {
         const afterScene = await h.sample(0, 900_000, 1_000_000);
         expect(
@@ -1029,14 +1024,7 @@ test("sampled trails retain pause equality and geometry/outside run breaks", asy
     { spans: [{ startUs: 0, endUs: 1_000_000 }], durationUs: 1_000_000 },
     [presentationRecord(0, 1_000_000, 0)],
     async (presentation) => {
-      const h = new PresentationPointerHistory(
-        { ...f, presentation },
-        signal(),
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 10,
-        }),
-      );
+      const h = new PresentationPointerHistory({ ...f, presentation }, signal());
       try {
         const pause = await h.sample(0, 200_000, 1_000_000);
         expect(pause.inspection.kind === "picture" && pause.inspection.plan.overlay).toEqual({
@@ -1074,14 +1062,7 @@ test("sampled pointer does not evaluate future invalid geometry or admit later j
     { spans: [{ startUs: 0, endUs: 1_000_000 }], durationUs: 1_000_000 },
     [presentationRecord(0, 1_000_000, 0)],
     async (presentation) => {
-      const h = new PresentationPointerHistory(
-        { ...f, presentation },
-        signal(),
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 10,
-        }),
-      );
+      const h = new PresentationPointerHistory({ ...f, presentation }, signal());
       try {
         const result = await h.sample(0, 500_000, 500_000);
         expect(
@@ -1095,79 +1076,20 @@ test("sampled pointer does not evaluate future invalid geometry or admit later j
   );
 });
 
-test("pointer sampling bounds occurrences and aggregate replay work and honors cancellation", async () => {
+test("pointer sampling honors cancellation", async () => {
   const f = await fixture([geometry(), point(100_000, 10), point(200_000, 20)]);
   await withPresentation(
     { spans: [{ startUs: 0, endUs: 1_000_000 }], durationUs: 1_000_000 },
     [presentationRecord(0, 1_000_000, 0)],
     async (presentation) => {
       const controller = new AbortController();
-      const h = new PresentationPointerHistory(
-        { ...f, presentation },
-        controller.signal,
-        pointerHistoryBudget({
-          maxEvents: 6,
-          maxSamples: 10,
-        }),
-      );
-      try {
-        await h.sample(0, 300_000, 100_000);
-        await expect(h.sample(0, 150_000, 100_000)).rejects.toMatchObject({
-          code: "LIMIT_EXCEEDED",
-        });
-      } finally {
-        await h.close();
-      }
-      const held = new PresentationPointerHistory(
-        { ...f, presentation },
-        controller.signal,
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 1,
-        }),
-      );
-      try {
-        await held.sample(0, 300_000, 0);
-        await expect(held.sample(0, 300_000, 0)).rejects.toMatchObject({ code: "LIMIT_EXCEEDED" });
-      } finally {
-        await held.close();
-      }
-      const canceled = new PresentationPointerHistory(
-        { ...f, presentation },
-        controller.signal,
-        pointerHistoryBudget({
-          maxEvents: 100,
-          maxSamples: 10,
-        }),
-      );
+      const canceled = new PresentationPointerHistory({ ...f, presentation }, controller.signal);
       try {
         await canceled.sample(0, 300_000, 0);
         controller.abort();
         await expect(canceled.sample(0, 400_000, 0)).rejects.toMatchObject({ name: "AbortError" });
       } finally {
         await canceled.close();
-      }
-    },
-  );
-});
-
-test("separate pointer histories share the render-attempt occurrence budget", async () => {
-  const f = await fixture([geometry(), point(100_000, 10)]);
-  await withPresentation(
-    { spans: [{ startUs: 0, endUs: 1_000_000 }], durationUs: 1_000_000 },
-    [presentationRecord(0, 1_000_000, 0)],
-    async (presentation) => {
-      const budget = pointerHistoryBudget({ maxEvents: 100, maxSamples: 1 });
-      const first = new PresentationPointerHistory({ ...f, presentation }, signal(), budget);
-      const second = new PresentationPointerHistory({ ...f, presentation }, signal(), budget);
-      try {
-        await first.sample(0, 300_000, 0);
-        await expect(second.sample(0, 300_000, 0)).rejects.toMatchObject({
-          code: "LIMIT_EXCEEDED",
-        });
-      } finally {
-        await first.close();
-        await second.close();
       }
     },
   );
@@ -1183,11 +1105,7 @@ test("sampled exact pointer membership precedes the integer observation cutoff",
       { ...presentationRecord(1, 2, 1), start: boundary, sampleTime: boundary },
     ],
     async (presentation) => {
-      const history = new PresentationPointerHistory(
-        { ...f, presentation },
-        signal(),
-        pointerHistoryBudget({ maxEvents: 100, maxSamples: 10 }),
-      );
+      const history = new PresentationPointerHistory({ ...f, presentation }, signal());
       try {
         const before = await history.sample(
           0,
@@ -1206,3 +1124,120 @@ test("sampled exact pointer membership precedes the integer observation cutoff",
     },
   );
 });
+
+test("change-only pointer survives a cut like the every-tick journal", async () => {
+  const positions = [];
+  for (const mode of ["dense", "sparse"]) {
+    const f = await fixture([], mode);
+    const plan = await planFrameTrail(
+      { ...request, kept: { startUs: 1_000_000, endUs: 3_000_000 }, trailUs: 0 },
+      {
+        ...f,
+        sample: f.sample([
+          [1_000_000, 0],
+          [1_500_000, 0],
+        ]),
+      },
+      signal(),
+    );
+    positions.push(
+      plan.overlay.pointer && { x: plan.overlay.pointer.x, y: plan.overlay.pointer.y },
+    );
+  }
+  expect(positions).toEqual([
+    { x: 42, y: 20 },
+    { x: 42, y: 20 },
+  ]);
+}, 30_000);
+
+test("held pointers match dense journals at scenes, trimmed spans and backward project requests", async () => {
+  const outputs: unknown[][] = [];
+  for (const mode of ["dense", "sparse", "historical", "everyTick"]) {
+    const f = await fixture([], mode);
+    const positions: unknown[] = [];
+    const still = await planFrameTrail(
+      { ...request, requestedSourceUs: 2_000_000, trailUs: 0 },
+      {
+        ...f,
+        sample: f.sample([
+          [0, 0],
+          [1_000_000, 255],
+          [2_000_000, 255],
+        ]),
+      },
+      signal(),
+    );
+    positions.push(still.overlay.pointer?.x ?? null);
+    await withPresentation(
+      { spans: [{ startUs: 1_000_000, endUs: 3_000_000 }], durationUs: 2_000_000 },
+      [
+        presentationRecord(1_000_000, 2_000_000, 1_000_000),
+        presentationRecord(2_000_000, 3_000_000, 2_000_000, 255),
+      ],
+      async (presentation) => {
+        const history = new PresentationPointerHistory({ ...f, presentation }, signal());
+        try {
+          // Project clip order can visit this source backward, with a trimmed initial sample.
+          for (const at of [2_500_000, 1_500_000, 2_000_000, 1_000_000]) {
+            const result = await history.sample(0, at, 500_000);
+            positions.push(
+              result.inspection.kind === "picture"
+                ? (result.inspection.plan.overlay.pointer?.x ?? null)
+                : null,
+            );
+          }
+        } finally {
+          await history.close();
+        }
+      },
+    );
+    outputs.push(positions);
+  }
+  expect(outputs[0]).toEqual([42, 42, 42, 42, 42]);
+  expect(outputs[1]).toEqual(outputs[0]);
+  expect(outputs[2]).toEqual([null, null, null, null, null]);
+  expect(outputs[3]).toEqual(outputs[2]);
+}, 30_000);
+
+test("held trails depend on elapsed time and changes rather than storage density or point caps", async () => {
+  const trails = [];
+  for (const mode of ["denseMotion", "sparseMotion", "busy"]) {
+    const f = await fixture([], mode);
+    const plan = await planFrameTrail(
+      { ...request, requestedSourceUs: 2_500_000, trailUs: 2_000_000 },
+      { ...f, sample: f.sample([[0, 0]]) },
+      signal(),
+    );
+    expect(plan.overlay.pointer).toMatchObject({ x: mode === "busy" ? 40 : 35, y: 20 });
+    trails.push(plan.overlay.trail);
+  }
+  expect(trails[0]).toEqual(trails[1]);
+  expect(trails[0]![0]![0]).toMatchObject({ atSourceUs: 500_000, x: 42 });
+  expect(trails[2]!.flat().length).toBeGreaterThan(1200);
+}, 30_000);
+
+test("held pointers remain absent after a physical presentation gap even through later scene resets", async () => {
+  const f = await fixture([], "sparse");
+  await withPresentation(
+    { spans: [{ startUs: 0, endUs: 3_000_000 }], durationUs: 3_000_000 },
+    [
+      presentationRecord(0, 500_000, 0),
+      presentationRecord(500_000, 1_000_000, null),
+      presentationRecord(1_000_000, 2_000_000, 1_000_000),
+      presentationRecord(2_000_000, 3_000_000, 2_000_000, 255),
+    ],
+    async (presentation) => {
+      const h = new PresentationPointerHistory({ ...f, presentation }, signal());
+      try {
+        for (const at of [1_500_000, 2_500_000]) {
+          const result = await h.sample(0, at, 500_000);
+          expect(
+            result.inspection.kind === "picture" && result.inspection.plan.overlay.pointer,
+          ).toBeNull();
+        }
+      } finally {
+        await h.close();
+      }
+    },
+  );
+}, 30_000);

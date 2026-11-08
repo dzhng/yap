@@ -37,10 +37,14 @@ func runPreferenceTests() {
     let suite = directory.appendingPathComponent("preferences").path
     let launch = { Preferences(defaults: UserDefaults(suiteName: suite)!) }
 
+    let defaults = launch()
+    precondition(defaults.countdown == nil, "The countdown is off until a person enables it")
     let first = launch()
+    first.countdownBeforeRecording = true
     precondition(first.showSettingsAtLaunch, "Settings opens at launch until a person turns it off")
     precondition(first.setUpAgents, "Agent setup (command and skill) is on by default")
     precondition(first.showCameraPreview, "Camera preview is visible by default")
+    precondition(first.controlsGlass == .clear, "The floating controls are clear glass by default")
     precondition(
         first.countdown?.remaining == Countdown.defaultSeconds,
         "A start counts down until a person turns that off")
@@ -58,6 +62,7 @@ func runPreferenceTests() {
     first.setUpAgents = false
     first.countdownBeforeRecording = false
     first.showCameraPreview = false
+    first.controlsGlass = .dark
 
     let relaunched = launch()
     precondition(!relaunched.showSettingsAtLaunch, "Turning the window off survives a relaunch")
@@ -66,6 +71,7 @@ func runPreferenceTests() {
         relaunched.countdown == nil,
         "Turning the countdown off survives a relaunch, and then a start records immediately")
     precondition(!relaunched.showCameraPreview, "Hiding the camera preview survives a relaunch")
+    precondition(relaunched.controlsGlass == .dark, "Choosing dark controls survives a relaunch")
     let restored = ControlsState(recording: relaunched.recording)
     precondition(
         restored.selection.microphone == .device(id: "mic-headset", name: "Studio Headset")

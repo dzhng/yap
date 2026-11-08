@@ -133,7 +133,7 @@ package enum MediaRecovery {
         func check() throws {
             try identity.check(fd)
             try ManagedFiles.checkDirectoryEntry(AT_FDCWD, directory, identity, failing: { _ in
-                NativeFailure("JOURNAL_CHANGED", "Empty source directory was replaced.", retryable: true)
+                NativeFailure("JOURNAL_CHANGED", "Empty source directory was replaced.")
             })
             var journal = stat()
             if fstatat(fd, "capture.journal.jsonl", &journal, AT_SYMLINK_NOFOLLOW) == 0 {
@@ -144,7 +144,7 @@ package enum MediaRecovery {
         try check()
         var members: [String] = []
         try DirectoryContents.forEachName(in: fd, failing: { action in
-            NativeFailure("JOURNAL_UNAVAILABLE", "\(action): \(String(cString: strerror(errno))).", retryable: true)
+            NativeFailure("JOURNAL_UNAVAILABLE", "\(action): \(String(cString: strerror(errno))).")
         }) { name in members.append(String(cString: name)); return members.count < 2 }
         // A companion camera writes its journal with its first picture, so a camera that never
         // delivered one (never turned on, or lost before its first picture) leaves only its mapping.
@@ -166,7 +166,7 @@ package enum MediaRecovery {
     private static func isRegularFile(_ directory: Int32, _ name: String) throws -> Bool {
         var member = stat()
         guard fstatat(directory, name, &member, AT_SYMLINK_NOFOLLOW) == 0 else {
-            throw NativeFailure("JOURNAL_UNAVAILABLE", "Inspect \(name): \(String(cString: strerror(errno))).", retryable: true)
+            throw NativeFailure("JOURNAL_UNAVAILABLE", "Inspect \(name): \(String(cString: strerror(errno))).")
         }
         return member.st_mode & S_IFMT == S_IFREG
     }
@@ -180,13 +180,13 @@ package enum MediaRecovery {
             layout = nil
         }
         let cameraReceipt = URL(fileURLWithPath: directory).appendingPathComponent("camera.publication.json")
-        if layout == 1 && FileManager.default.fileExists(atPath: cameraReceipt.path) {
+        if JournalSchema.isCompanion(layout) && FileManager.default.fileExists(atPath: cameraReceipt.path) {
             return try await recoverCamera(directory: directory, leased: leased)
         }
-        guard layout == 2 else {
+        guard JournalSchema.isPacked(layout) else {
             let result = await inspect(directory: directory)
             try Task.checkCancellation()
-            if layout == 1 && (result.journal?.header?.source.kind == "camera" || result.journal?.header?.cameraBinding != nil) {
+            if JournalSchema.isCompanion(layout) && (result.journal?.header?.source.kind == "camera" || result.journal?.header?.cameraBinding != nil) {
                 return try await recoverCamera(directory: directory, leased: leased)
             }
             if let failure = result.tracks.compactMap(\.failure).first(where: { $0.code == "MEDIA_UNAVAILABLE" }) { throw failure }
@@ -257,9 +257,8 @@ package enum MediaRecovery {
             _ = try await CameraMedia.publish(lease: lease, observationURL: root.appendingPathComponent("camera.mapping.jsonl"))
         }
         let verified = try await CameraMedia.readPublished(lease: lease, canonical: canonical)
-        let journal = try CaptureJournal.readEvidence(directory: directory, maximumBytes: 268_435_456,
-            retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
-            descriptor: lease.descriptor, layout: 1)
+        let journal = try CaptureJournal.readEvidence(directory: directory,             retainTiming: false, geometry: { _ in }, samples: { _ in }, displaySpace: { _ in },
+            descriptor: lease.descriptor, layout: JournalSchema.companion)
         let intervals = try verified.identity.availability.intervals.map { try $0.roundedSpan() }
         let track = RecoveredTrack(role: "video", file: "video.mov", intervals: intervals,
             decodedSamples: nil, representedFrames: JournalInteger(wrappedValue: Int64(verified.identity.representedFrames)),

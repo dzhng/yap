@@ -9,6 +9,7 @@ public final class NativeCapture {
         public let buffer: CVPixelBuffer
         init(_ buffer: CVPixelBuffer) { self.buffer = buffer }
     }
+    private let nowUs: @Sendable () -> Int64
     private var input: (any CaptureInputSession)?
     /// The running take's companion camera, held until the take ends so status reports it while finalizing.
     private var reservedCamera: (any CompanionCameraSwitch)?
@@ -23,8 +24,12 @@ public final class NativeCapture {
     public var onPublication: ((CapturePublicationObservation) -> Void)?
     private var publicationCancellationRequested = false
     private let termination = CaptureTermination<CaptureResult?>()
+    public var onMaximumDuration: (() -> Void)?
+    public private(set) var completionReason: String?
     public var onInterruption: ((CaptureFailure) -> Void)?
     public var onCameraFrame: (@Sendable (CameraPreviewFrame) -> Void)?
+    /// The marks a screen take recognizes as they happen, delivered on its writer queue.
+    public var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
     private var failure: CaptureFailure?
     private enum State: String { case idle, selecting, recording, paused, finalizing }
     private var state = State.idle
@@ -94,17 +99,14 @@ public final class NativeCapture {
     }
 
     public init() {
+        nowUs = CaptureHostTime.nowUs
         prepareInput = { request, check in
-            let camera = request.camera.map { selected in
-                let directory = URL(fileURLWithPath: selected.outputDirectory)
-                return CaptureCameraSelection(id: selected.binding.deviceId, directory: directory,
-                    observations: directory.appendingPathComponent(CameraMedia.mappingFile), binding: selected.binding)
-            }
-            return try await CaptureInputPreparation().prepare(request, camera: camera, checkInterruption: check)
+            try await CaptureInputPreparation().prepare(request, camera: request.camera?.selection, checkInterruption: check)
         }
     }
 
-    package init(prepareInput: @escaping @MainActor (CaptureRequest, @MainActor () throws -> Void) async throws -> any CaptureInputSession) {
+    package init(nowUs: @escaping @Sendable () -> Int64 = CaptureHostTime.nowUs, prepareInput: @escaping @MainActor (CaptureRequest, @MainActor () throws -> Void) async throws -> any CaptureInputSession) {
+        self.nowUs = nowUs
         self.prepareInput = prepareInput
     }
 
@@ -115,6 +117,7 @@ public final class NativeCapture {
         if let sourceId = request.sourceId, sourceId.isEmpty || sourceId.utf16.count > 256 {
             throw CaptureFailure("INVALID_REQUEST", "Source identity must be bounded and nonempty.")
         }
+        completionReason = nil
         closedResult = nil
         primaryCompletionRecorded = false
         companionFailure = nil
@@ -155,7 +158,7 @@ public final class NativeCapture {
         do {
             writer = try CaptureWriter(request: request, width: width, height: height,
                 sessionID: request.sourceId ?? generation.uuidString,
-                requestedSourceRect: prepared.requestedSourceRect, onFailure: onFailure)
+                requestedSourceRect: prepared.requestedSourceRect, nowUs: nowUs, onFailure: onFailure)
         } catch {
             _ = await prepared.stop()
             await prepared.discardMedia()
@@ -169,7 +172,16 @@ public final class NativeCapture {
                 if generations.accepts(generation) { input = nil }
             }
         }
+        writer.onMaximumDuration = { [weak self] in
+            Task { @MainActor in
+                guard let self, self.generations.accepts(generation) else { return }
+                self.completionReason = "maximumDuration"
+                if let onMaximumDuration = self.onMaximumDuration { onMaximumDuration() }
+                else { _ = try? await self.stop() }
+            }
+        }
         sink = writer
+        writer.onMarkUpdate = onMarkUpdate
         input = prepared
         do {
             try await prepared.start(writer: writer, output: writer, framesPerSecond: nil,
@@ -229,6 +241,10 @@ public final class NativeCapture {
             state = .recording
         }
     }
+
+    /// Undo Mark: clears the newest stroke or pin still on screen in the running take. Shortcut
+    /// bindings live in the app; this is the capture operation they call.
+    public func clearLatestMark() { sink?.clearLatestMark(at: CaptureHostTime.nowUs()) }
 
     /// The running take's reserved companion camera and whether it is on. Nil when no take holds one.
     public var companionCamera: (deviceId: String, on: Bool)? {
@@ -292,7 +308,8 @@ public final class NativeCapture {
             if let publicationError = camera.error ?? primary.error { throw publicationError }
             let result = primary.result.withFailure(companionFailure).withCamera(camera.camera)
             lifecycleSequence = sink.note(result.state,
-                reason: result.failure?.code ?? (result.cleanupFailure == nil ? nil : "CLEANUP_PENDING"))
+                reason: result.failure?.code ?? (result.cleanupFailure == nil ? nil : "CLEANUP_PENDING"),
+                completionReason: result.failure == nil ? completionReason : nil)
             outputSize = nil
             self.sink = nil
             self.closedResult = nil
@@ -331,7 +348,7 @@ public final class NativeCapture {
                 if value.durationUs > 0, let journal = closedCamera.journal {
                     let evidence = try await CaptureSourcePublication.publish(kind: .camera,
                         durationUs: value.durationUs, originHostUs: value.hostOriginUs,
-                        tracks: value.tracks, diagnostic: value.failure, lease: journal.lease, layout: 1)
+                        tracks: value.tracks, diagnostic: value.failure, lease: journal.lease, layout: JournalSchema.companion)
                     publication?.camera = .published(evidence)
                 } else {
                     publication?.camera = .unavailable(CaptureFailure(bounded: value.failure
@@ -371,7 +388,7 @@ public final class NativeCapture {
                     try await sink.freezePublicationJournal()
                     let evidence = try await CaptureSourcePublication.publish(kind: .primary,
                         durationUs: result.durationUs, originHostUs: result.hostOriginUs,
-                        tracks: result.tracks, diagnostic: result.failure, lease: lease, layout: 2)
+                        tracks: result.tracks, diagnostic: result.failure, lease: lease, layout: sink.journalSchemaVersion)
                     publication?.primary = .published(evidence)
                 } else {
                     publication?.primary = .unavailable(CaptureFailure(bounded: result.failure

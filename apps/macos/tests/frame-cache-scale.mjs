@@ -133,7 +133,7 @@ test(
           library,
           (owner) => {
             assert.equal(owner.kind, "asset");
-            assets.get(owner.assetId);
+            assets.get(owner.id);
           },
           1,
         );
@@ -147,11 +147,14 @@ test(
       }
       assert.equal(await hash(video), originalHash);
       ({ instance } = await launchReady(home));
-      const retry = await call("frame.retry", params);
+      const retry = await call("job.retry", { jobId: first.jobId });
       if (retry.delivery) await call("artifact.close", { token: retry.delivery.token });
       const regenerated = await ready();
       assert.equal(regenerated.jobId, first.jobId);
-      assert.equal(regenerated.published.generation, first.published.generation + 1);
+      assert.equal(
+        Number(regenerated.published.generation),
+        Number(first.published.generation) + 1,
+      );
       assert.notEqual(regenerated.published.output.cacheId, firstFrame.cacheId);
       assert.deepEqual(await readFile(regenerated.published.output.file), firstBytes);
       assert.equal(await hash(video), originalHash);

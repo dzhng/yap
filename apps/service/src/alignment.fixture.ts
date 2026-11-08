@@ -1,5 +1,16 @@
 import { createHash } from "node:crypto";
 import type { AlignmentEvidenceSource } from "@yap/core/alignment-operands";
+import { Catalog } from "@yap/core/catalog";
+import { AssetStore } from "@yap/core/assets";
+import { AcquisitionStore } from "@yap/core/acquisitions";
+import { Models } from "@yap/core/models";
+import { ResourceReferences } from "@yap/core/references";
+import {
+  AlignmentEvidenceStore,
+  assetAlignmentOwner,
+  alignmentGenerationResource,
+} from "@yap/core/alignment-evidence";
+import { selectAlignmentSource } from "@yap/core/source-alignment";
 const sha = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 export const alignmentSource: AlignmentEvidenceSource = {
   streamId: "a1",
@@ -10,7 +21,7 @@ export const alignmentSource: AlignmentEvidenceSource = {
   durationUs: 2000000,
   observationRange: { startUs: 0, endUs: 100000 },
   text: "Hi wrong Hi",
-  pcm: { sha256: sha("pcm"), sampleRate: 16000, frames: 1600 },
+  pcm: { sha256: sha("pcm"), sampleRate: 16000, frameCount: 1600 },
   decoder: {
     recipe: "source-selected-span-avfoundation-f32-16k-v1",
     workerSha256: sha("native"),
@@ -85,4 +96,61 @@ export function alignmentOutput() {
     report: JSON.stringify(report),
     correspondence: JSON.stringify(correspondence),
   };
+}
+/** Probe of the one controlled audio stream `alignmentSource` selects. */
+export const alignmentProbe = {
+  originUs: 0,
+  streams: [
+    {
+      id: "a1",
+      kind: "audio",
+      codec: "control",
+      decodable: true,
+      channels: 2,
+      sampleRate: 16000,
+      startUs: 0,
+      endUs: 2000000,
+      segments: [{ startUs: 0, endUs: 2000000, empty: false }],
+    },
+  ],
+};
+
+/** Publishes one ready, retained alignment generation for an imported asset of `alignmentProbe`. */
+export function publishRetainedAlignment(catalog: Catalog, library: string, assetId: string) {
+  const assets = new AssetStore(catalog, library),
+    acquisitions = new AcquisitionStore(catalog),
+    models = new Models(library, globalThis.fetch, undefined, catalog);
+  const selected = selectAlignmentSource(assets, acquisitions, {
+    assetId,
+    streamId: "a1",
+    channel: 0,
+    sourceRange: alignmentSource.observationRange,
+    text: alignmentSource.text,
+    modelId: "nemo-ctc110",
+  });
+  const evidence = new AlignmentEvidenceStore(catalog, assetAlignmentOwner(assets, acquisitions));
+  const source = {
+    ...alignmentSource,
+    supportDigest: selected.supportDigest,
+    engine: models.alignment("nemo-ctc110").engine,
+  };
+  const values = alignmentOutput();
+  for (const field of ["nativeReceipt", "report"] as const) {
+    const value = JSON.parse(values[field]);
+    value.modelSha256 = source.engine.modelSha256;
+    values[field] = JSON.stringify(value);
+  }
+  const identity = {
+    owner: { kind: "asset" as const, id: assetId },
+    generation: "retained-alignment-g1",
+    policy: "alignment-v1" as const,
+  };
+  const staged = evidence.stage(identity, source, values);
+  catalog.transaction(() => {
+    staged.publish();
+    new ResourceReferences(catalog).retain("alignment-generation", { kind: "asset", id: assetId }, [
+      alignmentGenerationResource(identity),
+    ]);
+  });
+  return { evidence, source, values, identity };
 }

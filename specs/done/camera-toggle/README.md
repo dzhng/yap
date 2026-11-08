@@ -120,7 +120,7 @@ has no call left to answer, so it writes a `camera off:` line on native's stderr
 
 ### Existing recordings keep working
 
-[`camera-library-preservation.mjs`](../../../packages/test-harness/editing/camera-library-preservation.mjs)
+[`camera-library-preservation.mjs`](https://github.com/dzhng/yap/blob/4b4e708c/packages/test-harness/editing/camera-library-preservation.mjs)
 is the standing check. It opens a library on an APFS clone with the code under test, hashes every
 original member before and after, and requires each recording to keep its states, admit, re-read
 its receipt, and deliver frames rendered by this build. Admission must state exactly the receipt's
@@ -158,14 +158,14 @@ Tests and harnesses that pin it:
 - [`SelectedCameraInputTests`](../../../helpers/mac/Tests/YapCaptureTests/SelectedCameraInputTests.swift):
   the session lifecycle on a fixture device: reserved-never-on, off-on-off-on, races with stop and
   discard, device loss on and off, the toggle limit, release failures.
-- [`camera-toggle-controls.mjs`](../../../packages/test-harness/editing/camera-toggle-controls.mjs):
+- [`camera-toggle-controls.mjs`](https://github.com/dzhng/yap/blob/4b4e708c/packages/test-harness/editing/camera-toggle-controls.mjs):
   the real controller, host channel, service, CLI and MCP with a fixture camera; toggle journeys
   through admission, composition (the camera is transparent in a gap) and crash recovery; a
   never-on take; a camera-only refusal.
-- [`camera-source-admission.mjs`](../../../packages/test-harness/editing/camera-source-admission.mjs):
+- [`camera-source-admission.mjs`](https://github.com/dzhng/yap/blob/4b4e708c/packages/test-harness/editing/camera-source-admission.mjs):
   admits the native suite's gapped takes through the service; the microsecond probe equals the
   receipt's intervals.
-- [`camera-library-preservation.mjs`](../../../packages/test-harness/editing/camera-library-preservation.mjs)
+- [`camera-library-preservation.mjs`](https://github.com/dzhng/yap/blob/4b4e708c/packages/test-harness/editing/camera-library-preservation.mjs)
   with the pre-toggle corpus (above).
 - Core: `evidence.test.ts`, `acquisitions.test.ts` (including "a 0.1.33 camera proof admits
   unchanged", using the proof 0.1.33 stored for corpus B), `capture-acquisition.test.ts`.

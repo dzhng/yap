@@ -46,8 +46,10 @@ final class AudioWaveWriter {
                 commonFormat: .pcmFormatFloat32, interleaved: true)
         } catch {
             destination.discard()
-            throw NativeFailure.decodeFailed(
-                "Cannot open audio output: \(error.localizedDescription)")
+            let message = "Cannot open audio output: \(error.localizedDescription)"
+            // A process out of descriptors drains, so a retry can succeed; any other failure is final.
+            throw descriptorsExhausted(error)
+                ? NativeFailure("CAPACITY_EXCEEDED", message) : NativeFailure.decodeFailed(message)
         }
     }
     func write(_ block: AudioPCMBlock) throws {
@@ -77,4 +79,10 @@ final class AudioWaveWriter {
         file = nil
         destination.discard()
     }
+}
+
+private func descriptorsExhausted(_ error: Error) -> Bool {
+    let error = error as NSError
+    return error.domain == NSPOSIXErrorDomain ? [EMFILE, ENFILE].contains(Int32(error.code))
+        : error.code == Int(kAudio_TooManyFilesOpenError)
 }

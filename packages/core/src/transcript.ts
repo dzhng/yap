@@ -1,3 +1,4 @@
+import { JsonDocument } from "./json-stream.js";
 import {
   signedTimeValueSchema,
   timeValueSchema,
@@ -24,13 +25,13 @@ import { z } from "zod";
 import type { CaptureStore } from "./capture-store.js";
 import { CatalogError, type Catalog } from "./catalog.js";
 import { createOutputIssueTable, wordIssues } from "./issues.js";
-import { ownerIdentity, type JobOwner } from "./jobs.js";
-import type { PageQuery } from "./ordered-pages.js";
+import { ownerIdentity, type Owner } from "./jobs.js";
+import type { PageQuery } from "./evidence-read.js";
 import type { SpeechEnginePins, SpeechModelRequest } from "./models.js";
 import type { TimeRange } from "./presentation-time.js";
 import { wordKind, wordKindPolicy, type WordKind } from "./word-kind.js";
 
-export const transcriptPolicy = "transcript-v4";
+export const transcriptPolicy = "transcript-v5";
 
 const speechWindowRecipe = "source-windows-20s-context4s-guard1s-v3";
 /** Retained and replayed execution keeps whatever recipe produced it; it is never relabelled. */
@@ -142,7 +143,7 @@ export const portableTranscriptSchema = z
   .strictObject({
     owner: z.strictObject({
       kind: z.literal("asset"),
-      assetId: z.string().regex(/^[a-f0-9]{64}$/),
+      id: z.string().regex(/^[a-f0-9]{64}$/),
     }),
     sourceId: z.string().regex(/^[a-f0-9]{64}$/),
     generation: z
@@ -162,23 +163,22 @@ export const portableTranscriptSchema = z
       })),
     engine: transcriptEngineSchema,
     execution: historicalSpeechExecutionSchema,
-    available: z.array(selectionRangeSchema).max(10000),
+    available: z.array(selectionRangeSchema),
     track: z.strictObject({
       streamId: engineLabel,
       sourceOffsetUs: signedTimeValueSchema,
     }),
-    segmentCount: portableInteger.max(10000),
+    segmentCount: portableInteger,
     wordCount: portableInteger,
     gapCount: portableInteger,
     maxWordUs: portableInteger,
     raw: z.strictObject({
-      bytes: portableInteger.max(268435456),
+      bytes: portableInteger,
       sha256: z.string().regex(/^[a-f0-9]{64}$/),
     }),
   })
   .refine(
-    (value) =>
-      value.owner.assetId === value.sourceId && value.source.streamId === value.track.streamId,
+    (value) => value.owner.id === value.sourceId && value.source.streamId === value.track.streamId,
     "Transcript source differs from its owner and track",
   );
 export type PortableTranscript = z.infer<typeof portableTranscriptSchema>;
@@ -188,9 +188,14 @@ export function transcriptGenerationResource(
   return JSON.stringify([...ownerIdentity(identity.owner), identity.generation]);
 }
 export function portableTranscript(metadata: TranscriptMetadata): PortableTranscript {
-  return portableTranscriptSchema.parse({ ...metadata, track: omit(metadata.track, "source") });
+  const value = metadata as TranscriptMetadata & { raw: { sizeBytes?: number; bytes?: number } };
+  const raw =
+    value.raw.sizeBytes !== undefined
+      ? { bytes: value.raw.sizeBytes, sha256: value.raw.sha256 }
+      : value.raw;
+  return portableTranscriptSchema.parse({ ...value, raw, track: omit(value.track, "source") });
 }
-export type TranscriptOwner = Extract<JobOwner, { kind: "recording" | "asset" }>;
+export type TranscriptOwner = Owner<"recording" | "asset">;
 export type TranscriptIdentity = Readonly<{
   owner: TranscriptOwner;
   sourceId: string;
@@ -222,6 +227,43 @@ export type TranscriptMetadata = TranscriptIdentity &
     source: TranscriptSource;
     track: Pick<SpeechTranscriptionRequest["track"], "source" | "streamId" | "sourceOffsetUs">;
   };
+/** Retained public metadata uses unit-bearing byte names; catalog rows stay internal. */
+export function publicTranscriptMetadata(value: TranscriptMetadata) {
+  return { ...value, raw: { sizeBytes: value.raw.bytes, sha256: value.raw.sha256 } };
+}
+export function parsePublicTranscriptMetadata(value: unknown): TranscriptMetadata {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Transcript metadata is unavailable");
+  const record = value as Record<string, any>;
+  if (!record.raw || "bytes" in record.raw || !Number.isSafeInteger(record.raw.sizeBytes))
+    throw new CatalogError("ARTIFACT_CHANGED", "Transcript metadata uses an obsolete shape");
+  return {
+    ...record,
+    raw: { bytes: record.raw.sizeBytes, sha256: record.raw.sha256 },
+  } as TranscriptMetadata;
+}
+export function publicTranscriptIssues(value: readonly Issue[]) {
+  return value.map((issue) => {
+    const evidence = issue.evidence;
+    if (
+      !evidence ||
+      typeof evidence !== "object" ||
+      typeof (evidence as any).endSeconds !== "number"
+    )
+      return issue;
+    const { endSeconds, startSeconds, ...rest } = evidence as Record<string, unknown>;
+    return {
+      ...issue,
+      evidence: {
+        ...rest,
+        ...(typeof startSeconds === "number"
+          ? { startUs: Math.round(startSeconds * 1_000_000) }
+          : { startSeconds }),
+        endUs: Math.round((endSeconds as number) * 1_000_000),
+      },
+    } as Issue;
+  });
+}
 export type RecordingTranscriptIdentity = Readonly<{
   recordingId: string;
   sourceId: string;
@@ -237,7 +279,7 @@ export function recordingTranscriptIdentity(
   value: RecordingTranscriptIdentity,
 ): TranscriptIdentity {
   return {
-    owner: { kind: "recording", recordingId: value.recordingId },
+    owner: { kind: "recording", id: value.recordingId },
     sourceId: value.sourceId,
     generation: value.generation,
   };
@@ -252,7 +294,7 @@ export function recordingTranscript(metadata: TranscriptMetadata): RecordingTran
     throw new CatalogError("INVALID_EVIDENCE", "Recording transcript requires a recording source");
   return {
     ...details,
-    recordingId: owner.recordingId,
+    recordingId: owner.id,
     sourceGeneration: source.sourceGeneration,
     narration: { source: track.source, sourceOffsetUs: track.sourceOffsetUs },
   };
@@ -261,9 +303,9 @@ export function recordingTranscriptOwner(store: CaptureStore) {
   return (identity: TranscriptIdentity, source: TranscriptSource): void => {
     if (identity.owner.kind !== "recording" || source.kind !== "recording")
       throw new CatalogError("INVALID_EVIDENCE", "Recording transcript requires a recording owner");
-    const recording = store.get(identity.owner.recordingId);
+    const recording = store.get(identity.owner.id);
     if (
-      !store.isAvailable(recording.recordingId) ||
+      !store.isAvailable(recording.id) ||
       recording.sourceId !== identity.sourceId ||
       recording.sourceDurationUs === null ||
       recording.sourceDurationUs !== source.durationUs
@@ -307,15 +349,13 @@ export type TranscriptRecords = {
   gapRecords(identity: TranscriptIdentity, query: TranscriptRecordQuery): TranscriptGapRecord[];
 };
 
-const maxBytes = 268_435_456;
-const lineBytes = 67_108_864;
 const time = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const range = z.object({ startUs: time, endUs: time });
 const label = z.string().min(1).max(128);
 const receiptSchema = z.object({
   output: z.object({
     file: z.string(),
-    bytes: time.max(maxBytes),
+    bytes: time,
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   engine: z.object({
@@ -325,21 +365,19 @@ const receiptSchema = z.object({
     encoderPrecision: label,
     computeUnits: label,
   }),
-  segments: z
-    .array(
-      z.object({
-        ordinal: time,
-        source: selectionRangeSchema,
-        state: z.enum(["transcribed", "skipped"]),
-        reason: z.literal("too_short").optional(),
-        wordCount: time,
-        owned: selectionRangeSchema,
-      }),
-    )
-    .max(10_000),
+  segments: z.array(
+    z.object({
+      ordinal: time,
+      source: selectionRangeSchema,
+      state: z.enum(["transcribed", "skipped"]),
+      reason: z.literal("too_short").optional(),
+      wordCount: time,
+      owned: selectionRangeSchema,
+    }),
+  ),
   wordCount: time,
   execution: historicalSpeechExecutionSchema,
-  available: z.array(selectionRangeSchema).max(10000),
+  available: z.array(selectionRangeSchema),
 });
 const lineSchema = z.object({
   ordinal: time,
@@ -450,7 +488,7 @@ export class TranscriptStore implements TranscriptRecords {
     if (entries)
       for await (const entry of entries) {
         signal.throwIfAborted();
-        const owner = { kind: "asset" as const, assetId: entry.name };
+        const owner = { kind: "asset" as const, id: entry.name };
         try {
           await this.reclaim(
             owner,
@@ -477,7 +515,7 @@ export class TranscriptStore implements TranscriptRecords {
         if (row.state !== "complete")
           try {
             await this.remove(
-              { owner: { kind: "asset", assetId: row.ownerId }, generation: row.generation },
+              { owner: { kind: "asset", id: row.ownerId }, generation: row.generation },
               signal,
             );
           } catch (error) {
@@ -541,7 +579,7 @@ export class TranscriptStore implements TranscriptRecords {
       stale: string[] = [];
     for (const row of rows) {
       if (row.state !== "complete")
-        throw new CatalogError("PROCESSING_BUSY", "Transcript generation is incomplete", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Transcript generation is incomplete", {});
       const value = readable(row);
       if (value && currentTranscript(value)) generations.push(portableTranscript(value));
       else stale.push(row.generation);
@@ -553,7 +591,7 @@ export class TranscriptStore implements TranscriptRecords {
       this.home,
       "transcripts",
       "assets",
-      value.owner.assetId,
+      value.owner.id,
       value.generation,
       "raw.jsonl",
     );
@@ -582,7 +620,7 @@ export class TranscriptStore implements TranscriptRecords {
     );
     const segments = this.store.catalog
       .prepare(
-        `SELECT ordinal,source,owned,state,reason FROM transcript_segments WHERE ${where} ORDER BY ordinal LIMIT 10001`,
+        `SELECT ordinal,source,owned,state,reason FROM transcript_segments WHERE ${where} ORDER BY ordinal`,
       )
       .all(...ownerIdentity(value.owner), value.generation) as {
       ordinal: number;
@@ -648,7 +686,6 @@ export class TranscriptStore implements TranscriptRecords {
           "PROCESSING_BUSY",
           "Transcript generation is already being staged",
           {},
-          true,
         );
       const existing = readable(prior);
       if (
@@ -694,7 +731,7 @@ export class TranscriptStore implements TranscriptRecords {
     try {
       const output = await this.reserve(expected);
       owned = true;
-      const copied = await copyImportedFile(raw.path, output, signal, raw, 268435456);
+      const copied = await copyImportedFile(raw.path, output, signal, raw);
       if (copied.bytes !== expected.raw.bytes || copied.sha256 !== expected.raw.sha256)
         throw new CatalogError("INVALID_PACKAGE", "Transcript raw bytes differ from inventory");
       const pins = omit(
@@ -748,8 +785,8 @@ export class TranscriptStore implements TranscriptRecords {
     let path = this.home;
     const names =
       owner.kind === "recording"
-        ? ["recordings", component(owner.recordingId), "evidence", "transcript"]
-        : ["transcripts", "assets", component(owner.assetId)];
+        ? ["recordings", component(owner.id), "evidence", "transcript"]
+        : ["transcripts", "assets", component(owner.id)];
     for (const name of names) {
       path = join(path, name);
       if (create)
@@ -965,10 +1002,10 @@ export class TranscriptStore implements TranscriptRecords {
       previousStartUs = 0,
       connectedRun = -1;
     let previousSegment: SpeechTranscriptionReceipt["segments"][number] | undefined;
-    const consume = async (bytes: Buffer) => {
+    const consume = async (document: JsonDocument) => {
       let value: unknown;
       try {
-        value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+        value = document.finish();
       } catch {
         invalid("Raw transcript line is not JSON");
       }
@@ -1054,8 +1091,8 @@ export class TranscriptStore implements TranscriptRecords {
     let bytes = 0;
     try {
       if (!(await handle.stat()).isFile()) invalid("Raw transcript is not a regular file");
-      // A decoded window can be a large raw line; collect chunks without re-copying a growing buffer.
-      let parts: Buffer[] = [],
+      // Provider windows decode incrementally; no whole raw line is retained beside its words.
+      let document = new JsonDocument(),
         partBytes = 0;
       for await (const chunk of handle.createReadStream({ highWaterMark: 65_536, signal })) {
         bytes += chunk.length;
@@ -1064,16 +1101,16 @@ export class TranscriptStore implements TranscriptRecords {
         let start = 0,
           newline: number;
         while ((newline = chunk.indexOf(10, start)) >= 0) {
-          await consume(Buffer.concat([...parts, chunk.subarray(start, newline)]));
-          parts = [];
+          document.write(chunk.subarray(start, newline));
+          await consume(document);
+          document = new JsonDocument();
           partBytes = 0;
           start = newline + 1;
         }
         if (start < chunk.length) {
-          parts.push(chunk.subarray(start));
+          document.write(chunk.subarray(start));
           partBytes += chunk.length - start;
         }
-        if (partBytes > lineBytes) invalid("Raw transcript line exceeds its read budget");
       }
       await flush();
       if (
@@ -1273,7 +1310,18 @@ export class TranscriptStore implements TranscriptRecords {
 
   /** The caller has fenced this owner and stopped every transcript producer. */
   async purge(owner: TranscriptOwner, signal: AbortSignal): Promise<void> {
-    await this.reclaim(owner, () => false, signal);
+    for (;;) {
+      signal.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT generation FROM transcript_generations WHERE ownerKind=? AND ownerId=? ORDER BY generation LIMIT 1",
+        )
+        .get(...ownerIdentity(owner)) as { generation: string } | undefined;
+      if (!row) break;
+      await this.remove({ owner, generation: row.generation }, signal);
+    }
+    const parent = await this.parent(owner);
+    if (parent) await rm(parent, { recursive: true, force: true });
   }
 }
 
@@ -1322,8 +1370,8 @@ function metadata(row: GenerationRow): TranscriptMetadata {
   return {
     owner:
       row.ownerKind === "recording"
-        ? { kind: "recording", recordingId: row.ownerId }
-        : { kind: "asset", assetId: row.ownerId },
+        ? { kind: "recording", id: row.ownerId }
+        : { kind: "asset", id: row.ownerId },
     sourceId: row.sourceId,
     generation: row.generation,
     source: JSON.parse(row.source) as TranscriptSource,

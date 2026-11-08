@@ -51,7 +51,8 @@ export function voiceRenderer(
       );
     signal.throwIfAborted();
     if (modelId !== voiceProfile.id)
-      throw new CatalogError("UNKNOWN_MODEL", "Voice execution profile is not registered", {
+      throw new CatalogError("NOT_FOUND", "Voice execution profile is not registered", {
+        kind: "model",
         modelId,
       });
     const settings = resolveVoiceSettings(request.generation, request.seed);

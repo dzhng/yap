@@ -99,37 +99,6 @@ func runSelectedCaptureMediaTests(output: String, corpus: String) async throws {
     precondition(retried.hostOriginUs == retryInput.finalClock?.originUs && retried.pauses == retryInput.finalClock?.pauses)
     precondition(retried.tracks.map(\.role) == ["narration", "video"] && retried.cleanupFailure == nil)
     try JSONEncoder().encode(retried).write(to: root.appendingPathComponent("retry-result.json"))
-    let limited = PrerecordedCaptureInput(source: video)
-    limited.audio = input.audio
-    limited.probeDirectory = root.appendingPathComponent("limited")
-    limited.probeMaximumRows = 3
-    let bounded = NativeCapture(prepareInput: { _, _ in limited })
-    do {
-        try await bounded.start(CaptureRequest(source: CaptureSource(kind: "offline-prerecorded"),
-            outputDirectory: limited.probeDirectory!.path, microphone: true))
-        preconditionFailure("Evidence failure during startup must refuse recording")
-    } catch let error as CaptureFailure { precondition(error.code == "EVIDENCE_LIMIT") }
-    precondition(limited.stops == 1 && limited.discards == 1 && limited.finalizations == 0 && bounded.deviceState == "idle")
-    let firstFrame = root.appendingPathComponent("limit-input.mov")
-    try await RecoveryFixture.writeVariableDurationVideo(to: firstFrame, timesUs: [0], endUs: 33333)
-    let running = PrerecordedCaptureInput(source: firstFrame)
-    running.probeDirectory = root.appendingPathComponent("limited-after-start")
-    // The one picture offers two camera callbacks during startup; the next one reaches the limit.
-    running.probeMaximumRows = 2
-    let boundedRunning = NativeCapture(prepareInput: { _, _ in running })
-    try await boundedRunning.start(CaptureRequest(source: CaptureSource(kind: "offline-prerecorded"),
-        outputDirectory: running.probeDirectory!.path, microphone: false, systemAudio: false))
-    let interrupted = InputGate()
-    boundedRunning.onInterruption = { reason in precondition(reason.code == "EVIDENCE_LIMIT"); interrupted.release() }
-    running.probe!.writer.queue.sync { () -> Void in
-        running.probe!.accept(running.finalCameraSample!, role: .camera, from: CMClockGetHostTimeClock())
-    }
-    await interrupted.wait()
-    let stopped = try await boundedRunning.stop()
-    precondition(stopped.state == "interrupted" && stopped.failure?.code == "EVIDENCE_LIMIT")
-    let retained = try String(contentsOf: running.probeDirectory!.appendingPathComponent("timestamps.jsonl"), encoding: .utf8)
-    precondition(retained.split(separator: "\n").count == 2 && running.finalizations == 1)
-    try JSONEncoder().encode(stopped).write(to: root.appendingPathComponent("limit-result.json"))
     print("PASS shared ingress camera offset/pause, separate results, exact canonical microphone PCM, final pause closure and earlier failure precedence")
 }
 

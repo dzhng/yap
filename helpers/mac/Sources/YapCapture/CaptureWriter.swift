@@ -1,77 +1,24 @@
 @preconcurrency import AVFoundation
+import AppKit
 import Foundation
+import YapMedia
+import YapProtocol
 import Synchronization
 @preconcurrency import ScreenCaptureKit
-
-private final class TrackWriter {
-    let role: String
-    let file: String
-    let writer: AVAssetWriter
-    let input: AVAssetWriterInput
-    let sampleRate: Double?
-    let channelCount: UInt32?
-    let pcm: CapturePCM?
-    var first: Int64?
-    var lastAcceptedUs: Int64?
-    var end: Int64?
-    var samples = 0
-    var physicalFrames: Int64 = 0
-    var heldTailUs: Int64 = 0
-
-    init(
-        role: String, directory: String, settings: [String: Any], format: CMFormatDescription? = nil
-    ) throws {
-        self.role = role
-        pcm = try role == "video" ? nil : format.map { try CapturePCM(format: $0) }
-        sampleRate = format.flatMap {
-            CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mSampleRate
-        }
-        channelCount = format.flatMap {
-            CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame
-        }
-        file = role == "video" ? "video.mov" : "\(role).packed.mov"
-        writer = try AVAssetWriter(
-            outputURL: URL(fileURLWithPath: directory).appendingPathComponent(file), fileType: .mov)
-        // Video endpoints use source-clock ticks; packed PCM endpoints use exact native frames.
-        let timescale: Int32
-        if role == "video" { timescale = 1_000_000 }
-        else {
-            guard let rate = sampleRate.flatMap({ Int32(exactly: $0) }), rate > 0 else {
-                throw CaptureFailure("INVALID_AUDIO_FORMAT", "PCM rate cannot identify its native sample grid.")
-            }
-            timescale = rate
-        }
-        writer.movieTimeScale = timescale
-        writer.movieFragmentInterval = CMTime(value: 5, timescale: 1)
-        writer.initialMovieFragmentInterval = CMTime(value: 1, timescale: 1)
-        input = AVAssetWriterInput(
-            mediaType: role == "video" ? .video : .audio, outputSettings: settings,
-            sourceFormatHint: pcm?.format ?? format)
-        if role == "video" { input.mediaTimeScale = timescale }
-        input.expectsMediaDataInRealTime = true
-        guard writer.canAdd(input) else {
-            throw CaptureFailure("ENCODER_UNAVAILABLE", "Cannot encode \(role).")
-        }
-        writer.add(input)
-        guard writer.startWriting() else {
-            throw writer.error ?? CaptureFailure("WRITE_FAILED", "Cannot start \(role) writer.")
-        }
-        writer.startSession(atSourceTime: .zero)
-    }
-}
 
 // All writer and clock mutations run on this queue, including control boundaries.
 package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable {
     package let queue = DispatchQueue(label: "com.dzhng.yap.capture-writer")
-    private let journal: CaptureJournal
-    package var packedJournalLease: CaptureJournalLease? { journal.schemaVersion == 2 ? journal.lease : nil }
+    let journal: CaptureJournal
+    package var packedJournalLease: CaptureJournalLease? { JournalSchema.isPacked(journal.schemaVersion) ? journal.lease : nil }
+    package var journalSchemaVersion: Int { journal.schemaVersion }
     package var requestedAudioRoles: [String] {
         (request.microphone ? ["narration"] : []) + (request.systemAudio ? ["system"] : [])
     }
     private let request: CaptureRequest
     private let width: Int
     private let height: Int
-    private var clock = CaptureClock()
+    var clock = CaptureClock()
     /// A copy of the clock for readers outside this queue. Elapsed playback time is asked for while
     /// a take is being finalized, and finalization occupies the writer queue for as long as the
     /// media takes to close; a reader that waited for the queue would stall its own thread behind
@@ -82,32 +29,53 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     private var dropped: [String: Int] = [:]
     private var omitted: [String: Int] = [:]
     private var stopHostUs: Int64?
+    let nowUs: @Sendable () -> Int64
     private let onFailure: @Sendable (CaptureFailure) -> Void
-    private var failure: CaptureFailure?
-    private var finishing = false
+    var failure: CaptureFailure?
+    var finishing = false
     private var lastVideo: CMSampleBuffer?
+    /// A still screen delivers no frames, and the video writer only indexes media on disk once
+    /// encoded samples pass its fragment interval. While the screen is still, the last frame repeats
+    /// at 10 frames a second, so an open take keeps reaching disk and a killed process loses only
+    /// its last seconds. The encoder holds several frames before writing any, so a slower floor
+    /// leaves a short take with no index at all. The repeated pixels are the ones already on screen.
+    private static let idleRepeatUs: Int64 = 100_000
+    package var onMaximumDuration: (@Sendable () -> Void)?
+    private var maximumDurationReached = false
+    private var idleRepeat: DispatchSourceTimer?
+    /// Host time the last video frame was written, real or repeated. Stillness is time without a
+    /// delivery, not a gap in timestamps: a frame can arrive stamped well before it is delivered.
+    private var lastVideoWrittenHostUs: Int64?
     private let requestedSourceRect: CGRect?
-    private var cursor = CursorTrack()
+    var cursor = CursorTrack()
     private var sampler: CursorSampler?
+    private var cursorFlush: DispatchSourceTimer?
     private var zeroOriginHeight: Double?
+    var marks = LiveMarks()
+    package var onMarkUpdate: (@Sendable (CaptureMarkUpdate) -> Void)?
 
     package init(
         request: CaptureRequest, width: Int, height: Int, sessionID: String,
-        requestedSourceRect: CGRect?, onFailure: @escaping @Sendable (CaptureFailure) -> Void
+        requestedSourceRect: CGRect?, nowUs: @escaping @Sendable () -> Int64 = CaptureHostTime.nowUs,
+        onFailure: @escaping @Sendable (CaptureFailure) -> Void
     ) throws {
+        self.nowUs = nowUs
         self.onFailure = onFailure
         self.request = request
         self.width = width
         self.height = height
         self.requestedSourceRect = requestedSourceRect
+        self.marks.recognizer = request.source.kind == "camera"
+            ? nil : MarkRecognizer(windowUnderPoint: LiveWindowSource())
         try FileManager.default.createDirectory(
             atPath: request.outputDirectory, withIntermediateDirectories: true)
         journal = try CaptureJournal(
             directory: request.outputDirectory,
             header: CaptureJournalHeader(
-                schemaVersion: 2, sessionID: sessionID, source: request.source, width: width,
+                schemaVersion: JournalSchema.current, sessionID: sessionID, source: request.source, width: width,
                 height: height,
-                microphone: request.microphone, systemAudio: request.systemAudio))
+                microphone: request.microphone, systemAudio: request.systemAudio,
+                cursorSampling: CursorSampling(holds: true)))
         tracks["video"] = try TrackWriter(
             role: "video", directory: request.outputDirectory,
             settings: [
@@ -130,20 +98,25 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             self.sampler = sampler
             sampler.start()
         }
+        guard request.source.kind != "camera" else { return }
+        installMarkMonitors()
     }
 
     package func pause() {
         queue.sync {
             sampler?.suspend()
-            let hostUs = CaptureHostTime.nowUs()
+            cursorFlush?.schedule(deadline: .distantFuture)
+            let hostUs = nowUs()
             clock.pause(at: hostUs)
             publishClock()
+            marks.recognizer?.updateCaptureState(
+                paused: true, hasFirstFrame: clock.originUs != nil)
             _ = record { try self.journal.recordPauseBegan(hostUs: hostUs) }
         }
     }
     package func resume() {
         queue.sync {
-            resumeClock(at: CaptureHostTime.nowUs())
+            resumeClock(at: nowUs())
             if !finishing { sampler?.resume() }
         }
     }
@@ -152,12 +125,16 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         let count = clock.pauses.count
         clock.resume(at: hostUs)
         publishClock()
+        marks.recognizer?.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
         if paused {
+            cursor.resume()
+            scheduleCursorFlush()
             let pause = clock.pauses.count > count ? clock.pauses.last : nil
             _ = record { try self.journal.recordPauseEnded(hostUs: hostUs, pause: pause) }
         }
     }
-    private func record(_ write: () throws -> Void) -> Bool {
+    func record(_ write: () throws -> Void) -> Bool {
         do {
             try write()
             return true
@@ -172,10 +149,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     }
     /// Records one reported transition in the take's journal and returns its sequence, so the
     /// number the service stores is the number this file carries.
-    func note(_ state: String, reason: String?) -> Int? {
+    func note(_ state: String, reason: String?, completionReason: String? = nil) -> Int? {
         queue.sync {
             var sequence: Int?
-            _ = record { sequence = try self.journal.recordLifecycle(state: state, reason: reason) }
+            _ = record { sequence = try self.journal.recordLifecycle(state: state, reason: reason, completionReason: completionReason) }
             return sequence
         }
     }
@@ -184,7 +161,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     /// answered from the published copy, so asking what time a take has reached never waits behind
     /// the take's own encoding or finalization.
     func elapsedSourceUs() -> Int64? {
-        publishedClock.withLock { $0.elapsedSourceUs(at: CaptureHostTime.nowUs()) }
+        publishedClock.withLock { $0.elapsedSourceUs(at: nowUs()) }
     }
 
     private func publishClock() {
@@ -193,10 +170,13 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
     }
 
     package func seal() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
+            cursorFlush?.cancel()
+            idleRepeat?.cancel()
             if stopHostUs == nil {
-                let endpoint = CaptureHostTime.nowUs()
+                let endpoint = nowUs()
                 stopHostUs = endpoint
                 clock.seal(at: endpoint)
                 publishClock()
@@ -206,8 +186,11 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         }
     }
     package func cancel() {
+        removeMarkMonitors()
         queue.sync {
             sampler?.stop()
+            cursorFlush?.cancel()
+            idleRepeat?.cancel()
             finishing = true
             tracks.values.forEach { $0.writer.cancelWriting() }
             journal.lease.release()
@@ -228,10 +211,42 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     hostUs: reading.hostUs, zeroOriginHeight: reading.zeroOriginHeight)
             }
         }
-        guard failure == nil,
-            let batch = cursor.accept(reading, sourceUs: clock.sourceTime(for: reading.hostUs))
-        else { return }
-        _ = record { try self.journal.recordCursorSamples(batch) }
+        let sourceUs = clock.sourceTime(for: reading.hostUs)
+        guard failure == nil else { return }
+        if let batch = cursor.accept(reading, sourceUs: sourceUs) {
+            _ = record { try self.journal.recordCursorSamples(batch) }
+        }
+        guard var recognizer = marks.recognizer, sourceUs != nil else { return }
+        recognizer.updateCaptureState(
+            paused: clock.isPaused, hasFirstFrame: clock.originUs != nil)
+        let events = recognizer.feed(
+            sample: MarkSample(
+                hostUs: reading.hostUs, shift: reading.shift, otherModifiers: reading.otherModifiers,
+                point: reading.global, buttonDown: reading.buttons != 0))
+        marks.recognizer = recognizer
+        append(events)
+        publishActiveStroke(recognizer)
+    }
+
+    private func scheduleCursorFlush() {
+        guard !finishing, !clock.isPaused, request.source.kind != "camera",
+            let sourceUs = clock.elapsedSourceUs(at: nowUs()) else { return }
+        let interval = CursorTrack.defaultFlushIntervalUs
+        if cursorFlush == nil {
+            let timer = DispatchSource.makeTimerSource(queue: queue)
+            timer.setEventHandler { [weak self] in
+                guard let self, !self.finishing, !self.clock.isPaused,
+                    let at = self.clock.elapsedSourceUs(at: self.nowUs()) else { return }
+                let samples = self.cursor.flush(through: at)
+                if !samples.isEmpty {
+                    _ = self.record { try self.journal.recordCursorSamples(samples) }
+                }
+            }
+            cursorFlush = timer
+            timer.resume()
+        }
+        cursorFlush?.schedule(deadline: .now() + .microseconds(Int(interval - sourceUs % interval)),
+            repeating: .microseconds(Int(interval)))
     }
 
     private func flushCursorSamples() {
@@ -319,6 +334,8 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             // The first usable primary picture establishes zero before screen geometry is placed.
             if usable, clock.start(at: hostUs, durationUs: durationUs) {
                 publishClock()
+                scheduleCursorFlush()
+                if screenInfo != nil { startIdleRepeat() }
                 guard record({
                     try self.journal.recordPCMOrigin(JournalPCMOrigin(rawPTS: pts, declaredHostUs: hostUs),
                         placedPauses: self.clock.pauses)
@@ -329,9 +346,14 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             }
             guard usable else { return }
         }
+        guard !finishAtMaximumDuration(at: hostUs) else { return }
         guard var sourceUs = clock.sourceTime(for: hostUs, durationUs: role == "video" ? durationUs : 0) else {
             omitted[role, default: 0] += 1
             return
+        }
+        if role == "video", let lastUs = tracks["video"]?.lastAcceptedUs, sourceUs <= lastUs {
+            // A screen change delivered after a repeat of the still frame plays right after it.
+            sourceUs = lastUs + 1
         }
         do {
             if tracks[role] == nil {
@@ -434,12 +456,78 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                     declaredFirstFrame: placement.firstFrame, rawPTS: pts, removedPauseUs: placement.removedPauseUs)) }) else { return }
             } else {
                 lastVideo = retimed
+                lastVideoWrittenHostUs = nowUs()
                 if firstAppend {
                     guard record({ try self.journal.recordTrackStarted(
                         role: role, file: track.file, firstSourceUs: sourceUs,
                         sampleRate: track.sampleRate, channelCount: track.channelCount) }) else { return }
                 }
             }
+        } catch {
+            let reason =
+                (error as? CaptureFailure)
+                ?? CaptureFailure("WRITE_FAILED", error.localizedDescription)
+            failure = reason
+            onFailure(reason)
+        }
+    }
+
+    private func startIdleRepeat() {
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + .milliseconds(50), repeating: .milliseconds(50))
+        timer.setEventHandler { [weak self] in self?.repeatIdleFrame() }
+        idleRepeat = timer
+        timer.resume()
+    }
+
+    /// Source seconds × the take requirement × 1; CaptureClock excludes paused time.
+    /// Pin the endpoint before asking the ordinary asynchronous finish owner to close inputs.
+    private func finishAtMaximumDuration(at hostUs: Int64) -> Bool {
+        if maximumDurationReached { return true }
+        guard !finishing, failure == nil, let elapsed = clock.elapsedSourceUs(at: hostUs),
+            elapsed >= Requirements.maximumTakeUs else { return false }
+        maximumDurationReached = true
+        stopHostUs = hostUs - (elapsed - Requirements.maximumTakeUs)
+        clock.seal(at: stopHostUs!)
+        publishClock()
+        idleRepeat?.cancel()
+        onMaximumDuration?()
+        return true
+    }
+
+    /// Repeats the last written frame once the screen has been still for `idleRepeatUs`, that long
+    /// after the previous frame's end and never past the take's clock, which excludes pauses.
+    private func repeatIdleFrame() {
+        let hostNowUs = nowUs()
+        if finishAtMaximumDuration(at: hostNowUs) { return }
+        guard !finishing, failure == nil, let video = tracks["video"], let last = lastVideo,
+            let end = video.end, let writtenUs = lastVideoWrittenHostUs,
+            hostNowUs - writtenUs >= Self.idleRepeatUs,
+            let sourceNowUs = clock.sourceTime(for: hostNowUs), video.input.isReadyForMoreMediaData
+        else { return }
+        let endUs = min(end + hostNowUs - writtenUs, sourceNowUs)
+        let ptsUs = endUs - 33_333
+        guard ptsUs > video.lastAcceptedUs ?? -1 else { return }
+        var timing = CMSampleTimingInfo(
+            duration: CMTime(value: 33_333, timescale: 1_000_000),
+            presentationTimeStamp: CMTime(value: ptsUs, timescale: 1_000_000),
+            decodeTimeStamp: .invalid)
+        do {
+            var repeated: CMSampleBuffer?
+            let status = CMSampleBufferCreateCopyWithNewTiming(
+                allocator: kCFAllocatorDefault, sampleBuffer: last, sampleTimingEntryCount: 1,
+                sampleTimingArray: &timing, sampleBufferOut: &repeated)
+            guard status == noErr, let repeated else {
+                throw CaptureFailure("RETIME_FAILED", "Cannot retime an idle frame: \(status).")
+            }
+            guard video.input.append(repeated) else {
+                throw video.writer.error
+                    ?? CaptureFailure("WRITE_FAILED", "Cannot append a repeated idle frame.")
+            }
+            video.lastAcceptedUs = ptsUs
+            video.end = endUs
+            video.samples += 1
+            lastVideoWrittenHostUs = hostNowUs
         } catch {
             let reason =
                 (error as? CaptureFailure)
@@ -483,8 +571,10 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             queue.async {
                 self.finishing = true
                 self.sampler?.stop()
+                self.idleRepeat?.cancel()
+                self.cursorFlush?.cancel()
                 self.flushCursorSamples()
-                let endHost = self.stopHostUs ?? CaptureHostTime.nowUs()
+                let endHost = self.stopHostUs ?? self.nowUs()
                 self.resumeClock(at: endHost)
                 let duration = max(0, self.clock.sourceTime(for: endHost) ?? 0)
                 self.failure = externalFailure ?? self.failure
@@ -539,19 +629,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
         sourceDurationUs: Int64, continuation: CheckedContinuation<CaptureResult, Never>
     ) {
         let group = DispatchGroup()
-        for track in tracks.values {
-            if track.samples == 0 {
-                track.writer.cancelWriting()
-                continue
-            }
-            let end = track.role == "video"
-                ? CMTime(value: sourceDurationUs, timescale: 1_000_000)
-                : CMTime(value: track.physicalFrames, timescale: Int32(track.sampleRate!))
-            track.writer.endSession(atSourceTime: end)
-            track.input.markAsFinished()
-            group.enter()
-            track.writer.finishWriting { group.leave() }
-        }
+        for track in tracks.values { track.finish(sourceDurationUs: sourceDurationUs, joining: group) }
         group.notify(queue: queue) {
             for track in self.tracks.values
             where track.samples > 0 && track.writer.status != .completed {
@@ -583,13 +661,9 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
                 durationUs: self.tracks["video"]?.samples == 0 ? 0 : sourceDurationUs,
                 hostOriginUs: self.clock.originUs, pauses: self.clock.pauses,
                 tracks: self.tracks.values.sorted { $0.role < $1.role }.map { track in
-                    CapturedTrack(
-                        role: track.role, file: track.file, firstSampleUs: track.first,
-                        lastSampleEndUs: track.end, samples: track.samples,
-                        droppedSamples: self.dropped[track.role, default: 0],
-                        omittedSamples: self.omitted[track.role, default: 0],
-                        heldTailUs: track.heldTailUs, sampleRate: track.sampleRate,
-                        channelCount: track.channelCount)
+                    track.captured(
+                        dropped: self.dropped[track.role, default: 0],
+                        omitted: self.omitted[track.role, default: 0])
                 }, failure: self.failure,
                 systemAudioScope: self.request.systemAudio
                     ? "whole-system-excluding-recorder" : "disabled",
@@ -606,7 +680,7 @@ package final class CaptureWriter: NSObject, SCStreamOutput, @unchecked Sendable
             queue.async {
                 do {
                     try lease.synchronize()
-                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: 2)
+                    try CaptureSourcePublication.freezePrimaryJournal(lease: lease, layout: self.journalSchemaVersion)
                     continuation.resume()
                 } catch { continuation.resume(throwing: error) }
             }

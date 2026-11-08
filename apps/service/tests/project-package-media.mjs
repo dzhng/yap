@@ -62,7 +62,7 @@ async function adoptedMedia(t, kind) {
         return {
           ok: false,
           error: {
-            code: "WORKER_EXIT",
+            code: "MEDIA_WORKER_FAILED",
             message: "Injected native worker failure",
             retryable: true,
             details: {},
@@ -105,7 +105,7 @@ async function adoptedMedia(t, kind) {
       );
       return state.state === "ready" && state;
     });
-  for (const params of [{ limit: 501 }, { unfinishedOnly: "yes" }, { typo: true }]) {
+  for (const params of [{ unfinishedOnly: "yes" }, { typo: true }]) {
     const result = await callLocal(service.socketPath, {
       id: randomUUID(),
       operation: "export.list",
@@ -114,6 +114,12 @@ async function adoptedMedia(t, kind) {
     assert.equal(result.ok, false, JSON.stringify({ params, result }));
     assert.equal(result.error.code, "INVALID_PARAMS");
   }
+  const acceptedLimit = await callLocal(service.socketPath, {
+    id: randomUUID(),
+    operation: "export.list",
+    params: { limit: 501 },
+  });
+  assert.equal(acceptedLimit.ok, true, JSON.stringify(acceptedLimit));
   const admitted = await call("asset.import", { path: input, requestId: randomUUID() });
   const imported = await ready(() => call("job.get", { jobId: admitted.jobId }));
   const asset = await call("asset.get", { assetId: imported.published.output.assetId });
@@ -128,7 +134,7 @@ async function adoptedMedia(t, kind) {
       background: "#000000ff",
     },
   });
-  const projectId = project.project.projectId;
+  const projectId = project.project.id;
   await call("edit.apply", {
     projectId,
     requestId: randomUUID(),
@@ -149,8 +155,8 @@ async function adoptedMedia(t, kind) {
   });
   const exportId = randomUUID();
   await call("export.create", {
+    requestId: exportId,
     projectId,
-    exportId,
     kind: "processed-package",
     directory: output,
     leaf: "project.zip",
@@ -158,7 +164,7 @@ async function adoptedMedia(t, kind) {
   await until(async () => {
     const status = await call("export.status", { exportId });
     assert.notEqual(status.state, "failed", JSON.stringify(status));
-    return status.state === "committed";
+    return status.state === "ready";
   });
   const archive = join(output, "project.zip"),
     archiveHash = hash(await readFile(archive));
@@ -176,7 +182,11 @@ async function adoptedMedia(t, kind) {
     socket.once("error", reject);
     socket.once("connect", () =>
       socket.write(
-        encodeJsonLine({ id: randomUUID(), operation: "package.open", params: { path: archive } }),
+        encodeJsonLine({
+          id: randomUUID(),
+          operation: "package.open",
+          params: { path: archive, requestId: "package-open-disconnected" },
+        }),
       ),
     );
     // Recover the admission through public discovery without parsing its discarded reply.
@@ -210,7 +220,7 @@ async function adoptedMedia(t, kind) {
     ...selected,
     ...(kind === "frame"
       ? { atUs: 100000, maxLongEdge: 96 }
-      : { range: { startUs: 0, endUs: 250000 } }),
+      : { sourceRange: { startUs: 0, endUs: 250000 } }),
   };
   const failed = await until(async () => {
     const status = await call(`${kind}.get`, request);
@@ -218,15 +228,15 @@ async function adoptedMedia(t, kind) {
   });
   assert.equal(failed.retryable, true);
   assert.deepEqual(await readdir(join(home, "library", "render")), []);
-  await call(`${kind}.retry`, request);
+  await call("job.retry", { jobId: failed.jobId });
   const retried = await ready(() => call(`${kind}.get`, request));
   assert.equal(retried.jobId, failed.jobId);
-  assert.equal(retried.published.generation, 2);
+  assert.equal(retried.published.generation, "2");
   const signature =
     kind === "frame" ? Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]) : Buffer.from("RIFF");
   const content = await call("artifact.read", {
     token: retried.delivery.token,
-    offset: 0,
+    offsetBytes: 0,
     maxBytes: signature.length,
   });
   assert.deepEqual(Buffer.from(content.data, "base64"), signature);
@@ -234,7 +244,7 @@ async function adoptedMedia(t, kind) {
   assert.deepEqual(
     await call("artifact.read", {
       token: retried.delivery.token,
-      offset: 0,
+      offsetBytes: 0,
       maxBytes: signature.length,
     }),
     content,
@@ -264,7 +274,7 @@ async function adoptedMedia(t, kind) {
   hold = true;
   await call(`${kind}.get`, {
     ...request,
-    ...(kind === "frame" ? { atUs: 300000 } : { range: { startUs: 100000, endUs: 350000 } }),
+    ...(kind === "frame" ? { atUs: 300000 } : { sourceRange: { startUs: 100000, endUs: 350000 } }),
   });
   pid = await until(async () =>
     Number(
@@ -290,7 +300,7 @@ async function adoptedMedia(t, kind) {
     (error) => error.code === "ESRCH",
   );
   pid = undefined;
-  assert.ok(Date.now() < retried.delivery.expiresAt);
+  assert.ok(Date.now() < retried.delivery.expiresAtMs);
   assert.deepEqual(retained(), [], "Service closure releases unexpired artifact descriptors");
   assert.deepEqual(await readdir(join(home, "library", "render")), []);
   assert.equal(hash(await readFile(input)), oracle.fixtureSha256);

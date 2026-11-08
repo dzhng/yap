@@ -1,0 +1,56 @@
+# Slice 12 changed files
+
+- [apps/macos/Package.swift](../../../../apps/macos/Package.swift) — Give controls the existing media ledger dependency.
+- [apps/macos/README.md](../../../../apps/macos/README.md) — Document failure ownership and explicit import retry.
+- [apps/macos/Sources/Yap/CaptureView.swift](../../../../apps/macos/Sources/Yap/CaptureView.swift) — Render an error naming its request and compact, adjacent repair/Dismiss buttons.
+- [apps/macos/Sources/Yap/ExportController.swift](../../../../apps/macos/Sources/Yap/ExportController.swift) — Prevent jobless retry and identify failure/resolution feedback.
+- [apps/macos/Sources/Yap/LibraryController.swift](../../../../apps/macos/Sources/Yap/LibraryController.swift) — Retry the selected primary admission job and read its result.
+- [apps/macos/Sources/Yap/LibraryView.swift](../../../../apps/macos/Sources/Yap/LibraryView.swift) — Separate metadata and failure copy, tint only the state and align inline Retry.
+- [apps/macos/Sources/Yap/PreviewController.swift](../../../../apps/macos/Sources/Yap/PreviewController.swift) — Identify failure/resolution feedback by preview action.
+- [apps/macos/Sources/Yap/RecordingControls.swift](../../../../apps/macos/Sources/Yap/RecordingControls.swift) — Preserve failure scope and request, route Retry/Copy, and remove generic Start/Stop Retry.
+- [apps/macos/Sources/Yap/ServiceBundle.swift](../../../../apps/macos/Sources/Yap/ServiceBundle.swift) — Present the ledger cause while preserving structured diagnostics.
+- [apps/macos/Sources/YapControls/CapturePresentation.swift](../../../../apps/macos/Sources/YapControls/CapturePresentation.swift) — Project supported failure actions and plain causes.
+- [apps/macos/Sources/YapControls/ControlsActions.swift](../../../../apps/macos/Sources/YapControls/ControlsActions.swift) — Add import retry and failure retry/dismiss identities.
+- [apps/macos/Sources/YapControls/ControlsState.swift](../../../../apps/macos/Sources/YapControls/ControlsState.swift) — Own scoped failures, matching resolution and existing start admission.
+- [apps/macos/Sources/YapControls/ExportPresentation.swift](../../../../apps/macos/Sources/YapControls/ExportPresentation.swift) — Disable Retry without a retained job.
+- [apps/macos/Sources/YapControls/LibraryPresentation.swift](../../../../apps/macos/Sources/YapControls/LibraryPresentation.swift) — Derive Import failed/Importing…/Ready from the primary job and keep its explanation separate.
+- [apps/macos/Sources/YapControls/LibraryState.swift](../../../../apps/macos/Sources/YapControls/LibraryState.swift) — Decode job error/retry projections and retain explicit retry observations.
+- [apps/macos/Sources/YapControls/SavedItem.swift](../../../../apps/macos/Sources/YapControls/SavedItem.swift) — Keep a row explanation separate from its metadata.
+- [apps/macos/tests/YapControlsTests/CapturePresentationTests.swift](../../../../apps/macos/tests/YapControlsTests/CapturePresentationTests.swift) — Cover scoped actions, persistence, start replay/refusal and plain causes.
+- [apps/macos/tests/YapControlsTests/ExportTests.swift](../../../../apps/macos/tests/YapControlsTests/ExportTests.swift) — Prove jobless Retry is disabled; use honest job-bearing fixtures.
+- [apps/macos/tests/YapControlsTests/SelectionTests.swift](../../../../apps/macos/tests/YapControlsTests/SelectionTests.swift) — Read the scoped failure message.
+- [apps/macos/tests/build-controller-journey.mjs](../../../../apps/macos/tests/build-controller-journey.mjs) — Link controls to its new media dependency in native journeys.
+- [apps/macos/tests/export-controls.test.mjs](../../../../apps/macos/tests/export-controls.test.mjs) — Verify failure recovery feedback and plain cause presentation.
+- [apps/macos/tests/fixtures/capture-view.swift](../../../../apps/macos/tests/fixtures/capture-view.swift) — Capture the before/after failed-start scene.
+- [apps/macos/tests/fixtures/library-preview-bridge.swift](../../../../apps/macos/tests/fixtures/library-preview-bridge.swift) — Consume identified feedback and assert plain diagnostics.
+- [apps/macos/tests/fixtures/library-view.swift](../../../../apps/macos/tests/fixtures/library-view.swift) — Capture failed/retrying/recovered scenes and assert native Retry dispatch.
+- [apps/macos/tests/fixtures/swift-controls.mjs](../../../../apps/macos/tests/fixtures/swift-controls.mjs) — Link the controls dependency from this checkout’s app build.
+- [apps/macos/tests/fixtures/swift-media.mjs](../../../../apps/macos/tests/fixtures/swift-media.mjs) — Allow the owning build directory to supply media linkage.
+- [apps/macos/tests/library-controls.test.mjs](../../../../apps/macos/tests/library-controls.test.mjs) — Test failed import through production controllers with service faked at the socket.
+- [apps/macos/tests/preview-controls.test.mjs](../../../../apps/macos/tests/preview-controls.test.mjs) — Prove successful reattempt resolves its own notice.
+- [apps/macos/tests/preview-player.test.mjs](../../../../apps/macos/tests/preview-player.test.mjs) — Consume identified failure/resolution feedback.
+- [apps/macos/tests/preview-service.test.mjs](../../../../apps/macos/tests/preview-service.test.mjs) — Consume identified feedback and assert the plain cause.
+- [apps/macos/tests/project-export-controls.test.mjs](../../../../apps/macos/tests/project-export-controls.test.mjs) — Consume identified failure/resolution feedback.
+- [helpers/mac/Package.swift](../../../../helpers/mac/Package.swift) — Expose the existing media module to controls.
+- [helpers/mac/Sources/YapMedia/README.md](../../../../helpers/mac/Sources/YapMedia/README.md) — Document the shared plain-cause reader.
+- [helpers/mac/Sources/YapMedia/RefusalLedger.swift](../../../../helpers/mac/Sources/YapMedia/RefusalLedger.swift) — Read causes from the existing authoritative JSON.
+- [packages/protocol/src/refusal-ledger.json](../../../../packages/protocol/src/refusal-ledger.json) — Rewrite internal cause language in plain words; remove the deleted ExportController NOT_READY inventory occurrence.
+- [packages/protocol/src/refusal-ledger.test.ts](../../../../packages/protocol/src/refusal-ledger.test.ts) — Guard the approved saved-details cause and keep internal vocabulary out of causes.
+- [specs/long-takes-and-retries/README.md](../../../../specs/long-takes-and-retries/README.md) — Record slice completion and next pickup.
+- [specs/long-takes-and-retries/slices/12-app-failures.md](../../../../specs/long-takes-and-retries/slices/12-app-failures.md) — Link implementation evidence and orchestrator-owned review.
+- [specs/long-takes-and-retries/assets/app-failures/README.md](README.md) — Verification, choices and remaining review.
+- [specs/long-takes-and-retries/assets/app-failures/after/capture/failure.png](after/capture/failure.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/after/capture/native-metadata.json](after/capture/native-metadata.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/after/capture/source-revision.json](after/capture/source-revision.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/after/library/failed-import.png](after/library/failed-import.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/after/library/native-metadata.json](after/library/native-metadata.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/after/library/recovered-import.png](after/library/recovered-import.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/after/library/retrying-import.png](after/library/retrying-import.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/after/library/source-revision.json](after/library/source-revision.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/before/capture/failure.png](before/capture/failure.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/before/capture/native-metadata.json](before/capture/native-metadata.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/before/capture/source-revision.json](before/capture/source-revision.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/before/library/failed-import.png](before/library/failed-import.png) — Offscreen failure/recovery evidence.
+- [specs/long-takes-and-retries/assets/app-failures/before/library/native-metadata.json](before/library/native-metadata.json) — Native dimensions and source provenance.
+- [specs/long-takes-and-retries/assets/app-failures/before/library/source-revision.json](before/library/source-revision.json) — Native dimensions and source provenance.
+- [files-changed.md](files-changed.md) — File-by-file closeout report requested by the task.

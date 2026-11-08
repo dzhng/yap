@@ -55,7 +55,7 @@ async function fixture(render = renderer) {
   const projects = projectStoreFixture(catalog, assets, home);
   const cache = new DerivedCache(catalog, home, (owner) => {
     if (owner.kind !== "project") throw new CatalogError("INVALID_TARGET", "Expected project");
-    projects.get(owner.projectId);
+    projects.get(owner.id);
   });
   await cache.reconcile();
   let preview!: ProjectPreviewInspection;
@@ -65,10 +65,13 @@ async function fixture(render = renderer) {
     targets: {
       pin(target) {
         if (target.kind !== "project") throw new Error("Expected project");
-        return { ...target, revisionId: projects.revision(target.projectId, target.revisionId).id };
+        return {
+          ...target,
+          revisionId: projects.revision(target.id, target.revisionId).id,
+        };
       },
-      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.projectId),
-      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.projectId),
+      isAvailable: (target) => target.kind === "project" && !projects.isDeleting(target.id),
+      isDeleting: (target) => target.kind === "project" && projects.isDeleting(target.id),
       isCapturing: () => false,
     },
     execute: (execution) => preview.execute(execution),
@@ -124,7 +127,7 @@ async function fixture(render = renderer) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const placed = projects.apply(projectId, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
@@ -359,7 +362,7 @@ test("deletion denies new previews while the existing queue drains before revisi
   cleanup.push(async () => release.resolve());
   const admitted = await f.preview.request({ projectId: f.projectId });
   await started.promise;
-  const owner = { kind: "project" as const, projectId: f.projectId };
+  const owner = { kind: "project" as const, id: f.projectId };
   f.projects.markDeleting(f.projectId);
   const draining = f.jobs.drainOwner(owner);
   await expect(
@@ -691,8 +694,8 @@ test("retiming recipe changes invalidate produced previews and refuse old export
   await f.jobs.idle();
   const next = f.replaceRenderer({ ...renderer, retime: "retime-v2", async validateAudio() {} });
   await expect(next.request(prepared.snapshot)).rejects.toMatchObject({
-    code: "NOT_READY",
-    retryable: true,
+    code: "PINNED_IMPLEMENTATION_UNAVAILABLE",
+    retryable: false,
   });
   const second = await next.request({ projectId: f.projectId });
   expect(second.jobId).not.toBe(first.jobId);

@@ -42,7 +42,7 @@ public enum CompositionFrameRenderer {
 
     public static func write(_ request: Request) async throws -> Result {
         guard request.profile == "h264-rec709" else {
-            throw NativeFailure("NOT_READY", "Unknown video export profile.")
+            throw NativeFailure("INVALID_PARAMS", "Unknown video export profile.")
         }
         let frame = request.frame
         let edge = request.maxLongEdge ?? FrameLimits.defaultLongEdge
@@ -53,7 +53,7 @@ public enum CompositionFrameRenderer {
             frame.sampleAtUs >= 0, frame.sampleAtUs <= frame.visibleRange.startUs,
             frame.visibleRange.endUs > frame.visibleRange.startUs,
             frame.visibleRange.endUs <= TimeSpan.maximumMicroseconds
-        else { throw NativeFailure("INVALID_REQUEST", "Invalid compiled picture or image limits.") }
+        else { throw NativeFailure("INTERNAL_ERROR", "Invalid compiled picture or image limits.") }
         let pictures = try CompositionPictureExecutor(
             canvas: request.canvas, deliveredSize: FrameImage.delivered(
                 width: request.canvas.width, height: request.canvas.height, maxLongEdge: edge),

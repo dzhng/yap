@@ -19,7 +19,7 @@ async function fixture() {
   });
   const records = new SpeakerEvidenceStore(catalog, () => {});
   const identity = {
-    owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+    owner: { kind: "asset" as const, id: "a".repeat(64) },
     sourceId: "a".repeat(64),
     generation: "g1",
     policy: "speaker-v1" as const,
@@ -81,8 +81,9 @@ test("continuations pin generation, native decoder, display query and score view
       meaning: "uncalibrated",
     },
   ]);
+  // Another view or display range is another filter set; a republished generation is a stale pin.
   expect(() => read.page({ view: "intervals", cursor: first.nextCursor! })).toThrow(
-    "query changed",
+    expect.objectContaining({ code: "INVALID_PARAMS" }),
   );
   expect(() =>
     read.page({
@@ -90,13 +91,13 @@ test("continuations pin generation, native decoder, display query and score view
       sourceRange: { startUs: 100000, endUs: 200000 },
       cursor: first.nextCursor!,
     }),
-  ).toThrow("query changed");
+  ).toThrow(expect.objectContaining({ code: "INVALID_PARAMS" }));
   expect(() =>
     new SourceSpeakerRead(f.records, replacement.metadata).page({
       view: "scores",
       cursor: first.nextCursor!,
     }),
-  ).toThrow("query changed");
+  ).toThrow(expect.objectContaining({ code: "ARTIFACT_CHANGED" }));
   expect(read.page({ view: "scores", limit: 1, cursor: first.nextCursor! })).toEqual(next);
 });
 

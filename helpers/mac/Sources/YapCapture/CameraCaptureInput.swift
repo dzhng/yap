@@ -17,6 +17,16 @@ package struct CaptureCameraSelection {
     }
 }
 
+extension CaptureCameraRequest {
+    /// The companion camera this request reserves, as a take prepares it.
+    package var selection: CaptureCameraSelection {
+        let directory = URL(fileURLWithPath: outputDirectory)
+        return CaptureCameraSelection(id: binding.deviceId, directory: directory,
+            observations: directory.appendingPathComponent(CameraMedia.mappingFile), binding: binding,
+            startsOn: startsOn)
+    }
+}
+
 /// Probe orchestration controls; ordinary capture retains device cadence and cursor sampling.
 @MainActor
 package struct CameraCaptureMeasurement {
@@ -196,9 +206,6 @@ package final class CameraCaptureInput: CaptureInputSession, CompanionCameraSwit
     /// Whether the camera is meant to be on: from the start or the last accepted turn-on, until
     /// the person turns it off. A camera meant on at stop that recorded nothing is `NO_CAMERA`.
     private var meantOn: Bool
-    /// Every turn-on that opened acquisition, including the one at the take's start.
-    private var turnOns = 0
-    static let maximumTurnOns = CameraAvailability.maximumGaps + 1
     package var deviceId: String { selection.id }
     package var isOn: Bool { session != nil }
     package var companionCamera: (any CompanionCameraSwitch)? { self }
@@ -281,14 +288,7 @@ package final class CameraCaptureInput: CaptureInputSession, CompanionCameraSwit
     /// Opens a new session on the reserved device. Any refusal leaves the camera off.
     private func turnOn() async throws {
         guard let ingress, let camera = ingress.companion else { throw CaptureFailure("INVALID_STATE", "The take is not capturing.") }
-        // Each turn-on can start one availability interval and a take publishes at most
-        // `maximumTurnOns`. Counting turn-ons, not recorded runs, can only overestimate.
-        guard turnOns < Self.maximumTurnOns else {
-            throw CaptureFailure("CAMERA_TOGGLE_LIMIT",
-                "This take has turned its camera on \(turnOns) times, the most one take can hold.")
-        }
         let device = opened == nil ? try devices.companionCamera(selection.id) : nil
-        turnOns += 1
         ingress.writer.queue.sync { camera.startAcquiring(atHostUs: CaptureHostTime.nowUs()) }
         var starting: (any CaptureCameraSession)?
         do {

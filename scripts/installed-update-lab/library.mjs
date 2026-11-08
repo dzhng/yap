@@ -48,7 +48,7 @@ export async function populateLibrary(home, source, call) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = await data("edit.apply", {
     projectId,
     requestId: randomUUID(),
@@ -74,7 +74,7 @@ export async function populateLibrary(home, source, call) {
   await data("export.create", {
     projectId,
     revisionId: authored.revision.id,
-    exportId,
+    requestId: exportId,
     kind: "processed-package",
     directory: destination,
     leaf: "fixture.zip",
@@ -85,7 +85,7 @@ export async function populateLibrary(home, source, call) {
       !["failed", "canceled", "unavailable"].includes(result.state),
       JSON.stringify(result),
     );
-    return result.state === "committed" && !result.cleanupPending;
+    return result.state === "ready" && !result.cleanupPending;
   }, "Fixture export did not commit");
   return {
     ...source,
@@ -93,7 +93,7 @@ export async function populateLibrary(home, source, call) {
     assetId: binding.assetId,
     projectId,
     revisionId: authored.revision.id,
-    jobId: job.jobId,
+    jobId: job.id,
     exportId,
     originalPath: join(source.donor, "video.mov"),
     exportPath: join(destination, "fixture.zip"),

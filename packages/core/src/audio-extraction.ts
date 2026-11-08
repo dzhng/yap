@@ -61,6 +61,70 @@ export type ExtractedAudio = {
   origin: ExtractionOrigin;
 };
 
+/** The retained job payload uses the public unit names; the in-memory owner keeps media math local. */
+export function publicExtraction(value: ExtractedAudio) {
+  const selection = value.origin.selection;
+  const { frames, origin, ...rest } = value as any;
+  const { frames: inputFrames, ...input } = origin.input as any;
+  const { frames: outputFrames, ...output } = origin.output as any;
+  return {
+    ...rest,
+    frameCount: frames,
+    input: { ...input, frameCount: inputFrames },
+    output: { ...output, frameCount: outputFrames },
+    origin: {
+      ...origin,
+      input: { ...input, frameCount: inputFrames },
+      output: { ...output, frameCount: outputFrames },
+      selection: {
+        ...selection,
+        sampleRange: {
+          startSamples: selection.sampleRange.start,
+          endSamples: selection.sampleRange.end,
+        },
+      },
+    },
+  };
+}
+export function parseExtractedAudio(value: unknown): ExtractedAudio {
+  if (!value || typeof value !== "object")
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio extraction receipt is not an object");
+  const raw = value as any;
+  if (
+    "frames" in raw ||
+    "bytes" in raw ||
+    "frames" in (raw.origin?.input ?? {}) ||
+    "frames" in (raw.origin?.output ?? {}) ||
+    raw.frameCount === undefined ||
+    raw.origin?.input?.frameCount === undefined ||
+    raw.origin?.output?.frameCount === undefined ||
+    raw.origin?.selection?.sampleRange?.startSamples === undefined
+  )
+    throw new CatalogError("ARTIFACT_CHANGED", "Audio extraction receipt uses an obsolete shape");
+  const record = value as ExtractedAudio & {
+    frameCount: number;
+    origin: { selection: { sampleRange: { startSamples: number; endSamples: number } } };
+  };
+  const input = record.origin.input as any;
+  const output = record.origin.output as any;
+  return {
+    ...record,
+    frames: record.frameCount,
+    origin: {
+      ...record.origin,
+      input: { ...input, frames: input.frameCount },
+      output: { ...output, frames: output.frameCount },
+      selection: {
+        ...record.origin.selection,
+        sampleRange: {
+          start: record.origin.selection.sampleRange.startSamples,
+          end: record.origin.selection.sampleRange.endSamples,
+        },
+      },
+    },
+  } as ExtractedAudio;
+}
+
 /** Durable excerpts share audio selection/rendering and immutable assets, but do not own donors. */
 export class AudioExtraction {
   constructor(
@@ -96,7 +160,7 @@ export class AudioExtraction {
                 "preparedResourceId" in recipe.options ? recipe.options.preparedResourceId : null,
             }
           : recipe.selection,
-      wholeSource: !("projectId" in selection) && selection.range === undefined,
+      wholeSource: !("projectId" in selection) && selection.sourceRange === undefined,
       rendition: audioRenditionSchema.parse(rendition),
       recipe: recipe.identity,
       processingSha256: "processingSha256" in recipe ? recipe.processingSha256 : null,
@@ -165,7 +229,11 @@ export class AudioExtraction {
     if (!isDeepStrictEqual(job.target, request.recipe.target))
       throw new CatalogError("ARTIFACT_CHANGED", "Extraction target differs from its recipe");
     if (request.conversionImplementationId !== this.owners.converter.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned PCM converter is unavailable", {}, true);
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned PCM converter is unavailable",
+        {},
+      );
     const current = this.owners.audio.recipe(request.selection);
     if (
       !isDeepStrictEqual(current.identity, request.recipe) ||
@@ -199,11 +267,11 @@ export class AudioExtraction {
             supportDigest: canonical.source.supportDigest,
             unavailable: [],
           },
-          selectionImplementationId: "verified-whole-source-v1",
+          selectionImplementationId: "verified-whole-source-v2",
           input: dimensions,
           output: dimensions,
           conversion: {
-            implementationId: "verified-wav-copy-v1",
+            implementationId: "verified-wav-copy-v2",
             channelPolicy: "preserve",
             contextPolicy: "complete-source",
           },
@@ -219,7 +287,7 @@ export class AudioExtraction {
               sampleRange: { start: 0, end: complete.dimensions.frames },
               supportDigest: complete.source.supportDigest,
               unavailable: [],
-              implementationId: "verified-whole-source-v1",
+              implementationId: "verified-whole-source-v2",
             }
           : (await this.owners.audio.renderSelection(request.recipe, selectedPath, signal)).value;
         const input = {
@@ -267,7 +335,7 @@ export class AudioExtraction {
             "projectId" in selected
               ? {
                   kind: "project",
-                  projectId: selected.projectId,
+                  id: selected.projectId,
                   revisionId: selected.revisionId,
                   range: selected.range,
                   tap: selected.tap,
@@ -324,7 +392,7 @@ export class AudioExtraction {
       };
       const publication = staged;
       return {
-        result: JSON.stringify(result),
+        result: JSON.stringify(publicExtraction(result)),
         publish: () => {
           publication.publish({ pinnedFile: false });
           this.owners.assets.retain({ kind: "job", id: job.jobId }, [result.assetId]);

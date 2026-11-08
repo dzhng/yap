@@ -32,8 +32,11 @@ public enum SDRCorrection {
     return "coreimage-sdr-source-neutral-recovery-v2:" + ProcessInfo.processInfo.operatingSystemVersionString
   }
   static func requireImplementation(_ identity: String?) throws {
-    guard let identity, identity == implementationId else {
-      throw NativeFailure("NOT_READY", "The bound native SDR correction recipe is unavailable.")
+    guard let identity else {
+        throw NativeFailure("INTERNAL_ERROR", "The compiled plan has no bound implementation.")
+    }
+    guard identity == implementationId else {
+      throw NativeFailure("PINNED_IMPLEMENTATION_UNAVAILABLE", "The bound native SDR correction recipe is unavailable.")
     }
   }
   static func apply(_ parameters: Parameters, to image: CIImage) throws -> CIImage {

@@ -73,7 +73,7 @@ async function fixture(fps = { numerator: 24, denominator: 1 }) {
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const authored = store.apply(projectId, {
     requestId: "place",
     expectedRevisionId: created.revision.id,
@@ -256,8 +256,10 @@ test("one exact 24fps ripple frame preserves retimed source, linked captions and
     const restarted = projectStoreFixture(reopened, new AssetStore(reopened, f.home), f.home);
     expect(restarted.apply(f.projectId, request)).toEqual(removed);
     expect(
-      restarted.undo(f.projectId, { requestId: "undo", expectedRevisionId: removed.revision.id })
-        .document,
+      restarted.undo(f.projectId, {
+        requestId: "undo",
+        expectedRevisionId: removed.revision.id,
+      }).document,
     ).toEqual(f.authored.revision.document);
   } finally {
     reopened.close();

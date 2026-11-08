@@ -66,7 +66,7 @@ export async function validateProjectAudio(
   );
   if (!retime && !externalState) return;
   if (!support.validateAudio || (retime && !support.retime))
-    throw new CatalogError("NOT_READY", "Native audio input admission is unavailable", {}, true);
+    throw new CatalogError("NOT_READY", "Native audio input admission is unavailable", {});
   await support.validateAudio(request);
 }
 
@@ -109,9 +109,13 @@ function requireStateInputsReady(manifest: CompositionWindow["manifest"]) {
           processor: step.processor.type,
         });
   if (issues.length)
-    throw new CatalogError("NOT_READY", "State processing requires verified mono or stereo input", {
-      stateInputs: issues,
-    });
+    throw new CatalogError(
+      "PREREQUISITE_MISSING",
+      "State processing requires verified mono or stereo input",
+      {
+        stateInputs: issues,
+      },
+    );
 }
 
 /**

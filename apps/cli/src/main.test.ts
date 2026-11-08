@@ -36,17 +36,17 @@ async function serviceFixture(peer?: (operation: string) => OperationResult) {
     newId: randomUUID,
   });
   const recording = store.allocate().recording;
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 1,
     state: "recording",
   });
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 2,
     state: "finalizing",
   });
-  store.ingestLifecycle(recording.recordingId, {
+  store.ingestLifecycle(recording.id, {
     sourceId: recording.sourceId,
     sequence: 3,
     state: "complete",
@@ -108,7 +108,7 @@ async function serviceFixture(peer?: (operation: string) => OperationResult) {
   return {
     home,
     socket: join(home, "run/service.sock"),
-    recordingId: recording.recordingId,
+    recordingId: recording.id,
     asked,
   };
 }
@@ -153,7 +153,7 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     return schema?.anyOf ? schema.anyOf.map((option) => option.required) : schema?.required;
   };
   expect(required("capture.start")).toEqual(["source", "requestId"]);
-  expect(required("artifact.read")).toEqual(["token", "offset"]);
+  expect(required("artifact.read")).toEqual(["token", "offsetBytes"]);
   expect(required("processing.get")).toEqual(["projectId", "revisionId", "target"]);
   expect(required("index.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
   expect(required("transcript.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
@@ -161,17 +161,13 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     ["projectId", "text"],
     ["assetId", "streamId", "text"],
   ]);
-  expect(required("transcript.retry")).toEqual([["assetId", "streamId"], ["projectId"]]);
   expect(required("audio.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
-  expect(required("audio.retry")).toEqual(required("audio.get"));
   expect(required("waveform.get")).toEqual([["projectId"], ["assetId", "streamId"]]);
-  expect(required("waveform.retry")).toEqual(required("waveform.get"));
   expect(required("frame.get")).toEqual([
     ["projectId", "atUs"],
     ["assetId", "streamId", "atUs"],
     ["assetId", "streamId"],
   ]);
-  expect(required("frame.retry")).toEqual(required("frame.get"));
   expect(required("frame.batch")).toEqual([
     ["projectId", "atUs"],
     ["assetId", "streamId", "atUs"],
@@ -182,9 +178,9 @@ function expectCallableContract(tools: AdvertisedTool[]) {
     ["projectId", "atUs", "trailUs"],
     ["assetId", "streamId", "atUs", "trailUs"],
   ]);
-  expect(required("cursor.render.retry")).toEqual(required("cursor.render"));
   expect(required("transcript.review")).toEqual([["projectId"], ["assetId", "streamId"]]);
   expect(required("model.prepare")).toEqual(["modelId"]);
+  expect(required("model.remove")).toEqual(["modelId", "requestId"]);
   expect(tools.filter((tool) => !tool.description).map((tool) => tool.name)).toEqual([]);
 }
 
@@ -333,6 +329,28 @@ it("operation help returns its canonical schema and refuses unknown names", () =
   expect(JSON.parse(unknown.stdout).error.code).toBe("UNKNOWN_OPERATION");
 });
 
+it("CLI and MCP return the same media list", async () => {
+  const { socket, recordingId } = await serviceFixture();
+  const client = new Client({ name: "media-listing-test", version: "1" });
+  cleanup.push(() => client.close());
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: [entry, "mcp", "--socket", socket],
+      stderr: "pipe",
+    }),
+  );
+  const listed = cli(socket, "media.list", { limit: 1 });
+  expect(listed.exitCode).toBe(0);
+  expect(listed.result.data).toMatchObject({
+    media: [{ kind: "recording", id: recordingId }],
+    nextCursor: null,
+  });
+  const mcpList = await client.callTool({ name: "media.list", arguments: { limit: 1 } });
+  expect(mcpList.isError).toBe(false);
+  expect(mcpList.structuredContent).toMatchObject({ ok: true, data: listed.result.data });
+});
+
 it("CLI and MCP return the same recording list", async () => {
   const { socket, recordingId } = await serviceFixture();
   const client = new Client({ name: "listing-test", version: "1" });
@@ -346,7 +364,7 @@ it("CLI and MCP return the same recording list", async () => {
   );
   const listed = cli(socket, "recording.list", { limit: 1 });
   expect(listed.exitCode).toBe(0);
-  expect(listed.result.data).toMatchObject({ recordings: [{ recordingId }], nextCursor: null });
+  expect(listed.result.data).toMatchObject({ recordings: [{ id: recordingId }], nextCursor: null });
   const mcpList = await client.callTool({ name: "recording.list", arguments: { limit: 1 } });
   expect(mcpList.isError).toBe(false);
   expect(mcpList.structuredContent).toMatchObject({ ok: true, data: listed.result.data });
@@ -375,7 +393,7 @@ it("the recording service exposes its complete result through the same MCP artif
     (
       await client.callTool({
         name: "artifact.read",
-        arguments: { token: delivered.resultDelivery.token, offset: 0 },
+        arguments: { token: delivered.resultDelivery.token, offsetBytes: 0 },
       })
     ).structuredContent,
   );
@@ -417,7 +435,7 @@ it("CLI and real MCP transport share project edits, replay, history and structur
     },
   });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const projectId = (created.data as { project: { projectId: string } }).project.projectId;
+  const projectId = (created.data as { project: { id: string } }).project.id;
   const initial = (created.data as { revision: { id: string } }).revision.id;
   const transport = new StdioClientTransport({
     command: process.execPath,
@@ -601,7 +619,7 @@ it("default discovery reaches the actual service layout from outside the checkou
     expect(JSON.parse(result.stdout)).toMatchObject({
       id: ["first", "second"][index],
       ok: true,
-      data: { recordingId },
+      data: { id: recordingId },
     });
   });
 });
@@ -618,7 +636,7 @@ async function defaultDeliveryFixture(disappear = false) {
   const operations: string[] = [];
   const ready = () => ({
     state: "ready",
-    published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+    published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
     delivery: delivery.open({ kind: "asset", id: "fixture" }, () => ({
       bytes: bytes.length,
       read: (buffer, position) => bytes.copy(buffer, 0, position, position + buffer.length),
@@ -669,8 +687,8 @@ async function defaultDeliveryFixture(disappear = false) {
       }
       if (operation.operation === "artifact.read") {
         if (disappear) void listener.close();
-        const { token, offset, maxBytes } = operation.params;
-        return { ok: true, data: delivery.read(token, offset, maxBytes) };
+        const { token, offsetBytes, maxBytes } = operation.params;
+        return { ok: true, data: delivery.read(token, offsetBytes, maxBytes) };
       }
       if (operation.operation === "artifact.close") {
         delivery.close(operation.params.token);
@@ -789,7 +807,7 @@ it("default CLI delivery reports a disappeared service without bootstrap or oper
           error: {
             code: "INVALID_RESPONSE",
             message: "Connection ended before the JSON line terminator",
-            retryable: false,
+            retryable: true,
           },
         },
         {
@@ -958,8 +976,8 @@ it.each([
           return {
             ok: true,
             data: {
-              offset: 0,
-              nextOffset: bytes.length,
+              offsetBytes: 0,
+              nextOffsetBytes: bytes.length,
               eof: true,
               data: bytes.toString("base64"),
             },
@@ -977,8 +995,8 @@ it.each([
                 ok: true,
                 data: {
                   state: "ready",
-                  published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
-                  delivery: { token, bytes: bytes.length, expiresAt: Date.now() + 30000 },
+                  published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
+                  delivery: { token, sizeBytes: bytes.length, expiresAtMs: Date.now() + 30000 },
                 },
               }),
             ),
@@ -1111,14 +1129,14 @@ it("selected-frame CLI and MCP deliver image bytes while metadata-only responses
     reads = 0;
   const envelope = (ordinal: number) =>
     ordinal === 9
-      ? { state: "processing", published: null }
+      ? { state: "running", published: null }
       : {
           state: "ready",
-          published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+          published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
           delivery: {
             token: `selected-${ordinal}`,
-            bytes: bytes.length,
-            expiresAt: Date.now() + 30000,
+            sizeBytes: bytes.length,
+            expiresAtMs: Date.now() + 30000,
           },
         };
   const delivery = new DerivativeDelivery();
@@ -1135,7 +1153,12 @@ it("selected-frame CLI and MCP deliver image bytes while metadata-only responses
         reads++;
         return {
           ok: true,
-          data: { offset: 0, nextOffset: bytes.length, eof: true, data: bytes.toString("base64") },
+          data: {
+            offsetBytes: 0,
+            nextOffsetBytes: bytes.length,
+            eof: true,
+            data: bytes.toString("base64"),
+          },
         };
       }
       if (request.operation === "index.frame")
@@ -1299,7 +1322,7 @@ it(
     ).toMatchObject({ ok: true, data: { cameras: [] } });
     const malformed = {
       requestId: "malformed-camera",
-      source: { kind: "window", windowId: 1, displayId: 1 },
+      source: { kind: "window", id: 1, displayId: 1 },
       cameraDeviceId: "camera-2",
     };
     expect(cli(f.socket, "capture.start", malformed).result).toMatchObject({

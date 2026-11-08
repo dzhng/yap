@@ -131,20 +131,20 @@ describe("retained production receipt", () => {
     const delivered = await client.callTool({ name: "edit.apply", arguments: params });
     const descriptor = deliveredResponseSchema.parse(delivered.structuredContent);
     const chunks: Buffer[] = [];
-    for (let offset = 0; offset < descriptor.resultDelivery.bytes;) {
+    for (let offsetBytes = 0; offsetBytes < descriptor.resultDelivery.sizeBytes;) {
       const read = responseSchema.parse(
         (
           await client.callTool({
             name: "artifact.read",
-            arguments: { token: descriptor.resultDelivery.token, offset },
+            arguments: { token: descriptor.resultDelivery.token, offsetBytes },
           })
         ).structuredContent,
       );
       if (!read.ok) throw Error(read.error.message);
-      const chunk = z.object({ data: z.string(), nextOffset: z.int() }).parse(read.data);
+      const chunk = z.object({ data: z.string(), nextOffsetBytes: z.int() }).parse(read.data);
       chunks.push(Buffer.from(chunk.data, "base64"));
-      expect(chunk.nextOffset).toBeGreaterThan(offset);
-      offset = chunk.nextOffset;
+      expect(chunk.nextOffsetBytes).toBeGreaterThan(offsetBytes);
+      offsetBytes = chunk.nextOffsetBytes;
     }
     const bytes = Buffer.concat(chunks);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(descriptor.resultDelivery.sha256);
@@ -217,7 +217,7 @@ test("deferred media metadata leaves its nested lease usable instead of reading 
         reads++;
         return {
           ok: true,
-          data: delivery.read(op.params.token, op.params.offset, op.params.maxBytes),
+          data: delivery.read(op.params.token, op.params.offsetBytes, op.params.maxBytes),
         };
       }
       if (op.operation === "artifact.close") {
@@ -229,7 +229,7 @@ test("deferred media metadata leaves its nested lease usable instead of reading 
         ok: true,
         data: {
           state: "ready",
-          published: { generation: 1, output: { mediaType: "image/png" }, issues: [] },
+          published: { generation: "1", output: { mediaType: "image/png" }, issues: [] },
           delivery: nested,
           evidence: "x".repeat(MCP_RESULT_INLINE_BYTES),
         },
@@ -277,7 +277,7 @@ test("deferred media metadata leaves its nested lease usable instead of reading 
     (
       await client.callTool({
         name: "artifact.read",
-        arguments: { token: nested.token, offset: 0 },
+        arguments: { token: nested.token, offsetBytes: 0 },
       })
     ).structuredContent,
   );
@@ -306,7 +306,7 @@ test("default MCP preserves a complete large failure and its error outcome", asy
         if (op.operation !== "artifact.read") throw Error("Expected artifact read");
         return {
           ok: true,
-          data: delivery.read(op.params.token, op.params.offset, op.params.maxBytes),
+          data: delivery.read(op.params.token, op.params.offsetBytes, op.params.maxBytes),
         };
       }
       if (request.operation === "artifact.close") {
@@ -345,20 +345,20 @@ test("default MCP preserves a complete large failure and its error outcome", asy
   expect(result.content).toEqual([{ type: "text", text: JSON.stringify(descriptor) }]);
   expect(result.isError).toBe(true);
   const chunks: Buffer[] = [];
-  for (let offset = 0; offset < descriptor.resultDelivery.bytes;) {
+  for (let offsetBytes = 0; offsetBytes < descriptor.resultDelivery.sizeBytes;) {
     const read = await client.callTool({
       name: "artifact.read",
-      arguments: { token: descriptor.resultDelivery.token, offset },
+      arguments: { token: descriptor.resultDelivery.token, offsetBytes },
     });
     const response = responseSchema.parse(read.structuredContent);
     if (!response.ok) throw Error(response.error.message);
-    const chunk = z.object({ data: z.string(), nextOffset: z.int() }).parse(response.data);
+    const chunk = z.object({ data: z.string(), nextOffsetBytes: z.int() }).parse(response.data);
     chunks.push(Buffer.from(chunk.data, "base64"));
-    expect(chunk.nextOffset).toBeGreaterThan(offset);
-    offset = chunk.nextOffset;
+    expect(chunk.nextOffsetBytes).toBeGreaterThan(offsetBytes);
+    offsetBytes = chunk.nextOffsetBytes;
   }
   const bytes = Buffer.concat(chunks);
-  expect(bytes.length).toBe(descriptor.resultDelivery.bytes);
+  expect(bytes.length).toBe(descriptor.resultDelivery.sizeBytes);
   expect(createHash("sha256").update(bytes).digest("hex")).toBe(descriptor.resultDelivery.sha256);
   const complete = responseSchema.parse(JSON.parse(bytes.toString()));
   expect(complete).toEqual({ id: descriptor.id, ok: false, error });

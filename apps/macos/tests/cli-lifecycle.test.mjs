@@ -42,8 +42,15 @@ test("install writes fresh bytes without quarantine", () => {
     join(paths.resources, "bin/yap"),
   ]);
   const [before, installed] = runHome(driver, paths, "cli.status", "cli.install");
-  assert.deepEqual(before, { onPath: false, path: paths.command, state: "missing" });
-  assert.equal(installed.state, "installed");
+  assert.deepEqual(before, {
+    onPath: false,
+    path: paths.command,
+    state: "unavailable",
+    installation: "missing",
+    jobId: null,
+  });
+  assert.equal(installed.state, "ready");
+  assert.equal(installed.installation, "installed");
   assert.deepEqual(readFileSync(paths.command), launcher);
   assert.equal(statSync(paths.command).mode & 0o777, 0o755);
   // macOS may attach com.apple.provenance to any file a process writes; only quarantine blocks.
@@ -60,8 +67,10 @@ test("install replaces a different file", () => {
   writeFileSync(paths.command, "#!/bin/sh\necho personal\n", { mode: 0o644 });
   writeFileSync(join(paths.home, ".zshenv"), 'export PATH="$HOME/.local/bin:$PATH"\n');
   const [before, installed] = runHome(driver, paths, "cli.status", "cli.install");
-  assert.equal(before.state, "different");
-  assert.deepEqual(installed, { onPath: true, path: paths.command, state: "installed" });
+  assert.equal(before.installation, "different");
+  assert.equal(before.state, "unavailable");
+  assert.equal(installed.state, "ready");
+  assert.equal(installed.installation, "installed");
   assert.deepEqual(readFileSync(paths.command), launcher);
   assert.equal(statSync(paths.command).mode & 0o777, 0o755);
   // Already covered by the person's own startup file, so no profile is edited.
@@ -78,7 +87,8 @@ test("uninstall keeps a modified command", () => {
   writeFileSync(profile, "export EDITOR=vim\n");
   const [installed, removed] = runHome(driver, paths, "cli.install", "cli.uninstall");
   assert.equal(installed.profile, profile);
-  assert.equal(removed.state, "missing");
+  assert.equal(removed.state, "unavailable");
+  assert.equal(removed.installation, "missing");
   assert.equal(existsSync(paths.command), false, "an identical command is removed");
   assert.equal(
     readFileSync(profile, "utf8"),
@@ -89,7 +99,8 @@ test("uninstall keeps a modified command", () => {
   runHome(driver, paths, "cli.install");
   writeFileSync(paths.command, "#!/bin/sh\necho edited\n");
   const [kept] = runHome(driver, paths, "cli.uninstall");
-  assert.equal(kept.state, "different");
+  assert.equal(kept.installation, "different");
+  assert.equal(kept.state, "unavailable");
   assert.equal(readFileSync(paths.command, "utf8"), "#!/bin/sh\necho edited\n");
 });
 
@@ -107,7 +118,8 @@ test("bash with only ~/.profile gets the block there, and ~/.profile keeps loadi
   const paths = setup("bash-profile", { launcher });
   writeFileSync(join(paths.home, ".profile"), "export EDITOR=vim\n");
   const [installed] = runHome(driver, { ...paths, env: { SHELL: "/bin/bash" } }, "cli.install");
-  assert.equal(installed.state, "installed");
+  assert.equal(installed.state, "ready");
+  assert.equal(installed.installation, "installed");
   assert.equal(
     existsSync(join(paths.home, ".bash_profile")),
     false,
@@ -126,7 +138,8 @@ test("an unreadable profile is never rewritten", () => {
   ]);
   writeFileSync(join(paths.home, ".zprofile"), latin1);
   const [installed] = runHome(driver, paths, "cli.install");
-  assert.equal(installed.state, "needs_attention");
+  assert.equal(installed.state, "failed");
+  assert.equal(installed.installation, "needs_attention");
   assert.deepEqual(readFileSync(join(paths.home, ".zprofile")), latin1);
 });
 
@@ -137,7 +150,8 @@ test("a shell Yap can't configure gets no profile edit and reports not on PATH",
     { ...paths, env: { SHELL: "/opt/homebrew/bin/fish" } },
     "cli.install",
   );
-  assert.equal(installed.state, "installed");
+  assert.equal(installed.state, "ready");
+  assert.equal(installed.installation, "installed");
   assert.equal(installed.onPath, false);
   assert.deepEqual(readdirSync(paths.home).sort(), [".local"]);
 });

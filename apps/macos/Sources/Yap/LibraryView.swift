@@ -12,7 +12,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
     private(set) var tab: Tab = .recordings
     private var filter = ""
     private var scrollPositions: [Tab: NSPoint] = [:]
-    let scrollView = NSScrollView()
+    let scrollView = OverlayScrollView()
     private let document = LibraryDocument()
     private var controls: [String: NSControl] = [:]
     private var actions: [ObjectIdentifier: ControlsAction] = [:]
@@ -30,7 +30,6 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         updateSurfaceColors()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay
         scrollView.documentView = document
         addSubview(scrollView)
         filterField.placeholderString = "Filter this page"
@@ -45,7 +44,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         let changed = state.library != self.state.library || state.service != self.state.service
             || state.storage != self.state.storage || state.storageRefreshing != self.state.storageRefreshing
             || state.storageFailure != self.state.storageFailure || exports != self.exports
-            || state.libraryFailure != self.state.libraryFailure
+            || state.failure != self.state.failure
         self.state = state
         self.exports = exports
         guard changed else { return }
@@ -102,8 +101,9 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         return ceil(field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width, height: .greatestFiniteMagnitude)).height ?? 0)
     }
 
+    @discardableResult
     private func label(_ text: String, frame: NSRect, size: CGFloat, weight: NSFont.Weight = .regular,
-                       color: NSColor = .labelColor, in parent: NSView, wrap: Bool = false, passive: Bool = false) {
+                       color: NSColor = .labelColor, in parent: NSView, wrap: Bool = false, passive: Bool = false) -> NSTextField {
         let field = passive ? PassiveLabel(wrappingLabelWithString: text) : NSTextField(wrappingLabelWithString: text)
         field.font = .systemFont(ofSize: size, weight: weight)
         field.textColor = color
@@ -111,6 +111,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         field.lineBreakMode = wrap ? .byWordWrapping : .byTruncatingTail
         field.maximumNumberOfLines = wrap ? 0 : 1
         parent.addSubview(field)
+        return field
     }
     private func button(_ title: String, id: String, frame: NSRect, action: ControlsAction?, enabled: Bool = true, in parent: NSView) {
         let button = NSButton(title: title, target: self, action: #selector(activate(_:)))
@@ -150,14 +151,19 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             controls["tab.\(value.rawValue.lowercased())"] = button
             tabActions[ObjectIdentifier(button)] = value
         }
-        let storage = state.storage.map { ByteCountFormatter.string(fromByteCount: $0.totalBytes, countStyle: .file) } ?? "not measured"
+        let storage = state.storage.map(LibraryPresentation.storage)
         let footerY = max(200, bounds.height - 34)
-        label(state.storage == nil ? "Not measured" : "\(storage) used", frame: NSRect(x: 20, y: footerY + 4, width: 92, height: 16), size: 10, color: .secondaryLabelColor, in: self)
+        label(storage?.total ?? "Not measured", frame: NSRect(x: 20, y: footerY - 22, width: 92, height: 16), size: 10, color: .secondaryLabelColor, in: self)
+        // The same total, split: what is media and what is prepared models.
+        if let storage {
+            label(storage.media, frame: NSRect(x: 20, y: footerY - 6, width: 116, height: 15), size: 10, color: .tertiaryLabelColor, in: self)
+            label(storage.models, frame: NSRect(x: 20, y: footerY + 8, width: 116, height: 15), size: 10, color: .tertiaryLabelColor, in: self)
+        }
         let refresh = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "Refresh storage")!, target: self, action: #selector(activate(_:)))
         refresh.isBordered = false
         refresh.contentTintColor = .secondaryLabelColor
         refresh.toolTip = "Refresh storage"
-        refresh.frame = NSRect(x: 114, y: footerY, width: 22, height: 22)
+        refresh.frame = NSRect(x: 114, y: footerY - 25, width: 22, height: 22)
         refresh.isEnabled = state.service == .ready && !state.storageRefreshing
         refresh.identifier = .init("storage.refresh")
         addSubview(refresh)
@@ -188,10 +194,15 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
         case .exports: page = ExportPresentation.items(for: state, exports: exports)
         }
         var y: CGFloat = 88
-        for failure in [state.libraryFailure, state.storageFailure].compactMap({ $0 }) {
+        for failure in [state.failure?.scope == .library ? state.failure?.message : nil, state.storageFailure].compactMap({ $0 }) {
             let height = max(38, wrappedHeight(failure, size: 12, width: width - 44))
             label(failure, frame: NSRect(x: 22, y: y, width: width - 44, height: height), size: 12, color: .secondaryLabelColor, in: document, wrap: true)
             y += height + 6
+        }
+        if state.failure?.scope == .library {
+            button("Dismiss", id: ControlsAction.dismissFailure.id, frame: NSRect(x: 22, y: y, width: 84, height: 26),
+                action: .dismissFailure, in: document)
+            y += 32
         }
         let firstRow = y
         for row in page.items {
@@ -202,7 +213,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             }
             let details = row.details
             // Everything the row shows can be filtered on, its state included.
-            guard filter.isEmpty || ([row.title] + (row.status.map { [$0] } ?? []) + details)
+            guard filter.isEmpty || ([row.title] + (row.status.map { [$0] } ?? []) + details + (row.message.map { [$0] } ?? []))
                 .contains(where: { $0.localizedCaseInsensitiveContains(filter) }) else { continue }
             let id = row.id
             let top = y
@@ -210,7 +221,9 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             let textWidth = width - textX - 72
             let subtitle = ((row.status.map { [$0] } ?? []) + details).joined(separator: " · ")
             let subtitleHeight = subtitle.isEmpty ? 0 : wrappedHeight(subtitle, size: 11, width: textWidth)
-            let height = max(60, 33 + subtitleHeight + 13)
+            let messageHeight = row.message.map { wrappedHeight($0, size: 11, width: textWidth) + 6 } ?? 0
+            let retry = row.actions.first { if case .retryImport = $0.action { return true }; return false }
+            let height = max(60, 33 + subtitleHeight + messageHeight + 13) + (retry == nil ? 0 : 30)
             // The row is its own button: the whole card opens it, with its text and icon passing clicks through.
             let card = LibraryRowButton(frame: NSRect(x: 12, y: top + 2, width: width - 24, height: height - 4), clickable: row.open != nil)
             card.setAccessibilityLabel(row.open == nil ? row.title : "Open \(row.title)")
@@ -225,7 +238,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             // Colour means something: a problem row is the only one that stands out.
             let attention = row.attention
             let tint: NSColor = attention ? .systemOrange : row.kind == .project ? .systemBlue : .secondaryLabelColor
-            let symbol = attention ? "exclamationmark.triangle.fill" : row.kind == .recording ? "video.fill" : row.kind == .project ? "square.stack.3d.up.fill" : "square.and.arrow.up.fill"
+            let symbol = attention ? "exclamationmark.triangle.fill" : row.kind == .recording ? "video.fill" : row.kind == .imported ? "film" : row.kind == .project ? "square.stack.3d.up.fill" : "square.and.arrow.up.fill"
             let tile = PassiveImage(frame: NSRect(x: 28, y: top + 12, width: 36, height: 36))
             tile.wantsLayer = true
             tile.layer?.cornerRadius = 9
@@ -235,9 +248,49 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
             tile.imageScaling = .scaleNone
             tile.contentTintColor = tint
             document.addSubview(tile)
-            label(row.title, frame: NSRect(x: textX, y: top + 12, width: textWidth, height: 18), size: 13, weight: .semibold, in: document, passive: true)
+            // A badge sits right after the title and keeps its room; a long title gives way to it.
+            let badgeWidth = row.badge.map { ceil(($0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 10, weight: .medium)]).width) + 12 } ?? 0
+            let titleRoom = row.badge == nil ? textWidth : textWidth - badgeWidth - 6
+            let titleWidth = min(titleRoom, ceil((row.title as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width) + 4)
+            let title = label(row.title, frame: NSRect(x: textX, y: top + 12, width: row.badge == nil ? textWidth : titleWidth, height: 18), size: 13, weight: .semibold, in: document, passive: true)
+            // A filename's end (its version and extension) is what tells two imports apart.
+            if row.kind == .imported { title.lineBreakMode = .byTruncatingMiddle }
+            if let badge = row.badge {
+                let chip = PassiveLabel(labelWithString: badge)
+                chip.font = .systemFont(ofSize: 10, weight: .medium)
+                // Light text on a muted accent reads in dark mode; the accent itself reads in light mode.
+                chip.textColor = NSColor(name: nil) { appearance in
+                    appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                        ? NSColor.controlAccentColor.blended(withFraction: 0.6, of: .white) ?? .white
+                        : .controlAccentColor
+                }
+                chip.alignment = .center
+                chip.wantsLayer = true
+                chip.layer?.cornerRadius = 4
+                chip.layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+                chip.frame = NSRect(x: textX + titleWidth + 6, y: top + 13, width: badgeWidth, height: 16)
+                document.addSubview(chip)
+            }
             if !subtitle.isEmpty {
-                label(subtitle, frame: NSRect(x: textX, y: top + 32, width: textWidth, height: subtitleHeight), size: 11, color: attention ? .systemOrange : .secondaryLabelColor, in: document, wrap: true, passive: true)
+                let field = label(subtitle, frame: NSRect(x: textX, y: top + 32, width: textWidth, height: subtitleHeight), size: 11, color: .secondaryLabelColor, in: document, wrap: true, passive: true)
+                if attention, let status = row.status {
+                    let text = NSMutableAttributedString(attributedString: field.attributedStringValue)
+                    text.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: NSRange(location: 0, length: (status as NSString).length))
+                    field.attributedStringValue = text
+                }
+            }
+            if let message = row.message {
+                label(message, frame: NSRect(x: textX, y: top + 38 + subtitleHeight, width: textWidth, height: messageHeight - 6), size: 11, color: .secondaryLabelColor, in: document, wrap: true, passive: true)
+            }
+            if let retry {
+                button(retry.title, id: retry.action.id,
+                    frame: NSRect(x: textX, y: top + 38 + subtitleHeight + messageHeight, width: 70, height: 26),
+                    action: retry.action, enabled: retry.enabled, in: document)
+                if let button = controls[retry.action.id] {
+                    // Labels have a two-point text inset; align the bezel with their visible text.
+                    let aligned = button.frame.offsetBy(dx: 2, dy: 0)
+                    button.frame = button.frame(forAlignmentRect: aligned)
+                }
             }
             if !row.actions.isEmpty {
                 let more = NSPopUpButton(frame: NSRect(x: width - 56, y: top + 8, width: 30, height: 26), pullsDown: true)
@@ -248,7 +301,7 @@ final class LibraryView: NSView, NSSearchFieldDelegate {
                 let handle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
                 handle.image = NSImage(systemSymbolName: "ellipsis.circle", accessibilityDescription: "Actions")
                 menu.addItem(handle)
-                for command in row.actions {
+                for command in row.actions where command.action != retry?.action {
                     let action = command.action
                     let item = NSMenuItem(title: command.title, action: #selector(activateItem(_:)), keyEquivalent: "")
                     item.target = self

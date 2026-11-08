@@ -97,6 +97,17 @@ test(
               const { preview, ...identity } = historical[key].published;
               historical[key].published = { ...identity, output: preview };
             }
+            // The archive predates record identity: a project names itself `id`.
+            if (key === "project") {
+              const { projectId, ...project } = historical[key];
+              historical[key] = { id: projectId, ...project };
+            }
+            // The archive predates WorkState and unit-suffixed delivery fields.
+            if (historical[key].state === "processing") historical[key].state = "running";
+            if (historical[key].delivery) {
+              const { token, bytes, expiresAt } = historical[key].delivery;
+              historical[key].delivery = { token, sizeBytes: bytes, expiresAtMs: expiresAt };
+            }
           }
         }
       }
@@ -231,7 +242,7 @@ child.on('close',(code,signal)=>{log({event:'close',operation,pid:child.pid,code
       assert(exchanges.every((x) => x.response?.ok));
       assert(
         exchanges.every((x) =>
-          ["project.create", "project.list", "project.get", "recording.list"].includes(
+          ["project.create", "project.list", "project.get", "media.list", "recording.get"].includes(
             x.request.operation,
           ),
         ),

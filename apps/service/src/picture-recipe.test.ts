@@ -15,7 +15,7 @@ test("picture discovery retains the exact native recipe and treats unavailable p
   expect(
     await nativePictureCapabilities(async () => ({
       ok: false,
-      error: { code: "NOT_READY", message: "missing", retryable: false, details: {} },
+      error: { code: "NOT_READY", message: "missing", retryable: true, details: {} },
     })),
   ).toEqual({});
 });

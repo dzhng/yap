@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { ResourceReferences } from "./references.js";
 import { isDeepStrictEqual } from "node:util";
-import { ownerIdentity, type JobOwner } from "./jobs.js";
+import { ownerIdentity, type Owner } from "./jobs.js";
 import type { AssetStore } from "./assets.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource } from "./source-selection.js";
@@ -30,7 +30,7 @@ import { sourceScenePolicy, sceneSampleSourceTime } from "./source-scenes.js";
 import { compare, fromTime } from "@yap/composition";
 import type { TimeRange } from "./presentation-time.js";
 
-export type SceneOwner = Extract<JobOwner, { kind: "recording" | "asset" }>;
+export type SceneOwner = Owner<"recording" | "asset">;
 export type SceneEvidenceIdentity = {
   owner: SceneOwner;
   sourceId: string;
@@ -73,7 +73,7 @@ export const portableSceneMetadataSchema = z
   .strictObject({
     owner: z.strictObject({
       kind: z.literal("asset"),
-      assetId: z.string().regex(/^[a-f0-9]{64}$/),
+      id: z.string().regex(/^[a-f0-9]{64}$/),
     }),
     sourceId: z.string().regex(/^[a-f0-9]{64}$/),
     generation: z.string().min(1).max(256),
@@ -98,34 +98,23 @@ export const portableSceneMetadataSchema = z
     boundaryCount: portableCount,
   })
   .refine(
-    (value) => value.sourceId === value.owner.assetId,
+    (value) => value.sourceId === value.owner.id,
     "Scene source identity differs from its owner",
   );
 export type PortableSceneMetadata = z.infer<typeof portableSceneMetadataSchema>;
-export type RecordingSceneEvidenceMetadata = RecordingSceneEvidenceIdentity &
-  SceneDetails & { durationUs: number };
 export function recordingSceneIdentity({
   recordingId,
   sourceId,
   generation,
   policy,
 }: RecordingSceneEvidenceIdentity): SceneEvidenceIdentity {
-  return { sourceId, generation, policy, owner: { kind: "recording", recordingId } };
-}
-export function recordingSceneMetadata({
-  owner,
-  source,
-  ...metadata
-}: SceneEvidenceMetadata): RecordingSceneEvidenceMetadata {
-  if (owner.kind !== "recording" || source.kind !== "recording")
-    invalid("Recording scene view requires a recording source");
-  return { ...metadata, recordingId: owner.recordingId, durationUs: source.durationUs };
+  return { sourceId, generation, policy, owner: { kind: "recording", id: recordingId } };
 }
 export function recordingSceneOwner(store: CaptureStore) {
   return (identity: SceneEvidenceIdentity, source: SceneSource): void => {
     if (identity.owner.kind !== "recording" || source.kind !== "recording")
       invalid("Scene identity requires a recording source");
-    const recording = store.get(identity.owner.recordingId);
+    const recording = store.get(identity.owner.id);
     if (
       recording.state === "canceled" ||
       recording.sourceId !== identity.sourceId ||
@@ -155,11 +144,11 @@ export function assetSceneOwner(assets: AssetStore, acquisitions: AcquisitionSto
     if (
       identity.owner.kind !== "asset" ||
       source.kind !== "asset" ||
-      identity.sourceId !== identity.owner.assetId
+      identity.sourceId !== identity.owner.id
     )
       invalid("Scene identity requires an asset source");
     const selected = selectSource(assets, acquisitions, {
-      assetId: identity.owner.assetId,
+      assetId: identity.owner.id,
       streamId: source.streamId,
       ...(source.acquisitionId === undefined ? {} : { acquisitionId: source.acquisitionId }),
     });
@@ -202,9 +191,7 @@ function metadata(row: Generation): SceneEvidenceMetadata {
     "sourceState",
   );
   const owner: SceneOwner =
-    ownerKind === "recording"
-      ? { kind: "recording", recordingId: ownerId }
-      : { kind: "asset", assetId: ownerId };
+    ownerKind === "recording" ? { kind: "recording", id: ownerId } : { kind: "asset", id: ownerId };
   return { ...details, owner, source: JSON.parse(source) };
 }
 /** Scene resets are the boundary comparisons; chunks do not store a second copy. */
@@ -380,8 +367,8 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
         if (row.complete !== 1) {
           const owner: SceneOwner =
             row.ownerKind === "asset"
-              ? { kind: "asset", assetId: row.ownerId }
-              : { kind: "recording", recordingId: row.ownerId };
+              ? { kind: "asset", id: row.ownerId }
+              : { kind: "recording", id: row.ownerId };
           await this.remove({
             owner,
             sourceId: row.sourceId,
@@ -405,7 +392,7 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
       throw new CatalogError("LIMIT_EXCEEDED", "Scene dependency inventory exceeds its limit");
     return rows.map((row) => {
       if (row.complete !== 1)
-        throw new CatalogError("PROCESSING_BUSY", "Scene generation is incomplete", {}, true);
+        throw new CatalogError("PROCESSING_BUSY", "Scene generation is incomplete", {});
       return portableSceneMetadataSchema.parse(metadata(row));
     });
   }
@@ -413,12 +400,7 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
     const expected = portableSceneMetadataSchema.parse(value),
       existing = this.get(expected);
     if (existing && existing.complete !== 1)
-      throw new CatalogError(
-        "PROCESSING_BUSY",
-        "Scene generation is already being prepared",
-        {},
-        true,
-      );
+      throw new CatalogError("PROCESSING_BUSY", "Scene generation is already being prepared", {});
     if (existing && !isDeepStrictEqual(metadata(existing), expected))
       invalid("Retained scene metadata conflicts with package");
     let owned = false,
@@ -780,6 +762,22 @@ export class SceneEvidenceStore extends SceneEvidenceReader {
       }
       if (rows.length < 100) return;
       await setImmediate();
+    }
+  }
+
+  /** Force removal for owner retirement; retained references cannot outlive their owner. */
+  async purge(owner: SceneOwner, signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const row = this.store.catalog
+        .prepare(
+          "SELECT sourceId,generation,policy FROM scene_evidence_generations WHERE ownerKind=? AND ownerId=? ORDER BY rowid LIMIT 1",
+        )
+        .get(...ownerIdentity(owner)) as
+        | { sourceId: string; generation: string; policy: string }
+        | undefined;
+      if (!row) return;
+      await this.remove({ ...row, owner });
     }
   }
 }

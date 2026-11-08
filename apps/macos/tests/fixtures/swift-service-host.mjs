@@ -4,9 +4,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { protocolLinkArguments } from "./swift-protocol.mjs";
 
 const sources = fileURLToPath(new URL("../../Sources/Yap/", import.meta.url));
-export function checkServiceHost(t, peer, body, extraSources = []) {
+export function checkServiceHost(
+  t,
+  peer,
+  body,
+  extraSources = [],
+  nativeHandler = 'answer(.failure(ServiceFailure(code: "UNEXPECTED", message: "No native call expected")))',
+) {
   const scratch = mkdtempSync(join(tmpdir(), "yap-update-host-"));
   t.after(() => rmSync(scratch, { recursive: true, force: true }));
   const script = join(scratch, "peer.mjs");
@@ -27,7 +34,7 @@ func diagnostic(_ message: String) {}
     var observed: ServiceHost.State = .starting
     var progress: @MainActor @Sendable () -> Void = {}
     let host = ServiceHost(bundle: bundle, onNativeCall: { _, _, answer in
-        answer(.failure(ServiceFailure(code: "UNEXPECTED", message: "No native call expected")))
+        ${nativeHandler}
     }, onState: { state in MainActor.assumeIsolated { observed = state } },
        onUpdateProgress: { MainActor.assumeIsolated { progress() } })
     host.start()
@@ -48,6 +55,7 @@ func diagnostic(_ message: String) {}
       "-swift-version",
       "6",
       "-parse-as-library",
+      ...protocolLinkArguments(),
       ...["ServiceHost", "ServiceBundle", "NodeRuntime", ...extraSources].map((name) =>
         join(sources, `${name}.swift`),
       ),

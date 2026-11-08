@@ -22,7 +22,7 @@ async function fixture() {
   });
   const store = new SpeakerEvidenceStore(catalog, () => {});
   const identity = {
-    owner: { kind: "asset" as const, assetId: "a".repeat(64) },
+    owner: { kind: "asset" as const, id: "a".repeat(64) },
     sourceId: "a".repeat(64),
     generation: "g1",
     policy: "speaker-v1" as const,
@@ -117,13 +117,13 @@ test("publishes a bounded selected range with its matching score extent", async 
   const source = {
     ...speakerSource,
     observationRange: { startUs: 0, endUs: 10_000_000 },
-    pcm: { ...speakerSource.pcm, frames: 160_000 },
+    pcm: { ...speakerSource.pcm, frameCount: 160_000 },
   };
   const raw = nativeOutput(["0.000 1.000 speaker_0"], speakerSource.engine.modelSha256, 160_000);
   const staged = f.store.stage(f.identity, source, raw);
   f.catalog.transaction(() => staged.publish());
   expect(f.store.metadata(f.identity)).toMatchObject({
-    source: { observationRange: source.observationRange, pcm: { frames: 160_000 } },
+    source: { observationRange: source.observationRange, pcm: { frameCount: 160_000 } },
     scoreCount: 125,
     axes: [1, 125, 4],
   });
@@ -150,11 +150,11 @@ test("reclamation preserves typed retained generations and drops unretained obse
   });
   const abandonedIdentity = { ...f.identity, generation: "g2" };
   f.store.stage(abandonedIdentity, speakerSource, nativeOutput([]));
-  await f.store.reclaim(f.identity.owner.assetId, () => false);
+  await f.store.reclaim(f.identity.owner.id, () => false);
   expect(f.store.intervalPage({ identity: f.identity }).intervals[0]?.slot).toBe(0);
   expect(() => f.store.metadata(abandonedIdentity)).toThrow("not ready");
   references.release("speaker-generation", { kind: "revision", id: "r1" });
-  await f.store.reclaim(f.identity.owner.assetId, () => false);
+  await f.store.reclaim(f.identity.owner.id, () => false);
   expect(() => f.store.metadata(f.identity)).toThrow("not ready");
 });
 

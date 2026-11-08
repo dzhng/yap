@@ -1,6 +1,38 @@
 import Foundation
 
-if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
+if ProcessInfo.processInfo.environment["YAP_MAXIMUM_TAKE"] != nil {
+    try await runMaximumTakeTests()
+} else if let output = ProcessInfo.processInfo.environment["YAP_CAPTURE_FIXTURE"] {
+    try await writeRecordingPromptFixture(directory: output,
+        options: ProcessInfo.processInfo.environment["YAP_CAPTURE_FIXTURE_OPTIONS"] ?? "{}")
+} else if let output = ProcessInfo.processInfo.environment["YAP_CURSOR_HOLD_FIXTURES"] {
+    try writeCursorHoldFixtures(to: URL(fileURLWithPath: output))
+} else if ProcessInfo.processInfo.environment["YAP_CHANGE_ONLY_TESTS"] != nil {
+    try runChangeOnlyCursorTests()
+} else if ProcessInfo.processInfo.environment["YAP_CURSOR_TESTS"] != nil {
+    try runCursorGeometryTests()
+    runInkLifetimeTests()
+    try runSchema4HeaderTests()
+} else if let output = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_FIXTURE"] {
+    try writeLongStrokeFixture(to: URL(fileURLWithPath: output),
+        strokeCount: Int(ProcessInfo.processInfo.environment["YAP_LONG_STROKE_COUNT"] ?? "1")!,
+        sourceID: ProcessInfo.processInfo.environment["YAP_LONG_STROKE_SOURCE_ID"] ?? "schema3-long-stroke")
+    if let video = ProcessInfo.processInfo.environment["YAP_LONG_STROKE_VIDEO"] {
+        try await RecoveryFixture.writeVariableDurationVideo(
+            to: URL(fileURLWithPath: video), timesUs: [0, 10_000_000], endUs: 11_000_000)
+    }
+} else if ProcessInfo.processInfo.environment["YAP_MARK_RECOGNIZER_TESTS"] != nil {
+    runMarkRecognizerTests()
+} else if ProcessInfo.processInfo.environment["YAP_SCHEMA4_SUMMARY"] != nil {
+    try await runSchema4SummaryTests()
+} else if ProcessInfo.processInfo.environment["YAP_SCHEMA4_TESTS"] != nil {
+    runMarkRecognizerTests()
+    try runSchema4HeaderTests()
+    try await runSchema4StrokeTests()
+    try await runSchema4SummaryTests()
+} else if ProcessInfo.processInfo.environment["YAP_REQUIREMENTS"] != nil {
+    try runRequirementsTests()
+} else if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
     runCaptureClockTests()
 } else if ProcessInfo.processInfo.environment["YAP_LIVE_PCM_TIMING"] != nil {
     try await runLivePCMTimingTests()
@@ -101,7 +133,22 @@ if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
   let corpus = ProcessInfo.processInfo.environment["YAP_CAPTURE_GAP_CORPUS"]
 {
   try await runCaptureAudioGapProbe(output: output, corpus: corpus)
+} else if ProcessInfo.processInfo.environment["YAP_JOURNAL_TESTS"] != nil {
+  try await runCaptureJournalTests()
+  try runCaptureJournalLeaseTests()
+  try runPCMJournalTests()
+} else if ProcessInfo.processInfo.environment["YAP_RECOVERY_TESTS"] != nil {
+  try await runFractionalRecoveryDurationTest()
+  try await runSourcePublicationRecoveryTests()
+  try await runEmptyCaptureRecoveryTests()
+  try await runCanonicalRecoveryTests()
+  try await runMediaRecoveryTests()
 } else {
+  try runRequirementsTests()
+  try runSchema4HeaderTests()
+  try await runSchema4StrokeTests()
+  try await runSchema4SummaryTests()
+  runMarkRecognizerTests()
   try await runLivePCMTimingTests()
   try await runCaptureInputAuthorityTests()
   try await runPrimaryCameraInputTests()
@@ -125,6 +172,8 @@ if ProcessInfo.processInfo.environment["YAP_CAPTURE_CLOCK"] != nil {
   try await runCanonicalRecoveryTests()
   try await runCaptureTerminationTests()
   try await runCaptureWriterTests()
+  try await runIdleScreenFragmentTest()
+  try await runLateScreenFrameTest()
   runCaptureClockTests()
   try await runIndependentCameraClockTests()
   try await runCameraAvailabilityTests()

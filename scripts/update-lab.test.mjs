@@ -280,6 +280,27 @@ for (const scenario of ["install", "disable-quit", "disable-extract-quit"]) {
 }
 
 test(
+  "the release feed offers each installed app the item for the catalog format it wrote",
+  { timeout: 120_000 },
+  () => {
+    const result = spawnSync(
+      process.execPath,
+      ["scripts/update-lab.mjs", "format-route", ...engineArgs],
+      { encoding: "utf8", timeout: 115_000 },
+    );
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const report = JSON.parse(result.stdout);
+    assert.deepEqual(
+      report.events
+        .filter((e) => e.event === "candidate")
+        .map(({ candidateVersion, format, accepted }) => ({ candidateVersion, format, accepted })),
+      [{ candidateVersion: "0.1.1", format: "23", accepted: true }],
+    );
+    assert.equal(report.installedVersion, "0.1.1");
+  },
+);
+
+test(
   "the pinned upstream engine is rejected because busy quit installs without permission",
   { timeout: 120_000 },
   () => {

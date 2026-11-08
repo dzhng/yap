@@ -244,7 +244,7 @@ test("changed immutable bytes and preparation failures never consume or leak an 
             error: {
               code: "UNSUPPORTED_MEDIA",
               message: "unreadable fresh source",
-              retryable: false,
+              retryable: true,
               details: {},
             },
           }

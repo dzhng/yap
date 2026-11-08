@@ -12,7 +12,6 @@ import {
   SceneEvidenceStore,
   assetSceneOwner,
   recordingSceneOwner,
-  recordingSceneMetadata,
   type SceneEvidenceIdentity,
   type SceneSource,
 } from "./scene-evidence.js";
@@ -101,7 +100,7 @@ async function fixture() {
   const asset = await assets.import(file, { kind: "import" }, probe);
   id = asset.id;
   const recording = catalog.allocate().recording;
-  catalog.registerSource(recording.recordingId, 1000000);
+  catalog.registerSource(recording.id, 1000000);
   const recordingCheck = recordingSceneOwner(catalog),
     assetCheck = assetSceneOwner(assets, acquisitions);
   const evidence = new SceneEvidenceStore(catalog, (identity, source) =>
@@ -110,7 +109,7 @@ async function fixture() {
       : assetCheck(identity, source),
   );
   const identity: SceneEvidenceIdentity = {
-    owner: { kind: "asset", assetId: asset.id },
+    owner: { kind: "asset", id: asset.id },
     sourceId: asset.id,
     generation: "same-attempt",
     policy: sourceScenePolicy,
@@ -125,7 +124,7 @@ async function fixture() {
       durationUs: selected.durationUs,
     };
   };
-  const recordingChunk = await analysisFor(recording.recordingId, file).analyze(
+  const recordingChunk = await analysisFor(recording.id, file).analyze(
     { startUs: 0, endUs: 1000000 },
     new AbortController().signal,
   );
@@ -150,11 +149,11 @@ async function fixture() {
 }
 test("real recording and asset owners with identical IDs and attempts retain their distinct scene policies", async () => {
   const f = await fixture();
-  expect(f.recording.recordingId).toBe(f.asset.id);
+  expect(f.recording.id).toBe(f.asset.id);
   expect(f.recording.sourceId).toBe(f.asset.id);
   const recording: SceneEvidenceIdentity = {
     ...f.identity,
-    owner: { kind: "recording", recordingId: f.asset.id },
+    owner: { kind: "recording", id: f.asset.id },
     policy: scenePolicy.id,
   };
   f.evidence.append(f.identity, f.descriptor(), f.chunk);
@@ -162,9 +161,9 @@ test("real recording and asset owners with identical IDs and attempts retain the
   const asset = f.evidence.finish(f.identity),
     captured = f.evidence.finish(recording);
   expect(asset.source).toEqual(f.descriptor());
-  expect(recordingSceneMetadata(captured)).toMatchObject({
-    recordingId: f.asset.id,
-    durationUs: 1000000,
+  expect(captured).toMatchObject({
+    owner: { kind: "recording", id: f.asset.id },
+    source: { kind: "recording", durationUs: 1000000 },
     boundaryCount: 1,
   });
   async function* capturedChunks() {
@@ -246,7 +245,7 @@ test("adopted acquisition contexts are authoritative and a generation cannot swi
   const f = await fixture();
   const raw = new SourceEvidenceStore(f.catalog, ({ owner }) => {
     if (owner.kind !== "acquisition") throw new Error("unexpected owner");
-    f.acquisitions.intent(owner.acquisitionId);
+    f.acquisitions.intent(owner.id);
   });
   const importer = new AcquisitionImporter(f.catalog, f.acquisitions, f.assets, raw, f.home);
   const signal = new AbortController().signal;
@@ -307,7 +306,7 @@ test("adopted acquisition contexts are authoritative and a generation cannot swi
   const assetId = a.bindings[0]!.assetId;
   const identity: SceneEvidenceIdentity = {
     ...f.identity,
-    owner: { kind: "asset", assetId },
+    owner: { kind: "asset", id: assetId },
     sourceId: assetId,
   };
   const selected = selectSource(f.assets, f.acquisitions, {

@@ -26,7 +26,7 @@ const correlates = /\bfor lag\b|correlat|\bxc(?:orr)?\.(?:py|m?js)\b/i;
 export const effort = {
   transcript_calls: (command) => /\btranscript\.(?:prepare|review)\b/.test(command),
   chunked_transcription: (command) =>
-    /\btranscript\.(?:prepare|review)\b/.test(command) && /executionRange/.test(command),
+    /\btranscript\.(?:prepare|review)\b/.test(command) && /sourceRange/.test(command),
   measure_calls: (command) => /\baudio\.measure\b/.test(command),
   cross_correlation: (command) => correlates.test(command),
   // A correlation score also uses sqrt; only level arithmetic counts here.

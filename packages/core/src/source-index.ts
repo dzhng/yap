@@ -31,12 +31,11 @@ import {
   validateSourceFrameGeometry,
   validatePictureObservations,
   validateFaceObservations,
-  type SourceFrameArtifact,
   type SourceFrameUnavailable,
   type MediaFrameInspection,
 } from "./frame-inspection.js";
 import type { IndexDomain } from "./screenshot-index.js";
-import { sourceIndexPolicy, type SourceIndexReason } from "./source-index-selection.js";
+import type { SourceIndexReason } from "./source-index-selection.js";
 import type { TimeRange } from "./presentation-time.js";
 import { validateSceneSampleClock, type SourceVisualPoint } from "./source-scenes.js";
 export type SourceIndexIdentity = SourceSelection & {
@@ -70,7 +69,7 @@ export type SourceIndexCoverage = { source: TimeRange } & (
 export type SourceIndexRecords = {
   identity: SourceIndexIdentity;
   candidate: SourceIndexCandidate;
-  frame: Omit<SourceFrameArtifact, "cacheId">;
+  frame: z.infer<typeof retainedSourceFrameSchema>;
   coverage: SourceIndexCoverage;
 };
 const portableTime = z.int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -81,15 +80,15 @@ export const portableSourceIndexMetadataSchema = sourceSelectionSchema
   .extend({
     generation: z.string().min(1).max(256),
     scenes: portableSceneMetadataSchema,
-    selectionPolicy: z.literal(sourceIndexPolicy.id),
+    selectionPolicy: z.string().min(1).max(256),
     implementationId: z.string().min(1).max(256),
     maxLongEdge: z.int().min(1).max(8192),
     observationRequest: pictureObservationRequestSchema.optional(),
     faceObservationRequest: faceObservationRequestSchema.optional(),
     durationUs: portableTime,
-    candidateCount: portableTime.max(25000),
-    coverageCount: portableTime.max(25000),
-    bytes: portableTime,
+    candidateCount: portableTime,
+    coverageCount: portableTime,
+    sizeBytes: portableTime,
   })
   .strict();
 export const portableSourceIndexRecordSchema = z.discriminatedUnion("kind", [
@@ -105,6 +104,11 @@ export const portableSourceIndexRecordSchema = z.discriminatedUnion("kind", [
             z.strictObject({
               kind: z.enum(["first", "last", "availability", "coverage"]),
               eventSourceUs: portableTime,
+            }),
+            z.strictObject({
+              kind: z.enum(["mark", "pin", "click"]),
+              eventSourceUs: portableTime,
+              markId: z.string().min(1),
             }),
             z.strictObject({
               kind: z.literal("scene"),
@@ -173,7 +177,7 @@ export function sourceIndexDomain(
     });
   }
   return {
-    owner: (i) => ({ kind: "asset", assetId: i.assetId }),
+    owner: (i) => ({ kind: "asset", id: i.assetId }),
     pin: (i) => ({
       assetId: i.assetId,
       streamId: i.streamId,
@@ -194,7 +198,7 @@ export function sourceIndexDomain(
       if (
         source.stream.kind !== "video" ||
         metadata.owner.kind !== "asset" ||
-        metadata.owner.assetId !== identity.assetId ||
+        metadata.owner.id !== identity.assetId ||
         !isDeepStrictEqual(metadata, identity.scenes) ||
         !isDeepStrictEqual(metadata.source, sourceSceneDescriptor(source)) ||
         !identity.generation ||
@@ -349,5 +353,6 @@ export function sourceIndexDomain(
       };
     },
     isDeleting: () => false,
+    retainedFrame: retainedSourceFrameSchema,
   };
 }

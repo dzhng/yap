@@ -63,7 +63,7 @@ async function app(home) {
     YAP_FIXTURE_WINDOW: "1",
   });
   const [, windowId] = await instance.waitFor(/capture fixture window=(\d+)/);
-  return { instance, source: { kind: "window", windowId: Number(windowId) } };
+  return { instance, source: { kind: "window", id: Number(windowId) } };
 }
 
 const seconds = (us) => (us == null ? null : Number((us / 1_000_000).toFixed(3)));
@@ -124,23 +124,23 @@ for (const moment of moments) {
   });
   await delay(moment.recordMs);
   if (moment.pause) {
-    await succeeds(home, "capture.pause", { recordingId: started.recordingId });
+    await succeeds(home, "capture.pause", { recordingId: started.id });
     await delay(500);
   }
   // A stop and a kill at the same moment: the take is between the order to finish and the
   // finished media, which is where a force quit at the end of a recording lands.
   const stopping = moment.stopFirst
-    ? call(home, "capture.stop", { recordingId: started.recordingId }).catch(() => undefined)
+    ? call(home, "capture.stop", { recordingId: started.id }).catch(() => undefined)
     : undefined;
   first.instance.kill("SIGKILL");
   await first.instance.exited;
   await stopping;
 
-  const source = join(home, "library", "recordings", started.recordingId, "source");
+  const source = join(home, "library", "recordings", started.id, "source");
   const second = await app(home);
   const recovered = await waitFor(
     async () => {
-      const facts = await succeeds(home, "recording.get", { recordingId: started.recordingId });
+      const facts = await succeeds(home, "recording.get", { recordingId: started.id });
       return (
         ["complete", "interrupted", "canceled"].includes(facts.state) &&
         (facts.sourceDurationUs === null ||

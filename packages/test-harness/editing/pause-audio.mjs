@@ -59,7 +59,7 @@ async function edit(requestId, operations, transport = "cli") {
     { projectId, expectedRevisionId: revisionId, requestId, operations },
     { transport },
   );
-  revisionId = result.revision.id;
+  revisionId = result.revision.revisionId;
   return result;
 }
 async function audio(name, selection = { projectId, revisionId }) {
@@ -103,15 +103,15 @@ try {
     },
   });
   projectId = made.project.projectId;
-  revisionId = made.revision.id;
+  revisionId = made.revision.revisionId;
   const placed = await edit("place", [
     { operation: "track.add", label: "narration", track: { kind: "audio", order: 0 } },
     {
       operation: "place",
       clip: {
         trackId: { label: "narration" },
-        assetId: asset.id,
-        streamId: asset.streams[0].id,
+        assetId: asset.assetId,
+        streamId: asset.streams[0].streamId,
         source: { kind: "range", range: { startUs: 0, endUs: 3000000 } },
         placement: { kind: "project", range: { startUs: 0, endUs: 3000000 } },
         pitch: "preserve",
@@ -153,9 +153,9 @@ try {
     protectedJoinGuardFrames: 0,
   };
   const selection = {
-    assetId: asset.id,
-    streamId: asset.streams[0].id,
-    range: { startUs: 0, endUs: 250000 },
+    assetId: asset.assetId,
+    streamId: asset.streams[0].streamId,
+    sourceRange: { startUs: 0, endUs: 250000 },
     rendition: { sampleRate: rate, channels: 2 },
   };
   const extraction = await poll(
@@ -272,14 +272,15 @@ try {
   const exported = await call("export.create", {
     projectId,
     kind: "video",
-    exportId: randomUUID(),
+    requestId: randomUUID(),
     directory: out,
     leaf: "export.mp4",
   });
+  const exportId = exported.exportId;
   assert.equal(exported.snapshot.revisionId, revisionId);
   const published = await poll(
-    () => call("export.status", { exportId: exported.exportId }, { transport: "mcp" }),
-    (v) => v.state === "committed",
+    () => call("export.status", { exportId }, { transport: "mcp" }),
+    (v) => v.state === "ready",
     "export",
   );
   assert.deepEqual(await readFile(published.output), await readFile(join(out, "filled.mp4")));
@@ -291,7 +292,7 @@ try {
         expectedRevisionId: revisionId,
         requestId: `undo-room-${n}`,
       })
-    ).id;
+    ).revisionId;
   assert.deepEqual(await audio("undo-room"), silent);
   const capability = (await call("processing.capabilities", {})).find((v) => v.type === "rnnoise");
   report.checks.rnnoise = {
@@ -335,8 +336,8 @@ try {
     const preparedAsset = await call("asset.get", { assetId: prepared.published.output.assetId });
     assert.deepEqual(
       await audio("noise-prepared", {
-        assetId: preparedAsset.id,
-        streamId: preparedAsset.streams.find((v) => v.kind === "audio").id,
+        assetId: preparedAsset.assetId,
+        streamId: preparedAsset.streams.find((v) => v.kind === "audio").streamId,
       }),
       wet,
     );
@@ -390,10 +391,13 @@ try {
           expectedRevisionId: revisionId,
           requestId: `undo-noise-${n}`,
         })
-      ).id;
+      ).revisionId;
     assert.deepEqual(await audio("undo-noise"), silent);
     assert.deepEqual(
-      await audio("source-after-noise", { assetId: asset.id, streamId: asset.streams[0].id }),
+      await audio("source-after-noise", {
+        assetId: asset.assetId,
+        streamId: asset.streams[0].streamId,
+      }),
       sourcePCM,
     );
     Object.assign(report.checks.rnnoise, {
@@ -415,9 +419,9 @@ try {
 
   revisionId = (
     await call("edit.undo", { projectId, expectedRevisionId: revisionId, requestId: "undo-gap" })
-  ).id;
+  ).revisionId;
   assert.deepEqual(await audio("undo-gap"), baseline);
-  assert.equal(hash(await readFile(sourcePath)), asset.id);
+  assert.equal(hash(await readFile(sourcePath)), asset.assetId);
   report.checks.undoAndRender = {
     roomUndoExact: true,
     gapUndoExact: true,

@@ -1,0 +1,265 @@
+{
+  "measuredAt": "2026-10-20",
+  "revision": "9784cb3aab3885e86c7cedf7179daf45389a6c84",
+  "environment": {
+    "node": "v24.14.0",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "cpu": "Apple M5 Pro"
+  },
+  "scope": "Single sequential observation per strategy; same indexed scratch catalog, no cache purge. Times cover awaited writeSourceEvidencePages across all eight source indexes, including page writes, excluding fixture generation, native normalization, ingest, startup and subsequent verification. No hardware, user recordings, or library home accessed.",
+  "fixture": {
+    "generator": "packages/test-harness/long-take/Main.swift generate(), compiled scratch entry point against existing debug YapCapture/YapMedia objects",
+    "profile": "cursor-worst",
+    "seconds": 4000,
+    "cursorHz": 60,
+    "cursorSamples": 240000,
+    "normalizedRecords": 240068,
+    "journalBytes": 33736621,
+    "journalSha256": "d29d59685606864bcdf31ece562d62edcb9cdf1cb89171a7ab5805f752140604",
+    "normalizedBytes": 40911926,
+    "normalizedSha256": "ae478dc6d441b396798335a1bc90054771711753520816285866703c4e2c08bc",
+    "productionPath": [
+      "CaptureJournal writer",
+      "media.sourceEvidence",
+      "SourceEvidenceStore.ingest",
+      "writeSourceEvidencePages"
+    ]
+  },
+  "method": {
+    "original256": "Pre-fix compiled evidence-read.js with only first export limit: 1 replaced by limit: 256; pre-fix compiled evidence.js unchanged.",
+    "limit1": "Pre-fix compiled evidence-read.js and evidence.js unchanged.",
+    "bounded": "Current compiled production modules, limit 256, maxBytes EVIDENCE_BATCH_BYTES, SQL window cutoff.",
+    "isolation": "Node registerHooks substitutes only those two modules for baselines. Three fresh processes read the same catalog; no tests/builds run during timed exports. Per-export AbortSignal stop at 120 seconds; parent stop at 150 seconds.",
+    "verification": "All page payload SHA-256 values recomputed after timing and checked against manifest. Identical manifest SHA-256 proves matching index descriptors, row counts, bounds, page byte lengths and page hashes across all three strategies; first/last cursor values also matched through FileSourceEvidence."
+  },
+  "commands": [
+    "scratch generator SOURCE (generate(cursor-worst,4000,11,94,60,30))",
+    "yap-native media.sourceEvidence {directory: SOURCE, output: NORMALIZED} via production JSON-line request",
+    "node packages/test-harness/long-take/ts-stage.mjs ingest SCRATCH (canonical /private/var path)",
+    "BATCH_VARIANT=original256 node --import SCRATCH/loader.mjs SCRATCH/export.mjs",
+    "BATCH_VARIANT=limit1 node --import SCRATCH/loader.mjs SCRATCH/export.mjs",
+    "BATCH_VARIANT=bounded node --import SCRATCH/loader.mjs SCRATCH/export.mjs"
+  ],
+  "sourceSha256": {
+    "packages/core/src/evidence-read.ts": "3e9c4976aa761ae6bf23e871cc7966a89197ca10635e08ebf7237a4f31cb469e",
+    "packages/core/src/evidence.ts": "a14e71feecb2905603dc5f960bae5bf955530d2446f434c0122df2f0c66d98a9",
+    "packages/core/src/ordered-pages.ts": "e0acda03f6435c21fcc1b05aa3dbc3eb24ceb18de8eba830deeecfea159f3fb4",
+    "packages/core/src/evidence-pages.ts": "c70f8de4a785e6bcb55e06f2b1a7d9b28c9cd6825dc4352aa78373cae8ffa955",
+    "packages/test-harness/long-take/Main.swift": "c4d28da51d58e650279c9fdd2f355ec9440bc2fb779ef66233b795b94e98ab83"
+  },
+  "baselineCompiledSha256": {
+    "evidence-read.js": "36d911a2381663feaac4af1921b4a63c2c66ead8375bad172b0ec0b747b164a3",
+    "evidence.js": "e592d8f394ef4bb08da623ed40a085a5f97796a392cca6024cba09715967d49c"
+  },
+  "results": [
+    {
+      "variant": "original256",
+      "seconds": 0.852525417,
+      "manifestSha256": "3b742adb2eba4675d13f02a74ababbbdbfd4f7914be56426324a90a06ae04649",
+      "indexes": {
+        "cursor": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "cursorSequence": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "geometry": {
+          "pages": 1,
+          "rows": 67
+        },
+        "unplaced": {
+          "pages": 0,
+          "rows": 0
+        },
+        "pauses": {
+          "pages": 0,
+          "rows": 0
+        },
+        "marks": {
+          "pages": 0,
+          "rows": 0
+        },
+        "narration": {
+          "pages": 0,
+          "rows": 0
+        },
+        "system": {
+          "pages": 0,
+          "rows": 0
+        }
+      },
+      "first": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 1,
+        "globalX": 0.125,
+        "globalY": 0.375,
+        "sourceUs": 0,
+        "x": 0.125,
+        "y": 0.375,
+        "sequence": 3
+      },
+      "last": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 67,
+        "globalX": 1903.125,
+        "globalY": 469.375,
+        "sourceUs": 3999983333,
+        "x": 1903.125,
+        "y": 469.375,
+        "sequence": 240068
+      }
+    },
+    {
+      "variant": "limit1",
+      "seconds": 18.604050083999997,
+      "manifestSha256": "3b742adb2eba4675d13f02a74ababbbdbfd4f7914be56426324a90a06ae04649",
+      "indexes": {
+        "cursor": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "cursorSequence": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "geometry": {
+          "pages": 1,
+          "rows": 67
+        },
+        "unplaced": {
+          "pages": 0,
+          "rows": 0
+        },
+        "pauses": {
+          "pages": 0,
+          "rows": 0
+        },
+        "marks": {
+          "pages": 0,
+          "rows": 0
+        },
+        "narration": {
+          "pages": 0,
+          "rows": 0
+        },
+        "system": {
+          "pages": 0,
+          "rows": 0
+        }
+      },
+      "first": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 1,
+        "globalX": 0.125,
+        "globalY": 0.375,
+        "sourceUs": 0,
+        "x": 0.125,
+        "y": 0.375,
+        "sequence": 3
+      },
+      "last": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 67,
+        "globalX": 1903.125,
+        "globalY": 469.375,
+        "sourceUs": 3999983333,
+        "x": 1903.125,
+        "y": 469.375,
+        "sequence": 240068
+      }
+    },
+    {
+      "variant": "bounded",
+      "seconds": 1.366649625,
+      "manifestSha256": "3b742adb2eba4675d13f02a74ababbbdbfd4f7914be56426324a90a06ae04649",
+      "indexes": {
+        "cursor": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "cursorSequence": {
+          "pages": 938,
+          "rows": 240000
+        },
+        "geometry": {
+          "pages": 1,
+          "rows": 67
+        },
+        "unplaced": {
+          "pages": 0,
+          "rows": 0
+        },
+        "pauses": {
+          "pages": 0,
+          "rows": 0
+        },
+        "marks": {
+          "pages": 0,
+          "rows": 0
+        },
+        "narration": {
+          "pages": 0,
+          "rows": 0
+        },
+        "system": {
+          "pages": 0,
+          "rows": 0
+        }
+      },
+      "first": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 1,
+        "globalX": 0.125,
+        "globalY": 0.375,
+        "sourceUs": 0,
+        "x": 0.125,
+        "y": 0.375,
+        "sequence": 3
+      },
+      "last": {
+        "buttons": 0,
+        "eligibility": "inside",
+        "geometryEpoch": 67,
+        "globalX": 1903.125,
+        "globalY": 469.375,
+        "sourceUs": 3999983333,
+        "x": 1903.125,
+        "y": 469.375,
+        "sequence": 240068
+      }
+    }
+  ],
+  "limitations": [
+    "Not a 12-hour acceptance run. Aggregate byte/page ceilings remain slice 10 work.",
+    "No cache purge or repeated trials; numbers describe this run, not latency guarantees.",
+    "Cursor-heavy comparison measures query amplification; oversized-record correctness is covered separately by focused integration tests."
+  ],
+  "compiledSha256": {
+    "packages/core/dist/evidence-read.js": "1aec0e0956c706f64cecf0de80a058d86b1655cbf9178ce54204ae02bbcd35ca",
+    "packages/core/dist/evidence.js": "7d584e325dcb185cf575254585cf1bcd09c15c0f589769f67459fbcaf1903b6e",
+    "packages/core/dist/evidence-pages.js": "cb19ae5bd7969543d4e8f10da6d34e2efd97a04dd33f5cb5501e36922cf490cd",
+    "packages/core/dist/ordered-pages.js": "e7c7f1f0465c72528355bf02810858049e34f8d1a103389da2dcedae59409a89"
+  },
+  "verification": {
+    "red": "New export batching regression failed against limit 1: 303 singleton batches instead of [2,1,256,44]. Disabling portable byte cutoff separately failed portable/SQL batch parity; restored before green.",
+    "green": {
+      "command": "cd packages/core && YAP_NATIVE=$REPO/helpers/mac/.build/debug/yap-native ../../node_modules/.bin/vitest run src/evidence.test.ts src/evidence-pages.test.ts src/ordered-pages.test.ts --maxWorkers=1",
+      "files": 3,
+      "testsPassed": 41,
+      "nativeLongStrokeProvisioned": true
+    },
+    "static": "Core tsc build and tsc -p tsconfig.check.json passed; oxlint and oxfmt --check on the six follow-up TS files passed; git diff --check passed.",
+    "independentReview": {
+      "exitCode": 0,
+      "turnCompleted": true,
+      "verdict": "No concrete correctness or bounded-work defects found in the scoped export batching follow-up. The SQL limits candidates before windowing and loads content only for the admitted prefix; portable reads preserve the byte cutoff and oversized-first-row exception. Static review only; tests were not run as requested."
+    }
+  }
+}

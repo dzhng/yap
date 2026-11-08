@@ -30,7 +30,9 @@ export async function startPublicService(
     cwd: "/",
     detached: true,
     stdio: ["pipe", "pipe", "pipe"],
-    env: { ...process.env, YAP_HOME: home, YAP_NATIVE: native },
+    // Test runners turn off the launch preset refresh: it reaches the network, and close waits
+    // for a refresh in flight, so a short check would otherwise depend on network latency.
+    env: { YAP_PRESETS_REFRESH: "0", ...process.env, YAP_HOME: home, YAP_NATIVE: native },
   });
   const terminal = new Promise((resolve) =>
     child.once("close", (code, signal) => resolve({ code, signal })),
@@ -125,8 +127,8 @@ export async function seedCapture(home, facts) {
   let take;
   try {
     take = store.allocate().recording;
-    assert.equal(take.recordingId, facts.recordingId);
-    store.ingestLifecycle(take.recordingId, {
+    assert.equal(take.id, facts.recordingId);
+    store.ingestLifecycle(take.id, {
       sourceId: take.sourceId,
       sequence: 1,
       state: "interrupted",
@@ -136,7 +138,7 @@ export async function seedCapture(home, facts) {
   } finally {
     store.close();
   }
-  await mkdir(join(library, "recordings", take.recordingId, "source"), {
+  await mkdir(join(library, "recordings", take.id, "source"), {
     recursive: true,
     mode: 0o700,
   });

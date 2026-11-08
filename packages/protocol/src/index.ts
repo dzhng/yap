@@ -1,6 +1,8 @@
+import { refusalRetryable, refusalRetryAfterMs } from "./refusal-ledger.js";
 import { z } from "zod";
 import { RESPONSE_FRAME_BYTES } from "./framing.js";
 import { operationSchema } from "./operations.js";
+export { pageParams, pageResult, hasPageParams } from "./paging.js";
 
 export const requestSchema = z
   .object({
@@ -23,15 +25,29 @@ export const wireRequestSchema = requestSchema.extend({
 });
 export type OperationWireRequest = z.infer<typeof wireRequestSchema>;
 
+export const retryDirectiveSchema = z
+  .object({
+    operation: z.string().min(1),
+    params: z.record(z.string(), z.unknown()),
+  })
+  .strict()
+  .refine((request) => operationSchema.safeParse(request).success, {
+    message: "Retry must name an existing operation with valid parameters",
+  });
+const errorDetailsSchema = z
+  .object({ retry: retryDirectiveSchema.optional() })
+  .catchall(z.unknown());
+
 export const operationErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string(),
   retryable: z.boolean(),
-  details: z.record(z.string(), z.unknown()),
+  retryAfterMs: z.int().positive().optional(),
+  details: errorDetailsSchema,
 });
 export const waitJobSchema = z.object({
-  jobId: z.string().min(1),
-  generation: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+  id: z.string().min(1),
+  attemptGeneration: z.int().positive().max(Number.MAX_SAFE_INTEGER),
   attemptId: z.string().min(1),
 });
 /** Adapter deadline outcome; it does not change the service's work or publication state. */
@@ -68,11 +84,11 @@ export const deliveredResponseSchema = z.object({
   ok: z.boolean(),
   resultDelivery: z.object({
     token: z.string().min(1),
-    bytes: z
+    sizeBytes: z
       .int()
       .positive()
       .max(RESPONSE_FRAME_BYTES - 1),
-    expiresAt: z.int(),
+    expiresAtMs: z.int(),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
     mediaType: z.literal("application/json"),
   }),
@@ -85,10 +101,19 @@ export type OperationFailure = Extract<OperationResult, { ok: false }>;
 export function operationError(
   code: string,
   message: string,
-  retryable = false,
   details: Record<string, unknown> = {},
 ): OperationFailure {
-  return { ok: false, error: { code, message, retryable, details } };
+  const retryAfterMs = refusalRetryAfterMs(code);
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      retryable: refusalRetryable(code),
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
+      details: errorDetailsSchema.parse(details),
+    },
+  };
 }
 
 /**
@@ -100,7 +125,7 @@ export function admitOperation(
 ): { ok: true; data: z.infer<typeof operationSchema> } | OperationFailure {
   const parsed = operationSchema.safeParse(request);
   if (parsed.success) return { ok: true, data: parsed.data };
-  return operationError("INVALID_PARAMS", "Parameters do not match the operation schema", false, {
+  return operationError("INVALID_PARAMS", "Parameters do not match the operation schema", {
     invalid: parsed.error.issues
       .slice(0, 20)
       .map((issue) => ({ path: issue.path.join("."), message: issue.message })),
@@ -143,6 +168,8 @@ export { boundedIssues, issueCount, type Issue } from "@yap/composition";
 export * from "./capture.js";
 export * from "./framing.js";
 export * from "./layout.js";
+export * from "./refusal-ledger.js";
+export * from "./requirements.js";
 export * from "./operations.js";
 export * from "./tools.js";
 export * from "./update.js";
@@ -151,3 +178,4 @@ export * from "./work.js";
 export * from "./picture.js";
 export * from "./faces.js";
 export * from "./correspondence.js";
+export * from "./in-use.js";

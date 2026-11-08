@@ -28,7 +28,7 @@ async function heldReportApp(home) {
     callLocal(socketPath(home), { id: randomUUID(), operation, params }, { timeoutMs: 25_000 });
   const native = (operation, params = {}) => call("peer.native", { operation, params });
   const take = (name) => ({
-    source: { kind: "window", windowId: Number(fixtureId) },
+    source: { kind: "window", id: Number(fixtureId) },
     microphone: false,
     systemAudio: false,
     recordingId: randomUUID(),

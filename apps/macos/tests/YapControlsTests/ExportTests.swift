@@ -11,17 +11,17 @@ private func entry(_ items: [SavedItem], _ id: String) -> PresentedControlsActio
 
 private func record(
     _ exportId: String, state: String, projectId: String = "rec-1", output: String? = nil,
-    retryable: Bool = false, abandoning: Bool = false, cleanupPending: Bool = false
+    retryable: Bool = false, abandoning: Bool = false, cleanupPending: Bool = false, jobId: String? = "fixture-job"
 ) -> ExportsState.Record {
     .init(
         exportId: exportId, target: .project(projectId), kind: .video, revisionId: "r2", state: state,
         directory: "/Users/me/Exports", leaf: "demo.mp4", output: output, reason: nil,
-        retryable: retryable, abandoning: abandoning, cleanupPending: cleanupPending)
+        retryable: retryable, abandoning: abandoning, cleanupPending: cleanupPending, jobId: jobId)
 }
 
 func runExportTests() {
     var state = ready()
-    state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(#"{"projectId":"rec-1","title":"Caller project","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r-existing"}"#.utf8))]
+    state.library.projects = [try! JSONDecoder().decode(LibraryState.Project.self, from: Data(#"{"id":"rec-1","title":"Caller project","createdAt":"2026-09-15T18:04:05Z","currentRevisionId":"r-existing"}"#.utf8))]
     var exports = ExportsState()
     precondition(exportItems(state, exports).isEmpty, "No exports section until there is an export to show")
 
@@ -40,6 +40,10 @@ func runExportTests() {
         "A sent request does not block exporting again")
     precondition(exports.resend("e1") == nil, "An outstanding send is not sent twice")
 
+    exports.records = [record("no-job", state: "failed", retryable: true, jobId: nil)]
+    precondition(entry(exportItems(state, exports), "export.jobRetry.no-job")?.enabled == false,
+                 "An export without a retained job cannot retry")
+    exports.records = []
     // A lost reply keeps the original identity for the person's explicit retry.
     exports.unanswered("e1", reason: "TIMEOUT: export.create did not answer in time")
     let pending = exportItems(state, exports)
@@ -67,7 +71,7 @@ func runExportTests() {
         "A queued export waits, without asking for attention")
     precondition(entry(exportItems(state, exports), "export.abandon.e1")?.enabled == true,
         "An unfinished export can be abandoned")
-    precondition(entry(exportItems(state, exports), "export.retry.e1") == nil,
+    precondition(entry(exportItems(state, exports), "export.jobRetry.e1") == nil,
         "Work still running offers no retry")
 
     // Rediscovered exports keep their order behind this session's own.
@@ -77,7 +81,7 @@ func runExportTests() {
 
     // A non-retryable failure is abandoned, not retried; an action is sent once.
     var failed = exportItems(state, exports)
-    precondition(entry(failed, "export.retry.e0")?.enabled == false, "A permanent failure is not retried")
+    precondition(entry(failed, "export.jobRetry.e0")?.enabled == false, "A permanent failure is not retried")
     precondition(exports.begin(.abandon, "e0") && !exports.begin(.abandon, "e0"), "Abandon is sent once")
     failed = exportItems(state, exports)
     precondition(entry(failed, "export.abandon.e0")?.title == "Abandoning…"
@@ -92,16 +96,16 @@ func runExportTests() {
     exports.forget("e0")
 
     // A committed export keeps its receipt while private cleanup is retried.
-    exports.update(record("e1", state: "committed", output: "/Users/me/Exports/demo.mp4", cleanupPending: true))
+    exports.update(record("e1", state: "ready", output: "/Users/me/Exports/demo.mp4", cleanupPending: true))
     let committed = exportItems(state, exports)
     precondition(entry(committed, "export.reveal.e1")?.enabled == true, "A committed file can be shown")
-    precondition(entry(committed, "export.retry.e1")?.title == "Retry Cleanup", "Retrying a commit only cleans up")
+    precondition(entry(committed, "export.jobRetry.e1")?.title == "Retry Cleanup", "Retrying a commit only cleans up")
     precondition(entry(committed, "export.abandon.e1") == nil, "A committed export is not offered for abandonment")
     precondition(entry(committed, "export.dismiss.e1") == nil, "Pending cleanup cannot be dismissed")
     precondition(committed.contains { $0.title == "demo.mp4" && $0.status == "exported, cleanup pending" && $0.attention },
         "Cleanup does not hide that the export committed, and needs attention")
     precondition(exports.observed.contains("e1"), "Pending cleanup is still observed")
-    exports.update(record("e1", state: "committed", output: "/Users/me/Exports/demo.mp4"))
+    exports.update(record("e1", state: "ready", output: "/Users/me/Exports/demo.mp4"))
     precondition(!exports.observed.contains("e1"), "A clean commit is no longer polled")
     precondition(entry(exportItems(state, exports), "export.dismiss.e1")?.enabled == true,
         "A clean commit can leave the list")
@@ -114,7 +118,7 @@ func runExportTests() {
         "A deleted project's exports leave the list")
 
     let status = Data(#"""
-        {"exportId":"e9","kind":"processed-package","abandoning":false,"recovery":null,"projectId":"rec-9",
+        {"id":"e9","kind":"processed-package","abandoning":false,"recovery":null,"projectId":"rec-9",
          "snapshot":{"revisionId":"r4","historyOrdinal":3},"state":"failed",
          "destination":{"directory":"/Volumes/Work","leaf":"take.zip"},"cleanupPending":true,
          "receipt":null,"output":null,"jobId":"j","reason":"Required evidence is unavailable","retryable":true}
@@ -127,11 +131,11 @@ func runExportTests() {
         "Status fields keep their meaning")
     for leaf in ["mix.wav", "mix.m4a"] {
         let fields: [String: Any] = [
-            "exportId": "audio-" + leaf, "projectId": "p", "kind": "audio",
+            "id": "audio-" + leaf, "projectId": "p", "kind": "audio",
             "snapshot": ["revisionId": "r", "settings": ["container": leaf.hasSuffix("wav") ? "wav" : "m4a"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": leaf],
             "retryable": true, "abandoning": false, "cleanupPending": false,
-            "output": NSNull(), "reason": "fixture failure",
+            "output": NSNull(), "reason": "fixture failure", "jobId": "fixture-job",
         ]
         let record = try! JSONDecoder().decode(ExportsState.Record.self,
             from: JSONSerialization.data(withJSONObject: fields))
@@ -140,15 +144,15 @@ func runExportTests() {
         audio.admit(record)
         let delivered = exportItems(ready(), audio)
         precondition(delivered.first.map { $0.title == leaf && $0.status == "failed" && $0.details.first?.hasPrefix("Audio · ") == true && $0.attention } == true)
-        precondition(entry(delivered, "export.retry.audio-" + leaf)?.enabled == true)
+        precondition(entry(delivered, "export.jobRetry.audio-" + leaf)?.enabled == true)
     }
     for kind in ["srt", "vtt"] {
         let fields: [String: Any] = [
-            "exportId": "captions-" + kind, "projectId": "p", "kind": kind,
+            "id": "captions-" + kind, "projectId": "p", "kind": kind,
             "snapshot": ["revisionId": "r", "placementIds": ["caption"]],
             "state": "failed", "destination": ["directory": "/tmp", "leaf": "captions." + kind],
             "retryable": true, "abandoning": false, "cleanupPending": false,
-            "output": NSNull(), "reason": "fixture failure",
+            "output": NSNull(), "reason": "fixture failure", "jobId": "fixture-job",
         ]
         guard let record = try? JSONDecoder().decode(ExportsState.Record.self,
             from: JSONSerialization.data(withJSONObject: fields)) else {
@@ -159,7 +163,7 @@ func runExportTests() {
         captions.update(record)
         let delivered = exportItems(ready(), captions)
         precondition(delivered.first.map { $0.title == "captions." + kind && $0.status == "failed" && $0.details.first?.hasPrefix("Captions · ") == true && $0.attention } == true)
-        precondition(entry(delivered, "export.retry.captions-" + kind)?.enabled == true)
+        precondition(entry(delivered, "export.jobRetry.captions-" + kind)?.enabled == true)
         precondition(entry(delivered, "export.abandon.captions-" + kind)?.enabled == true)
         precondition(captions.beginChoice(target: .project("p"), kind: record.kind) == nil,
             "The app has no caption-placement selection for authoring a sidecar")

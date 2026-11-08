@@ -1,3 +1,5 @@
+import { readJsonDescriptor } from "@yap/core/json-stream";
+import { jsonChunks, writeJsonWithIdentity } from "@yap/core/json-stream";
 import { portableProjectSpeakers, type PortableSpeakerCheckpoint } from "./portable-speakers.js";
 import { publishedOutput } from "@yap/protocol";
 import { omit } from "@yap/composition";
@@ -32,7 +34,7 @@ import { mkdir, open, writeFile, type FileHandle } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CatalogError } from "@yap/core/catalog";
 import { copyImportedFile, fileIdentity, type IdentifiedFile } from "@yap/core/files";
-import { archiveLimits, checkProjectJsonBytes } from "@yap/core/package-archive";
+import { archiveLimits } from "@yap/core/package-archive";
 import {
   collectPortableResources,
   projectResourceRoots,
@@ -49,7 +51,8 @@ import {
   resourceMetadataMember,
   type ProjectPackageManifest,
   staleTranscriptIssues,
-  validateProjectPackage,
+  resolveProjectPackage,
+  type ProjectJsonMember,
   type ValidatedProjectPackage,
 } from "@yap/core/project-package";
 import {
@@ -150,11 +153,18 @@ export class ProjectPackages {
   }
   private parent: Awaited<ReturnType<typeof openPackageParent>> | undefined;
   private registry: PackageRegistry<ValidatedProjectPackage, ProjectPackageManifest> | undefined;
+  private readonly openRequests = new Map<
+    string,
+    {
+      path: string;
+      result: ReturnType<PackageRegistry<ValidatedProjectPackage, ProjectPackageManifest>["open"]>;
+    }
+  >();
   private preparing: Promise<void> | undefined;
   private closed = false;
   constructor(private readonly owners: Owners) {}
   private async prepare() {
-    if (this.closed) throw new CatalogError("SERVICE_STOPPED", "Project packages are closed");
+    if (this.closed) throw new CatalogError("OWNER_CLOSED", "Project packages are closed");
     if (this.preparing) return this.preparing;
     if (this.registry) return;
     this.preparing = (async () => {
@@ -241,9 +251,20 @@ export class ProjectPackages {
     });
     return this.preparing;
   }
-  async open(path: string) {
+  async open(path: string, requestId?: string) {
+    const prior = requestId ? this.openRequests.get(requestId) : undefined;
+    if (prior) {
+      if (prior.path !== path)
+        throw new CatalogError(
+          "REQUEST_CONFLICT",
+          "Request identity names a different package path",
+        );
+      return prior.result;
+    }
     await this.prepare();
-    return this.registry!.open(path);
+    const result = this.registry!.open(path);
+    if (requestId) this.openRequests.set(requestId, { path, result });
+    return result;
   }
   projectSpeakers(packageHandle: string, input: ProjectSpeakerInput) {
     if (!this.registry) throw new CatalogError("CONTEXT_CLOSED", "Project package is not open");
@@ -366,7 +387,7 @@ export class ProjectPackages {
       .filter(
         (resource): resource is Extract<PortableResource, { kind: "speaker-generation" }> =>
           resource.kind === "speaker-generation" &&
-          resource.metadata.owner.assetId === input.assetId &&
+          resource.metadata.owner.id === input.assetId &&
           resource.metadata.source.streamId === input.streamId &&
           resource.metadata.source.acquisitionId === (input.acquisitionId ?? null) &&
           resource.metadata.source.channel === input.channel &&
@@ -418,10 +439,10 @@ export class ProjectPackages {
     const resource = manifest.resources.find(
       (value): value is Extract<PortableResource, { kind: "alignment-generation" }> =>
         value.kind === "alignment-generation" &&
-        value.metadata.owner.assetId === assetId &&
+        value.metadata.owner.id === assetId &&
         value.metadata.generation === generation,
     );
-    if (!resource) throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {}, true);
+    if (!resource) throw new CatalogError("NOT_READY", "Alignment evidence is not ready", {});
     return {
       assetId,
       state: "ready",
@@ -480,11 +501,6 @@ export class ProjectPackages {
   }
   pin(projectId: string, revisionId?: string): PinnedProjectPackage {
     const snapshot = this.owners.projects.snapshot(projectId, revisionId);
-    let jsonBytes = snapshot.revisions.reduce(
-        (sum, revision) => sum + Buffer.byteLength(JSON.stringify(revision)),
-        0,
-      ),
-      members = snapshot.revisions.length;
     const acquisitionFiles: PinnedProjectPackage["acquisitionFiles"] = {};
     const transcriptFiles: PinnedProjectPackage["transcriptFiles"] = {};
     const importedTranscriptFiles: PinnedProjectPackage["importedTranscriptFiles"] = {};
@@ -516,21 +532,11 @@ export class ProjectPackages {
     >();
     const scenesForAsset = (assetId: string) => {
       return this.owners.sceneRecords.portableGenerations(assetId).map((metadata) => {
-        if (metadata.chunkCount > archiveLimits.entries - 1)
-          throw new CatalogError("LIMIT_EXCEEDED", "Scene chunks exceed archive inventory budget");
         const scene: Extract<PortableDependency, { kind: "scene-generation" }> = {
           kind: "scene-generation",
           metadata,
           publication: this.owners.scenes.portablePublication(metadata),
         };
-        if (!sceneInventory.has(resourceIdentity(scene).id)) {
-          members += metadata.chunkCount;
-          if (members >= archiveLimits.entries)
-            throw new CatalogError(
-              "LIMIT_EXCEEDED",
-              "Scene inventory exceeds archive metadata budget",
-            );
-        }
         const identity = resourceIdentity(scene);
         sceneInventory.set(identity.id, scene);
         return identity;
@@ -545,9 +551,6 @@ export class ProjectPackages {
       };
       const identity = resourceIdentity(resource);
       if (!transcriptInventory.has(identity.id)) {
-        members += 2;
-        if (members >= archiveLimits.entries)
-          throw new CatalogError("LIMIT_EXCEEDED", "Transcript inventory exceeds archive budget");
         transcriptFiles[identity.id] = this.owners.transcriptRecords.portableFile(metadata);
         transcriptInventory.set(identity.id, resource);
       }
@@ -556,7 +559,10 @@ export class ProjectPackages {
     const transcriptsForAsset = (assetId: string) => {
       const { generations, stale } = this.owners.transcriptRecords.portableGenerations(assetId);
       for (const generation of stale) {
-        const id = transcriptGenerationResource({ owner: { kind: "asset", assetId }, generation });
+        const id = transcriptGenerationResource({
+          owner: { kind: "asset", id: assetId },
+          generation,
+        });
         staleTranscripts.set(id, { kind: "transcript-generation", id });
       }
       return generations.map(addTranscript);
@@ -587,7 +593,6 @@ export class ProjectPackages {
       string,
       Extract<PortableDependency, { kind: "alignment-generation" }>
     >();
-    let alignmentInventoryBytes = 0;
     const alignmentsForAsset = (assetId: string) => {
       const identities: import("@yap/core/references").ResourceReference[] = [];
       for (const { metadata, sequence } of this.owners.alignmentRecords.portableGenerations(
@@ -606,34 +611,27 @@ export class ProjectPackages {
           publication: this.owners.alignments.portablePublication(metadata),
           ...this.owners.alignmentRecords.operands(metadata),
         };
-        alignmentInventoryBytes += Buffer.byteLength(JSON.stringify(resource));
-        checkProjectJsonBytes(alignmentInventoryBytes);
         alignmentInventory.set(identity.id, resource);
       }
       return identities;
     };
     const indexesForAsset = (assetId: string) =>
-      this.owners.indexRecords.portableGenerations({ kind: "asset", assetId }).map((metadata) => {
-        const resource: Extract<PortableDependency, { kind: "index-generation" }> = {
-          kind: "index-generation",
-          metadata: portableSourceIndexMetadataSchema.parse(metadata),
-          publication: this.owners.indexes.portableSource(metadata),
-        };
-        const identity = resourceIdentity(resource);
-        if (!indexInventory.has(identity.id)) {
-          const entries = metadata.candidateCount * 2 + metadata.coverageCount;
-          members += entries;
-          if (members >= archiveLimits.entries)
-            throw new CatalogError(
-              "LIMIT_EXCEEDED",
-              "Screenshot index inventory exceeds archive budget",
-            );
-          indexInventory.set(identity.id, resource);
-        }
-        return identity;
-      });
+      this.owners.indexRecords
+        .portableGenerations({ kind: "asset", id: assetId })
+        .map((metadata) => {
+          const resource: Extract<PortableDependency, { kind: "index-generation" }> = {
+            kind: "index-generation",
+            metadata: portableSourceIndexMetadataSchema.parse(metadata),
+            publication: this.owners.indexes.portableSource(metadata),
+          };
+          const identity = resourceIdentity(resource);
+          if (!indexInventory.has(identity.id)) {
+            indexInventory.set(identity.id, resource);
+          }
+          return identity;
+        });
     for (const metadata of this.owners.projectIndexRecords.portableGenerations(
-      { kind: "project", projectId },
+      { kind: "project", id: projectId },
       undefined,
       snapshot.project.currentRevisionId === this.owners.projects.get(projectId).currentRevisionId
         ? undefined
@@ -659,13 +657,6 @@ export class ProjectPackages {
         )
       )
         reference.resources.push(identity);
-      const entries = metadata.candidateCount * 2 + metadata.coverageCount;
-      members += entries;
-      if (members >= archiveLimits.entries)
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Screenshot index inventory exceeds archive budget",
-        );
       indexInventory.set(identity.id, resource);
     }
     const resources = collectPortableResources(projectResourceRoots(snapshot), (identity) => {
@@ -755,7 +746,7 @@ export class ProjectPackages {
                 addTranscript(
                   portableTranscript(
                     this.owners.transcriptRecords.retainedGeneration(
-                      { owner: { kind: "asset", assetId: retained[1] }, generation: retained[2] },
+                      { owner: { kind: "asset", id: retained[1] }, generation: retained[2] },
                       { historical: true },
                     ),
                   ),
@@ -771,21 +762,6 @@ export class ProjectPackages {
           );
         resource = scene;
       }
-      if (
-        resource.kind === "asset" ||
-        resource.kind === "acquisition" ||
-        resource.kind === "prepared-audio"
-      ) {
-        members += resourceMembers(resource).length;
-      }
-      jsonBytes += Buffer.byteLength(JSON.stringify(resource));
-      checkProjectJsonBytes(jsonBytes);
-      members++;
-      if (members >= archiveLimits.entries)
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Project resources exceed package inventory budget",
-        );
       return resource;
     });
     return {
@@ -825,9 +801,11 @@ export class ProjectPackages {
       { artifact: "package.adopt", lane: "heavy", input: JSON.stringify({ requestId }) },
       async (context, signal, { lifetime }) => {
         const manifest = context.manifest;
+        const identity = createHash("sha256");
+        for (const chunk of jsonChunks(manifest)) identity.update(chunk);
         const adoption = this.owners.projects.prepareAdoption({
           requestId,
-          packageIdentity: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
+          packageIdentity: identity.digest("hex"),
           snapshot: manifest.snapshot,
         });
         const preparedAudio: Awaited<ReturnType<PreparedAudioStore["stagePortable"]>>[] = [];
@@ -837,7 +815,7 @@ export class ProjectPackages {
               return [
                 [
                   resourceIdentity(resource).id,
-                  preparedAudioResource(adoption.project.projectId, resource.publication.attemptId),
+                  preparedAudioResource(adoption.project.id, resource.publication.attemptId),
                 ] as const,
               ];
             if (resource.kind === "project-index-generation")
@@ -845,7 +823,7 @@ export class ProjectPackages {
                 [
                   resourceIdentity(resource).id,
                   indexGenerationResource(
-                    { kind: "project", projectId: adoption.project.projectId },
+                    { kind: "project", id: adoption.project.id },
                     resource.metadata.generation,
                   ),
                 ] as const,
@@ -997,9 +975,13 @@ export class ProjectPackages {
               const receipt = context.files.open(receiptPath);
               let value: unknown;
               try {
-                value = JSON.parse(
-                  new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(receipt.fd)),
-                );
+                try {
+                  value = readJsonDescriptor(receipt.fd);
+                } catch (error) {
+                  if (error instanceof SyntaxError)
+                    throw new CatalogError("INVALID_PACKAGE", error.message);
+                  throw error;
+                }
               } finally {
                 receipt.close();
               }
@@ -1016,7 +998,7 @@ export class ProjectPackages {
                   },
                   {
                     ...resource.metadata.track,
-                    source: assetPaths.get(resource.metadata.owner.assetId)!,
+                    source: assetPaths.get(resource.metadata.owner.id)!,
                     available: resource.available,
                   },
                   signal,
@@ -1140,7 +1122,10 @@ export class ProjectPackages {
                 portableIndexRecords<SourceIndexRecords>(
                   context.files,
                   resource,
-                  (value) => portableSourceIndexRecordSchema.parse(value),
+                  (value) => {
+                    const parsed = portableSourceIndexRecordSchema.parse(value);
+                    return parsed;
+                  },
                   signal,
                 ),
                 signal,
@@ -1157,7 +1142,7 @@ export class ProjectPackages {
             const revisionId = adoption.revisionIds[resource.metadata.revisionId]!;
             const metadata = {
               ...resource.metadata,
-              projectId: adoption.project.projectId,
+              projectId: adoption.project.id,
               revisionId,
             };
             const revision = adoption.revisions.find((value) => value.id === revisionId)!;
@@ -1298,7 +1283,7 @@ export class ProjectPackages {
             );
           }
           return JSON.stringify({
-            projectId: result.project.projectId,
+            projectId: result.project.id,
             revisionId: result.revision.id,
           });
         } finally {
@@ -1339,12 +1324,6 @@ export class ProjectPackages {
     const revisions = new Map<string, string>();
     let expanded = 0;
     const add = async (path: string, bytes: number, sha256: string) => {
-      if (
-        bytes > archiveLimits.memberBytes ||
-        plan.length >= archiveLimits.entries - 1 ||
-        expanded + bytes > archiveLimits.expandedBytes
-      )
-        throw new CatalogError("LIMIT_EXCEEDED", "Project package exceeds archive budget");
       const file = await open(
         join(input.directory, path),
         constants.O_RDONLY | constants.O_NOFOLLOW,
@@ -1365,6 +1344,15 @@ export class ProjectPackages {
       await writeFile(join(input.directory, path), body, { flag: "wx", signal });
       await add(path, Buffer.byteLength(body), createHash("sha256").update(body).digest("hex"));
     };
+    const json = async (path: string, value: unknown) => {
+      const { bytes, sha256 } = await writeJsonWithIdentity(
+        join(input.directory, path),
+        value,
+        signal,
+      );
+      await add(path, bytes, sha256);
+      return { bytes, sha256 };
+    };
     await mkdir(join(input.directory, "revisions"), { mode: 0o700 });
     await mkdir(join(input.directory, "assets"), { mode: 0o700 });
     for (const revision of pinned.snapshot.revisions) {
@@ -1373,24 +1361,8 @@ export class ProjectPackages {
       revisions.set(path, body);
       await text(path, body);
     }
-    const declared = pinned.resources.flatMap((resource) =>
-      resource.kind === "scene-generation" ||
-      resource.kind === "transcript-generation" ||
-      resource.kind === "imported-transcript-generation" ||
-      resource.kind === "index-generation" ||
-      resource.kind === "project-index-generation"
-        ? []
-        : resourceMembers(resource),
-    );
     const resources: PortableResource[] = [];
-    const resourceMetadata = new Map<string, string>();
-    let jsonBytes = [...revisions.values()].reduce((sum, body) => sum + Buffer.byteLength(body), 0);
-    if (
-      declared.length + plan.length >= archiveLimits.entries ||
-      declared.some((entry) => entry.bytes > archiveLimits.memberBytes) ||
-      declared.reduce((sum, entry) => sum + entry.bytes, expanded) > archiveLimits.expandedBytes
-    )
-      throw new CatalogError("LIMIT_EXCEEDED", "Project resources exceed archive budget");
+    const resourceMetadata = new Map<string, ProjectJsonMember>();
     const assembleIndex = async <D extends IndexRecords>(
       entry: Extract<PortableDependency, { kind: "index-generation" | "project-index-generation" }>,
       recordsStore: ScreenshotIndexStore<D>,
@@ -1488,20 +1460,11 @@ export class ProjectPackages {
             "Transcript raw data changed after package pin",
           );
         await add(rawPath, copied.bytes, copied.sha256);
-        const body = JSON.stringify(this.owners.transcriptRecords.portableReceipt(entry.metadata));
-        if (Buffer.byteLength(body) > 8 * 1024 * 1024)
-          throw new CatalogError(
-            "LIMIT_EXCEEDED",
-            "Transcript receipt exceeds package read budget",
-          );
-        await text(receiptPath, body);
-        resources.push({
-          ...entry,
-          receipt: {
-            bytes: Buffer.byteLength(body),
-            sha256: createHash("sha256").update(body).digest("hex"),
-          },
-        });
+        const receipt = await json(
+          receiptPath,
+          this.owners.transcriptRecords.portableReceipt(entry.metadata),
+        );
+        resources.push({ ...entry, receipt });
         continue;
       }
       if (entry.kind === "imported-transcript-generation") {
@@ -1572,24 +1535,35 @@ export class ProjectPackages {
     for (const resource of resources) {
       signal.throwIfAborted();
       const metadata = resourceMetadataMember(resource);
-      jsonBytes += metadata.reference.metadata.bytes;
-      checkProjectJsonBytes(jsonBytes);
-      await text(metadata.reference.metadata.path, metadata.body);
-      resourceMetadata.set(metadata.reference.metadata.path, metadata.body);
+      await writeFile(join(input.directory, metadata.reference.metadata.path), metadata.chunks(), {
+        flag: "wx",
+        signal,
+      });
+      await add(
+        metadata.reference.metadata.path,
+        metadata.reference.metadata.bytes,
+        metadata.reference.metadata.sha256,
+      );
+      resourceMetadata.set(metadata.reference.metadata.path, {
+        value: resource,
+        bytes: metadata.reference.metadata.bytes,
+        sha256: metadata.reference.metadata.sha256,
+      });
     }
     const manifest = projectPackageManifest(
       pinned.snapshot,
       resources,
       plan.map((entry) => omit(entry, "identity")),
     );
-    const body = JSON.stringify(manifest);
-    validateProjectPackage(body, revisions, archiveLimits, resourceMetadata);
-    await text("manifest.json", body);
-    const planBody = JSON.stringify(plan);
-    if (Buffer.byteLength(planBody) > archiveLimits.receiptBytes)
-      throw new CatalogError("LIMIT_EXCEEDED", "Project ZIP plan exceeds metadata budget");
+    resolveProjectPackage(
+      parseProjectPackageManifest(manifest, archiveLimits),
+      revisions,
+      archiveLimits,
+      resourceMetadata,
+    );
+    await json("manifest.json", manifest);
     const path = join(input.directory, "zip-plan.json");
-    await writeFile(path, planBody, { flag: "wx", signal });
+    await writeFile(path, jsonChunks(plan), { flag: "wx", signal });
     const planFile = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       return await writeArchive(

@@ -1,3 +1,9 @@
+import { readSync } from "node:fs";
+import { mkdtemp, open, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { readJsonDescriptor } from "@yap/core/json-stream";
+import { publicationDeadlineMs } from "./publication.js";
 import type { FileHandle } from "node:fs/promises";
 import { omit } from "@yap/composition";
 import { CatalogError } from "@yap/core/catalog";
@@ -67,7 +73,6 @@ async function extractArchive<T extends ArchiveManifest>(
   const identity = { dev: info.dev.toString(), ino: info.ino.toString() };
   const nativeOptions = {
     descriptors: [workspace.fd],
-    timeoutMs: options.timeoutMs ?? 30 * 60_000,
   };
   nativeConfirmed(
     await worker(
@@ -81,7 +86,7 @@ async function extractArchive<T extends ArchiveManifest>(
   const close = async (failure?: unknown) => {
     try {
       nativeConfirmed(
-        await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: 30_000 }),
+        await worker("archive.cleanup", { identity }, { ...nativeOptions, timeoutMs: null }),
         "removed",
         "Archive cleanup did not confirm completion",
       );
@@ -94,11 +99,24 @@ async function extractArchive<T extends ArchiveManifest>(
           operationError: failure === undefined ? null : describe(failure),
           cleanupError: describe(cleanup),
         },
-        true,
       );
     }
   };
+  const scratch = await mkdtemp(join(tmpdir(), "yap-archive-inventory-"));
+  const operands: FileHandle[] = [];
   try {
+    const receipt = await open(join(scratch, "receipt.json"), "wx+");
+    operands.push(receipt);
+    const meter = await open(join(scratch, "work"), "wx+");
+    operands.push(meter);
+    let observed = 0;
+    const workBudget = () => {
+      const buffer = Buffer.alloc(32);
+      const count = readSync(meter.fd, buffer, 0, buffer.length, 0);
+      const bytes = Number(buffer.subarray(0, count).toString());
+      if (Number.isSafeInteger(bytes) && bytes >= observed) observed = bytes;
+      return publicationDeadlineMs(archive.bytes + observed);
+    };
     const result = await worker(
       "archive.extract",
       {
@@ -111,17 +129,40 @@ async function extractArchive<T extends ArchiveManifest>(
       },
       {
         ...nativeOptions,
-        descriptors: [workspace.fd, archive.fd],
+        descriptors: [workspace.fd, archive.fd, receipt.fd, meter.fd],
+        timeoutMs: options.timeoutMs ?? workBudget,
         ...(options.signal ? { signal: options.signal } : {}),
       },
     );
-    const verified = verifyArchiveReceipt(nativeResult(result), limits, options.validate);
+    const reply = nativeResult(result);
+    if (
+      !reply ||
+      typeof reply !== "object" ||
+      !("receiptBytes" in reply) ||
+      reply.receiptBytes !== Number((await receipt.stat()).size)
+    )
+      throw new CatalogError(
+        "INVALID_NATIVE_RESPONSE",
+        "Archive extraction must confirm its retained receipt",
+      );
+    let inventory: unknown;
+    try {
+      inventory = readJsonDescriptor(receipt.fd);
+    } catch (error) {
+      if (error instanceof SyntaxError)
+        throw new CatalogError("INVALID_NATIVE_RESPONSE", error.message);
+      throw error;
+    }
+    const verified = verifyArchiveReceipt(inventory, limits, options.validate);
     if (verified.copiedBytes !== archive.bytes)
       throw new CatalogError("INVALID_NATIVE_RESPONSE", "Archive copy size differs from admission");
     return { verified, identity, close };
   } catch (failure) {
     await close(failure);
     throw failure;
+  } finally {
+    await Promise.all(operands.map((file) => file.close()));
+    await rm(scratch, { recursive: true, force: true });
   }
 }
 type Extraction<T extends ArchiveManifest> = Awaited<ReturnType<typeof extractArchive<T>>>;

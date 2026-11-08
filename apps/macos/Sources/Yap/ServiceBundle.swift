@@ -1,12 +1,32 @@
 import Foundation
+import YapProtocol
 
 /// A refusal as the service states it: its own code, and a message a person can act on.
 struct ServiceFailure: LocalizedError, Sendable {
     let code: String
     let message: String
-    var retryable: Bool = false
+    let retryable: Bool
+    let retryAfterMs: Int?
+    /// The refusal's structured details as the service sent them (JSON), such as the users an
+    /// `IN_USE` delete names.
+    var details: Data? = nil
 
-    var errorDescription: String? { "\(code): \(message)" }
+    init(code: String, message: String, details: Data? = nil) {
+        self.code = code
+        self.message = message
+        self.retryable = RefusalLedger.retryable(code)
+        self.retryAfterMs = RefusalLedger.retryAfterMs(code)
+        self.details = details
+    }
+
+    var envelope: [String: Any] {
+        var result: [String: Any] = ["code": code, "message": message, "retryable": retryable,
+            "details": details.flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? [String: Any]()]
+        if let retryAfterMs { result["retryAfterMs"] = retryAfterMs }
+        return result
+    }
+
+    var errorDescription: String? { RefusalLedger.cause(code) ?? message }
 }
 
 /// What the build placed in `Contents/Resources/service`: the bundled entrypoint, the

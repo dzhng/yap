@@ -7,14 +7,23 @@ import { CatalogError } from "./catalog.js";
 import type { DerivedCache } from "./cache.js";
 import { O_NOFOLLOW_ANY } from "./open-flags.js";
 
-type Category = "sourceBytes" | "evidenceBytes" | "cacheBytes" | "otherBytes" | "sharedBytes";
+type Category =
+  | "sourceBytes"
+  | "evidenceBytes"
+  | "cacheBytes"
+  | "otherBytes"
+  | "sharedBytes"
+  | "modelBytes";
 export type StorageUsage = Record<Category | "totalBytes", number> & {
   recordingId: string | null;
   observedAt: string;
   measurement: "live";
 };
 type DirectoryIdentity = { path: string; dev: bigint; ino: bigint };
-type Location = { area: "home" | "recordings" | "recording" | "files"; category: Category };
+type Location = {
+  area: "home" | "recordings" | "recording" | "models" | "files";
+  category: Category;
+};
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 
 /** Actual regular-file lengths, never artifact metadata or an estimate of SQLite row ownership.
@@ -95,15 +104,14 @@ export class ManagedStorage {
       throw new CatalogError("NOT_FOUND", "Recording does not exist", { recordingId });
     if (
       recording &&
-      (basename(recording.recordingId) !== recording.recordingId ||
-        [".", "..", ""].includes(recording.recordingId))
+      (basename(recording.id) !== recording.id || [".", "..", ""].includes(recording.id))
     )
       throw new CatalogError(
         "INVALID_CATALOG",
         "Recording identity is not a storage directory name",
       );
     const usage: StorageUsage = {
-      recordingId: recording?.recordingId ?? null,
+      recordingId: recording?.id ?? null,
       observedAt: "",
       measurement: "live",
       sourceBytes: 0,
@@ -111,6 +119,7 @@ export class ManagedStorage {
       cacheBytes: 0,
       otherBytes: 0,
       sharedBytes: 0,
+      modelBytes: 0,
       totalBytes: 0,
     };
     const checkDirectories = async (directories: readonly DirectoryIdentity[]) => {
@@ -123,7 +132,6 @@ export class ManagedStorage {
             "STORAGE_CHANGED",
             "Managed directory changed during inspection",
             {},
-            true,
           );
       }
     };
@@ -164,7 +172,6 @@ export class ManagedStorage {
             "STORAGE_CHANGED",
             "Managed path became a symbolic link during inspection",
             {},
-            true,
           );
         if (!missing(error)) throw error;
       }
@@ -193,10 +200,11 @@ export class ManagedStorage {
           for (let entry = await directory.read(); entry; entry = await directory.read()) {
             this.lifetime.signal.throwIfAborted();
             const child = join(path, entry.name);
-            if (location.area === "home" && entry.name === "models") continue;
             let next: Location = { area: "files", category: location.category };
             if (this.store !== null && location.area === "home" && entry.name === "recordings")
               next = { area: "recordings", category: "sharedBytes" };
+            else if (location.area === "home" && entry.name === "models")
+              next = { area: "models", category: "modelBytes" };
             else if (location.area === "recordings" && this.recording(entry.name))
               next = { area: "recording", category: "otherBytes" };
             else if (location.area === "recording")
@@ -233,7 +241,7 @@ export class ManagedStorage {
           const stat = await lstat(parent, { bigint: true });
           if (stat.isDirectory())
             await walk(
-              join(parent, recording.recordingId),
+              join(parent, recording.id),
               {
                 area: "recording",
                 category: "otherBytes",
@@ -245,7 +253,7 @@ export class ManagedStorage {
         }
         for (const path of this.cache.usageFiles({
           kind: "recording",
-          recordingId: recording.recordingId,
+          id: recording.id,
         }))
           await count(path, "cacheBytes", [this.homeIdentity]);
       } else {
@@ -270,14 +278,9 @@ export class ManagedStorage {
       if (this.lifetime.signal.aborted)
         throw new CatalogError("CANCELED", "Storage inspection was canceled");
       if (error instanceof CatalogError) throw error;
-      throw new CatalogError(
-        "STORAGE_IO",
-        "Cannot inspect managed storage",
-        {
-          cause: (error as NodeJS.ErrnoException).code ?? "UNKNOWN",
-        },
-        true,
-      );
+      throw new CatalogError("STORAGE_IO", "Cannot inspect managed storage", {
+        cause: (error as NodeJS.ErrnoException).code ?? "UNKNOWN",
+      });
     }
     usage.observedAt = new Date().toISOString();
     return usage;

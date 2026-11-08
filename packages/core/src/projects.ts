@@ -1,5 +1,5 @@
 import { ResourceReferences, resourceKinds, type ResourceReference } from "./references.js";
-import { archiveLimits, checkProjectJsonBytes } from "./package-archive.js";
+import { archiveLimits } from "./package-archive.js";
 import { AcquisitionStore } from "./acquisitions.js";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -22,9 +22,10 @@ import { seedTextOperations, textSeeds, validateTextSeeds } from "./text-seeds.j
 import { Catalog, CatalogError } from "./catalog.js";
 import { AssetStore, compositionAsset } from "./assets.js";
 import { speakerCorrectionSchema, type SpeakerCorrection } from "./speaker-attribution.js";
+import { pageCursor } from "./page-cursor.js";
 
 export type Project = {
-  projectId: string;
+  id: string;
   title: string;
   createdAt: string;
   currentRevisionId: string;
@@ -48,16 +49,15 @@ export const projectSnapshotReferencesSchema = z
   .array(
     z.strictObject({
       revisionId: z.string().min(1),
-      resources: z
-        .array(z.strictObject({ kind: z.enum(resourceKinds), id: z.string().min(1).max(2048) }))
-        .max(25000),
+      resources: z.array(
+        z.strictObject({ kind: z.enum(resourceKinds), id: z.string().min(1).max(2048) }),
+      ),
     }),
   )
-  .max(archiveLimits.history)
-  .refine((values) => values.reduce((sum, value) => sum + value.resources.length, 0) <= 25000);
+  .max(archiveLimits.history);
 const projectSnapshotSchema = z.strictObject({
   project: z.strictObject({
-    projectId: z.string().min(1),
+    id: z.string().min(1),
     title: z.string(),
     createdAt: z.string().min(1),
     currentRevisionId: z.string().min(1),
@@ -88,7 +88,7 @@ export function validateProjectSnapshot(value: unknown): ProjectSnapshot {
   for (const [ordinal, revision] of snapshot.revisions.entries()) {
     if (
       revision.ordinal !== ordinal ||
-      revision.projectId !== snapshot.project.projectId ||
+      revision.projectId !== snapshot.project.id ||
       ids.has(revision.id)
     )
       throw new CatalogError("INVALID_PACKAGE", "Project history is incomplete or ambiguous");
@@ -121,20 +121,27 @@ export function validateProjectSnapshot(value: unknown): ProjectSnapshot {
 }
 export type ProjectEditResult = {
   revision: ProjectRevision;
-  edit: Omit<EditBatchResult, "document">;
+  edit: any;
 };
 function editResult(
   result: ProjectEditResult & { edit: { document?: EditBatchResult["document"] } },
 ): ProjectEditResult {
-  // Historical request receipts may contain the same document inside edit.
-  return { revision: result.revision, edit: omit(result.edit, "document") };
+  // The revision already carries the document; the edit reports only what changed.
+  const clean = (value: any): any =>
+    Array.isArray(value)
+      ? value.map(clean)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value)
+              .filter(([, child]) => child !== undefined)
+              .map(([key, child]) => [key, clean(child)]),
+          )
+        : value;
+  return clean({ revision: result.revision, edit: omit(result.edit, "document") });
 }
-export type ProjectHistoryCursor = {
-  projectId: string;
-  afterOrdinal: number;
-  throughOrdinal: number;
-};
-const projectColumns = "projectId,title,createdAt,currentRevisionId";
+export type ProjectHistoryCursor = string;
+export type DuplicateStep = "project" | "references" | "revision" | "result";
+const projectColumns = "projectId AS id,title,createdAt,currentRevisionId";
 function canonical(value: unknown): string {
   return JSON.stringify(value, (_key, item) =>
     item && typeof item === "object" && !Array.isArray(item)
@@ -164,6 +171,7 @@ export class ProjectStore {
     private readonly assets: AssetStore,
     private readonly transcripts: TranscriptStore,
     private readonly acquisitions = new AcquisitionStore(store),
+    private readonly duplicateFault?: (step: DuplicateStep) => void,
   ) {
     this.references = new ResourceReferences(store);
     store.catalog.exec(`
@@ -225,7 +233,7 @@ export class ProjectStore {
         operation: "create",
         document,
       };
-      const project: Project = { projectId, title, createdAt, currentRevisionId: id };
+      const project: Project = { id: projectId, title, createdAt, currentRevisionId: id };
       const result = { project, revision };
       this.store.catalog
         .prepare(
@@ -244,6 +252,75 @@ export class ProjectStore {
       return result;
     });
   }
+  duplicate(input: { requestId: string; projectId: string; revisionId?: string; title?: string }): {
+    project: Project;
+    revision: ProjectRevision;
+  } {
+    const argumentsKey = canonical({
+      operation: "duplicate",
+      projectId: input.projectId,
+      revisionId: input.revisionId ?? null,
+      title: input.title ?? null,
+    });
+    return this.store.transaction(() => {
+      const prior = this.store.catalog
+        .prepare("SELECT createArguments,createResult FROM projects WHERE createRequestId=?")
+        .get(input.requestId);
+      if (prior) {
+        if (prior.createArguments !== argumentsKey)
+          throw new CatalogError(
+            "REQUEST_CONFLICT",
+            "Request ID was already used with different arguments",
+          );
+        return JSON.parse(prior.createResult as string) as {
+          project: Project;
+          revision: ProjectRevision;
+        };
+      }
+      const source = this.get(input.projectId);
+      const selected = this.revision(input.projectId, input.revisionId);
+      const projectId = randomUUID();
+      const revisionId = randomUUID();
+      const createdAt = new Date().toISOString();
+      const revision: ProjectRevision = {
+        ...selected,
+        id: revisionId,
+        projectId,
+        ordinal: 0,
+        createdAt,
+        operation: "create",
+        document: structuredClone(selected.document),
+        ...(selected.speakerCorrections === undefined
+          ? {}
+          : { speakerCorrections: structuredClone(selected.speakerCorrections) }),
+      };
+      const project: Project = {
+        id: projectId,
+        title: input.title ?? `${source.title} copy`,
+        createdAt,
+        currentRevisionId: revisionId,
+      };
+      const result = { project, revision };
+      this.duplicateFault?.("project");
+      this.store.catalog
+        .prepare(
+          `INSERT INTO projects(projectId,title,createdAt,currentRevisionId,createRequestId,createArguments,createResult) VALUES(?,?,?,?,?,?,?)`,
+        )
+        .run(
+          projectId,
+          project.title,
+          createdAt,
+          revisionId,
+          input.requestId,
+          argumentsKey,
+          JSON.stringify(result),
+        );
+      this.duplicateFault?.("references");
+      this.insertRevision(revision);
+      this.duplicateFault?.("result");
+      return result;
+    });
+  }
   get(projectId: string): Project {
     const row = this.store.catalog
       .prepare(`SELECT ${projectColumns} FROM projects WHERE projectId=? AND deletedAt IS NULL`)
@@ -251,24 +328,37 @@ export class ProjectStore {
     if (!row) throw new CatalogError("NOT_FOUND", "Project does not exist", { projectId });
     return row as Project;
   }
-  /** Pages are newest first; afterSequence anchors the next page below the prior page's tail. */
-  list(input: { afterSequence?: number; limit?: number } = {}) {
-    const limit = input.limit ?? 250,
-      after = input.afterSequence;
+  /** A deleting project is never discoverable through library listings. */
+  listable(projectId: string): boolean {
+    return Boolean(
+      this.store.catalog
+        .prepare("SELECT 1 FROM projects WHERE projectId=? AND deletedAt IS NULL")
+        .get(projectId),
+    );
+  }
+  /** Pages are newest first; the opaque continuation anchors below the prior page's tail. */
+  list(input: { cursor?: string; limit?: number } = {}) {
+    const limit = input.limit ?? 100,
+      position =
+        input.cursor === undefined
+          ? undefined
+          : pageCursor.decode("project.list", input.cursor, {}),
+      after = position === undefined ? undefined : (position as { sequence?: unknown }).sequence;
     pageLimit(limit);
-    if (after !== undefined && (!Number.isSafeInteger(after) || after < 0))
+    if (after !== undefined && (!Number.isSafeInteger(after) || (after as number) < 0))
       throw new CatalogError("INVALID_PARAMS", "Invalid project cursor");
-    const where =
-      after === undefined || after === 0 ? "deletedAt IS NULL" : "deletedAt IS NULL AND sequence<?";
+    const where = "deletedAt IS NULL AND sequence<?";
     const rows = this.store.catalog
       .prepare(
         `SELECT sequence,${projectColumns} FROM projects WHERE ${where} ORDER BY sequence DESC LIMIT ?`,
       )
-      .all(...(after === undefined || after === 0 ? [limit + 1] : [after, limit + 1]));
+      .all(after === undefined ? Number.MAX_SAFE_INTEGER : (after as number), limit + 1);
     return {
       projects: rows.slice(0, limit).map((row) => omit(row, "sequence") as Project),
       nextCursor:
-        rows.length > limit ? { afterSequence: rows[limit - 1]!.sequence as number } : null,
+        rows.length > limit
+          ? pageCursor.encode("project.list", { sequence: rows[limit - 1]!.sequence as number }, {})
+          : null,
     };
   }
   /** The marker fences all readers and new work before asynchronous owners drain. */
@@ -368,15 +458,21 @@ export class ProjectStore {
   ): ProjectEditResult {
     const operations = parsed(z.array(editOperationSchema).max(1000), request.operations);
     const args = { operation: "apply", expectedRevisionId: request.expectedRevisionId, operations };
-    return editResult(
-      this.mutate(projectId, request.requestId, args, () =>
+    return this.mutate(
+      projectId,
+      request.requestId,
+      args,
+      () =>
         this.applyOperations(
           this.current(projectId, request.expectedRevisionId),
           request.requestId,
           operations,
         ),
-      ),
-    );
+      (result) =>
+        editResult(
+          result as ProjectEditResult & { edit: { document?: EditBatchResult["document"] } },
+        ),
+    ) as ProjectEditResult;
   }
   correctSpeakers(
     projectId: string,
@@ -511,19 +607,33 @@ export class ProjectStore {
       ids.map((id) => compositionAsset(this.assets.get(id))),
       this.contexts(revision.document),
     );
-    return { projectId, revisionId: revision.id, target, steps: getProcessing(model, target) };
+    return {
+      projectId,
+      revisionId: revision.id,
+      target,
+      steps: getProcessing(model, target),
+    };
   }
-  history(projectId: string, cursor: ProjectHistoryCursor | null = null, limit = 250) {
+  history(projectId: string, cursor: ProjectHistoryCursor | null = null, limit = 100) {
     this.get(projectId);
     pageLimit(limit);
-    const afterOrdinal = cursor?.afterOrdinal ?? -1;
+    const position =
+      cursor === null ? undefined : pageCursor.decode("revision.history", cursor, { projectId });
+    const decoded = position as { afterOrdinal?: unknown; throughOrdinal?: unknown } | undefined;
+    const afterOrdinal = (decoded?.afterOrdinal ?? -1) as number;
     const throughOrdinal =
-      cursor?.throughOrdinal ??
+      (decoded?.throughOrdinal as number | undefined) ??
       (this.store.catalog
         .prepare("SELECT MAX(ordinal) AS ordinal FROM project_revisions WHERE projectId=?")
         .get(projectId)!.ordinal as number);
+    if (decoded) {
+      const currentThrough = this.store.catalog
+        .prepare("SELECT MAX(ordinal) AS ordinal FROM project_revisions WHERE projectId=?")
+        .get(projectId)!.ordinal as number;
+      if (throughOrdinal > currentThrough)
+        throw new CatalogError("ARTIFACT_CHANGED", "Project history pin is stale");
+    }
     if (
-      (cursor && cursor.projectId !== projectId) ||
       !Number.isSafeInteger(afterOrdinal) ||
       afterOrdinal < -1 ||
       !Number.isSafeInteger(throughOrdinal) ||
@@ -542,7 +652,11 @@ export class ProjectStore {
       revisions,
       nextCursor:
         rows.length > limit
-          ? { projectId, afterOrdinal: revisions.at(-1)!.ordinal, throughOrdinal }
+          ? pageCursor.encode(
+              "revision.history",
+              { afterOrdinal: revisions.at(-1)!.ordinal, throughOrdinal },
+              { projectId },
+            )
           : null,
     };
   }
@@ -559,10 +673,13 @@ export class ProjectStore {
         "LIMIT_EXCEEDED",
         "Project history exceeds the portable snapshot budget",
       );
-    checkProjectJsonBytes(usage.bytes);
     const history = this.history(
       projectId,
-      { projectId, afterOrdinal: -1, throughOrdinal: selected.ordinal },
+      pageCursor.encode(
+        "revision.history",
+        { afterOrdinal: -1, throughOrdinal: selected.ordinal },
+        { projectId },
+      ),
       archiveLimits.history,
     );
     if (history.nextCursor)
@@ -587,15 +704,8 @@ export class ProjectStore {
       }
     if (undo.length > archiveLimits.history)
       throw new CatalogError("LIMIT_EXCEEDED", "Project undo exceeds the portable snapshot limit");
-    let edges = 0;
     const references = history.revisions.map((revision) => {
       const resources = this.references.dependencies({ kind: "revision", id: revision.id });
-      edges += resources.length;
-      if (edges > 25000)
-        throw new CatalogError(
-          "LIMIT_EXCEEDED",
-          "Project revision dependencies exceed package budget",
-        );
       return { revisionId: revision.id, resources };
     });
     return {
@@ -626,7 +736,7 @@ export class ProjectStore {
       };
     };
     const prior = replay();
-    const projectId = prior?.project.projectId ?? randomUUID();
+    const projectId = prior?.project.id ?? randomUUID();
     const revisionIds =
       prior?.revisionIds ??
       Object.fromEntries(snapshot.revisions.map((revision) => [revision.id, randomUUID()]));
@@ -637,7 +747,7 @@ export class ProjectStore {
     }));
     const project = {
       ...snapshot.project,
-      projectId,
+      id: projectId,
       currentRevisionId: revisionIds[snapshot.project.currentRevisionId]!,
     };
     const result = { project, revision: revisions.at(-1)!, revisionIds };
@@ -695,7 +805,13 @@ export class ProjectStore {
         }),
     };
   }
-  private mutate<T>(projectId: string, requestId: string, args: unknown, run: () => T): T {
+  private mutate<T>(
+    projectId: string,
+    requestId: string,
+    args: unknown,
+    run: () => T,
+    retain: (result: T) => T = (result) => result,
+  ): T {
     const key = canonical(args);
     return this.store.transaction(() => {
       this.get(projectId);
@@ -711,10 +827,11 @@ export class ProjectStore {
         return JSON.parse(replay.result as string) as T;
       }
       const result = run();
+      const retained = retain(result);
       this.store.catalog
         .prepare("INSERT INTO project_requests VALUES(?,?,?,?)")
-        .run(projectId, requestId, key, JSON.stringify(result));
-      return result;
+        .run(projectId, requestId, key, JSON.stringify(retained));
+      return retained;
     });
   }
   private current(projectId: string, expected: string) {
@@ -800,6 +917,7 @@ export class ProjectStore {
       { kind: "revision", id: revision.id },
       documentAcquisitionIds(revision.document),
     );
+    this.duplicateFault?.("revision");
     this.store.catalog
       .prepare("INSERT INTO project_revisions VALUES(?,?,?,?)")
       .run(revision.id, revision.projectId, revision.ordinal, JSON.stringify(revision));

@@ -236,7 +236,7 @@ The same handlers are available through Settings and the public CLI:
   but while **Set up my agents** is on the next launch installs the skill again, so
   turn the row off to keep it removed.
 
-The protocol mutation response includes `state: "updating"` and an `operationId`;
+The protocol mutation response includes `state: "running"` and a `jobId`;
 the CLI waits for the terminal state by default (use `--no-wait` for an immediate
 acknowledgement). Other protocol clients poll `skill.status` for the terminal
 state and any retained error or backup path.
@@ -244,5 +244,6 @@ The app reconciles at every launch (including the relaunch after an app update)
 and when maintenance is re-enabled. There is no periodic background timer.
 Maintenance is the Settings row **Set up my agents**, which covers both this skill
 and the `yap` command (`cli.status`, `cli.install`, `cli.uninstall`). Its status
-line summarizes both; read detailed state (`installed`, `updating`, `missing`,
-`unmanaged`, `disabled` or `needs_attention`) and diagnostics from `skill.status`.
+line summarizes both; read the WorkState lifecycle plus the separate
+`installation` fact (`installed`, `missing`, `unmanaged`, `disabled` or
+`needs_attention`) and diagnostics from `skill.status`.

@@ -1,18 +1,17 @@
 import { createServer, createConnection, type Socket } from "node:net";
 import { once } from "node:events";
-import { chmod, mkdir, writeFile, truncate, lstat, readFile, realpath } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { chmod, mkdir, writeFile, readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
-import { createHash } from "node:crypto";
-import { Models, parakeetModel } from "@yap/core/models";
+import { parakeetModel } from "@yap/core/models";
 import type { SpeechTranscriptionRequest } from "@yap/core/transcript";
 import type { SourceTranscriptRow } from "@yap/core/transcript-read";
 import { callLocal } from "@yap/client";
 import { REQUEST_FRAME_BYTES, type OperationRequest, type OperationResponse } from "@yap/protocol";
 import { projectServiceFixture } from "./project-service.fixture.js";
-import type { MediaWorker } from "./worker.js";
 import { publishControlledObservation, speakerSource } from "./speaker.fixture.js";
+import { controlledSpeech, modelMetadata } from "./transcript.fixture.js";
 
 const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -38,14 +37,14 @@ async function emptyProject() {
   expect(created.ok).toBe(true);
   if (!created.ok) throw new Error(created.error.message);
   const { project, revision } = created.data as {
-    project: { projectId: string };
+    project: { id: string };
     revision: { id: string };
   };
   const request = {
     id: "resize",
     operation: "edit.apply",
     params: {
-      projectId: project.projectId,
+      projectId: project.id,
       requestId: "resize",
       expectedRevisionId: revision.id,
       operations: [{ operation: "canvas.set", canvas: { ...canvas, width: 32 } }],
@@ -55,11 +54,11 @@ async function emptyProject() {
   cleanups.push(async () => db.close());
   async function state() {
     return {
-      project: await f.call("project.get", { projectId: project.projectId }),
-      history: await f.call("revision.history", { projectId: project.projectId }),
+      project: await f.call("project.get", { projectId: project.id }),
+      history: await f.call("revision.history", { projectId: project.id }),
       requests: db
         .prepare("SELECT * FROM project_requests WHERE projectId=? ORDER BY requestId")
-        .all(project.projectId),
+        .all(project.id),
     };
   }
   return { ...f, project, revision, request, state };
@@ -69,14 +68,14 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   const f = await emptyProject();
   const before = await f.state();
   const opened = await f.call("inspect.open", {
-    projectId: f.project.projectId,
+    projectId: f.project.id,
     revisionId: f.revision.id,
     range: { startUs: 0, endUs: 1 },
   });
   expect(opened).toMatchObject({
     ok: true,
     data: {
-      projectId: f.project.projectId,
+      projectId: f.project.id,
       headRevisionId: f.revision.id,
       revision: { id: f.revision.id },
       history: [{ id: f.revision.id, ordinal: 0 }],
@@ -84,7 +83,7 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
     },
   });
   const proposed = await f.call("caption.propose", {
-    projectId: f.project.projectId,
+    projectId: f.project.id,
     revisionId: f.revision.id,
     trackId: "captions",
     canvas: { width: 100, height: 100 },
@@ -111,7 +110,7 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   });
   expect(proposed).toMatchObject({ ok: false, error: { code: "NOT_READY" } });
   const diagnostics = await f.call("layout.diagnostics", {
-    projectId: f.project.projectId,
+    projectId: f.project.id,
     revisionId: f.revision.id,
     samples: [
       {
@@ -129,7 +128,7 @@ test("inspect, caption proposal and layout diagnostics stay pinned and read-only
   }
   expect(await f.state()).toEqual(before);
   expect(
-    await f.call("inspect.open", { projectId: f.project.projectId, revisionId: "missing" }),
+    await f.call("inspect.open", { projectId: f.project.id, revisionId: "missing" }),
   ).toMatchObject({ ok: false, error: { code: "NOT_FOUND" } });
 });
 async function sendRaw(socketPath: string, bytes: Buffer) {
@@ -149,7 +148,7 @@ async function sendRaw(socketPath: string, bytes: Buffer) {
 }
 test("public rendered recognition rejects absent generations and refuses a range wholly outside the project before any job", async () => {
   const f = await emptyProject();
-  const selector = { projectId: f.project.projectId, revisionId: f.revision.id };
+  const selector = { projectId: f.project.id, revisionId: f.revision.id };
   expect(
     await f.call("transcript.render.get", {
       ...selector,
@@ -173,6 +172,241 @@ test("public rendered recognition rejects absent generations and refuses a range
   cleanups.push(async () => db.close());
   expect(db.prepare("SELECT COUNT(*) AS n FROM jobs").get()).toEqual({ n: 0 });
 });
+function pcmWave(frames: number, sampleRate: number, channels: number) {
+  const bytes = Buffer.alloc(44 + frames * channels * 4);
+  bytes.write("RIFF");
+  bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.write("WAVEfmt ", 8);
+  bytes.writeUInt32LE(16, 16);
+  bytes.writeUInt16LE(3, 20);
+  bytes.writeUInt16LE(channels, 22);
+  bytes.writeUInt32LE(sampleRate, 24);
+  bytes.writeUInt32LE(sampleRate * channels * 4, 28);
+  bytes.writeUInt16LE(channels * 4, 32);
+  bytes.writeUInt16LE(32, 34);
+  bytes.write("data", 36);
+  bytes.writeUInt32LE(bytes.length - 44, 40);
+  return bytes;
+}
+/**
+ * One project with a placed audio clip, rendered by a controlled native edge: the project mix, the
+ * PCM conversion and recognition each answer like the native worker, and `fail` names the one
+ * native operation whose first attempt fails.
+ */
+async function renderedRecognition(fail: "media.mixCompositionAudio" | "speech.transcribe") {
+  const calls: string[] = [];
+  let failing = true,
+    probes = 0;
+  const speech = controlledSpeech([], [], [{ text: "rendered", startUs: 100_000, endUs: 400_000 }]);
+  const audio = (sampleRate: number, channels: number, endUs: number) => ({
+    id: "audio",
+    kind: "audio",
+    codec: "pcm",
+    decodable: true,
+    sampleRate,
+    channels,
+    startUs: 0,
+    endUs,
+    segments: [{ startUs: 0, endUs, empty: false }],
+  });
+  const f = await projectServiceFixture(cleanups, async (operation, params, options) => {
+    calls.push(operation);
+    if (operation === fail && failing) {
+      failing = false;
+      return {
+        ok: false,
+        error: {
+          code: "MEDIA_WORKER_FAILED",
+          message: "controlled failure",
+          retryable: true,
+          details: {},
+        },
+      };
+    }
+    // The first probe admits the source; later probes admit the converted PCM rendition.
+    if (operation === "media.probe")
+      return {
+        ok: true,
+        data: {
+          originUs: 0,
+          streams: [probes++ === 0 ? audio(48000, 2, 2_000_000) : audio(16000, 1, 1_000_000)],
+        },
+      };
+    if (operation === "media.mixCompositionAudio") {
+      const { output, range, clips } = params as {
+        output: string;
+        range: { start: number; end: number };
+        clips: { clipId: string }[];
+      };
+      const frames = range.end - range.start;
+      const bytes = pcmWave(frames, 48000, 2);
+      await writeFile(output, bytes);
+      return {
+        ok: true,
+        data: {
+          file: output,
+          bytes: bytes.length,
+          sampleRate: 48000,
+          channels: 2,
+          frames,
+          peak: 0,
+          clippedSamples: 0,
+          maximumBlockFrames: 1024,
+          peakResidentBytes: 0,
+          decoderContext: {
+            policy: "bounded-current-retained-run",
+            sampleRate: 48000,
+            maximumPrerollFrames: 0,
+            maximumTailFrames: 0,
+          },
+          unavailable: clips.map(({ clipId }) => ({ clipId, ranges: [] })),
+        },
+      };
+    }
+    if (operation === "media.convertSelectedAudio") {
+      const { source, output, sampleRate, channels } = params as {
+        source: string;
+        output: string;
+        sampleRate: number;
+        channels: number;
+      };
+      // Like the native converter, the selected input's dimensions come from its WAV header.
+      const selected = await readFile(source);
+      const input = {
+        sampleRate: selected.readUInt32LE(24),
+        channels: selected.readUInt16LE(22),
+        frames: (selected.length - 44) / (selected.readUInt16LE(22) * 4),
+      };
+      const frames = (input.frames * sampleRate) / input.sampleRate;
+      const bytes = pcmWave(frames, sampleRate, channels);
+      await writeFile(output, bytes);
+      return {
+        ok: true,
+        data: {
+          file: output,
+          mediaType: "audio/wav",
+          bytes: bytes.length,
+          implementationId: "native-finite-pcm-v2",
+          input,
+          output: { frames, sampleRate, channels },
+          channelPolicy: "equal-weight-double-rounded-float32",
+          contextPolicy: "complete-selected-pcm-zero-origin",
+        },
+      };
+    }
+    return speech(operation, params, options);
+  });
+  await modelMetadata(await realpath(join(f.home, "library")));
+  const imported = await f.call("asset.import", { requestId: "speech", path: f.path });
+  if (!imported.ok) throw new Error(JSON.stringify(imported));
+  const assetId = (await f.job((imported.data as { jobId: string }).jobId, "ready")).published!
+    .output.assetId;
+  const created = await f.call("project.create", { requestId: "rendered", canvas });
+  if (!created.ok) throw new Error(JSON.stringify(created));
+  const initial = created.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
+  const edited = await f.call("edit.apply", {
+    projectId: initial.project.id,
+    expectedRevisionId: initial.revision.id,
+    requestId: "place",
+    operations: [
+      { operation: "track.add", track: { kind: "audio", order: 0 }, label: "dialogue" },
+      {
+        operation: "place",
+        clip: {
+          trackId: { label: "dialogue" },
+          assetId,
+          streamId: "audio",
+          source: { kind: "range", range: { startUs: 0, endUs: 1_000_000 } },
+          placement: { kind: "project", range: { startUs: 0, endUs: 1_000_000 } },
+        },
+      },
+    ],
+  });
+  if (!edited.ok) throw new Error(JSON.stringify(edited));
+  const request = {
+    projectId: initial.project.id,
+    revisionId: (edited.data as { revision: { id: string } }).revision.id,
+    range: { startUs: 0, endUs: 1_000_000 },
+    tap: { target: { kind: "output" }, point: { kind: "processed" } },
+    rendition: { sampleRate: 16000, channels: 1 },
+  };
+  type Status = {
+    state: string;
+    jobId: string | null;
+    published: { output: { generation: string } } | null;
+  };
+  const prepare = async () => {
+    const result = await f.call("transcript.render.prepare", request);
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return result.data as Status;
+  };
+  /** Polls the item's own status, as a caller would, until it settles. */
+  const settled = async () => {
+    const deadline = performance.now() + 5000;
+    for (;;) {
+      const status = await prepare();
+      if (["ready", "failed", "canceled", "unavailable"].includes(status.state)) return status;
+      if (performance.now() >= deadline) throw new Error(JSON.stringify(status));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  };
+  const words = async (generation: string) => {
+    const read = await f.call("transcript.render.get", {
+      projectId: request.projectId,
+      revisionId: request.revisionId,
+      generation,
+    });
+    expect(read).toMatchObject({ ok: true, data: { state: "ready" } });
+    if (!read.ok) throw new Error(JSON.stringify(read));
+    return (read.data as { rows: { text: string }[] }).rows.map((row) => row.text);
+  };
+  return { ...f, calls, prepare, settled, words };
+}
+
+test("failed rendered recognition recovers through job.retry with the jobId its prepare returned", async () => {
+  const f = await renderedRecognition("speech.transcribe");
+  const pending = await f.prepare();
+  expect(pending.jobId).toEqual(expect.any(String));
+  const failed = await f.settled();
+  expect(failed).toMatchObject({ state: "failed", jobId: pending.jobId, published: null });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(1);
+  expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: { id: pending.jobId },
+  });
+  const ready = await f.settled();
+  expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(2);
+  expect(await f.words(ready.published!.output.generation)).toEqual(["rendered"]);
+});
+
+test("a failed rendered PCM dependency recovers through job.retry with the jobId its prepare returned", async () => {
+  const f = await renderedRecognition("media.mixCompositionAudio");
+  const pending = await f.prepare();
+  const failed = await f.settled();
+  expect(failed).toMatchObject({ state: "failed", jobId: pending.jobId, published: null });
+  expect(await f.call("job.get", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: {
+      state: "failed",
+      errorDetails: { dependencyJobId: expect.any(String), state: "failed" },
+    },
+  });
+  expect(f.calls.filter((operation) => operation === "speech.transcribe")).toHaveLength(0);
+  // The jobId the item reported is enough: its retry also re-runs the failed extraction.
+  expect(await f.call("job.retry", { jobId: failed.jobId! })).toMatchObject({
+    ok: true,
+    data: { id: pending.jobId },
+  });
+  const ready = await f.settled();
+  expect(ready).toMatchObject({ state: "ready", jobId: pending.jobId });
+  expect(f.calls.filter((operation) => operation === "media.mixCompositionAudio")).toHaveLength(2);
+  expect(await f.words(ready.published!.output.generation)).toEqual(["rendered"]);
+});
+
 test("oversized independently valid project mutation does not dispatch", async () => {
   const f = await emptyProject();
   const before = await f.state();
@@ -255,10 +489,12 @@ test("client TIMEOUT after a real committed reply preserves same-ID replay and h
   expect(await f.state()).toEqual(after);
   expect(after.history).toMatchObject({
     ok: true,
-    data: { revisions: [{ id: f.revision.id }, { document: { canvas: { width: 32 } } }] },
+    data: {
+      revisions: [{ id: f.revision.id }, { document: { canvas: { width: 32 } } }],
+    },
   });
   expect(after.requests).toHaveLength(1);
-  expect(after.requests[0]).toMatchObject({ projectId: f.project.projectId, requestId: "resize" });
+  expect(after.requests[0]).toMatchObject({ projectId: f.project.id, requestId: "resize" });
   expect(JSON.parse(after.requests[0]!.result as string)).toEqual(
     success.response.ok ? success.response.data : null,
   );
@@ -300,141 +536,32 @@ test("package-root refusal does not revoke unrelated canonical project dispatch"
     ok: true,
     data: { usage: null, admissions: [] },
   });
-  expect(await f.call("project.get", { projectId: f.project.projectId })).toMatchObject({
+  expect(await f.call("project.get", { projectId: f.project.id })).toMatchObject({
     ok: true,
-    data: { projectId: f.project.projectId, currentRevisionId: f.revision.id },
+    data: { id: f.project.id, currentRevisionId: f.revision.id },
   });
   expect((await callLocal(f.service.socketPath, f.request)).ok).toBe(true);
 });
 
-// Sparse sizes and stat-bound receipts exercise actual Models metadata/readiness only.
-// These are not model weights; the controlled transcription edge never reads them.
-async function modelMetadata(library: string) {
-  const root = join(library, "models", "parakeet", parakeetModel.revision);
-  const files: Record<string, { modifiedNs: string; inode: string }> = {};
-  for (const file of parakeetModel.files) {
-    const path = join(root, parakeetModel.folderName, file.path);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(path, "");
-    await truncate(path, file.bytes);
-    const info = await lstat(path, { bigint: true });
-    files[file.path] = { modifiedNs: String(info.mtimeNs), inode: String(info.ino) };
-  }
-  const receipt = join(root, "receipt.json");
-  await writeFile(
-    receipt,
-    JSON.stringify({
-      modelDigest: new Models(library).transcription("parakeet").modelDigest,
-      files,
-    }),
-  );
-  return { directory: join(root, parakeetModel.folderName), receipt };
-}
-const spoken = [
-  { text: "Open", startUs: 200000, endUs: 500000 },
-  { text: "the", startUs: 500000, endUs: 700000 },
-  { text: "Settings", startUs: 800000, endUs: 1400000 },
-  { text: "panel.", startUs: 1500000, endUs: 2000000 },
-  { text: "Um,", startUs: 4100000, endUs: 4300000 },
-  { text: "press", startUs: 4500000, endUs: 5000000 },
-  { text: "record", startUs: 5100000, endUs: 5800000 },
-];
-/** A controlled native edge: probe two audio streams and transcribe `spoken`, with raw line issues. */
-function controlledSpeech(
-  requests: SpeechTranscriptionRequest[],
-  lineIssues: Record<string, unknown>[] = [],
-): MediaWorker {
-  return async (operation, params) => {
-    if (operation === "media.probe")
-      return {
-        ok: true,
-        data: {
-          originUs: 48675,
-          streams: [
-            {
-              id: "track:1",
-              kind: "audio",
-              codec: "pcm",
-              decodable: true,
-              startUs: 0,
-              endUs: 10000000,
-              segments: [
-                { startUs: 0, endUs: 3000000, empty: false },
-                { startUs: 3000000, endUs: 4000000, empty: true },
-                { startUs: 4000000, endUs: 6000000, empty: false },
-                { startUs: 6000000, endUs: 10000000, empty: true },
-              ],
-            },
-            {
-              id: "audio",
-              kind: "audio",
-              codec: "pcm",
-              decodable: true,
-              channels: 2,
-              sampleRate: 16000,
-              startUs: 0,
-              endUs: 40000000,
-              segments: [{ startUs: 0, endUs: 40000000, empty: false }],
-            },
-          ],
-        },
-      };
-    expect(operation).toBe("speech.transcribe");
-    const request = params as SpeechTranscriptionRequest;
-    requests.push(request);
-    const lines = request.track.available.map((source, ordinal) => {
-      const words = spoken
-        .filter(
-          (word) => word.startUs >= Number(source.startUs) && word.endUs <= Number(source.endUs),
-        )
-        .map(({ text, ...range }) => ({
-          text,
-          source: range,
-          confidence: 0.9,
-          startSeconds: (range.startUs - Number(source.startUs)) / 1e6,
-          endSeconds: (range.endUs - Number(source.startUs)) / 1e6,
-        }));
-      return {
-        ordinal,
-        source,
-        owned: source,
-        state: "transcribed" as const,
-        words,
-        ...(ordinal === 0 && lineIssues.length ? { issues: lineIssues } : {}),
-      };
-    });
-    const raw = lines.map((line) => JSON.stringify(line) + "\n").join("");
-    await writeFile(request.output, raw);
-    return {
-      ok: true,
-      data: {
-        output: {
-          file: request.output,
-          bytes: Buffer.byteLength(raw),
-          sha256: createHash("sha256").update(raw).digest("hex"),
-        },
-        engine: {
-          ...parakeetModel.engine,
-          encoderPrecision: "int8",
-          computeUnits: "cpuAndNeuralEngine",
-        },
-        execution: request.execution,
-        available: request.track.available,
-        segments: lines.map(({ ordinal, source, state, words }) => ({
-          ordinal,
-          source,
-          owned: source,
-          state,
-          wordCount: words.length,
-        })),
-        wordCount: spoken.length,
-      },
-    };
-  };
-}
 test("selected-source transcript preserves filler, phrase and ready retry through actual model metadata", async () => {
   const requests: SpeechTranscriptionRequest[] = [];
-  const f = await projectServiceFixture(cleanups, controlledSpeech(requests));
+  let failFirst = true;
+  const speech = controlledSpeech(requests);
+  const f = await projectServiceFixture(cleanups, async (operation, params, options) => {
+    if (operation === "speech.transcribe" && failFirst) {
+      failFirst = false;
+      return {
+        ok: false,
+        error: {
+          code: "MEDIA_WORKER_FAILED",
+          message: "controlled failure",
+          retryable: true,
+          details: {},
+        },
+      };
+    }
+    return speech(operation, params, options);
+  });
   const model = await modelMetadata(await realpath(join(f.home, "library")));
   const receipt = await readFile(model.receipt);
   const status = await f.call("model.status", { modelId: "parakeet" });
@@ -449,13 +576,16 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const selection = { assetId: ready.published!.output.assetId, streamId: "track:1" };
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
-    data: { state: "not_requested", jobId: null, page: null },
+    data: { state: "idle", jobId: null },
   });
   const created = await f.call("project.create", { requestId: "cached-read", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const initial = created.data as { project: { projectId: string }; revision: { id: string } };
+  const initial = created.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
+    projectId: initial.project.id,
     expectedRevisionId: initial.revision.id,
     requestId: "cached-place",
     operations: [
@@ -473,16 +603,15 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
   const projectSelection = {
-    projectId: initial.project.projectId,
+    projectId: initial.project.id,
     revisionId: (edited.data as { revision: { id: string } }).revision.id,
   };
   expect(await f.call("transcript.get", projectSelection)).toMatchObject({
     ok: true,
     data: {
-      state: "not_ready",
+      state: "queued",
       reason: "source_evidence_not_ready",
-      page: null,
-      dependencies: [{ state: "not_requested", jobId: null }],
+      dependencies: [{ state: "idle", jobId: null }],
     },
   });
   const database = new DatabaseSync(join(f.home, "library", "catalog.sqlite"));
@@ -494,6 +623,8 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const pending = await f.call("transcript.transcribe", selection);
   if (!pending.ok) throw new Error(JSON.stringify(pending));
   const jobId = (pending.data as { jobId: string }).jobId;
+  await f.job(jobId, "failed");
+  expect(await f.call("job.retry", { jobId })).toMatchObject({ ok: true, data: { id: jobId } });
   await f.job(jobId, "ready");
   const speakerInput = {
     assetId: selection.assetId,
@@ -505,11 +636,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
   const speakerMetadata = await publishControlledObservation(f.home, speakerInput);
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Ada" },
@@ -517,37 +650,36 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       ],
     }),
   ).toMatchObject({ ok: true });
+  const attributedSpeaker = {
+    streamId: speakerInput.streamId,
+    channel: speakerInput.channel,
+    modelId: speakerInput.modelId,
+    sourceRange: speakerInput.sourceRange,
+    generation: speakerMetadata.generation,
+  };
   const attributed = await f.call("transcript.get", {
     ...selection,
     limit: 4,
-    speaker: {
-      streamId: speakerInput.streamId,
-      channel: speakerInput.channel,
-      modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
-      generation: speakerMetadata.generation,
-    },
+    speaker: attributedSpeaker,
   });
   expect(attributed).toMatchObject({
     ok: true,
     data: {
-      page: {
-        rows: [
-          { id: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
-          { id: "w1", speaker: { state: "overlap", slots: [0, 1] } },
-          { id: "w2", speaker: { state: "overlap", slots: [0, 1] } },
-          { id: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
-        ],
-        nextCursor: expect.any(Object),
-      },
+      rows: [
+        { id: "w0", speaker: { state: "attributed", slot: 0, displayName: "Ada" } },
+        { id: "w1", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w2", speaker: { state: "overlap", slots: [0, 1] } },
+        { id: "w3", speaker: { state: "attributed", slot: 1, displayName: "Grace" } },
+      ],
+      nextCursor: expect.any(String),
     },
   });
   if (!attributed.ok) throw new Error(JSON.stringify(attributed));
-  const attributedCursor = (attributed.data as { page: { nextCursor: unknown } }).page.nextCursor;
-  expect(attributedCursor).toMatchObject({ speaker: { bindingDigest: expect.any(String) } });
+  const attributedCursor = (attributed.data as { nextCursor: string }).nextCursor;
+  expect(attributedCursor).toEqual(expect.any(String));
   const reorderedSpeaker = {
     generation: speakerMetadata.generation,
-    observationRange: speakerInput.sourceRange,
+    sourceRange: speakerInput.sourceRange,
     modelId: speakerInput.modelId,
     channel: speakerInput.channel,
     streamId: speakerInput.streamId,
@@ -560,13 +692,19 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       cursor: attributedCursor,
     }),
   ).toMatchObject({ ok: true });
+  // The speaker request is part of the filter set; a continuation must repeat it.
+  expect(
+    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
+  ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-relabel",
+      expectedBindingDigest: "0128e332e14906c60e2692d34693068c5e67b389409636c720801bad805e84d2",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Adele" },
@@ -575,15 +713,22 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     }),
   ).toMatchObject({ ok: true });
   expect(
-    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
+    await f.call("transcript.get", {
+      ...selection,
+      limit: 4,
+      speaker: attributedSpeaker,
+      cursor: attributedCursor,
+    }),
   ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   expect(
     await f.call("speaker.bind", {
+      requestId: "speaker-bind-test",
+      expectedBindingDigest: "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
       assetId: speakerInput.assetId,
       streamId: speakerInput.streamId,
       channel: speakerInput.channel,
       modelId: speakerInput.modelId,
-      observationRange: speakerInput.sourceRange,
+      sourceRange: speakerInput.sourceRange,
       generation: speakerMetadata.generation,
       bindings: [
         { slot: 0, displayName: "Ada" },
@@ -592,20 +737,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     }),
   ).toMatchObject({ ok: true });
   expect(
-    await f.call("transcript.get", { ...selection, limit: 4, cursor: attributedCursor }),
-  ).toMatchObject({
-    ok: true,
-    data: {
-      page: {
-        rows: [
-          { type: "gap", reason: "not_acquired" },
-          { id: "w4", speaker: { state: "unknown" } },
-          { id: "w5", speaker: { state: "unknown" } },
-          { id: "w6", speaker: { state: "unknown" } },
-        ],
-      },
-    },
-  });
+    await f.call("transcript.get", {
+      ...selection,
+      limit: 4,
+      speaker: attributedSpeaker,
+      cursor: attributedCursor,
+    }),
+  ).toMatchObject({ ok: false, error: { code: "ARTIFACT_CHANGED" } });
   const rows: SourceTranscriptRow[] = [];
   let cursor: unknown;
   let generation: string | undefined;
@@ -618,12 +756,13 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     if (!page.ok) throw new Error(JSON.stringify(page));
     const data = page.data as {
       generation: string;
-      page: { rows: SourceTranscriptRow[]; nextCursor: unknown };
+      rows: SourceTranscriptRow[];
+      nextCursor: unknown;
     };
     generation ??= data.generation;
     expect(data.generation).toBe(generation);
-    rows.push(...data.page.rows);
-    cursor = data.page.nextCursor;
+    rows.push(...data.rows);
+    cursor = data.nextCursor;
   } while (cursor);
   await save("source-transcript", { requests, rows, generation });
   expect(
@@ -648,19 +787,14 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
       ok: true,
       data: {
         generation,
-        page: {
-          entries: [{ wordIds: ["w2", "w3"], sourceRange: { startUs: 800000, endUs: 2000000 } }],
-          nextCursor: null,
-        },
+        entries: [{ wordIds: ["w2", "w3"], sourceRange: { startUs: 800000, endUs: 2000000 } }],
+        nextCursor: null,
       },
     },
   );
-  const first = await f.call("transcript.retry", selection);
-  expect(first).toMatchObject({
-    ok: true,
-    data: { state: "ready", jobId, published: { output: { generation } } },
-  });
-  expect(await f.call("transcript.retry", selection)).toEqual(first);
+  const first = await f.call("job.get", { jobId });
+  expect(first).toMatchObject({ ok: true, data: { state: "ready", id: jobId } });
+  expect(await f.call("job.get", { jobId })).toEqual(first);
   expect(await f.call("transcript.get", selection)).toMatchObject({
     ok: true,
     data: { generation },
@@ -727,7 +861,7 @@ test("selected-source transcript preserves filler, phrase and ready retry throug
     ok: true,
     data: {
       projects: [
-        { projectId: projectSelection.projectId, currentRevisionId: projectSelection.revisionId },
+        { id: projectSelection.projectId, currentRevisionId: projectSelection.revisionId },
       ],
     },
   });
@@ -760,10 +894,14 @@ test("ready source transcript reads carry the issues published with the transcri
     (pending.data as { jobId: string }).jobId,
     "ready",
   );
-  const { range, ...reported } = dropped;
+  const {
+    range,
+    evidence: { endSeconds: _endSeconds, ...evidence },
+    ...reported
+  } = dropped;
   const published = {
     generation: publication!.generation,
-    issues: [{ ...reported, at: { range } }],
+    issues: [{ ...reported, evidence: { ...evidence, endUs: 2_500_000 }, at: { range } }],
   };
   for (const operation of ["transcript.get", "transcript.review"])
     expect(await f.call(operation, selection), operation).toMatchObject({
@@ -774,9 +912,12 @@ test("ready source transcript reads carry the issues published with the transcri
   // A project read names the source generations it projects; each carries its own issues.
   const created = await f.call("project.create", { requestId: "issues", canvas });
   if (!created.ok) throw new Error(JSON.stringify(created));
-  const initial = created.data as { project: { projectId: string }; revision: { id: string } };
+  const initial = created.data as {
+    project: { id: string };
+    revision: { id: string };
+  };
   const edited = await f.call("edit.apply", {
-    projectId: initial.project.projectId,
+    projectId: initial.project.id,
     expectedRevisionId: initial.revision.id,
     requestId: "place",
     operations: [
@@ -793,7 +934,7 @@ test("ready source transcript reads carry the issues published with the transcri
     ],
   });
   if (!edited.ok) throw new Error(JSON.stringify(edited));
-  const project = { projectId: initial.project.projectId };
+  const project = { projectId: initial.project.id };
   let read = await f.call("transcript.get", project);
   for (let poll = 0; read.ok && (read.data as { state: string }).state !== "ready"; poll++) {
     if (poll > 300) throw new Error(JSON.stringify(read));
@@ -886,13 +1027,13 @@ test("ready and canceled source jobs retain identity through public cancel and r
   holdProbe = true;
   expect(await f.call("job.retry", { jobId })).toMatchObject({
     ok: true,
-    data: { jobId, target: (failed.ok ? (failed.data as { target: unknown }) : null)?.target },
+    data: { id: jobId, target: (failed.ok ? (failed.data as { target: unknown }) : null)?.target },
   });
   await probeEntry;
   const canceled = await f.call("job.cancel", { jobId });
   expect(canceled).toMatchObject({
     ok: true,
-    data: { jobId, state: "canceled", target: { kind: "import" }, published: null },
+    data: { id: jobId, state: "canceled", target: { kind: "import" }, published: null },
   });
   const home = f.home;
   await f.service.close();
@@ -904,7 +1045,10 @@ test("ready and canceled source jobs retain identity through public cancel and r
   const retried = await f.call("job.retry", { jobId });
   expect(retried).toMatchObject({
     ok: true,
-    data: { jobId, target: (canceled.ok ? (canceled.data as { target: unknown }) : null)?.target },
+    data: {
+      id: jobId,
+      target: (canceled.ok ? (canceled.data as { target: unknown }) : null)?.target,
+    },
   });
   if (!retried.ok || !canceled.ok) throw new Error("Job operation failed");
   expect((retried.data as { attemptId: string }).attemptId).not.toBe(
@@ -914,7 +1058,7 @@ test("ready and canceled source jobs retain identity through public cancel and r
   const stopped = await f.call("job.cancel", { jobId });
   expect(stopped).toMatchObject({
     ok: true,
-    data: { jobId, state: "canceled", target: (canceled.data as { target: unknown }).target },
+    data: { id: jobId, state: "canceled", target: (canceled.data as { target: unknown }).target },
   });
   expect(await f.call("job.get", { jobId })).toEqual(stopped);
   for (const operation of ["job.get", "job.retry", "job.cancel"])

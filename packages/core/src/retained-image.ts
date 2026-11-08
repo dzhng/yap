@@ -3,7 +3,7 @@ import { openedFile, type OpenedFile } from "./files.js";
 import { CatalogError } from "./catalog.js";
 export type RetainedImage = {
   file: string;
-  bytes: number;
+  sizeBytes: number;
   mediaType: string;
   width: number;
   height: number;
@@ -28,7 +28,7 @@ export function openRetainedImage(
     if (
       !stat.isFile() ||
       stat.nlink !== 1 ||
-      stat.size !== frame.bytes ||
+      stat.size !== frame.sizeBytes ||
       stat.size < 33 ||
       stat.size > 32 * 1024 * 1024 ||
       frame.mediaType !== "image/png"

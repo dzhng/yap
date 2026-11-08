@@ -314,7 +314,7 @@ test("sparse source pictures preserve containing-sample timing, full resolution 
   const assets = new AssetStore(catalog, library);
   const ownerCheck = (owner) => {
     assert.equal(owner.kind, "asset");
-    assert.ok(assets.has(owner.assetId));
+    assert.ok(assets.has(owner.id));
   };
   try {
     const cache = new DerivedCache(catalog, library, ownerCheck);
@@ -332,7 +332,7 @@ test("sparse source pictures preserve containing-sample timing, full resolution 
       catalog,
       library,
       ownerCheck,
-      cache.bytes - boundary.published.output.bytes,
+      cache.bytes - boundary.published.output.sizeBytes,
     );
     await constrained.reconcile();
     assert.equal(constrained.acquire(boundary.published.output.cacheId), null);
@@ -345,7 +345,7 @@ test("sparse source pictures preserve containing-sample timing, full resolution 
   assert.equal(regenerated.assetId, selection.assetId);
   assert.equal(regenerated.streamId, selection.streamId);
   assert.equal(regenerated.jobId, boundary.jobId);
-  assert.equal(regenerated.published.generation, boundary.published.generation + 1);
+  assert.equal(Number(regenerated.published.generation), Number(boundary.published.generation) + 1);
   assert.notEqual(regenerated.published.output.cacheId, boundary.published.output.cacheId);
   assert.equal(regenerated.published.output.actualSourceUs, 2000000);
 

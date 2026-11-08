@@ -16,6 +16,10 @@ public enum ControlsAction: Hashable, Sendable {
     /// during one. The menu's switch and the floating controls send this same action.
     case setCamera(Bool)
     case startOrStop
+    case dismissFailure
+    case retryFailure
+    case pastePrompt
+    case undoMark
     case pauseOrResume
     case cancel
     case restart
@@ -32,6 +36,10 @@ public enum ControlsAction: Hashable, Sendable {
     case previousRecordings
     case refreshLibrary
     case deleteRecording(String)
+    case retryImport(String)
+    case playAsset(String)
+    case copyAssetPrompt(String)
+    case deleteAsset(String)
     /// Send an unconfirmed export request again under its original export ID.
     case resendExport(String)
     case retryExport(String)
@@ -43,6 +51,8 @@ public enum ControlsAction: Hashable, Sendable {
     case requestScreenPermission
     case requestMicrophonePermission
     case requestCameraPermission
+    /// Opens the Accessibility privacy pane; there is no prompt to show.
+    case requestAccessibilityPermission
     case openSettings
     case quit
 
@@ -58,11 +68,18 @@ public enum ControlsAction: Hashable, Sendable {
         case .showCameraPreview(let shown): shown ? "camera.preview.show" : "camera.preview.hide"
         case .setCamera(let on): on ? "capture.camera.on" : "capture.camera.off"
         case .startOrStop: "capture.startOrStop"
+        case .dismissFailure: "failure.dismiss"
+        case .retryFailure: "failure.retry"
+        case .pastePrompt: "capture.pastePrompt"
+        case .undoMark: "capture.undoMark"
         case .pauseOrResume: "capture.pauseOrResume"
         case .cancel: "capture.cancel"
         case .restart: "capture.restart"
         case .playRecording(let id): "recording.play.\(id)"
         case .copyRecordingPrompt(let id): "recording.copyPrompt.\(id)"
+        case .playAsset(let id): "asset.play.\(id)"
+        case .copyAssetPrompt(let id): "asset.copyPrompt.\(id)"
+        case .deleteAsset(let id): "asset.delete.\(id)"
         case .copyProjectPrompt(let id): "project.copyPrompt.\(id)"
         case .previewProject(let id): "project.preview.\(id)"
         case .exportProject(let id, let kind): "project.export.\(kind.rawValue).\(id)"
@@ -73,9 +90,10 @@ public enum ControlsAction: Hashable, Sendable {
         case .nextRecordings: "library.recordings.next"
         case .previousRecordings: "library.recordings.previous"
         case .refreshLibrary: "library.refresh"
+        case .retryImport(let id): "recording.retryImport.\(id)"
         case .deleteRecording(let id): "recording.delete.\(id)"
         case .resendExport(let id): "export.resend.\(id)"
-        case .retryExport(let id): "export.retry.\(id)"
+        case .retryExport(let id): "export.jobRetry.\(id)"
         case .abandonExport(let id): "export.abandon.\(id)"
         case .revealExport(let id): "export.reveal.\(id)"
         case .dismissExport(let id): "export.dismiss.\(id)"
@@ -83,6 +101,7 @@ public enum ControlsAction: Hashable, Sendable {
         case .requestScreenPermission: "permission.screen"
         case .requestMicrophonePermission: "permission.microphone"
         case .requestCameraPermission: "permission.camera"
+        case .requestAccessibilityPermission: "permission.accessibility"
         case .openSettings: "app.settings"
         case .quit: "app.quit"
         }

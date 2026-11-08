@@ -74,7 +74,7 @@ export class SpeakerProcessing {
   private identity(input: SpeakerSourceInput, decoder = this.options.decoder) {
     const selected = this.selected(input);
     return {
-      target: { kind: "asset" as const, assetId: selected.selection.assetId },
+      target: { kind: "asset" as const, id: selected.selection.assetId },
       artifact,
       input: JSON.stringify({
         request: speakerSourceSchema.parse(input),
@@ -168,8 +168,8 @@ export class SpeakerProcessing {
     const selected = this.selected(input),
       descriptor = this.descriptor(selected);
     if (!descriptor.decoder)
-      throw new CatalogError("NOT_READY", "Native speaker decoder is unavailable", {}, true);
-    if (job.target.assetId !== input.assetId || this.identity(input).input !== job.input)
+      throw new CatalogError("NOT_READY", "Native speaker decoder is unavailable", {});
+    if (job.target.id !== input.assetId || this.identity(input).input !== job.input)
       throw new CatalogError("ARTIFACT_CHANGED", "Speaker source or execution inputs changed");
     signal.throwIfAborted();
     const model = this.options.models.speaker(input.modelId),
@@ -206,7 +206,7 @@ export class SpeakerProcessing {
     );
     signal.throwIfAborted();
     const identity = {
-      owner: { kind: "asset" as const, assetId: input.assetId },
+      owner: { kind: "asset" as const, id: input.assetId },
       sourceId: input.assetId,
       generation: job.attemptId,
       policy: "speaker-v1" as const,
@@ -266,7 +266,7 @@ export class SpeakerProcessing {
     const identity = this.identity(parsed.data, metadata.source.decoder);
     const source = speakerEvidenceSourceSchema.omit({ pcm: true }).strip().parse(metadata.source);
     if (
-      metadata.owner.assetId !== parsed.data.assetId ||
+      metadata.owner.id !== parsed.data.assetId ||
       metadata.sourceId !== parsed.data.assetId ||
       publication.attemptId !== metadata.generation ||
       publication.input !== identity.input ||
@@ -283,11 +283,11 @@ export class SpeakerProcessing {
     );
   }
   async cleanup(signal: AbortSignal): Promise<void> {
-    let afterSequence = 0;
+    let cursor: string | undefined;
     let failure: unknown;
     for (;;) {
       signal.throwIfAborted();
-      const page = this.options.assets.list({ afterSequence, limit: 100 });
+      const page = this.options.assets.list({ ...(cursor ? { cursor } : {}), limit: 100 });
       for (const asset of page.assets) {
         try {
           await this.cleanupAsset(asset.id, signal);
@@ -297,7 +297,7 @@ export class SpeakerProcessing {
         }
       }
       if (!page.nextCursor) break;
-      afterSequence = page.nextCursor.afterSequence;
+      cursor = page.nextCursor;
       await setImmediate(undefined, { signal });
     }
     if (failure) throw failure;
@@ -306,7 +306,7 @@ export class SpeakerProcessing {
     return this.options.evidence.reclaim(
       assetId,
       (generation) =>
-        this.options.jobs.retainsAttempt({ kind: "asset", assetId }, artifact, generation),
+        this.options.jobs.retainsAttempt({ kind: "asset", id: assetId }, artifact, generation),
       signal,
     );
   }

@@ -81,9 +81,12 @@ export class VoiceGenerationJobs {
     await mkdir(this.owners.staging, { recursive: true, mode: 0o700 });
   }
   private model(modelId: string): ModelIdentity {
-    const registered = this.owners.models.list().find((model) => model.modelId === modelId);
+    const registered = this.owners.models.list().find((model) => model.id === modelId);
     if (!registered || registered.purpose !== "voice" || !registered.runtimeDigest)
-      throw new CatalogError("UNKNOWN_MODEL", "Model is not a registered voice model", { modelId });
+      throw new CatalogError("NOT_FOUND", "Model is not a registered voice model", {
+        modelId,
+        kind: "model",
+      });
     if (registered.generationProfile?.id !== voiceProfile.id)
       throw new CatalogError(
         "UNSUPPORTED_MODEL",
@@ -102,9 +105,9 @@ export class VoiceGenerationJobs {
     const parsed = assetOriginSchema.safeParse(value);
     if (!parsed.success)
       throw new CatalogError("INVALID_PARAMS", "Reference origin is not typed asset provenance");
-    let afterProvenance: string | undefined;
+    let cursor: string | undefined;
     do {
-      const page = this.owners.assets.origins(assetId, afterProvenance ? { afterProvenance } : {});
+      const page = this.owners.assets.origins(assetId, cursor ? { cursor } : {});
       for (const origin of page.origins)
         if (isDeepStrictEqual(assetOriginSchema.parse(origin), parsed.data)) {
           const selected = parsed.data;
@@ -117,8 +120,8 @@ export class VoiceGenerationJobs {
             );
           return selected;
         }
-      afterProvenance = page.nextCursor?.afterProvenance;
-    } while (afterProvenance);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
     throw new CatalogError(
       "INVALID_PARAMS",
       "Selected reference origin is not stored on this asset",
@@ -190,7 +193,7 @@ export class VoiceGenerationJobs {
       settings,
     };
     const identity = {
-      target: { kind: "asset" as const, assetId: asset.id },
+      target: { kind: "asset" as const, id: asset.id },
       artifact: "voice-generation",
       input: JSON.stringify(request),
     };
@@ -214,7 +217,7 @@ export class VoiceGenerationJobs {
     const request = JSON.parse(job.input) as FrozenVoiceRequest;
     if (
       job.target.kind !== "asset" ||
-      job.target.assetId !== request.reference.assetId ||
+      job.target.id !== request.reference.assetId ||
       !isDeepStrictEqual(this.model(request.model.modelId), request.model) ||
       request.profileSha256 !== voiceProfileSha256
     )

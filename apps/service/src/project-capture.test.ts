@@ -1,7 +1,10 @@
 import { captureFixture, sourceWorker } from "./project-capture.fixture.js";
+import { execFileSync } from "node:child_process";
+import { mediaWorker } from "./worker.js";
+import { readCaptureSourceOutcome, readRecoveryReceipt } from "@yap/core/capture-publication";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, mkdir, open, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
@@ -10,6 +13,8 @@ import { CONTROL_FRAME_BYTES, JsonLineStream, controlMessageSchema } from "@yap/
 import { startProjectService } from "./project-service.js";
 import { once } from "node:events";
 import { Socket } from "node:net";
+
+const it = test.runIf(Boolean(process.env.YAP_NATIVE));
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -62,21 +67,21 @@ test("public camera selection preserves its allocated binding across native forw
   const f = await fixture();
   const params = {
     requestId: "camera-selection",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   };
   const started = await f.call("capture.start", params);
   expect(started).toMatchObject({ ok: true, data: { camera: { deviceId: "camera-a" } } });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const recording = started.data as {
-    recordingId: string;
+    id: string;
     sourceId: string;
     camera: { sourceId: string; deviceId: string };
   };
   expect(
     f.nativeRequests.find((request) => request.operation === "capture.start")?.params,
   ).toMatchObject({
-    recordingId: recording.recordingId,
+    recordingId: recording.id,
     sourceId: recording.sourceId,
     cameraDeviceId: "camera-a",
     cameraSourceId: recording.camera.sourceId,
@@ -99,12 +104,16 @@ test("a published primary reaches ready while its selected camera publication re
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "independent-publication",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId, camera } = started.data as {
-    recordingId: string;
+  const {
+    id: recordingId,
+    sourceId,
+    camera,
+  } = started.data as {
+    id: string;
     sourceId: string;
     camera: { sourceId: string };
   };
@@ -175,12 +184,12 @@ test("a reserved camera starts off and turns on and off in the take's control or
   const f = await fixture(undefined, undefined, "capture.pause");
   const started = await f.call("capture.start", {
     requestId: "camera-starts-off",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   expect(
     f.nativeRequests.find((request) => request.operation === "capture.start")?.params,
   ).toMatchObject({ cameraDeviceId: "camera-a", cameraAtStart: "off" });
@@ -200,14 +209,14 @@ test("a reserved camera starts off and turns on and off in the take's control or
     ok: true,
     data: {
       device: { state: "paused", recordingId, camera: { deviceId: "camera-a", state: "on" } },
-      recording: { recordingId, state: "paused", camera: { deviceId: "camera-a" } },
+      recording: { id: recordingId, state: "paused", camera: { deviceId: "camera-a" } },
     },
   });
   expect(await f.call("capture.setCamera", { recordingId, on: false })).toMatchObject({
     ok: true,
     data: {
       device: { camera: { deviceId: "camera-a", state: "off" } },
-      recording: { recordingId },
+      recording: { id: recordingId },
     },
   });
   expect(
@@ -226,12 +235,12 @@ test("a camera turn-on that outlasts an ordinary native call is still answered",
   const f = await fixture(undefined, undefined, "capture.setCamera", 100);
   const started = await f.call("capture.start", {
     requestId: "slow-camera",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const turnedOn = f.call("capture.setCamera", { recordingId, on: true });
   await expect.poll(() => f.nativeCalls).toContain("capture.setCamera");
   await new Promise((resolve) => setTimeout(resolve, 300));
@@ -240,7 +249,7 @@ test("a camera turn-on that outlasts an ordinary native call is still answered",
     recordingId,
     sourceId,
     elapsedUs: 0,
-    selection: { source: { kind: "display", displayId: 1 }, cameraDeviceId: "camera-a" },
+    selection: { source: { kind: "display", id: 1 }, cameraDeviceId: "camera-a" },
     camera: { deviceId: "camera-a", state: "on" },
     permissions: { screen: true, microphone: "authorized", camera: "authorized" },
   });
@@ -254,12 +263,12 @@ test("a camera toggle refuses without a reserved camera or a live take, and carr
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "camera-refusals",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId } = started.data as { recordingId: string };
+  const { id: recordingId } = started.data as { id: string };
   f.refuseNext("capture.setCamera", "SOURCE_UNAVAILABLE", "The camera is gone.");
   expect(await f.call("capture.setCamera", { recordingId, on: true })).toMatchObject({
     ok: false,
@@ -281,10 +290,10 @@ test("a camera toggle refuses without a reserved camera or a live take, and carr
 
   const plain = await f.call("capture.start", {
     requestId: "no-camera",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!plain.ok) throw new Error(JSON.stringify(plain));
-  const screenOnly = (plain.data as { recordingId: string }).recordingId;
+  const screenOnly = (plain.data as { id: string }).id;
   expect(await f.call("capture.setCamera", { recordingId: screenOnly, on: true })).toMatchObject({
     ok: false,
     error: { code: "CAMERA_NOT_RESERVED" },
@@ -297,13 +306,17 @@ test("a take whose reserved camera never turned on completes and admits its prim
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "camera-never-on",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
     cameraAtStart: "off",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId, camera } = started.data as {
-    recordingId: string;
+  const {
+    id: recordingId,
+    sourceId,
+    camera,
+  } = started.data as {
+    id: string;
     sourceId: string;
     camera: { sourceId: string };
   };
@@ -374,10 +387,10 @@ test("source admission failure remains discoverable through stop replay and serv
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "failed-source",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   expect(await f.call("capture.stop", { recordingId })).toMatchObject({
     ok: true,
     data: { state: "finalizing" },
@@ -401,7 +414,7 @@ test("source admission failure remains discoverable through stop replay and serv
             kind: "primary",
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND", retryable: true },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE", retryable: true },
           },
         ],
       },
@@ -454,10 +467,10 @@ test("failed queue admission stays pending without read mutations and resumes fr
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "admission-rollback",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const database = new DatabaseSync(join(f.home, "library/catalog.sqlite"));
   cleanup.push(async () => database.close());
   database.exec(
@@ -482,7 +495,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
       ok: true,
       data: pending,
     });
-    expect(await f.call("recording.latest")).toMatchObject({ ok: true, data: pending });
+    expect(await f.call("recording.get")).toMatchObject({ ok: true, data: pending });
     expect(await f.call("recording.list")).toMatchObject({
       ok: true,
       data: { recordings: [pending] },
@@ -503,7 +516,7 @@ test("failed queue admission stays pending without read mutations and resumes fr
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND" },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE" },
           },
         ],
       },
@@ -516,14 +529,113 @@ test("failed queue admission stays pending without read mutations and resumes fr
   ).toMatchObject([{ kind: "capture", recordingId, sourceId }]);
 });
 
+it("a capture import with a stale nonretryable bit reports and follows job.retry", async () => {
+  const native = process.env.YAP_NATIVE!;
+  const worker = mediaWorker({ YAP_NATIVE: native });
+  const f = await fixture(undefined, worker);
+  const started = await f.call("capture.start", {
+    requestId: "ledger-retry",
+    source: { kind: "display", id: 1 },
+  });
+  if (!started.ok) throw new Error(JSON.stringify(started));
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
+  const directory = join(f.home, "library", "recordings", recordingId, "source");
+  // Synthetic observations replace hardware; the production journal writer and publisher own bytes.
+  execFileSync(join(dirname(native), "YapCaptureTests"), [], {
+    env: {
+      ...process.env,
+      YAP_LONG_STROKE_SOURCE_ID: sourceId,
+      YAP_LONG_STROKE_FIXTURE: join(directory, "capture.journal.jsonl"),
+      YAP_LONG_STROKE_VIDEO: join(directory, "video.mov"),
+    },
+  });
+  const recovered = await worker("media.recover", {
+    directory,
+    sourceAuthority: { kind: "primary", sourceId },
+  });
+  if (!recovered.ok) throw new Error(JSON.stringify(recovered));
+  const receipt = readRecoveryReceipt(recovered.data);
+  const publication = readCaptureSourceOutcome(receipt.sourcePublication);
+  expect(publication?.state).toBe("published");
+  const database = new DatabaseSync(join(f.home, "library", "catalog.sqlite"));
+  cleanup.push(async () => database.close());
+  // Real storage failure during import settlement, not an inserted failed job or a fake importer.
+  database.exec(
+    "CREATE TRIGGER refuse_evidence BEFORE INSERT ON source_evidence_records BEGIN SELECT RAISE(ABORT,'fixture storage unavailable'); END",
+  );
+  await f.call("capture.stop", { recordingId });
+  await f.report({
+    recordingId,
+    sourceId,
+    sequence: 3,
+    state: "complete",
+    sourceDurationUs: receipt.durationUs,
+    publication: {
+      generation: "ledger-retry",
+      sourceId,
+      inputsClosed: true,
+      primary: publication,
+      camera: null,
+    },
+  });
+  let current = f;
+  const inspect = async () => {
+    const result = await current.call("recording.get", { recordingId });
+    if (!result.ok) throw new Error(JSON.stringify(result));
+    return (
+      result.data as {
+        sourceAdmissions: {
+          acquisitionId: string;
+          job: { id: string; state: string; attemptId: string };
+        }[];
+      }
+    ).sourceAdmissions[0]!;
+  };
+  await expect.poll(async () => (await inspect()).job.state).toBe("failed");
+  const failed = await inspect();
+  expect(failed.job).toMatchObject({
+    errorCode: "JOB_FAILED",
+    reason: expect.stringContaining("fixture storage unavailable"),
+  });
+  database.prepare("UPDATE jobs SET retryable=0 WHERE jobId=?").run(failed.job.id);
+  database.exec("DROP TRIGGER refuse_evidence");
+  await f.service.close();
+  current = await fixture(f.home, worker);
+  expect((await inspect()).job.attemptId).toBe(failed.job.attemptId);
+  const retry = { operation: "job.retry", params: { jobId: failed.job.id } };
+  expect((await inspect()).job).toMatchObject({
+    state: "failed",
+    retryable: true,
+    details: { retry },
+  });
+  expect(await current.call("job.get", retry.params)).toMatchObject({
+    ok: true,
+    data: { details: { retry } },
+  });
+  expect(await current.call(retry.operation, retry.params)).toMatchObject({
+    ok: true,
+    data: { id: failed.job.id },
+  });
+  await expect.poll(async () => (await inspect()).job.state).toBe("ready");
+  const ready = await inspect();
+  expect(ready.acquisitionId).toBe(failed.acquisitionId);
+  expect(ready.job.attemptId).not.toBe(failed.job.attemptId);
+  expect(
+    await current.call("acquisition.get", { acquisitionId: ready.acquisitionId }),
+  ).toMatchObject({
+    ok: true,
+    data: { id: ready.acquisitionId, sourceId, bindings: [{ sourceRoles: ["video"] }] },
+  });
+});
+
 test("explicit source retry publishes the same acquisition and remains ready without donor files", async () => {
   const f = await fixture(undefined, sourceWorker);
   const started = await f.call("capture.start", {
     requestId: "ready-source",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   await f.call("capture.stop", { recordingId });
   await f.report({ recordingId, sourceId, sequence: 3, state: "complete", sourceDurationUs: 100 });
   const inspect = async () => {
@@ -533,7 +645,7 @@ test("explicit source retry publishes the same acquisition and remains ready wit
       result.data as {
         sourceAdmissions: {
           acquisitionId: string;
-          job: { jobId: string; state: string; attemptId: string };
+          job: { id: string; state: string; attemptId: string };
         }[];
       }
     ).sourceAdmissions[0]!;
@@ -548,13 +660,13 @@ test("explicit source retry publishes the same acquisition and remains ready wit
   await writeFile(join(directory, "video.mov"), "scripted source bytes");
   await f.call("capture.stop", { recordingId });
   expect(await inspect()).toEqual(failed);
-  expect(await f.call("job.retry", { jobId: failed.job.jobId })).toMatchObject({ ok: true });
+  expect(await f.call("job.retry", { jobId: failed.job.id })).toMatchObject({ ok: true });
   await expect.poll(async () => (await inspect()).job.state).toBe("ready");
   const ready = await inspect();
   expect(ready).toMatchObject({
     acquisitionId: failed.acquisitionId,
     job: {
-      jobId: failed.job.jobId,
+      id: failed.job.id,
       published: { output: { acquisitionId: failed.acquisitionId } },
     },
   });
@@ -600,10 +712,10 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
   cleanup.push(async () => release());
   const started = await f.call("capture.start", {
     requestId: "capture-priority",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const path = join(f.home, "background.mov");
   await writeFile(path, "scripted background bytes");
   for (let index = 0; index < 32; index++) {
@@ -615,7 +727,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
   expect(probes).toBe(0);
   expect(await f.call("asset.import", { requestId: "over-capacity", path })).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED" },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   await f.call("capture.stop", { recordingId });
   expect(
@@ -645,7 +757,7 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
           {
             sourceId,
             acquisitionId: expect.any(String),
-            job: { state: "failed", errorCode: "NOT_FOUND" },
+            job: { state: "failed", errorCode: "MEDIA_UNAVAILABLE" },
           },
         ],
       },
@@ -654,10 +766,10 @@ test("capture priority holds heavy jobs and released capacity admits a pending s
 
 test("private lifecycle order, cancel and no-video outcomes retain the capture owner's authority", async () => {
   const f = await fixture();
-  const selection = { source: { kind: "display", displayId: 1 } };
+  const selection = { source: { kind: "display", id: 1 } };
   const started = await f.call("capture.start", { requestId: "ordered-take", ...selection });
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   expect(await f.call("capture.pause", { recordingId })).toMatchObject({
     ok: true,
     data: { state: "paused", lifecycleSequence: 2, sourceAdmissions: [] },
@@ -685,7 +797,7 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
     ok: true,
     data: { state: "canceled", sourceAdmissions: [] },
   });
-  const next = restarted.data as { recordingId: string; sourceId: string };
+  const next = restarted.data as { id: string; sourceId: string };
   expect(
     await f.report({
       ...next,
@@ -697,7 +809,7 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
   ).toMatchObject({ ok: false, error: { code: "INVALID_PARAMS" } });
   expect(
     await f.report({
-      recordingId: next.recordingId,
+      recordingId: next.id,
       sourceId: next.sourceId,
       sequence: 2,
       state: "interrupted",
@@ -705,11 +817,13 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
       sourceDurationUs: null,
     }),
   ).toMatchObject({ ok: true, data: { state: "interrupted", sourceAdmissions: [] } });
-  expect(await f.call("recording.delete", { recordingId: next.recordingId })).toMatchObject({
+  expect(
+    await f.call("recording.delete", { requestId: "test-delete", recordingId: next.id }),
+  ).toMatchObject({
     ok: true,
     data: { deleted: true },
   });
-  expect(await f.call("recording.cleanup", { recordingId: next.recordingId })).toMatchObject({
+  expect(await f.call("recording.cleanup", { recordingId: next.id })).toMatchObject({
     ok: false,
     error: { code: "NOT_FOUND" },
   });
@@ -717,7 +831,7 @@ test("private lifecycle order, cancel and no-video outcomes retain the capture o
 
 test("lost public start reply reopens the same take and reconciles before publishing source admission", async () => {
   const f = await fixture();
-  const params = { requestId: "lost-start-reply", source: { kind: "display", displayId: 1 } };
+  const params = { requestId: "lost-start-reply", source: { kind: "display", id: 1 } };
   await new Promise<void>((resolve, reject) => {
     const socket = new Socket();
     const timer = setTimeout(() => {
@@ -737,9 +851,9 @@ test("lost public start reply reopens the same take and reconciles before publis
       socket.write(JSON.stringify({ id: randomUUID(), operation: "capture.start", params }) + "\n"),
     );
   });
-  const latest = await f.call("recording.latest");
+  const latest = await f.call("recording.get");
   if (!latest.ok) throw new Error(JSON.stringify(latest));
-  const take = latest.data as { recordingId: string; sourceId: string };
+  const take = latest.data as { id: string; sourceId: string };
   await f.service.close();
   let entered!: () => void, release!: () => void;
   const recovery = new Promise<void>((resolve) => {
@@ -791,7 +905,7 @@ test("lost public start reply reopens the same take and reconciles before publis
   expect(await reopened.call("capture.status")).toMatchObject({
     ok: true,
     data: {
-      recording: { recordingId: take.recordingId, state: "finalizing", sourceAdmissions: [] },
+      recording: { id: take.id, state: "finalizing", sourceAdmissions: [] },
     },
   });
   release();
@@ -800,7 +914,7 @@ test("lost public start reply reopens the same take and reconciles before publis
     .toMatchObject({
       ok: true,
       data: {
-        recordingId: take.recordingId,
+        id: take.id,
         sourceId: take.sourceId,
         state: "interrupted",
         sourceDurationUs: 100,
@@ -811,7 +925,7 @@ test("lost public start reply reopens the same take and reconciles before publis
     });
   expect(
     await reopened.report({
-      recordingId: take.recordingId,
+      recordingId: take.id,
       sourceId: take.sourceId,
       sequence: 2,
       state: "finalizing",
@@ -819,7 +933,7 @@ test("lost public start reply reopens the same take and reconciles before publis
   ).toMatchObject({
     ok: true,
     data: {
-      recordingId: take.recordingId,
+      id: take.id,
       state: "interrupted",
       sourceDurationUs: 100,
     },
@@ -827,7 +941,7 @@ test("lost public start reply reopens the same take and reconciles before publis
   expect(await reopened.call("recording.list")).toMatchObject({
     ok: true,
     data: {
-      recordings: [{ recordingId: take.recordingId }],
+      recordings: [{ id: take.id }],
       nextCursor: null,
     },
   });
@@ -837,17 +951,17 @@ test("reopened recovery admits a verified primary while allocated camera recover
   const f = await fixture();
   const started = await f.call("capture.start", {
     requestId: "independent-recovery",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     cameraDeviceId: "camera-a",
   });
   if (!started.ok) throw new Error(JSON.stringify(started));
   const take = started.data as {
-    recordingId: string;
+    id: string;
     sourceId: string;
     camera: { sourceId: string; deviceId: string };
   };
   await f.service.close();
-  const directory = join(f.home, "library/recordings", take.recordingId, "source");
+  const directory = join(f.home, "library/recordings", take.id, "source");
   const journal = JSON.stringify({ sessionID: take.sourceId });
   const hash = (value: string) => createHash("sha256").update(value).digest("hex");
   const source = {
@@ -913,11 +1027,11 @@ test("reopened recovery admits a verified primary while allocated camera recover
     {
       kind: "camera",
       sourceId: take.camera.sourceId,
-      binding: { recordingId: take.recordingId, ...take.camera },
+      binding: { recordingId: take.id, ...take.camera },
     },
   ]);
   await expect
-    .poll(() => reopened.call("recording.get", { recordingId: take.recordingId }))
+    .poll(() => reopened.call("recording.get", { recordingId: take.id }))
     .toMatchObject({
       ok: true,
       data: {
@@ -931,7 +1045,7 @@ test("reopened recovery admits a verified primary while allocated camera recover
     });
   release();
   await expect
-    .poll(() => reopened.call("recording.get", { recordingId: take.recordingId }))
+    .poll(() => reopened.call("recording.get", { recordingId: take.id }))
     .toMatchObject({
       ok: true,
       data: { state: "interrupted", publication: { camera: { state: "unavailable" } } },
@@ -941,7 +1055,7 @@ test("reopened recovery admits a verified primary while allocated camera recover
 test("controller loss drains an unanswered native start before releasing the capture catalog", async () => {
   const f = await fixture(undefined, undefined, "capture.start");
   const start = f
-    .call("capture.start", { requestId: "silent-start", source: { kind: "display", displayId: 1 } })
+    .call("capture.start", { requestId: "silent-start", source: { kind: "display", id: 1 } })
     .catch((error: Error) => ({ disconnected: error.message }));
   await expect.poll(() => f.nativeCalls).toContain("capture.start");
   f.input.end();
@@ -967,7 +1081,7 @@ test("controller loss drains an unanswered native start before releasing the cap
     };
   });
   await expect
-    .poll(() => reopened.call("recording.latest"))
+    .poll(() => reopened.call("recording.get"))
     .toMatchObject({
       ok: true,
       data: {
@@ -987,10 +1101,10 @@ test("controller loss drains an unanswered native start before releasing the cap
 
 test("an explicit-import namespace collision refuses source admission without hiding completed capture facts", async () => {
   const f = await fixture(undefined, sourceWorker);
-  const params = { requestId: "collision-take", source: { kind: "display", displayId: 1 } };
+  const params = { requestId: "collision-take", source: { kind: "display", id: 1 } };
   const started = await f.call("capture.start", params);
   if (!started.ok) throw new Error(JSON.stringify(started));
-  const { recordingId, sourceId } = started.data as { recordingId: string; sourceId: string };
+  const { id: recordingId, sourceId } = started.data as { id: string; sourceId: string };
   const path = join(f.home, "explicit-source");
   await mkdir(path);
   await writeFile(
@@ -1000,10 +1114,10 @@ test("an explicit-import namespace collision refuses source admission without hi
   await writeFile(join(path, "video.mov"), "explicit source bytes");
   const imported = await f.call("acquisition.import", { requestId: `capture:${sourceId}`, path });
   if (!imported.ok) throw new Error(JSON.stringify(imported));
-  const explicit = imported.data as { jobId: string; target: { acquisitionId: string } };
+  const explicit = imported.data as { jobId: string; target: { id: string } };
   await f.call("capture.stop", { recordingId });
   const capture = {
-    recordingId,
+    id: recordingId,
     sourceId,
     state: "complete",
     sourceAdmissions: [
@@ -1026,7 +1140,7 @@ test("an explicit-import namespace collision refuses source admission without hi
     }),
   ).toMatchObject({ ok: true, data: capture });
   expect(await f.call("recording.get", { recordingId })).toMatchObject({ ok: true, data: capture });
-  expect(await f.call("recording.latest")).toMatchObject({ ok: true, data: capture });
+  expect(await f.call("recording.get")).toMatchObject({ ok: true, data: capture });
   expect(await f.call("recording.list")).toMatchObject({
     ok: true,
     data: { recordings: [capture] },
@@ -1038,12 +1152,13 @@ test("an explicit-import namespace collision refuses source admission without hi
       ok: true,
       data: {
         state: "ready",
-        published: { output: { acquisitionId: explicit.target.acquisitionId } },
+        published: { output: { acquisitionId: explicit.target.id } },
       },
     });
-  expect(
-    await f.call("acquisition.get", { acquisitionId: explicit.target.acquisitionId }),
-  ).toMatchObject({ ok: true, data: { sourceId: "explicit-source" } });
+  expect(await f.call("acquisition.get", { acquisitionId: explicit.target.id })).toMatchObject({
+    ok: true,
+    data: { sourceId: "explicit-source" },
+  });
   await f.service.close();
   const reopened = await fixture(f.home, sourceWorker);
   expect(await reopened.call("capture.start", params)).toMatchObject({ ok: true, data: capture });
@@ -1091,7 +1206,7 @@ test("fresh capture allocates and replays through its private controller without
   cleanup.push(() => service.close());
   const params = {
     requestId: "capture-replay",
-    source: { kind: "display", displayId: 1 },
+    source: { kind: "display", id: 1 },
     microphone: false,
     systemAudio: false,
   };
@@ -1111,7 +1226,7 @@ test("fresh capture allocates and replays through its private controller without
       home,
       "library",
       "recordings",
-      (started.ok ? (started.data as { recordingId: string }) : { recordingId: "" }).recordingId,
+      (started.ok ? (started.data as { id: string }) : { id: "" }).id,
       "source",
     ),
   );
@@ -1161,13 +1276,13 @@ test("unpublished raw camera recovery receives its byte-scaled materialization b
     const f = await fixture();
     const started = await f.call("capture.start", {
       requestId: "raw-camera-budget",
-      source: { kind: "display", displayId: 1 },
+      source: { kind: "display", id: 1 },
       cameraDeviceId: "camera-a",
     });
     if (!started.ok) throw new Error(JSON.stringify(started));
-    const take = started.data as { recordingId: string };
+    const take = started.data as { id: string };
     await f.service.close();
-    const directory = join(f.home, "library/recordings", take.recordingId, "camera");
+    const directory = join(f.home, "library/recordings", take.id, "camera");
     await mkdir(directory, { recursive: true });
     const raw = await open(join(directory, "camera.raw.mov"), "w+");
     await raw.truncate(bytes);
@@ -1176,7 +1291,10 @@ test("unpublished raw camera recovery receives its byte-scaled materialization b
     const reopened = await fixture(f.home, async (operation, params, options) => {
       if (operation !== "media.recover") return sourceWorker(operation, params, options);
       const camera = (params.sourceAuthority as { kind: string }).kind === "camera";
-      const budget = options?.timeoutMs ?? 30000;
+      const budget =
+        typeof options?.timeoutMs === "function"
+          ? options.timeoutMs()
+          : (options?.timeoutMs ?? 30000);
       if (camera) budgets.push(budget);
       // Simulated materialization needs one minute; the test never waits that long.
       if (camera && budget < 60000)
@@ -1203,7 +1321,7 @@ test("unpublished raw camera recovery receives its byte-scaled materialization b
       };
     });
     await expect
-      .poll(() => reopened.call("recording.get", { recordingId: take.recordingId }))
+      .poll(() => reopened.call("recording.get", { recordingId: take.id }))
       .toMatchObject({
         ok: true,
         data: {

@@ -259,11 +259,6 @@ package enum CaptureAudioMaterializer {
       {
         runs[runs.count - 1].count += append.frameCount
       } else {
-        // Provisional measured materializer capacity, not a new recording/admission domain.
-        guard runs.count < 100_000 else {
-          throw invalid(
-            "Sparse materializer exceeds its measured 100000-run capacity; retain working media.")
-        }
         runs.append(
           Run(
             physical: append.physicalFirstFrame, declared: append.declaredFirstFrame,

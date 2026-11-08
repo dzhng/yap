@@ -68,6 +68,45 @@ func runCameraLivePublicationTests(output: String? = nil) async throws {
     try await runCameraStableMediaTest(output: root.appendingPathComponent("stable").path)
 }
 
+/// Waits until `done` holds or active camera verification stops progressing.
+///
+/// Verification decodes every picture, so its duration follows machine load, not
+/// the authored take. Progress is what the worker observably does: a snapshot
+/// scratch in flight, a reader start, or a changed raw or candidate file. Only an
+/// idle window with none of these ends the wait unsatisfied; `hangLimit` only
+/// stops a hung worker and is not a latency contract.
+@MainActor
+private func awaitCameraVerification(camera: URL, readers: CameraReaderStarts,
+    until done: () throws -> Bool = { false }) async throws {
+    let idleWindow = Duration.seconds(2), hangLimit = Duration.seconds(120)
+    func signature() throws -> [String] {
+        let names = try FileManager.default.contentsOfDirectory(atPath: camera.path)
+        var media: [String] = []
+        for name in names.sorted() where name == "camera.raw.mov" || name.hasPrefix(".yap-output-") {
+            let path = name == "camera.raw.mov" ? camera.appendingPathComponent(name).path
+                : camera.appendingPathComponent(name).appendingPathComponent("camera.mov").path
+            var info = stat()
+            if lstat(path, &info) == 0 {
+                media.append("\(name):\(info.st_size):\(info.st_mtimespec.tv_sec):\(info.st_mtimespec.tv_nsec)")
+            }
+        }
+        return names.filter { $0.hasPrefix(".camera-snapshot-") }.sorted() + media
+            + readers.observed.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }
+    }
+    let started = ContinuousClock.now
+    var last = try signature(), idleSince = ContinuousClock.now
+    while try !done() {
+        let current = try signature()
+        let working = current.contains { $0.hasPrefix(".camera-snapshot-") }
+        if working || current != last { last = current; idleSince = .now }
+        else if idleSince.duration(to: .now) >= idleWindow { return }
+        guard started.duration(to: .now) < hangLimit else {
+            throw CaptureFailure("LIVE_VERIFICATION_HUNG", "Camera verification kept working without settling.")
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 @MainActor
 func runCameraStableMediaTest(output: String) async throws {
     try await runCameraLivePublicationTest(output: output, stableMediaCallbacks: true)
@@ -107,9 +146,8 @@ private func runCameraLivePublicationTest(output: String, firstCameraAfterPrimar
                 .map { camera.appendingPathComponent($0).appendingPathComponent("camera.mov").path }
                 .filter { FileManager.default.fileExists(atPath: $0) }
         }
-        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
-        while (try candidates().isEmpty || readers.observed["canonical"] == 0) && ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
+        try await awaitCameraVerification(camera: camera, readers: readers) {
+            try !candidates().isEmpty && readers.observed["canonical", default: 0] > 0
         }
         let activeCandidates = try candidates()
         let proof: [String: Any] = ["deviceState": capture.deviceState,
@@ -154,10 +192,11 @@ private func runCameraLivePublicationTest(output: String, firstCameraAfterPrimar
             }
             // Catch up the latest written mapping once; subsequent identical wakeups have no new operands.
             wake()
-            try await Task.sleep(for: .milliseconds(100))
+            try await awaitCameraVerification(camera: camera, readers: readers)
             let settled = try [version(raw), version(activeCandidates[0])]
             let snapshots = readers.observed["snapshots", default: 0]
             for _ in 0..<3 { wake(); try await Task.sleep(for: .milliseconds(20)) }
+            try await awaitCameraVerification(camera: camera, readers: readers)
             let after = try [version(raw), version(activeCandidates[0])]
             let created = readers.observed["snapshots", default: 0] - snapshots
             try JSONSerialization.data(withJSONObject: ["before": versions, "settled": settled,

@@ -1,6 +1,8 @@
+import { refusalRetryable } from "@yap/protocol";
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { CatalogError } from "./catalog.js";
+import { journalCapabilities } from "./evidence.js";
 
 const identity = z.string().min(1).max(256);
 const diagnostic = z.strictObject({
@@ -16,6 +18,8 @@ const media = z.strictObject({
   sha256: hash,
 });
 const published = z.strictObject({
+  take: z.strictObject({ kind: z.enum(["display", "window", "region", "camera"]) }).optional(),
+  marks: z.strictObject({ pins: z.boolean(), strokes: z.boolean() }).optional(),
   kind: z.enum(["primary", "camera"]),
   sourceId: identity,
   sourceDurationUs: z.int().positive(),
@@ -26,10 +30,12 @@ const published = z.strictObject({
   diagnostic: diagnostic.optional(),
   journal: z.strictObject({
     file: z.enum(["source.journal.jsonl", "capture.journal.jsonl"]),
-    bytes: z.int().positive().max(268_435_456),
+    bytes: z.int().positive().max(Number.MAX_SAFE_INTEGER),
     sha256: hash,
     lastSequence: z.int().positive(),
-    layout: z.union([z.literal(1), z.literal(2)]),
+    layout: z
+      .int()
+      .refine((version) => journalCapabilities({ schemaVersion: version }) !== undefined),
   }),
   members: z.strictObject({
     "video.mov": media,
@@ -45,7 +51,7 @@ const outcome = z.discriminatedUnion("state", [
   z.strictObject({ state: z.literal("published"), source: published }),
   z.strictObject({
     state: z.literal("pending"),
-    error: diagnostic.extend({ retryable: z.boolean() }),
+    error: z.object(diagnostic.shape),
   }),
   z.strictObject({ state: z.literal("unavailable"), error: diagnostic }),
 ]);
@@ -87,14 +93,20 @@ export type CaptureSourceAuthority = {
 };
 export type CapturePublication = z.infer<typeof observation>;
 export type CaptureSourceOutcome = z.infer<typeof outcome>;
-export function readCaptureSourceOutcome(value: unknown): CaptureSourceOutcome | null {
+export function readCaptureSourceOutcome(value: unknown) {
   const parsed = outcome.nullable().safeParse(value);
   if (!parsed.success)
     throw new CatalogError(
-      "MEDIA_WORKER_FAILED",
+      "INVALID_RESPONSE",
       "Source recovery returned an invalid publication outcome",
     );
-  return parsed.data;
+  const parsedOutcome = parsed.data;
+  return parsedOutcome?.state === "pending"
+    ? {
+        ...parsedOutcome,
+        error: { ...parsedOutcome.error, retryable: refusalRetryable(parsedOutcome.error.code) },
+      }
+    : parsedOutcome;
 }
 export type RecoveryReceipt = {
   durationUs: number;
@@ -109,7 +121,7 @@ export type RecoveryReceipt = {
 export function readRecoveryReceipt(value: unknown): RecoveryReceipt {
   const parsed = recoveryReceipt.safeParse(value);
   if (!parsed.success)
-    throw new CatalogError("MEDIA_WORKER_FAILED", "Recovery returned an invalid outcome");
+    throw new CatalogError("INVALID_RESPONSE", "Recovery returned an invalid outcome");
   const completion = parsed.data.journal?.completion;
   const roleFailure = parsed.data.tracks
     ?.map((track) => track.failure ?? undefined)
@@ -136,7 +148,7 @@ export type CapturePublicationState = {
 export function readCapturePublication(
   value: unknown,
   allocation: {
-    recordingId: string;
+    id: string;
     sourceId: string;
     camera: { sourceId: string; deviceId: string } | null;
   },
@@ -176,9 +188,7 @@ export function readCapturePublication(
       throw new CatalogError("INVALID_STATE", "Published source authority is immutable");
     const expectedId = kind === "primary" ? allocation.sourceId : allocation.camera?.sourceId;
     const expectedBinding =
-      kind === "primary"
-        ? undefined
-        : { recordingId: allocation.recordingId, ...allocation.camera! };
+      kind === "primary" ? undefined : { recordingId: allocation.id, ...allocation.camera! };
     if (
       receipt.kind !== kind ||
       receipt.sourceId !== expectedId ||
@@ -189,9 +199,11 @@ export function readCapturePublication(
         "Published source differs from allocated source/device authority",
       );
     const camera = kind === "camera";
+    const packed = journalCapabilities({ schemaVersion: receipt.journal.layout })!.isPacked;
     if (
       receipt.journal.file !== (camera ? "capture.journal.jsonl" : "source.journal.jsonl") ||
-      receipt.journal.layout !== (camera ? 1 : 2) ||
+      // A companion camera keeps its own schema-1 journal; a primary source's is packed.
+      (camera ? packed : !packed) ||
       Boolean(receipt.members["camera.publication.json"]) !== camera ||
       Boolean(receipt.members["camera.mapping.jsonl"]) !== camera
     )

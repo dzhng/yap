@@ -35,6 +35,7 @@ final class ServiceHost: @unchecked Sendable {
     private var pending: [String: @Sendable (Result<Data, ServiceFailure>) -> Void] = [:]
     private var stopping = false
     private var finished = false
+    private var terminalFailure: ServiceFailure?
     private var writerClosed = false
     private var outbound = 0
     /// Control writes go through an asynchronous channel rather than a blocking file
@@ -323,7 +324,8 @@ final class ServiceHost: @unchecked Sendable {
             let error = message["error"] as? [String: Any]
             fail(
                 code: error?["code"] as? String ?? "SERVICE_UNAVAILABLE",
-                message: error?["message"] as? String ?? "Service reported a startup failure")
+                message: error?["message"] as? String ?? "Service reported a startup failure",
+                details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })
         case "call":
             guard let request = message["request"] as? [String: Any],
                 let id = request["id"] as? String, !id.isEmpty,
@@ -380,7 +382,8 @@ final class ServiceHost: @unchecked Sendable {
                     .failure(
                         ServiceFailure(
                             code: error?["code"] as? String ?? "INTERNAL_ERROR",
-                            message: error?["message"] as? String ?? "Service operation failed")))
+                            message: error?["message"] as? String ?? "Service operation failed",
+                            details: (error?["details"]).flatMap { try? JSONSerialization.data(withJSONObject: $0) })))
             }
         default:
             fail(code: "CONTROL_PROTOCOL", message: "Unknown service control event: \(event)")
@@ -408,9 +411,7 @@ final class ServiceHost: @unchecked Sendable {
             response["data"] = data
         case .failure(let failure):
             response["ok"] = false
-            response["error"] = [
-                "code": failure.code, "message": failure.message, "retryable": failure.retryable, "details": [:],
-            ]
+            response["error"] = failure.envelope
         }
         let message: [String: Any] = ["event": "result", "response": response]
         guard let line = try? JSONSerialization.data(withJSONObject: message) else {
@@ -443,17 +444,19 @@ final class ServiceHost: @unchecked Sendable {
 
     /// One terminal failure per child. Settling every pending call here is what keeps a
     /// dead or unreadable channel from leaving callers waiting forever.
-    private func fail(code: String, message: String) {
+    private func fail(code: String, message: String, details: Data? = nil) {
+        let failure = ServiceFailure(code: code, message: message, details: details)
         let settled = pending
         pending.removeAll()
         if !finished {
             finished = true
+            terminalFailure = failure
             state = .unavailable(code: code, message: message)
             closeWriter()
             endChild()
             publish(state)
         }
-        for waiting in settled.values { waiting(.failure(ServiceFailure(code: code, message: message))) }
+        for waiting in settled.values { waiting(.failure(failure)) }
     }
 
     /// A child that ignores EOF and SIGTERM is killed within the same bounded deadline
@@ -476,6 +479,7 @@ final class ServiceHost: @unchecked Sendable {
     }
 
     private func unavailableFailure() -> ServiceFailure {
+        if let terminalFailure { return terminalFailure }
         if case .unavailable(let code, let message) = state {
             return ServiceFailure(code: code, message: message)
         }

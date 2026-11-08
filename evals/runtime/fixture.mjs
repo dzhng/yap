@@ -15,19 +15,19 @@ export async function failedJobFixture() {
               id: request.id,
               ok: true,
               data: {
-                jobId: "audit-job",
+                id: "audit-job",
+                state: "failed",
                 attemptId: "audit-attempt",
-                target: { kind: "asset", assetId: "audit-asset" },
                 artifact: "audio",
                 lane: "heavy",
-                state: "failed",
                 reason: "The scripted preparation attempt failed.",
                 errorCode: "AUDIT_FIXTURE_FAILURE",
-                errorDetails: null,
-                retryable: false,
-                generation: 1,
                 inputSha256: "0".repeat(64),
-                result: null,
+                attemptGeneration: 1,
+                target: { kind: "asset", id: "audit-asset" },
+                retryable: false,
+                errorDetails: null,
+                published: null,
               },
             }
           : {
@@ -47,4 +47,236 @@ export async function failedJobFixture() {
     server.listen("/sandbox/service.sock", resolve);
   });
   return () => new Promise((resolve) => server.close(resolve));
+}
+
+const refusal = ({ assetId, usedBy, freesBytes, cascadeFreesBytes }) => ({
+  code: "IN_USE",
+  message: "The asset is still used by library projects.",
+  retryable: false,
+  details: {
+    assetId,
+    usedBy,
+    acquisitions: [],
+    derivedAssets: [],
+    freesBytes,
+    cascadeFreesBytes,
+  },
+});
+
+function deletionReply(request, response) {
+  return { id: request.id, ...response };
+}
+
+function unsupported(request, message) {
+  return deletionReply(request, {
+    ok: false,
+    error: { code: "UNSUPPORTED", message, retryable: false },
+  });
+}
+
+function serveDeletionFixture(responder) {
+  const server = createServer((socket) => {
+    let bytes = "";
+    socket.on("data", async (chunk) => {
+      bytes += chunk;
+      if (!bytes.includes("\n")) return;
+      const request = JSON.parse(bytes.slice(0, bytes.indexOf("\n")));
+      await appendFile("/sandbox/service-calls.jsonl", JSON.stringify(request) + "\n");
+      socket.end(JSON.stringify(responder(request)) + "\n");
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen("/sandbox/service.sock", () =>
+      resolve(() => new Promise((done) => server.close(done))),
+    );
+  });
+}
+
+export async function deletionFixture(name) {
+  if (name === "refused-delete") {
+    const assetId = "asset-imported-clip";
+    const details = {
+      assetId,
+      usedBy: [
+        {
+          kind: "project",
+          id: "project-client-interview",
+          title: "Client interview",
+          revisions: 2,
+        },
+        {
+          kind: "project",
+          id: "project-social-cut",
+          title: "Social cut",
+          revisions: 1,
+        },
+      ],
+      acquisitions: [],
+      derivedAssets: [],
+      freesBytes: 48_000_000,
+      cascadeFreesBytes: 148_000_000,
+    };
+    return serveDeletionFixture((request) => {
+      if (request.operation === "asset.delete")
+        return deletionReply(request, {
+          ok: false,
+          error: refusal({
+            assetId,
+            usedBy: details.usedBy,
+            freesBytes: details.freesBytes,
+            cascadeFreesBytes: details.cascadeFreesBytes,
+          }),
+        });
+      if (request.operation === "asset.get")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            id: assetId,
+            sizeBytes: details.freesBytes,
+            streams: [{ id: "video:0", kind: "video" }],
+          },
+        });
+      return unsupported(request, "This refusal fixture only answers asset.delete and asset.get.");
+    });
+  }
+
+  if (name === "authorized-free-a-clip") {
+    const assetId = "asset-history-only-clip";
+    const sourceProjectId = "project-history-holder";
+    const sourceRevisionId = "revision-head-before-remove";
+    const editedRevisionId = "revision-after-remove";
+    const copyProjectId = "project-history-copy";
+    const copyRevisionId = "revision-copy-head";
+    const freedBytes = 12_345_678;
+    let removed = false;
+    let originalDeleted = false;
+    let assetDeleted = false;
+    const revision = (id, projectId) => ({
+      id,
+      projectId,
+      ordinal: id === editedRevisionId ? 1 : 0,
+      createdAt: "2026-10-19T00:00:00.000Z",
+      operation: id === editedRevisionId ? "apply" : "create",
+      document: { tracks: [] },
+    });
+    const usedBy = [
+      { kind: "project", id: sourceProjectId, title: "History holder", revisions: 3 },
+    ];
+    return serveDeletionFixture((request) => {
+      if (request.operation === "asset.delete") {
+        if (!assetDeleted) {
+          if (removed && originalDeleted) {
+            assetDeleted = true;
+            return deletionReply(request, {
+              ok: true,
+              data: { id: assetId, deleted: true, freedBytes },
+            });
+          }
+          return deletionReply(request, {
+            ok: false,
+            error: refusal({
+              assetId,
+              usedBy,
+              freesBytes: freedBytes,
+              cascadeFreesBytes: freedBytes,
+            }),
+          });
+        }
+        return deletionReply(request, {
+          ok: true,
+          data: { id: assetId, deleted: true, freedBytes },
+        });
+      }
+      if (request.operation === "asset.get")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            id: assetId,
+            sizeBytes: freedBytes,
+            streams: [{ id: "video:0", kind: "video" }],
+          },
+        });
+      if (request.operation === "project.get")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            id: sourceProjectId,
+            title: "History holder",
+            createdAt: "2026-10-01T00:00:00.000Z",
+            currentRevisionId: removed ? editedRevisionId : sourceRevisionId,
+          },
+        });
+      if (request.operation === "revision.get") {
+        const projectId = request.params.projectId;
+        const id =
+          projectId === copyProjectId
+            ? copyRevisionId
+            : removed
+              ? editedRevisionId
+              : sourceRevisionId;
+        return deletionReply(request, {
+          ok: true,
+          data: { projectId, revision: revision(id, projectId) },
+        });
+      }
+      if (request.operation === "revision.history")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            projectId: request.params.projectId,
+            revisions: [revision(copyRevisionId, copyProjectId)],
+            nextCursor: null,
+          },
+        });
+      if (request.operation === "preview.get")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            projectId: copyProjectId,
+            revisionId: copyRevisionId,
+            state: "ready",
+            jobId: null,
+          },
+        });
+      if (request.operation === "edit.apply") {
+        removed = true;
+        return deletionReply(request, {
+          ok: true,
+          data: { revision: revision(editedRevisionId, sourceProjectId), edit: { issues: [] } },
+        });
+      }
+      if (request.operation === "project.duplicate")
+        return deletionReply(request, {
+          ok: true,
+          data: {
+            project: {
+              id: copyProjectId,
+              title: "History holder copy",
+              createdAt: "2026-10-19T00:00:00.000Z",
+              currentRevisionId: copyRevisionId,
+            },
+            revision: revision(copyRevisionId, copyProjectId),
+          },
+        });
+      if (request.operation === "project.delete") {
+        originalDeleted = true;
+        return deletionReply(request, {
+          ok: true,
+          data: { id: sourceProjectId, deleted: true, freedBytes: 0 },
+        });
+      }
+      if (request.operation === "asset.origins")
+        return deletionReply(request, {
+          ok: true,
+          data: { origins: [], nextCursor: null },
+        });
+      return unsupported(
+        request,
+        "This free-a-clip fixture only answers the deletion recipe operations.",
+      );
+    });
+  }
+
+  return undefined;
 }

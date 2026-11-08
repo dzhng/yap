@@ -57,7 +57,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       background: "#000000ff",
     },
   });
-  const projectId = project.project.projectId;
+  const projectId = project.project.id;
   const placed = await call("edit.apply", {
     requestId: randomUUID(),
     projectId,
@@ -88,16 +88,17 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
     const request = {
       projectId,
       revisionId,
-      exportId: randomUUID(),
+      requestId: randomUUID(),
       kind: "video",
       directory: out,
       leaf: codec + ".mp4",
       settings: { video: { codec } },
     };
     const admitted = await call("export.create", request);
+    const exportId = admitted.id;
     const receipt = await poll(
-      () => call("export.status", { exportId: request.exportId }),
-      (v) => v.state === "committed" && !v.cleanupPending,
+      () => call("export.status", { exportId }),
+      (v) => v.state === "ready" && !v.cleanupPending,
       codec,
     );
     const path = receipt.output;
@@ -162,7 +163,7 @@ export async function verifyVideoDelivery({ call, out, ffmpeg, ffprobe, report, 
       assert.ok(Math.abs(marker.position - 16800) <= 2);
     }
     const replay = await call("export.create", request);
-    assert.equal(replay.exportId, request.exportId);
+    assert.equal(replay.id, exportId);
     assert.equal(hash(await readFile(path)), report.operands[codec].sha256);
   }
   assert.equal(hash(await readFile(source)), report.sourceSha256);

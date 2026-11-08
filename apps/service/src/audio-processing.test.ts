@@ -5,7 +5,7 @@ import {
   type ProcessingStep,
   resolveOutputSettings,
 } from "@yap/composition";
-import { constants, readSync } from "node:fs";
+import { readSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
@@ -18,7 +18,7 @@ import {
   selectNormalizationAttempt,
 } from "@yap/core/audio-measurement";
 import { checkProjectAudioResult } from "@yap/core/audio-inspection";
-import { mkdtemp, mkdir, writeFile, readFile, rm, copyFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, copyFile, link } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { callLocal } from "@yap/client";
@@ -1322,20 +1322,20 @@ real(
           }),
         (value) => value.state === "ready",
       );
-      const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-        "project.create",
-        {
-          requestId: "project",
-          canvas: {
-            width: 16,
-            height: 16,
-            fps: { numerator: 30, denominator: 1 },
-            background: "#000000ff",
-          },
+      const created = await call<{
+        project: { id: string };
+        revision: { id: string };
+      }>("project.create", {
+        requestId: "project",
+        canvas: {
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          background: "#000000ff",
         },
-      );
+      });
       const edited = await call<{ revision: { id: string } }>("edit.apply", {
-        projectId: created.project.projectId,
+        projectId: created.project.id,
         expectedRevisionId: created.revision.id,
         requestId: "media",
         operations: [
@@ -1367,18 +1367,21 @@ real(
           },
         ],
       });
-      const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+      const selection = {
+        projectId: created.project.id,
+        revisionId: edited.revision.id,
+      };
       const exportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId,
+        requestId: exportId,
         kind: "video",
         directory: home,
         leaf: "delivered.mp4",
       });
       const committed = await settled(
         () => call<{ state: string; jobId: string }>("export.status", { exportId }),
-        (value) => value.state === "committed",
+        (value) => value.state === "ready",
       );
       // The receipt commits before the export job publishes the issues it carries.
       await settled(
@@ -1662,20 +1665,20 @@ real(
       const imported = await call<{ jobId: string }>("asset.import", { requestId: "source", path });
       const importedJob = await job(imported.jobId);
       const assetId = (importedJob.published!.output as { assetId: string }).assetId;
-      const created = await call<{ project: { projectId: string }; revision: { id: string } }>(
-        "project.create",
-        {
-          requestId: "project",
-          canvas: {
-            width: 16,
-            height: 16,
-            fps: { numerator: 30, denominator: 1 },
-            background: "#000000ff",
-          },
+      const created = await call<{
+        project: { id: string };
+        revision: { id: string };
+      }>("project.create", {
+        requestId: "project",
+        canvas: {
+          width: 16,
+          height: 16,
+          fps: { numerator: 30, denominator: 1 },
+          background: "#000000ff",
         },
-      );
+      });
       const edited = await call<{ revision: { id: string } }>("edit.apply", {
-        projectId: created.project.projectId,
+        projectId: created.project.id,
         expectedRevisionId: created.revision.id,
         requestId: "media",
         operations: [
@@ -1721,7 +1724,10 @@ real(
           },
         ],
       });
-      const selection = { projectId: created.project.projectId, revisionId: edited.revision.id };
+      const selection = {
+        projectId: created.project.id,
+        revisionId: edited.revision.id,
+      };
       type Prepared = {
         state: string;
         jobId: string;
@@ -1747,7 +1753,8 @@ real(
       for (const relative of Object.keys(receipt.files)) {
         const target = join(replaced, relative);
         await mkdir(dirname(target), { recursive: true });
-        await copyFile(join(installation!, relative), target, constants.COPYFILE_FICLONE);
+        // The fixture changes the receipt identity; verified executable bytes stay shared.
+        await link(join(installation!, relative), target);
       }
       const receiptBytes = JSON.stringify({ ...receipt, fixtureGeneration: "replacement" });
       await writeFile(join(replaced, "receipt.json"), receiptBytes);
@@ -1793,15 +1800,15 @@ real(
       });
       const excerptJob = await job(excerpt.jobId);
       expect(excerptJob.published?.output).toMatchObject({
-        frames: 4800,
-        sampleRange: { start: 336000, end: 340800 },
+        frameCount: 4800,
+        sampleRange: { startSamples: 336000, endSamples: 340800 },
         processingEvidence: ready.published!.output.processingEvidence,
       });
       requireRetainedMix = true;
       const movieExportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId: movieExportId,
+        requestId: movieExportId,
         kind: "video",
         directory: home,
         leaf: "prepared.mp4",
@@ -1809,7 +1816,7 @@ real(
       const movieDeadline = performance.now() + 10000;
       for (;;) {
         const status = await call<{ state: string }>("export.status", { exportId: movieExportId });
-        if (status.state === "committed") break;
+        if (status.state === "ready") break;
         if (
           ["failed", "unavailable", "canceled", "conflicted"].includes(status.state) ||
           performance.now() > movieDeadline
@@ -1823,7 +1830,7 @@ real(
       const exportId = randomUUID();
       await call("export.create", {
         ...selection,
-        exportId,
+        requestId: exportId,
         kind: "processed-package",
         directory: home,
         leaf: "prepared.zip",
@@ -1833,7 +1840,7 @@ real(
         const status = await call<{ state: string; output: string | null }>("export.status", {
           exportId,
         });
-        if (status.state === "committed") break;
+        if (status.state === "ready") break;
         if (
           ["failed", "unavailable", "canceled"].includes(status.state) ||
           performance.now() > exportDeadline
@@ -1843,6 +1850,7 @@ real(
       }
       const admission = await call<{ id: string }>("package.open", {
         path: join(home, "prepared.zip"),
+        requestId: "open-prepared",
       });
       let packageHandle: string | undefined;
       const packageDeadline = performance.now() + 10000;
@@ -2063,7 +2071,7 @@ test("a failed 0.1.33 normalization job re-runs after an identity bump", async (
       background: "#000000ff",
     },
   });
-  const projectId = created.project.projectId;
+  const projectId = created.project.id;
   const revision = old.projects.apply(projectId, {
     requestId: "edit",
     expectedRevisionId: created.revision.id,

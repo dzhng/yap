@@ -117,7 +117,7 @@ func verifySDRCorrection(in directory: URL) async throws {
   do {
     try SDRCorrection.requireImplementation("other-host")
     preconditionFailure("Wrong native recipe admitted")
-  } catch let error as NativeFailure { precondition(error.code == "NOT_READY") }
+  } catch let error as NativeFailure { precondition(error.code == "PINNED_IMPLEMENTATION_UNAVAILABLE") }
   var invalid = identity
   invalid.exposureEV = 9
   do {

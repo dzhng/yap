@@ -37,14 +37,7 @@ import type { ProjectStore } from "./projects.js";
 import type { AcquisitionStore } from "./acquisitions.js";
 import { selectSource, sourceSelectionSchema, type SourceSelection } from "./source-selection.js";
 import { compositionAsset, type AssetStore } from "./assets.js";
-import type {
-  JobQueue,
-  JobExecution,
-  JobOwner,
-  Job,
-  JobAdmission,
-  StagedJobResult,
-} from "./jobs.js";
+import type { JobQueue, JobExecution, Owner, Job, JobAdmission, StagedJobResult } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
 import { CatalogError } from "./catalog.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
@@ -73,6 +66,12 @@ const pictureDeliverySchema = z.object({
   sourceWidth: z.int().positive(),
   sourceHeight: z.int().positive(),
   bytes: z
+    .int()
+    .positive()
+    .max(32 * 1024 * 1024),
+});
+const publicPictureDeliverySchema = pictureDeliverySchema.omit({ bytes: true }).extend({
+  sizeBytes: z
     .int()
     .positive()
     .max(32 * 1024 * 1024),
@@ -193,6 +192,15 @@ const nativeProjectReceiptSchema = pictureDeliverySchema.extend({
 const projectReceiptSchema = nativeProjectReceiptSchema.extend({
   frame: z.strictObject(compiledFrameSchema.shape).omit({ visual: true }),
 });
+const publicProjectReceiptSchema = publicPictureDeliverySchema.extend({
+  profile: z.literal("h264-rec709"),
+  frame: z.strictObject(compiledFrameSchema.shape).omit({ visual: true }),
+  decodedSamples: time,
+  readerOpens: time,
+  decodedImages: time,
+  pictures: nativeProjectReceiptSchema.shape.pictures,
+  textFallbacks: textFallbacksSchema.optional(),
+});
 export const projectPictureOptionsSchema = z.strictObject({
   maxLongEdge: z.int().min(1).max(8192),
   tap: processingTapSchema,
@@ -205,7 +213,7 @@ const optionsSchema = z.strictObject({
   cursorTrailUs: z.int().min(0).max(10_000_000).optional(),
   ...projectPictureOptionsSchema.shape,
 });
-export const retainedProjectFrameSchema = projectReceiptSchema
+export const retainedProjectFrameSchema = publicProjectReceiptSchema
   .extend({
     ...optionsSchema.shape,
     projectId: z.string().min(1),
@@ -409,7 +417,16 @@ export function validateFaceObservations(
     );
 }
 
-export const retainedSourceFrameSchema = sourceReceiptSchema
+const publicSourceReceiptSchema = publicPictureDeliverySchema.extend({
+  decodedSamples: time,
+  readerOpens: time,
+  assetId: z.string().min(1),
+  streamId: z.string().min(1),
+  requestedSourceUs: time,
+  actualSourceUs: z.int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+  sample: sourceReceiptSchema.shape.sample,
+});
+export const retainedSourceFrameSchema = publicSourceReceiptSchema
   .extend({
     ...sourceSelectionSchema.shape,
     atUs: time,
@@ -496,7 +513,7 @@ export class MediaFrameInspection {
       jobs,
       cache,
       {
-        target: { kind: "asset", assetId: options.selection.assetId },
+        target: { kind: "asset", id: options.selection.assetId },
         artifact: "frame",
         input: JSON.stringify(options),
       },
@@ -619,7 +636,7 @@ export class MediaFrameInspection {
   sourceUnavailable(input: SourceFrameInput): SourceFrameUnavailable {
     const { options } = this.sourcePlan(input);
     const status = this.owners.jobs.status({
-      target: { kind: "asset", assetId: options.selection.assetId },
+      target: { kind: "asset", id: options.selection.assetId },
       artifact: "frame",
       input: JSON.stringify(options),
     });
@@ -632,7 +649,7 @@ export class MediaFrameInspection {
       job.errorDetails?.requestedSourceUs !== options.atUs
     )
       throw new CatalogError(
-        "NOT_READY",
+        "PREREQUISITE_MISSING",
         "No physical no-picture observation exists for this request",
       );
     return {
@@ -645,7 +662,7 @@ export class MediaFrameInspection {
   }
 
   private async publish<T extends { file: string; bytes: number }>(
-    owner: Extract<JobOwner, { kind: "asset" | "project" }>,
+    owner: Owner<"asset" | "project">,
     signal: AbortSignal,
     render: (output: string) => Promise<T>,
   ) {
@@ -663,7 +680,8 @@ export class MediaFrameInspection {
           "INVALID_RESPONSE",
           "Published picture size differs from its receipt",
         );
-      return JSON.stringify({ ...value, cacheId: output.id });
+      const { bytes, ...publicValue } = value;
+      return JSON.stringify({ ...publicValue, sizeBytes: bytes, cacheId: output.id });
     } catch (error) {
       this.owners.cache.remove(output.id);
       throw error;
@@ -675,7 +693,7 @@ export class MediaFrameInspection {
       job.target.kind !== "asset" ||
       job.artifact !== "frame" ||
       !parsed.success ||
-      parsed.data.selection.assetId !== job.target.assetId
+      parsed.data.selection.assetId !== job.target.id
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a still image");
     const plan = this.imagePlan({
@@ -685,7 +703,11 @@ export class MediaFrameInspection {
       faceObservations: parsed.data.faceObservationRequest,
     });
     if (plan.options.implementationId !== parsed.data.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned image renderer is unavailable", {}, true);
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned image renderer is unavailable",
+        {},
+      );
     return this.publish(job.target, signal, async (output) => {
       const receipt = imageReceiptSchema.safeParse(
         await plan.renderer.render(
@@ -745,11 +767,15 @@ export class MediaFrameInspection {
       job.target.kind !== "asset" ||
       job.artifact !== "frame" ||
       !parsed.success ||
-      parsed.data.selection.assetId !== job.target.assetId
+      parsed.data.selection.assetId !== job.target.id
     )
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a selected source");
     if (parsed.data.implementationId !== this.owners.sourceRenderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {}, true);
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned picture renderer is unavailable",
+        {},
+      );
     const plan = this.sourcePlan({
       ...parsed.data.selection,
       ...parsed.data,
@@ -759,7 +785,7 @@ export class MediaFrameInspection {
     if (plan.options.supportDigest !== parsed.data.supportDigest)
       throw new CatalogError("ARTIFACT_CHANGED", "Selected source support changed");
     if (plan.reason) throw new CatalogError("UNAVAILABLE", plan.reason);
-    return this.publish({ kind: "asset", assetId: job.target.assetId }, signal, async (output) => {
+    return this.publish({ kind: "asset", id: job.target.id }, signal, async (output) => {
       const parsedReceipt = sourceReceiptSchema.safeParse(
         await this.owners.sourceRenderer
           .render(
@@ -889,7 +915,7 @@ export class MediaFrameInspection {
       this.owners.jobs,
       this.owners.cache,
       {
-        target: { kind: "project", projectId: input.projectId, revisionId },
+        target: { kind: "project", id: input.projectId, revisionId },
         artifact: "frame",
         input: JSON.stringify({
           ...options,
@@ -961,15 +987,16 @@ export class MediaFrameInspection {
     const options = optionsSchema.parse(JSON.parse(job.input));
     if (options.implementationId !== this.project.renderer.implementationId)
       throw new CatalogError(
-        "NOT_READY",
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
         "Pinned picture renderer is unavailable",
-        { implementationId: options.implementationId },
-        true,
+        {
+          implementationId: options.implementationId,
+        },
       );
     if (job.target.kind !== "project" || job.artifact !== "frame")
       throw new CatalogError("UNSUPPORTED_JOB", "Picture admission requires a project job");
     const plan = this.planProject({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...options,
       observations: options.observationRequest,
@@ -989,46 +1016,59 @@ export class MediaFrameInspection {
     if (job.target.kind !== "project" || job.artifact !== "frame" || !parsed.success)
       throw new CatalogError("UNSUPPORTED_JOB", "Picture job does not name a project frame");
     if (parsed.data.implementationId !== this.project.renderer.implementationId)
-      throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {}, true);
+      throw new CatalogError(
+        "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        "Pinned picture renderer is unavailable",
+        {},
+      );
     const plan = this.planProject({
-      projectId: job.target.projectId,
+      projectId: job.target.id,
       revisionId: job.target.revisionId,
       ...parsed.data,
       observations: parsed.data.observationRequest,
       faceObservations: parsed.data.faceObservationRequest,
     });
-    const projectId = job.target.projectId;
+    const projectId = job.target.id;
     let issues: Issue[] = [];
-    const result = await this.publish({ kind: "project", projectId }, signal, async (output) => {
-      const render = () =>
-        this.project.renderer.render(
-          {
-            model: plan.model,
-            window: plan.window,
-            assets: plan.assets,
-            fonts: plan.fonts,
-            luts: plan.luts,
-            output,
-            maxLongEdge: plan.options.maxLongEdge,
-            ...(plan.options.observationRequest === undefined
-              ? {}
-              : { observations: plan.options.observationRequest }),
-            ...(plan.options.faceObservationRequest === undefined
-              ? {}
-              : { faceObservations: plan.options.faceObservationRequest }),
-          },
-          signal,
-        );
-      const receipt = this.project.renderer.pointers
-        ? await this.project.renderer.pointers.withReady(plan.pointerSources, render)
-        : await render();
-      signal.throwIfAborted();
-      const value = validateProjectFrameReceipt(receipt, plan, output, plan.options.maxLongEdge);
-      validatePictureObservations(value, plan.options.observationRequest);
-      validateFaceObservations(value, plan.options.faceObservationRequest);
-      issues = pictureTextIssues(value);
-      return { ...value, ...plan.options, projectId, revisionId: plan.window.manifest.revisionId };
-    });
+    const result = await this.publish(
+      { kind: "project", id: projectId },
+      signal,
+      async (output) => {
+        const render = () =>
+          this.project.renderer.render(
+            {
+              model: plan.model,
+              window: plan.window,
+              assets: plan.assets,
+              fonts: plan.fonts,
+              luts: plan.luts,
+              output,
+              maxLongEdge: plan.options.maxLongEdge,
+              ...(plan.options.observationRequest === undefined
+                ? {}
+                : { observations: plan.options.observationRequest }),
+              ...(plan.options.faceObservationRequest === undefined
+                ? {}
+                : { faceObservations: plan.options.faceObservationRequest }),
+            },
+            signal,
+          );
+        const receipt = this.project.renderer.pointers
+          ? await this.project.renderer.pointers.withReady(plan.pointerSources, render)
+          : await render();
+        signal.throwIfAborted();
+        const value = validateProjectFrameReceipt(receipt, plan, output, plan.options.maxLongEdge);
+        validatePictureObservations(value, plan.options.observationRequest);
+        validateFaceObservations(value, plan.options.faceObservationRequest);
+        issues = pictureTextIssues(value);
+        return {
+          ...value,
+          ...plan.options,
+          projectId,
+          revisionId: plan.window.manifest.revisionId,
+        };
+      },
+    );
     return { result, issues };
   }
 }
@@ -1062,16 +1102,18 @@ export function validateRetainedProjectFrameReceipt(
   output: string,
   maxLongEdge: number,
 ): PictureReceipt {
-  const parsed = projectReceiptSchema.safeParse(receipt);
+  const parsed = publicProjectReceiptSchema.safeParse(receipt);
   if (!parsed.success) throw new CatalogError("INVALID_RESPONSE", "Malformed picture receipt");
+  const { sizeBytes, ...publicValue } = parsed.data;
+  const value = { ...publicValue, bytes: sizeBytes } as PictureReceipt;
   checkPictureReceipt(
-    parsed.data,
+    value,
     inspectedFrame(plan.window.frames().next().value!, plan),
     plan,
     output,
     maxLongEdge,
   );
-  return parsed.data;
+  return value;
 }
 function checkPictureReceipt(
   value: PictureReceipt,

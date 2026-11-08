@@ -11,7 +11,7 @@ afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) await close();
 });
 const request = {
-  recordingId: "recording-1",
+  ownerId: "recording-1",
   source: "/immutable/take/video.mov",
   kept: { startUs: 0, endUs: 10 },
   atSourceUs: [4],
@@ -312,30 +312,23 @@ test("partial hits stay usable when publishing missing samples evicts their old 
 
 test("same-path visual requests retain independent recording ownership and purge only their own lookup", async () => {
   const f = await fixture();
-  const sibling = f.store.allocate().recording.recordingId;
+  const sibling = f.store.allocate().recording.id;
   const observations = new VisualObservationCache(f.store, f.cache, f.decode);
   const expected = await observations.sample(request, signal());
-  expect(await observations.sample({ ...request, recordingId: sibling }, signal())).toEqual(
-    expected,
-  );
+  expect(await observations.sample({ ...request, ownerId: sibling }, signal())).toEqual(expected);
   expect(f.calls()).toBe(2);
-  await f.cache.purgeOwner(
-    { kind: "recording", recordingId: request.recordingId },
-    async ({ ids }) => {
-      for (const id of ids) {
-        if (basename(id) !== id) throw new Error("Fixture refuses a nonlocal cache name");
-        await rm(join(f.home, "cache", "derived", `${id}.cache`), { force: true });
-      }
-    },
-  );
-  expect(await observations.sample({ ...request, recordingId: sibling }, signal())).toEqual(
-    expected,
-  );
+  await f.cache.purgeOwner({ kind: "recording", id: request.ownerId }, async ({ ids }) => {
+    for (const id of ids) {
+      if (basename(id) !== id) throw new Error("Fixture refuses a nonlocal cache name");
+      await rm(join(f.home, "cache", "derived", `${id}.cache`), { force: true });
+    }
+  });
+  expect(await observations.sample({ ...request, ownerId: sibling }, signal())).toEqual(expected);
   expect(f.calls()).toBe(2);
   expect(await observations.sample(request, signal())).toEqual(expected);
   expect(f.calls()).toBe(3);
   await expect(
-    observations.sample({ ...request, recordingId: "missing" }, signal()),
+    observations.sample({ ...request, ownerId: "missing" }, signal()),
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
   expect(f.calls()).toBe(3);
 });

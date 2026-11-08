@@ -2,6 +2,179 @@ Yap is the macOS recording and agent-operated video toolkit. This release ships
 `Yap.app`, the `yap` CLI and the `com.dzhng.yap` app identity. Install the app for
 this identity; capture permissions must be granted to Yap separately.
 
+## 0.1.72
+
+When the selected monitor disconnects while Yap is idle, the recording menu now
+automatically selects the Mac’s main display. No unavailable-monitor warning or
+Dismiss button remains, and a temporarily empty display list recovers on its own.
+
+## 0.1.71
+
+**Finishing a take copies its prompt.** Stop a recording with ⌥⇧S, the menu or the floating
+Finish button and, once it has saved, Yap copies its prompt and shows "Copied, press ⌘V". A take
+an agent stops leaves your clipboard alone.
+
+**Paste Prompt (⌥⇧V) pastes in more apps.** It now waits for you to let go of the shortcut before
+pressing ⌘V. Apps such as Chrome and Electron apps saw the ⌥⇧ you were still holding and pasted
+nothing.
+
+**Your agent sees your marks the way you did.** Each pin and drawing says how long it stayed on
+your screen, so your agent reads it as a moment you pointed at, not a lasting note. Cursor renders
+draw the pins and drawings that were on screen at that moment, without the ones that had faded or
+that you cleared. Marks from earlier versions are still listed but aren't drawn.
+
+## 0.1.70
+
+**Undo Mark (⌥⇧Z) only clears your screen.** It takes the newest pin or drawing off the screen
+and leaves the recording alone, so your agent still sees every pin, drawing and click you made,
+including ones you cleared. Recordings from earlier versions get them back too.
+
+**Paste Prompt (⌥⇧V) tells you when Yap needs reopening.** If you allow Accessibility while Yap
+is running, macOS only lets Yap paste after it reopens. Until then ⌥⇧V copies the prompt and says
+"Copied, press ⌘V (reopen Yap to auto-paste)", and Settings shows "Reopen Yap to finish",
+instead of looking like it pasted when nothing appeared.
+
+## 0.1.69
+
+**Pins clear on their own.** A pin you drop while recording now fades away after 5 seconds, so
+the screen no longer fills up with numbered pins. Only the screen forgets: the recording keeps
+every pin and drawing for your agent.
+
+**Undo Mark (⌥⇧Z) takes back what you can see.** It used to take back your last plain click
+instead, so pressing it after clicking around left the pin on screen. Now it takes back the
+latest pin or drawing still on screen, and does nothing once everything has cleared.
+
+## 0.1.68
+
+**Copy prompt** on a recording made before 0.1.67 with the camera on no longer says you
+recorded yourself on camera when you recorded your screen. Those older recordings don't say
+whether they captured a screen, so the prompt now says only that you recorded something.
+
+## 0.1.67
+
+A take can now run for up to 12 hours (long takes used to fail after about two), and a long
+drawing no longer breaks its import. A recording whose import failed says why in the Library
+and offers **Retry**; your recording stays safe either way. **Copy prompt** works right after a
+take, even while it imports. An error in the capture panel now names what failed, and its
+**Retry** repeats that action instead of starting a new recording. The pasted prompt
+describes pins and drawings without listing individual marks, times or windows;
+your agent reads that evidence when it needs it.
+
+## 0.1.66
+
+Settings has a "Reset All Shortcuts to Defaults" button, and `yap shortcuts.reset` does the
+same. Recording a shortcut in Settings now ends as soon as you press one, and Escape leaves
+the field; before, the field stayed waiting, Yap's shortcuts stayed off and Settings wrongly
+said macOS had refused them.
+
+## 0.1.65
+
+Your agent can now change Yap's shortcuts by naming the keys: `yap shortcuts.set
+--params '{"bindings":{"capture.startOrStop":"ctrl+cmd+r"}}'`. A key means the one your
+keyboard layout types it with. `shortcuts.get` and `shortcuts.set` answer each action's
+name, keys, label, when it applies and whether macOS took it; the raw key codes they used
+to take and answer are gone. Your existing shortcuts are kept. Settings no longer accepts a
+key without ⌃, ⌥ or ⌘ (except function keys), since that key would stop typing everywhere.
+
+## 0.1.64
+
+Fixes the service failing to start after updating to 0.1.62 or 0.1.63 on a Mac whose
+speech model was already installed ("Service closed its control channel"). Your library
+and recordings were never touched; this update installs itself and the service starts
+again.
+
+## 0.1.63
+
+Automatic updates now cross a library upgrade. 0.1.62 converts libraries to a new format,
+and 0.1.61 refused it with `UPDATE_INCOMPATIBLE`; this release updates 0.1.61 and 0.1.62
+automatically and converts the library once on open.
+
+## 0.1.62
+
+Show your agent, in four keys. Press ⌥⇧S to record the display under your pointer, talk,
+hold ⇧ and move to draw, ⇧-click to drop a numbered pin, and press ⌥⇧S again. ⌥⇧V pastes a
+short prompt into your agent describing what you captured and where you pointed; allow
+Accessibility in Settings and it pastes for you, otherwise it is copied. ⌥⇧Z undoes a mark,
+⌥⇧X cancels and ⌥⇧P pauses. Shortcuts are recorded right in Settings and apply at once. The
+countdown is now off unless you turn it on. Every recording and import is transcribed in the
+background, without slowing anything you ask for.
+
+For scripts and agents: new operations `recording.prompt`, `shortcuts.get` and
+`shortcuts.set`. `timeline.events` lists a recording's marks, and screenshot indexes take a
+frame at every mark, pin and click while adding fewer frames over long still stretches;
+existing indexes rebuild on their next request. Recordings now carry capture journal
+schema 3, which older Yap versions cannot open in packages.
+
+This release also changes how results name things. A record calls its own identity `id`
+(`asset.get {assetId}` answers `{id, …}`), a reference to another record is still
+`<noun>Id`, and a reference that can point at several kinds is `{kind, id}`: job targets,
+`IN_USE` details, `media.list` items and `capture.start`'s `source` (for example
+`{kind: "display", id: 1}`). Deletes answer `{id, deleted, freedBytes}`. `job.get`,
+`job.retry` and `job.cancel` answer with the job, and `asset.import`, `acquisition.import`
+and `recording.cleanup` answer with the status of the work they started and its `jobId`.
+Libraries and packages from 0.1.61 are converted once when opened; packages this version
+exports cannot be opened by older versions.
+
+## 0.1.61
+
+The camera now stays off unless you turn it on. Since the camera switch arrived, every screen
+recording quietly started the camera, with its light on and its picture in the floating
+controls, even with the switch off. Now the switch alone decides: the camera menu only picks
+which camera, and the "Camera off" choice is gone. A Mac with no camera or no microphone shows
+that row as "No camera" or "No microphone", switched off, and records without it.
+
+The floating controls are always hidden from screenshots and screen sharing, as they are from
+Yap's own recordings; the Show Controls in Screenshots setting is gone. Clear controls choose
+their look again whenever their window is redrawn, aimed at the clear capsule that sometimes
+turned black.
+
+## 0.1.60
+
+You can now delete anything that takes up space, and see what it frees first. The
+Library's Recordings tab also lists the videos you imported, and deleting a recording,
+an imported video or a project asks once before anything goes. When a video is still
+used by a project, Yap names the project and the space a delete would free, and deletes
+the project too only if you say so. Downloaded models can be removed as well, and
+storage now shows how much they take. A force-quit while recording a still screen no
+longer loses the take.
+
+For scripts and agents that call Yap, this release changes the interface. Every
+identity is now `<noun>Id` and every quantity carries its unit (for example
+`revisionId`, `sizeBytes`, `frameCount`). Every operation that changes something takes a
+`requestId`, and repeating a request returns its first result. `recording.latest`,
+`inspect` and the `*.retry` operations are gone (use `job.retry`), and asynchronous work
+reports one set of states. New operations: `asset.delete`, `project.duplicate`,
+`model.remove` and `media.list`. A delete refuses with `IN_USE`, naming the projects
+that use the item; `cascade: true` deletes exactly what the refusal listed. Run
+`yap <operation> --help` for the current schema; the bundled skill is already updated.
+
+## 0.1.59
+
+Clear recording controls are fully see-through again. The milky surface added in 0.1.58
+looked dark on screen instead of frosted. The glowing red record and stop marks stay.
+
+## 0.1.58
+
+Starting a recording now closes the menu bar menu, so it no longer covers the countdown
+and the floating controls. Clear recording controls have a faint milky surface that sets
+them apart from what is behind them. The red record and stop marks glow, and on dark
+controls the white marks glow too.
+
+## 0.1.57
+
+Scroll bars in the capture menu and the Library float over the content again while a
+mouse is connected, instead of narrowing the menu and cutting off its right edge. Clear
+recording controls now show their see-through glass on screen as soon as a take starts,
+instead of staying dark until another look was chosen.
+
+## 0.1.56
+
+The floating recording controls now sit in macOS Liquid Glass. Settings > Recording >
+Controls Glass chooses clear glass (the default), which lets what is behind the controls
+show through, or light or dark frosted glass that stays easy to read on any background.
+A new setting, Show Controls in Screenshots, lets screenshots and screen sharing see the
+controls. It is off by default, and Yap's own recordings leave the controls out either way.
+
 ## 0.1.55
 
 Agents no longer create presets on their own. When you finish a project whose

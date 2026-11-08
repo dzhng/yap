@@ -174,4 +174,103 @@ func runCaptureJournalTests() async throws {
         "A refused record must leave the sequence the next record reports readable, reported \(reported) read \(afterRefusal.lastSequence) invalid \(afterRefusal.invalidAtSequence as Int?)"
     )
     print("PASS a record the journal could not write leaves the sequence unbroken")
+
+    let schema2 = RecoveryFixture.directory("schema2-mark-refused")
+    defer { try? FileManager.default.removeItem(at: schema2) }
+    let oldJournal = try CaptureJournal(directory: schema2.path, header: CaptureJournalHeader(
+        schemaVersion: 2, sessionID: "schema2", source: CaptureSource(kind: "display"),
+        width: 120, height: 80, microphone: false, systemAudio: false))
+    do {
+        try oldJournal.recordMark(JournalMark(
+            hostUs: 1, sourceUs: 0, epoch: 1, id: "old", kind: "click",
+            points: [JournalMarkPoint(globalX: 1, globalY: 2, x: 1, y: 2, hostUs: 1)]))
+        preconditionFailure("Schema2 journals must refuse marks")
+    } catch let failure as CaptureFailure {
+        precondition(failure.code == "INVALID_JOURNAL")
+    }
+    let schema3 = RecoveryFixture.directory("schema3-mark-writer")
+    defer { try? FileManager.default.removeItem(at: schema3) }
+    let newJournal = try CaptureJournal(directory: schema3.path, header: CaptureJournalHeader(
+        schemaVersion: 3, sessionID: "schema3", source: CaptureSource(kind: "display"),
+        width: 120, height: 80, microphone: false, systemAudio: false))
+    let points = (0..<50_000).map {
+        JournalMarkPoint(globalX: Double($0), globalY: 2, x: Double($0), y: 2, hostUs: Int64($0))
+    }
+    do {
+        try newJournal.recordMark(JournalMark(
+            hostUs: 1, sourceUs: 0, epoch: 1, id: "long", kind: "stroke", points: points))
+        preconditionFailure("Schema3 retains its one-megabyte writer guard")
+    } catch let failure as CaptureFailure {
+        precondition(failure.code == "JOURNAL_FAILED")
+    }
+    try newJournal.recordMark(JournalMark(hostUs: 1, sourceUs: 0, epoch: 1,
+        id: "small", kind: "stroke", points: Array(points.prefix(2))))
+    var written: [JournalMark] = []
+    let bounded = try CaptureJournal.streamEvidence(directory: schema3.path, mark: { written.append($0) })
+    precondition(bounded.invalidAtSequence == nil && written.count == 1
+        && written[0].points == Array(points.prefix(2)),
+        "A refused historical record must neither thin points nor consume a sequence")
+    print("PASS schema3 writer guard and lossless small marks, schema2 refusal")
+
+    let fixtureRoot = RecoveryFixture.directory("schema3-marks-fixture")
+    defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+    let fixtureURL = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("fixtures/journal/schema3-marks.jsonl")
+    try FileManager.default.copyItem(
+        at: fixtureURL, to: fixtureRoot.appendingPathComponent("capture.journal.jsonl"))
+    var fixtureMarks: [JournalMark] = []
+    let fixtureSummary = try CaptureJournal.streamEvidence(
+        directory: fixtureRoot.path, geometry: { _ in }, samples: { _ in },
+        displaySpace: { _ in }, mark: { fixtureMarks.append($0) })
+    precondition(
+        fixtureSummary.invalidAtSequence == nil && fixtureMarks.count == 4
+            && fixtureMarks[0].points[0] == JournalMarkPoint(
+                globalX: 10, globalY: 20, x: 10, y: 20, hostUs: 1100),
+        "Schema3 fixture mark points must retain global and output coordinates")
+    print("PASS schema3 fixture mark points read with cursor-compatible coordinates")
+
+    // A schema-3 crash after a complete stroke retains exactly the writer's prefix.
+    let longStroke = RecoveryFixture.directory("schema3-long-stroke")
+    defer { try? FileManager.default.removeItem(at: longStroke) }
+    let longURL = longStroke.appendingPathComponent("capture.journal.jsonl")
+    try FileManager.default.copyItem(at: fixtureURL.deletingLastPathComponent()
+        .appendingPathComponent("schema3-long-stroke.jsonl"), to: longURL)
+    let original = try Data(contentsOf: longURL)
+    var longMarks: [JournalMark] = []
+    let wholeStroke = try CaptureJournal.streamEvidence(directory: longStroke.path,
+        mark: { longMarks.append($0) })
+    precondition(wholeStroke.finished && wholeStroke.invalidAtSequence == nil
+        && longMarks.count == 1 && longMarks[0].points.count == 660)
+    for (size, invalid) in [(1_048_576, false), (1_048_577, true)] {
+        try (original + Data(repeating: 120, count: size)).write(to: longURL)
+        let tail = try CaptureJournal.streamEvidence(directory: longStroke.path)
+        precondition(tail.lastSequence == 5 && tail.finished
+            && tail.invalidAtSequence == (invalid ? 6 : nil)
+            && tail.incompleteTail == !invalid,
+            "Schema-3 tail at \(size) bytes must keep its historical disposition")
+    }
+    print("PASS schema3 long stroke and exact oversized/torn-tail boundary")
+    for name in ["schema4-marks", "schema4-undone"] {
+        let directory = RecoveryFixture.directory(name)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.copyItem(at: fixtureURL.deletingLastPathComponent()
+            .appendingPathComponent(name + ".jsonl"), to: directory.appendingPathComponent("capture.journal.jsonl"))
+        var marks: [JournalMark] = []
+        let summary = try CaptureJournal.streamEvidence(directory: directory.path, mark: { marks.append($0) })
+        precondition(summary.finished && summary.invalidAtSequence == nil
+            && summary.header?.schemaVersion == 4
+            && JournalSchema.cursorSampling(summary.header!) == CursorSampling())
+        precondition(marks.prefix(2).map(\.id) == ["pin", "stroke"]
+            && marks[1].points.map(\.hostUs) == [1200, 1300])
+        precondition(marks.compactMap(\.retracts) == (name == "schema4-undone" ? ["pin", "stroke"] : []))
+    }
+    let summaryFixture = try JSONDecoder().decode(CapturePublishedSource.self, from: Data(contentsOf:
+        fixtureURL.deletingLastPathComponent().appendingPathComponent("schema4-summary.json")))
+    precondition(summaryFixture.take?.kind == .display && summaryFixture.marks?.pins == true
+        && summaryFixture.marks?.strokes == true)
+    print("PASS shared schema4 journal and take-summary fixtures")
+
 }

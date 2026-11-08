@@ -114,7 +114,7 @@ test(
           !["failed", "unavailable", "canceled"].includes(result.data.state),
           JSON.stringify(result.data),
         );
-        return result.data.state === "committed" && result.data;
+        return result.data.state === "ready" && result.data;
       });
       assert.equal(status.snapshot.revisionId, f.placed.revision.id);
       const output = await readFile(join(f.output, request.leaf));

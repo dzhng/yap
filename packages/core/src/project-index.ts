@@ -44,7 +44,7 @@ export type ProjectIndexCoverage = { project: TimeRange } & (
 export type ProjectIndexRecords = {
   identity: ProjectIndexIdentity;
   candidate: ProjectIndexCandidate;
-  frame: Omit<ProjectFrameArtifact, "cacheId">;
+  frame: z.infer<typeof retainedProjectFrameSchema>;
   coverage: ProjectIndexCoverage;
 };
 
@@ -57,12 +57,12 @@ export const portableProjectIndexMetadataSchema = projectPictureOptionsSchema
     projectId: z.string().min(1),
     revisionId: z.string().min(1),
     generation: z.string().min(1).max(256),
-    selectionPolicy: z.literal(projectIndexPolicy.id),
-    scenes: z.array(portableSceneMetadataSchema).max(25000),
+    selectionPolicy: z.string().min(1).max(256),
+    scenes: z.array(portableSceneMetadataSchema),
     durationUs: portableTime,
-    candidateCount: portableTime.max(25000),
-    coverageCount: portableTime.max(25000),
-    bytes: portableTime,
+    candidateCount: portableTime,
+    coverageCount: portableTime,
+    sizeBytes: portableTime,
   })
   .strict();
 export const portableProjectIndexRecordSchema = z.discriminatedUnion("kind", [
@@ -88,6 +88,11 @@ export const portableProjectIndexRecordSchema = z.discriminatedUnion("kind", [
             }),
             z.strictObject({
               kind: z.enum(["first", "last", "coverage"]),
+              projectAtUs: timeValueSchema,
+            }),
+            z.strictObject({
+              kind: z.enum(["mark", "pin", "click"]),
+              markId: z.string().min(1),
               projectAtUs: timeValueSchema,
             }),
             z.strictObject({
@@ -247,7 +252,7 @@ export function projectIndexDomain(
     return active;
   }
   return {
-    owner: (identity) => ({ kind: "project", projectId: identity.projectId }),
+    owner: (identity) => ({ kind: "project", id: identity.projectId }),
     pin: (identity) => ({
       projectId: identity.projectId,
       revisionId: identity.revisionId,
@@ -266,7 +271,7 @@ export function projectIndexDomain(
     }),
     begin(identity, admission) {
       if (admission === "produced" && identity.implementationId !== support.implementationId)
-        throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {}, true);
+        throw new CatalogError("NOT_READY", "Pinned picture renderer is unavailable", {});
       if (!identity.generation || identity.selectionPolicy !== projectIndexPolicy.id)
         invalid("Project index selection identity is unavailable");
       const { plan } = resolve(identity, admission);
@@ -278,7 +283,7 @@ export function projectIndexDomain(
         if (dependency.owner.kind !== "asset" || dependency.source.kind !== "asset")
           invalid("Project scenes require a selected video source");
         const selection = {
-          assetId: dependency.owner.assetId,
+          assetId: dependency.owner.id,
           streamId: dependency.source.streamId,
           ...(dependency.source.acquisitionId === undefined
             ? {}
@@ -367,6 +372,7 @@ export function projectIndexDomain(
         invalid("A nonempty project index requires a delivered picture");
       active = undefined;
     },
-    isDeleting: (owner) => owner.kind === "project" && read.isDeleting(owner.projectId),
+    isDeleting: (owner) => owner.kind === "project" && read.isDeleting(owner.id),
+    retainedFrame: retainedProjectFrameSchema,
   };
 }

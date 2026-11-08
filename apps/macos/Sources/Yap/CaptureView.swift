@@ -1,16 +1,6 @@
 import AppKit
 import YapControls
 
-/// Presentation requests. Existing operations retain ControlsAction; new source/device intents
-/// are admitted by RecordingControls when the production shell binds this view.
-enum CaptureViewIntent: Equatable {
-    case controls(ControlsAction)
-    case chooseSource(CaptureViewInput.Source)
-    case camera(String?)
-    case countdown(Bool)
-    case openLibrary
-}
-
 /// Immutable rendering facts, never an owner of selections, permission, recording state or time.
 struct CaptureViewInput: Equatable {
     enum Source: String, CaseIterable { case display, window, area, cameraOnly }
@@ -36,9 +26,13 @@ struct CaptureViewInput: Equatable {
     let cameraChoices: [Choice]
     let selectedCamera: Int
     var cameraOn: Bool
+    /// Whether the Mac has a camera; without one the camera row is disabled and off.
+    var cameraAvailable = true
     let microphoneChoices: [Choice]
     let selectedMicrophone: Int
     let microphoneOn: Bool
+    /// Whether the Mac has a microphone; without one the microphone row is disabled and off.
+    var microphoneAvailable = true
     let systemAudio: Bool
     let countdown: Bool
     let inputsEnabled: Bool
@@ -48,9 +42,11 @@ struct CaptureViewInput: Equatable {
     var notices: [String] = []
     /// A message from the Yap team for this version; it leads the panel as a banner.
     var adminMessage: String?
+    var failureMessage: String?
+    var failureAction: PresentedControlsAction?
     var permissionActions: [PresentedControlsAction] = []
     var transport: [PresentedControlsAction] = []
-    var startTitle: String = "Start Recording"
+    var startTitle: String? = "Start Recording"
     var startShortcut: String? = nil
     var lastRecording: LastRecording? = nil
     /// The running take reserved a camera, so its switch turns that camera on and off while the
@@ -66,7 +62,7 @@ final class CaptureView: NSView {
     private(set) var input: CaptureViewInput
     private let perform: (CaptureViewIntent) -> Void
     private let appIcon: NSImage?
-    let scrollView = NSScrollView()
+    let scrollView = OverlayScrollView()
     private let document = CaptureDocument()
     private let footer = CaptureDocument()
     private static let footerHeight: CGFloat = 62
@@ -86,7 +82,6 @@ final class CaptureView: NSView {
         wantsLayer = true
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
-        scrollView.scrollerStyle = .overlay
         scrollView.verticalScrollElasticity = .none
         scrollView.documentView = document
         addSubview(scrollView)
@@ -230,6 +225,7 @@ final class CaptureView: NSView {
         }
         if popup.indexOfSelectedItem != selected { popup.selectItem(at: values.indices.contains(selected) ? selected : -1) }
         popup.isEnabled = input.inputsEnabled && !values.isEmpty && (id != "source.device" || input.screenSourcesEnabled)
+            && (id != "camera.device" || input.cameraAvailable) && (id != "microphone.device" || input.microphoneAvailable)
         popup.target = self
         popup.action = #selector(selectChoice(_:))
         popup.identifier = .init(id)
@@ -318,14 +314,38 @@ final class CaptureView: NSView {
                 label(id == "systemAudio" ? "System audio" : "3-second countdown", NSRect(x: 46, y: textY, width: 238, height: 18), size: 12, color: input.inputsEnabled ? .labelColor : .secondaryLabelColor)
             }
             if let subtitle { label(subtitle, NSRect(x: 46, y: y + 25, width: 232, height: 16), size: 10, color: .secondaryLabelColor) }
-            if id == "camera", CapturePresentation.cameraIsRequired(cameraOnly: input.selectedSource == .cameraOnly, selectedCameraIndex: input.selectedCamera) {
-                label("Required", NSRect(x: 280, y: centerY - 8, width: 56, height: 16), size: 10, weight: .medium, color: .systemBlue)
-            } else {
-                toggle(id == "systemAudio" ? "System audio" : id.capitalized, id: "\(id).toggle", frame: NSRect(x: 296, y: centerY - 9, width: 38, height: 18), intent: intent, on: on, enabled: input.inputsEnabled || (id == "camera" && input.liveCamera))
-            }
+            // A camera-only take's camera is its source, so its switch is on and cannot be turned off.
+            toggle(id == "systemAudio" ? "System audio" : id.capitalized, id: "\(id).toggle", frame: NSRect(x: 296, y: centerY - 9, width: 38, height: 18), intent: intent, on: on,
+                   enabled: (input.inputsEnabled || (id == "camera" && input.liveCamera))
+                       && (id != "camera" || (input.cameraAvailable && input.selectedSource != .cameraOnly))
+                       && (id != "microphone" || input.microphoneAvailable))
             y += rowHeight
         }
         y += 12
+        if let message = input.failureMessage {
+            let text = NSTextField(wrappingLabelWithString: message)
+            text.font = .systemFont(ofSize: 11)
+            text.textColor = .secondaryLabelColor
+            let styled = NSMutableAttributedString(attributedString: text.attributedStringValue)
+            let lead = (message as NSString).range(of: ":")
+            if lead.location != NSNotFound {
+                styled.addAttribute(.foregroundColor, value: NSColor.systemOrange, range: NSRange(location: 0, length: lead.location + 1))
+            }
+            text.attributedStringValue = styled
+            let height = max(18, ceil(text.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: 322, height: CGFloat.greatestFiniteMagnitude)).height ?? 0))
+            text.frame = NSRect(x: 16, y: y, width: 322, height: height)
+            document.addSubview(text)
+            y += height + 8
+            var actionX: CGFloat = 18
+            if let action = input.failureAction {
+                button(action.title, id: action.action.id, frame: NSRect(x: actionX, y: y, width: 64, height: 24),
+                       intent: .controls(action.action), kind: .secondary, enabled: action.enabled)
+                actionX += 72
+            }
+            button("Dismiss", id: ControlsAction.dismissFailure.id, frame: NSRect(x: actionX, y: y, width: 72, height: 24),
+                   intent: .controls(.dismissFailure), kind: .secondary, enabled: true)
+            y += 36
+        }
         if !input.notices.isEmpty || !input.permissionActions.isEmpty {
             for notice in input.notices {
                 let font = NSFont.systemFont(ofSize: 11)
@@ -364,8 +384,10 @@ final class CaptureView: NSView {
             }
             y += 8
         }
-        button(input.startTitle == "Start Recording" ? "Start recording" : input.startTitle, id: "capture.start", frame: NSRect(x: 17, y: y, width: 320, height: 36), intent: .controls(.startOrStop), kind: .primary(shortcut: input.startShortcut), enabled: input.startEnabled)
-        y += 36
+        if let title = input.startTitle {
+            button(title == "Start Recording" ? "Start recording" : title, id: "capture.start", frame: NSRect(x: 17, y: y, width: 320, height: 36), intent: .controls(.startOrStop), kind: .primary(shortcut: input.startShortcut), enabled: input.startEnabled)
+            y += 36
+        }
         for action in input.transport {
             y += 8
             button(action.title, id: action.action.id, frame: NSRect(x: 17, y: y, width: 320, height: 28), intent: .controls(action.action), kind: .secondary, enabled: action.enabled)
@@ -482,11 +504,10 @@ final class SourcePickerButton: NSButton {
         }
         let visible = gap + 4.5 * (height + gap)
         guard content.frame.height > visible else { return content }
-        let scroller = NSScrollView(frame: NSRect(x: 0, y: 0, width: content.frame.width, height: visible))
+        let scroller = OverlayScrollView(frame: NSRect(x: 0, y: 0, width: content.frame.width, height: visible))
         scroller.appearance = content.appearance
         scroller.drawsBackground = false
         scroller.hasVerticalScroller = true
-        scroller.scrollerStyle = .overlay
         scroller.documentView = content
         if values.indices.contains(selected) {
             content.scrollToVisible(content.subviews[selected].frame.insetBy(dx: 0, dy: -gap))

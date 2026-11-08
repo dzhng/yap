@@ -93,18 +93,29 @@ for (const evict of [false, true])
     await f.jobs.idle();
     if (evict) {
       assert.equal(state.state, "failed");
-      assert.equal(f.jobs.job(state.jobId).errorCode, "NOT_READY");
+      assert.equal(f.jobs.job(state.jobId).errorCode, "PINNED_IMPLEMENTATION_UNAVAILABLE");
       await assert.rejects(readFile(join(f.output, request.leaf)));
+      const snapshot = f.exports.status(request.exportId).snapshot;
       f.replaceRenderer("project-owner-fixture-v1");
-      await f.exports.retry(request.exportId);
+      const attemptsBeforeRetry = renders;
+      await assert.rejects(f.exports.retry(request.exportId), {
+        code: "PINNED_IMPLEMENTATION_UNAVAILABLE",
+        retryable: false,
+      });
+      assert.equal(renders, attemptsBeforeRetry);
+      assert.deepEqual(f.exports.status(request.exportId).snapshot, snapshot);
+      f.replaceRenderer("project-owner-fixture-v2");
+      const fresh = { ...f.request(), leaf: request.leaf };
+      await f.exports.create(fresh);
       await until(() => {
-        const value = f.exports.status(request.exportId);
+        const value = f.exports.status(fresh.exportId);
         return value.state === "committed" && !value.cleanupPending;
       });
+      assert.equal(renders, attemptsBeforeRetry + 1);
       assert.equal(
         JSON.parse(await readFile(join(f.output, request.leaf), "utf8")).manifest.requirements[0]
           .implementationId,
-        "project-owner-fixture-v1",
+        "project-owner-fixture-v2",
       );
     } else {
       assert.equal(state.state, "committed");
@@ -113,7 +124,7 @@ for (const evict of [false, true])
         "project-owner-fixture-v1",
       );
     }
-    assert.equal(renders, evict ? 2 : 1);
+    if (!evict) assert.equal(renders, 1);
     await f.exports.abandon(request.exportId);
     assert.throws(
       () => f.exports.status(request.exportId),
@@ -258,7 +269,7 @@ test("project retirement drains a late publication, removes only private state a
   await f.exports.create(request);
   await started.promise;
   f.projects.markDeleting(f.projectId);
-  const owner = { kind: "project", projectId: f.projectId };
+  const owner = { kind: "project", id: f.projectId };
   const retiring = Promise.all([f.jobs.drainOwner(owner), f.exports.retireOwner(owner)]);
   assert.ok(f.assets.references(f.asset.id).length > 0);
   await assert.rejects(
@@ -282,7 +293,7 @@ test("project retirement drains a late publication, removes only private state a
   );
 });
 
-test("explicit export retry recovers a queued preview after its pinned renderer returns", async (t) => {
+test("export retry preserves a refused pin and fresh work uses the current renderer", async (t) => {
   const started = gate(),
     release = gate();
   t.after(() => release.resolve());
@@ -307,15 +318,23 @@ test("explicit export retry recovers a queued preview after its pinned renderer 
   await f.jobs.idle();
   f.replaceRenderer("project-owner-fixture-v1");
   assert.equal((await f.preview.request({ projectId: f.projectId })).state, "failed");
-  await f.exports.retry(request.exportId);
+  const snapshot = f.exports.status(request.exportId).snapshot;
+  await assert.rejects(f.exports.retry(request.exportId), {
+    code: "PINNED_IMPLEMENTATION_UNAVAILABLE",
+    retryable: false,
+  });
+  assert.deepEqual(f.exports.status(request.exportId).snapshot, snapshot);
+  f.replaceRenderer("project-owner-fixture-v2");
+  const fresh = f.request();
+  await f.exports.create(fresh);
   const result = await until(() => {
-    const value = f.exports.status(request.exportId);
+    const value = f.exports.status(fresh.exportId);
     if (value.state === "failed") throw new Error(JSON.stringify(value));
     return value.state === "committed" && !value.cleanupPending && value;
   });
   assert.equal(
     JSON.parse(await readFile(result.output, "utf8")).manifest.requirements[0].implementationId,
-    "project-owner-fixture-v1",
+    "project-owner-fixture-v2",
   );
 });
 
@@ -325,7 +344,7 @@ test("polling and export retry leave unrelated failed preview dependencies alone
   const f = await fixture(t, {
     render: async (request, signal, ordinary) => {
       renders++;
-      if (fail) throw new CatalogError("DECODE_FAILED", "fixture dependency", {}, true);
+      if (fail) throw new CatalogError("DECODE_FAILED", "fixture dependency");
       return ordinary(request, signal);
     },
   });
@@ -357,14 +376,14 @@ test("polling and export retry leave unrelated failed preview dependencies alone
   assert.equal(renders, 2);
 });
 
-test("stale export implementation absence does not retry a newer decode failure", async (t) => {
+test("retrying a vanished export pin leaves a fresh preview decode failure alone", async (t) => {
   let fail = false,
     renders = 0;
   const f = await fixture(t, {
     admission: false,
     render: async (request, signal, ordinary) => {
       renders++;
-      if (fail) throw new CatalogError("DECODE_FAILED", "newer failure", {}, true);
+      if (fail) throw new CatalogError("DECODE_FAILED", "newer failure");
       return ordinary(request, signal);
     },
   });
@@ -383,16 +402,20 @@ test("stale export implementation absence does not retry a newer decode failure"
   f.replaceRenderer("project-owner-fixture-v2");
   f.jobs.startAdmission((job) => f.exports.admit(job));
   await until(() => f.exports.status(request.exportId).state === "failed");
-  assert.equal(f.jobs.job(f.exports.status(request.exportId).jobId).errorCode, "NOT_READY");
+  assert.equal(
+    f.jobs.job(f.exports.status(request.exportId).jobId).errorCode,
+    "PINNED_IMPLEMENTATION_UNAVAILABLE",
+  );
   release.resolve();
   await f.jobs.idle();
-  f.replaceRenderer("project-owner-fixture-v1");
   fail = true;
-  await f.preview.retry({ projectId: f.projectId });
+  await f.preview.request({ projectId: f.projectId });
   await until(async () => (await f.preview.request({ projectId: f.projectId })).state === "failed");
   fail = false;
-  await f.exports.retry(request.exportId);
-  await until(() => ["failed", "committed"].includes(f.exports.status(request.exportId).state));
+  await assert.rejects(f.exports.retry(request.exportId), {
+    code: "PINNED_IMPLEMENTATION_UNAVAILABLE",
+    retryable: false,
+  });
   await f.jobs.idle();
   assert.equal(f.exports.status(request.exportId).state, "failed");
   assert.equal(renders, 1);
@@ -408,7 +431,7 @@ test("staged project bytes retry after renderer replacement without rendering ag
     },
     wrap: (worker) => async (operation, params, options) => {
       if (operation === "publication.commit" && rejectCommit)
-        throw new CatalogError("FIXTURE_COMMIT_INTERRUPTED", "Staged before commit", {}, true);
+        throw new CatalogError("STORAGE_BUSY", "Staged before commit");
       return worker(operation, params, options);
     },
   });
@@ -477,11 +500,17 @@ test("settings-free export replay retains its original request identity", async 
   assert.deepEqual(replay.snapshot, first.snapshot);
 });
 
-test("abandonment during preview retry cannot resurrect an export job", async (t) => {
+test("abandonment during preview preparation cannot resurrect an export job", async (t) => {
   const started = gate(),
     release = gate();
   t.after(() => release.resolve());
-  const f = await fixture(t);
+  let fail = true;
+  const f = await fixture(t, {
+    render: async (request, signal, ordinary) => {
+      if (fail) throw new CatalogError("DECODE_FAILED", "Retryable preview failure");
+      return ordinary(request, signal);
+    },
+  });
   const context = f.jobs.createContext(async () => {
     started.resolve();
     await release.promise;
@@ -491,13 +520,11 @@ test("abandonment during preview retry cannot resurrect an export job", async (t
   await started.promise;
   const request = f.request();
   await f.exports.create(request);
-  f.replaceRenderer("project-owner-fixture-v2");
   release.resolve();
   await until(() => f.exports.status(request.exportId).state === "failed");
   await f.jobs.idle();
-  f.replaceRenderer("project-owner-fixture-v1");
+  fail = false;
   const retry = f.exports.retry(request.exportId);
-  await Promise.resolve();
   const abandoning = f.exports.abandon(request.exportId);
   await assert.rejects(retry, (error) => ["EXPORT_ABANDONING", "NOT_FOUND"].includes(error.code));
   await abandoning;
@@ -522,44 +549,41 @@ test("export discovery pages pinned summaries without admitting work and binds c
       leaf: exportId + ".mp4",
     });
   const page = f.exports.list({ limit: 2, unfinishedOnly: true });
-  assert.deepEqual(page.nextCursor, {
-    projectId: null,
-    unfinishedOnly: true,
-    afterExportId: ids[1],
-  });
+  assert.equal(typeof page.nextCursor, "string");
   assert.deepEqual(
-    page.exports.map((row) => row.exportId),
-    ids.slice(0, 2),
+    page.exports.map((row) => row.id),
+    ids.slice(1).reverse(),
   );
   assert.deepEqual(page.exports[0], {
-    exportId: ids[0],
+    id: ids[2],
     projectId: f.projectId,
     kind: "video",
     revisionId: f.placed.revision.id,
+    jobId: page.exports[0].jobId,
     state: "queued",
     abandoning: false,
     cleanupPending: false,
   });
-  assert.throws(() => f.exports.list({ cursor: page.nextCursor }), /cursor.*filters/i);
   assert.throws(
-    () =>
-      f.exports.list({
-        unfinishedOnly: true,
-        projectId: f.projectId,
-        cursor: page.nextCursor,
-      }),
-    /cursor.*filters/i,
+    () => f.exports.list({ cursor: page.nextCursor }),
+    (error) => error.code === "INVALID_PARAMS",
+  );
+  assert.throws(
+    () => f.exports.list({ unfinishedOnly: true, projectId: f.projectId, cursor: page.nextCursor }),
+    (error) => error.code === "INVALID_PARAMS",
   );
   assert.deepEqual(
-    f.exports
-      .list({ unfinishedOnly: true, cursor: page.nextCursor })
-      .exports.map((row) => row.exportId),
-    ids.slice(2),
+    f.exports.list({ unfinishedOnly: true, cursor: page.nextCursor }).exports.map((row) => row.id),
+    [ids[0]],
   );
-  const continuation = { unfinishedOnly: true, cursor: page.nextCursor };
+  const continuation = { unfinishedOnly: true, cursor: page.nextCursor, limit: 100 };
   assert.deepEqual(
     operationSchema.parse({ operation: "export.list", params: continuation }).params,
     continuation,
+  );
+  assert.equal(
+    operationSchema.parse({ operation: "export.list", params: { limit: 1000 } }).params.limit,
+    1000,
   );
   const arrival = "00000000-0000-4000-8000-000000000000";
   await f.exports.create({
@@ -570,18 +594,16 @@ test("export discovery pages pinned summaries without admitting work and binds c
     leaf: "new.mp4",
   });
   assert.deepEqual(
-    f.exports
-      .list({ unfinishedOnly: true, cursor: page.nextCursor })
-      .exports.map((row) => row.exportId),
-    [ids[2]],
+    f.exports.list({ unfinishedOnly: true, cursor: page.nextCursor }).exports.map((row) => row.id),
+    [ids[0]],
   );
-  assert.equal(f.exports.list({ unfinishedOnly: true }).exports[0].exportId, arrival);
+  assert.equal(f.exports.list({ unfinishedOnly: true }).exports[0].id, arrival);
   assert.deepEqual(f.exports.list({ projectId: randomUUID() }).exports, []);
   await f.exports.abandon(arrival);
   await f.exports.abandon(ids[1]);
   assert.deepEqual(
-    f.exports.list({}).exports.map((row) => row.exportId),
-    [ids[0], ids[2]],
+    f.exports.list({}).exports.map((row) => row.id),
+    [ids[2], ids[0]],
   );
   assert.deepEqual(await readdir(f.output), []);
   assert.equal(f.exports.status(ids[0]).state, "queued");

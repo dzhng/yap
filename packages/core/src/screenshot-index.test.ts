@@ -117,7 +117,7 @@ test("pages and filtered coverage remain bounded and reject unrelated anchors", 
   expect(() => f.index.page({ identity: f.identity, afterOrdinal: 50 })).toThrow(
     expect.objectContaining({ code: "NOT_FOUND" }),
   );
-  expect(() => f.index.page({ identity: f.identity, limit: 201 })).toThrow("limit");
+  expect(() => f.index.page({ identity: f.identity, limit: 201 })).not.toThrow();
   expect(() =>
     f.index.coveragePage({ identity: f.identity, candidateOrdinal: 0, afterSequence: 1 }),
   ).toThrow("outside");
@@ -160,7 +160,7 @@ test("canceling final validation hides partial evidence and prevents late append
   controller.abort();
   await expect(finishing).rejects.toThrow();
   expect(() => f.index.page({ identity: f.identity })).toThrow("complete");
-  await f.index.reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false);
+  await f.index.reclaim({ kind: "asset", id: f.identity.assetId }, () => false);
   expect(() => f.index.outputPath(f.identity, 0)).toThrow("identity");
 });
 test("an acquired read survives deletion while new reads fail", async () => {
@@ -193,15 +193,15 @@ test("retained evidence survives derived cache eviction and owner-directed recla
     f.home,
     (owner) => {
       if (owner.kind !== "asset") throw new Error("asset only");
-      f.assets.get(owner.assetId);
+      f.assets.get(owner.id);
     },
     png.length,
   );
   await cache.reconcile();
-  const reserved = cache.reserve({ kind: "asset", assetId: f.identity.assetId });
+  const reserved = cache.reserve({ kind: "asset", id: f.identity.assetId });
   writeFileSync(reserved.path, png);
   await cache.publish(reserved.id);
-  const later = cache.reserve({ kind: "asset", assetId: f.identity.assetId });
+  const later = cache.reserve({ kind: "asset", id: f.identity.assetId });
   writeFileSync(later.path, png);
   await cache.publish(later.id);
   expect(cache.acquire(reserved.id)).toBeNull();
@@ -213,11 +213,11 @@ test("retained evidence survives derived cache eviction and owner-directed recla
   const stray = f.index.outputPath(partial, 0);
   writeFileSync(stray, png);
   await f.index.reclaim(
-    { kind: "asset", assetId: f.identity.assetId },
+    { kind: "asset", id: f.identity.assetId },
     (id) => id.generation === f.identity.generation,
   );
   expect(existsSync(stray)).toBe(false);
-  expect(f.index.page({ identity: f.identity }).entries[0]?.frame.bytes).toBe(png.length);
+  expect(f.index.page({ identity: f.identity }).entries[0]?.frame.sizeBytes).toBe(png.length);
 });
 test.for([false, true])(
   "replaced, symlinked and hard-linked images are refused (remounted: %s)",
@@ -305,11 +305,14 @@ test("a substituted FIFO is rejected without blocking file validation", async ()
      s=>selectSource(assets,acquisitions,s),new SceneEvidenceStore(catalog,assetSceneOwner(assets,acquisitions)),null)).openRead(${JSON.stringify(f.identity)},0);
    process.exitCode=1;
  } catch(error) {
-   console.log(JSON.stringify({code:error.code,message:error.message}));
+   process.stdout.write(JSON.stringify({code:error.code,message:error.message}));
  } finally {catalog.close();}
  `,
     ],
-    { timeout: 1000, encoding: "utf8" },
+    // Opening a FIFO for reading blocks until a writer appears, which never happens here, so a
+    // blocking read never returns. The bound only has to beat that, not a loaded machine's
+    // startup of a TypeScript-transforming Node child.
+    { timeout: 20_000, encoding: "utf8" },
   );
   expect(child.stderr).toBe("");
   expect(child.error).toBeUndefined();
@@ -318,7 +321,7 @@ test("a substituted FIFO is rejected without blocking file validation", async ()
     code: "INVALID_EVIDENCE",
     message: "Invalid retained PNG file or byte receipt",
   });
-});
+}, 30_000);
 test("one damaged generation does not starve unrelated reclamation", async () => {
   const f = await fixture();
   f.index.begin(f.identity);
@@ -331,13 +334,13 @@ test("one damaged generation does not starve unrelated reclamation", async () =>
   writeFileSync(nextPath, png);
   writeFileSync(join(image.frame.file, "..", "unexpected.txt"), "foreign file");
   const error = await f.index
-    .reclaim({ kind: "asset", assetId: f.identity.assetId }, () => false)
+    .reclaim({ kind: "asset", id: f.identity.assetId }, () => false)
     .catch((error) => error);
   expect(error).toBeInstanceOf(Error);
   expect(existsSync(nextPath)).toBe(false);
   expect(() => f.index.page({ identity: f.identity })).toThrow("complete");
 });
-test("candidate and coverage pages cap work independently at 50 by default and 200 maximum", async () => {
+test("candidate and coverage pages cap work independently at 100 by default and 1000 maximum", async () => {
   const f = await fixture();
   f.index.begin(f.identity);
   for (let i = 0; i < 205; i++) add(f, i, i * 1000);
@@ -345,7 +348,7 @@ test("candidate and coverage pages cap work independently at 50 by default and 2
     cover(f, i % 2, Math.floor((i * 10_000_000) / 205), Math.floor(((i + 1) * 10_000_000) / 205));
   await f.index.finish(f.identity);
   expect(f.index.page({ identity: f.identity }).entries.map((e) => e.candidate.ordinal)).toEqual(
-    Array.from({ length: 50 }, (_, i) => i),
+    Array.from({ length: 100 }, (_, i) => i),
   );
   const first = f.index.page({ identity: f.identity, limit: 200 });
   expect(first.nextOrdinal).toBe(199);
@@ -354,7 +357,7 @@ test("candidate and coverage pages cap work independently at 50 by default and 2
       .page({ identity: f.identity, afterOrdinal: first.nextOrdinal! })
       .entries.map((e) => e.candidate.ordinal),
   ).toEqual([200, 201, 202, 203, 204]);
-  expect(f.index.coveragePage({ identity: f.identity }).nextSequence).toBe(49);
+  expect(f.index.coveragePage({ identity: f.identity }).nextSequence).toBe(99);
   const coverage = f.index.coveragePage({ identity: f.identity, limit: 200 });
   expect(coverage.nextSequence).toBe(199);
   expect(

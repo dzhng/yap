@@ -52,10 +52,10 @@ async function fixture() {
     targets: {
       pin: (target) => {
         if (target.kind !== "asset") throw Error("asset required");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
-      isAvailable: (target) => target.kind === "asset" && assets.has(target.assetId),
+      isAvailable: (target) => target.kind === "asset" && assets.has(target.id),
       isDeleting: () => false,
       isCapturing: () => false,
     },
@@ -106,7 +106,7 @@ test("conversion admission canonicalizes explicit selection and retains the immu
   expect(first.jobId).toBeTruthy();
   expect(replay.jobId).toBe(first.jobId);
   expect(f.assets.references(f.asset.id)).toContainEqual({ kind: "job-input", id: first.jobId });
-  expect(f.jobs.job(first.jobId!).target).toEqual({ kind: "asset", assetId: f.asset.id });
+  expect(f.jobs.job(first.jobId!).target).toEqual({ kind: "asset", id: f.asset.id });
   const unavailable = new AssetConversionJobs({
     assets: f.assets,
     jobs: f.jobs,

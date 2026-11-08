@@ -56,7 +56,7 @@ export function portableProjectSpeakers(
   previous?: PortableSpeakerCheckpoint,
 ): PortableSpeakerCheckpoint {
   const { manifest: archive, files } = context;
-  if (archive.snapshot.project.projectId !== input.projectId)
+  if (archive.snapshot.project.id !== input.projectId)
     throw new CatalogError("NOT_FOUND", "Project is outside this package");
   const cursor = input.cursor as ProjectEvidenceCursor | undefined;
   if (
@@ -166,7 +166,7 @@ export function portableProjectSpeakers(
       for (const resource of resources) {
         const source = resource.metadata.source;
         if (
-          resource.metadata.owner.assetId === selection.assetId &&
+          resource.metadata.owner.id === selection.assetId &&
           source.streamId === selection.streamId &&
           source.acquisitionId === (selection.acquisitionId ?? null) &&
           source.channel === input.channel &&

@@ -48,7 +48,7 @@ export class CaptureSources {
             sourceId,
           );
           return {
-            target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+            target: { kind: "acquisition", id: intent.acquisitionId },
             artifact: "acquisition.import",
             lane: "heavy",
             input: "capture",
@@ -60,6 +60,13 @@ export class CaptureSources {
       }
     }
     if (failed) throw failure;
+  }
+
+  /** An unfinished import whose donor recording was discarded or deleted can never finish. */
+  orphaned(acquisitionId: string): boolean {
+    return this.acquisitions
+      .recordingDonors(acquisitionId, this.recordings)
+      .some((recordingId) => !this.captures.isAvailable(recordingId));
   }
 
   /** Ready acquisitions own their originals; every unfinished managed donor must remain available. */
@@ -99,7 +106,7 @@ export class CaptureSources {
       if (!imports.length) return;
       yield imports.flatMap((intent) => {
         const { jobId } = this.jobs.status({
-          target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+          target: { kind: "acquisition", id: intent.acquisitionId },
           artifact: "acquisition.import",
           input: intent.kind === "capture" ? "capture" : JSON.stringify(intent.files),
         });
@@ -169,9 +176,9 @@ export class CaptureSources {
   }
 
   describe(
-    snapshot: Pick<Recording, "recordingId">,
+    snapshot: Pick<Recording, "id">,
   ): Recording & { sourceAdmissions: CaptureSourceAdmission[] } {
-    const recording = this.captures.get(snapshot.recordingId);
+    const recording = this.captures.get(snapshot.id);
     if (!recording.publication?.inputsClosed || recording.state === "canceled")
       return { ...recording, sourceAdmissions: [] };
     return {
@@ -197,7 +204,7 @@ export class CaptureSources {
     }
     const status = intent
       ? this.jobs.status({
-          target: { kind: "acquisition", acquisitionId: intent.acquisitionId },
+          target: { kind: "acquisition", id: intent.acquisitionId },
           artifact: "acquisition.import",
           input: "capture",
         })

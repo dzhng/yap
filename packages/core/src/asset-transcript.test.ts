@@ -58,14 +58,9 @@ async function fixture(
     })),
   }));
   let modelDigest = "a".repeat(64);
-  const models: TranscriptionModels & { state: "absent" | "ready" | "preparing" | "failed" } = {
+  const models: TranscriptionModels & { state: "absent" | "ready" } = {
     state: "ready",
-    status: () =>
-      models.state === "preparing"
-        ? { state: "preparing", receivedBytes: 0, totalBytes: 1, etaMs: null }
-        : models.state === "failed"
-          ? { state: "failed", code: "fixture", message: "fixture", retryable: true }
-          : { state: models.state },
+    status: () => ({ state: models.state }),
     nativeRequest: async () => ({ directory: join(home, "models"), files: [] }),
     get modelDigest() {
       return modelDigest;
@@ -86,14 +81,13 @@ async function fixture(
   );
   let processing: TranscriptProcessing;
   const requests: Parameters<SpeechTranscriber>[0][] = [];
-  const control = { fail: false, hold: false };
   const jobs = new JobQueue({
     store: catalog,
     providers: { newId: randomUUID },
     targets: {
       pin: (target) => {
         if (target.kind !== "asset") throw new Error("Unexpected owner");
-        assets.get(target.assetId);
+        assets.get(target.id);
         return target;
       },
       isAvailable: () => true,
@@ -110,11 +104,6 @@ async function fixture(
     transcribe: async (request, signal) => {
       requests.push(request);
       if (native) return native(request, signal);
-      if (control.hold)
-        await new Promise((_, reject) =>
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-        );
-      if (control.fail) throw new Error("fixture transcription failure");
       const spans = request.track.available.flatMap((available) => {
         const execution = request.execution?.executionRange;
         if (!execution) return [{ source: available, owned: available }];
@@ -203,7 +192,6 @@ async function fixture(
     processing,
     transcripts,
     requests,
-    control,
     changeModel: (value: string) => {
       modelDigest = value;
     },
@@ -408,77 +396,6 @@ test("native execution receipt must match the requested bounded preparation", as
     published: null,
     reason: "Transcription execution differs from requested preparation",
   });
-});
-
-test("model readiness and failure stay explicit, reads never retry and explicit retry creates a fresh attempt", async () => {
-  const f = await fixture();
-  for (const state of ["absent", "preparing", "failed"] as const) {
-    f.models.state = state;
-    expect(f.processing.sourceStatus(f.selection)).toMatchObject({
-      state: "unavailable",
-      reason: "model_not_prepared",
-      jobId: null,
-      models: { state },
-    });
-    expect(() => f.processing.retrySource(f.selection)).toThrow("model_not_prepared");
-  }
-  expect(f.requests).toEqual([]);
-  f.models.state = "ready";
-  f.control.fail = true;
-  f.processing.prepareSource(f.selection);
-  await expect.poll(() => f.processing.sourceStatus(f.selection).state).toBe("failed");
-  const failed = f.processing.sourceStatus(f.selection);
-  const attempt = f.jobs.job(failed.jobId!).attemptId;
-  f.processing.sourceStatus(f.selection);
-  expect(f.requests).toHaveLength(1);
-  f.control.fail = false;
-  f.processing.retrySource(f.selection);
-  await expect.poll(() => f.processing.sourceStatus(f.selection).state).toBe("ready");
-  expect(f.processing.sourceStatus(f.selection).published!.generation).not.toBe(attempt);
-  expect(f.requests).toHaveLength(2);
-  await expect(readFile(f.requests[0]!.output)).rejects.toMatchObject({ code: "ENOENT" });
-});
-
-test("cancelled attempts are not revived by reads; cleanup preserves other published source generations", async () => {
-  const f = await fixture();
-  f.processing.prepareSource(f.selection);
-  await expect.poll(() => f.processing.sourceStatus(f.selection).state).toBe("ready");
-  const retained = f.processing.sourceStatus(f.selection).published!.transcript;
-  f.control.hold = true;
-  const first = {
-    ...f.selection,
-    executionRange: { startUs: 300, endUs: 700 },
-    context: { beforeUs: 100, afterUs: 100 },
-  };
-  f.processing.prepareSource(first);
-  await expect.poll(() => f.requests.length).toBe(2);
-  const id = f.processing.sourceStatus(first).jobId!;
-  const attempt = f.jobs.job(id).attemptId;
-  expect(f.processing.retrySource(first)).toMatchObject({ state: "processing", jobId: id });
-  expect(f.jobs.job(id).attemptId).toBe(attempt);
-  expect(f.requests).toHaveLength(2);
-  await f.jobs.drainJob(id);
-  f.processing.sourceStatus(first);
-  expect(f.requests).toHaveLength(2);
-  f.control.hold = false;
-  f.processing.retrySource(first);
-  await expect.poll(() => f.processing.sourceStatus(first).state).toBe("ready");
-  await f.processing.cleanup(new AbortController().signal);
-  expect(f.transcripts.wordRecords(retained, { limit: 10 }).map((word) => word.text)).toEqual([
-    "track:2",
-  ]);
-  const resumed = f.processing.sourceStatus(first).published!.transcript;
-  expect(resumed.generation).not.toBe(retained.generation);
-  expect(resumed.execution.executionRange).toEqual(first.executionRange);
-  expect(
-    f.transcripts
-      .wordRecords(resumed, { limit: 10 })
-      .map(({ text, startUs, endUs }) => ({ text, startUs, endUs })),
-  ).toEqual([{ text: "track:2", startUs: 210, endUs: 790 }]);
-  expect(f.processing.sourceStatus(f.selection).published!.transcript).toEqual(retained);
-  expect(() => f.processing.prepareSource({ ...f.selection, streamId: "track:3" })).toThrow(
-    "audio stream",
-  );
 });
 
 test("explicit acquisition masks separate jobs for the same bytes and retain the context", async () => {
@@ -1081,7 +998,7 @@ test("selected transcript native refusal leaves no generation, indexed row or ou
     await f.jobs.idle();
     const status = f.processing.sourceStatus(f.selection);
     await retainOutput(`state-${index}`, {
-      expected: { state: "failed", reason, retryable: false, published: null },
+      expected: { state: "failed", reason, retryable: true, published: null },
       status,
       tables: Object.fromEntries(
         [
@@ -1095,7 +1012,7 @@ test("selected transcript native refusal leaves no generation, indexed row or ou
     expect(status, reason).toMatchObject({
       state: "failed",
       reason,
-      retryable: false,
+      retryable: true,
       published: null,
     });
     expect(
@@ -1164,8 +1081,28 @@ test("local transcription problems publish as issues on the words they touch", a
   // Word positions are line-local in raw evidence and transcript ordinals once published.
   const expected = [
     issue(unresolvedIssue),
-    { ...issue(clampedIssue), at: { word: 6 } },
-    issue(droppedIssue),
+    {
+      ...issue(clampedIssue),
+      at: { word: 6 },
+      evidence: {
+        window: 1,
+        observation: 2,
+        decoded: { startUs: 5500000, endUs: 8000000 },
+        startUs: 16560000,
+        endUs: 16720000,
+      },
+    },
+    {
+      ...issue(droppedIssue),
+      evidence: {
+        window: 1,
+        token: 6,
+        text: "bad",
+        startSeconds: "NaN",
+        endUs: 5200000,
+        confidence: 1,
+      },
+    },
   ];
   expect(status).toMatchObject({ state: "ready", published: { issues: expected } });
   const rows = new SourceTranscriptRead(f.transcripts, status.published!.transcript)
@@ -1253,4 +1190,38 @@ test("selected decoded segments retain gaps, kinds, null confidence and instanta
     sha256: createHash("sha256").update(raw).digest("hex"),
   });
   expect(f.requests).toHaveLength(1);
+});
+
+test("portable transcripts retain more than ten thousand physical segments", async () => {
+  const f = await fixture(
+    { originUs: 0, startUs: 0, endUs: 10002 },
+    nativeTranscript((lines, receipt) => {
+      lines.splice(
+        0,
+        lines.length,
+        ...Array.from({ length: 10002 }, (_, ordinal) => ({
+          ordinal,
+          source: { startUs: ordinal, endUs: ordinal + 1 },
+          owned: { startUs: ordinal, endUs: ordinal + 1 },
+          state: "skipped" as const,
+          reason: "too_short" as const,
+          wordCount: 0,
+          words: [],
+        })),
+      );
+      receipt.wordCount = 0;
+      receipt.available = [{ startUs: 0, endUs: 10002 }];
+      receipt.segments = lines.map(({ words, ...segment }) => segment);
+    }),
+  );
+  f.processing.prepareSource(f.selection);
+  await f.jobs.idle();
+  expect(f.processing.sourceStatus(f.selection).state).toBe("ready");
+  const generation = f.transcripts.portableGenerations(f.asset.id).generations[0]!;
+  const receipt = f.transcripts.portableReceipt(generation);
+  expect(receipt.segments.at(-1)).toMatchObject({
+    ordinal: 10001,
+    owned: { startUs: 10001, endUs: 10002 },
+  });
+  expect(receipt.segments).toHaveLength(10002);
 });

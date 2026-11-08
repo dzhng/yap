@@ -33,7 +33,7 @@ test("project package export owns resource pins until commit and reopens retaine
   await f.jobs.idle();
   const opened = f.packages.status(admission.id);
   assert.equal(opened.state, "ready", JSON.stringify(opened));
-  assert.equal(opened.project.projectId, f.projectId);
+  assert.equal(opened.project.id, f.projectId);
   f.packages.adopt(opened.packageHandle, "adopt");
   await f.jobs.idle();
   const adopted = f.packages.adopt(opened.packageHandle, "adopt");
@@ -68,7 +68,7 @@ test("committed project package retains counted private cleanup until retry with
   assert.deepEqual(
     f.exports
       .list({ unfinishedOnly: true })
-      .exports.map((row) => [row.exportId, row.state, row.cleanupPending]),
+      .exports.map((row) => [row.id, row.state, row.cleanupPending]),
     [[request.exportId, "committed", true]],
   );
   const original = await readFile(committed.output);
@@ -701,8 +701,8 @@ for (const kind of ["source", "project"])
           "index-generation",
           indexGenerationResource(
             kind === "source"
-              ? { kind: "asset", assetId: f.asset.id }
-              : { kind: "project", projectId: f.projectId },
+              ? { kind: "asset", id: f.asset.id }
+              : { kind: "project", id: f.projectId },
             old.generation,
           ),
         ],
@@ -752,7 +752,7 @@ for (const kind of ["source", "project"])
       kind === "source"
         ? old
         : recipientRecords
-            .portableGenerations({ kind: "project", projectId: adopted.published.output.projectId })
+            .portableGenerations({ kind: "project", id: adopted.published.output.projectId })
             .find((value) => value.generation === old.generation);
     assert.ok(adoptedMetadata);
     assert.deepEqual(

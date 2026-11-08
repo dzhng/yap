@@ -1,6 +1,9 @@
 import { Catalog, CatalogError } from "./catalog.js";
+import { type CaptureCompletionReason, refusalRetryable } from "@yap/protocol";
+import { pageCursor } from "./page-cursor.js";
 import {
   readCapturePublication,
+  readCaptureSourceOutcome,
   type CapturePublication,
   type CapturePublishedSource,
   type CapturePublicationState,
@@ -14,8 +17,9 @@ export type RecordingState =
   | "interrupted"
   | "canceled";
 export type FinalizationError = Readonly<{ code: string; message: string; retryable: boolean }>;
+type StoredFinalizationError = Readonly<{ code: string; message: string; retryable?: boolean }>;
 export type Recording = Readonly<{
-  recordingId: string;
+  id: string;
   sourceId: string;
   camera: Readonly<{ sourceId: string; deviceId: string }> | null;
   publication: CapturePublication | null;
@@ -23,6 +27,7 @@ export type Recording = Readonly<{
   createdAt: string;
   state: RecordingState;
   lifecycleSequence: number;
+  completionReason: CaptureCompletionReason | null;
   interruptionReason: string | null;
   interruptionMessage: string | null;
   finalizationError: FinalizationError | null;
@@ -36,8 +41,12 @@ export type LifecycleEvent = Readonly<{
 }> &
   Readonly<
     | { state: "recording" | "paused" | "canceled" }
-    | { state: "finalizing"; finalizationError?: FinalizationError | null }
-    | { state: "complete"; sourceDurationUs: number }
+    | { state: "finalizing"; finalizationError?: StoredFinalizationError | null }
+    | {
+        state: "complete";
+        sourceDurationUs: number;
+        completionReason?: CaptureCompletionReason | null;
+      }
     | {
         state: "interrupted";
         reason: string;
@@ -55,7 +64,7 @@ const nextStates: Readonly<Record<RecordingState, readonly RecordingState[]>> = 
   canceled: ["canceled"],
 };
 const recordingColumns =
-  "recordingId,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
+  "recordingId AS id,sourceId,cameraSourceId,cameraDeviceId,publication,creationSequence,createdAt,state,lifecycleSequence,(SELECT reason FROM recording_completions WHERE recordingId=recordings.recordingId) AS completionReason,interruptionReason,interruptionMessage,finalizationError,sourceDurationUs";
 type RecordingRow = Omit<Recording, "finalizationError" | "camera" | "publication"> & {
   finalizationError: string | null;
   publication: string | null;
@@ -64,18 +73,28 @@ type RecordingRow = Omit<Recording, "finalizationError" | "camera" | "publicatio
 };
 function readRecording(row: RecordingRow): Recording {
   const { cameraSourceId, cameraDeviceId, ...recording } = row;
+  const failure =
+    row.finalizationError === null
+      ? null
+      : (JSON.parse(row.finalizationError) as FinalizationError);
+  const publication =
+    row.publication === null
+      ? null
+      : (JSON.parse(row.publication) as CapturePublicationState).observation;
   return {
     ...recording,
     camera:
       cameraSourceId === null ? null : { sourceId: cameraSourceId, deviceId: cameraDeviceId! },
     publication:
-      row.publication === null
+      publication === null
         ? null
-        : (JSON.parse(row.publication) as CapturePublicationState).observation,
+        : {
+            ...publication,
+            primary: readCaptureSourceOutcome(publication.primary),
+            camera: readCaptureSourceOutcome(publication.camera),
+          },
     finalizationError:
-      row.finalizationError === null
-        ? null
-        : (JSON.parse(row.finalizationError) as FinalizationError),
+      failure === null ? null : { ...failure, retryable: refusalRetryable(failure.code) },
   };
 }
 /** A settled take can no longer leave its state, so a missing source is final rather than pending. */
@@ -85,7 +104,7 @@ export function isSettled(state: RecordingState): boolean {
 const unsettledStates = (Object.keys(nextStates) as RecordingState[]).filter(
   (state) => !isSettled(state),
 );
-export type RecordingCursor = Readonly<{ beforeSequence: number }>;
+export type RecordingCursor = string;
 /** What a caller asks a take to be allocated for, canonically, so a replay can be recognized. */
 export type AllocationRequest = Readonly<{
   requestId: string;
@@ -111,6 +130,9 @@ export class CaptureStore extends Catalog {
     CHECK ((cameraSourceId IS NULL)=(cameraDeviceId IS NULL))
    ) STRICT;
    CREATE INDEX IF NOT EXISTS recordings_state_sequence ON recordings(state,creationSequence);
+   CREATE TABLE IF NOT EXISTS recording_completions (
+    recordingId TEXT PRIMARY KEY REFERENCES recordings(recordingId) ON DELETE CASCADE,reason TEXT NOT NULL
+   ) STRICT;
    CREATE TABLE IF NOT EXISTS recording_deletions (
     recordingId TEXT PRIMARY KEY REFERENCES recordings(recordingId)
    ) STRICT;
@@ -149,7 +171,7 @@ export class CaptureStore extends Catalog {
               "REQUEST_CONFLICT",
               "Request ID was already used with different arguments",
             );
-          return { recording: this.get(recording.recordingId), replay: true };
+          return { recording: this.get(recording.id), replay: true };
         }
       }
       const recordingId = this.providers.newId();
@@ -201,7 +223,7 @@ export class CaptureStore extends Catalog {
         cause: outcome.error.code,
       });
     if (!recording.publication?.inputsClosed || outcome?.state !== "published")
-      throw new CatalogError("NOT_READY", "Capture source has not published", { sourceId }, true);
+      throw new CatalogError("NOT_READY", "Capture source has not published", { sourceId });
     return outcome.source;
   }
   /** Physical inputs, including drain, retain queue priority; publication after closure does not. */
@@ -242,7 +264,7 @@ export class CaptureStore extends Catalog {
       .all(afterId, limit + 1) as RecordingRow[];
     return {
       recordings: rows.slice(0, limit).map(readRecording),
-      nextAfterId: rows.length > limit ? rows[limit - 1]!.recordingId : null,
+      nextAfterId: rows.length > limit ? rows[limit - 1]!.id : null,
     };
   }
   /** Finalize only after each resource owner has reclaimed its rows and files. Foreign keys keep
@@ -258,7 +280,7 @@ export class CaptureStore extends Catalog {
     });
   }
   protected removeRecording(recordingId: string): void {
-    for (const table of ["recording_deletions", "recordings"])
+    for (const table of ["recording_completions", "recording_deletions", "recordings"])
       this.catalog.prepare(`DELETE FROM ${table} WHERE recordingId=?`).run(recordingId);
   }
   /** Native closure ends capture priority even if later deletion cleanup fails. */
@@ -305,7 +327,7 @@ export class CaptureStore extends Catalog {
    */
   async forEachRecording(
     signal: AbortSignal,
-    visit: (recording: Pick<Recording, "recordingId" | "sourceId">) => Promise<void>,
+    visit: (recording: Pick<Recording, "id" | "sourceId">) => Promise<void>,
   ): Promise<void> {
     let after = "";
     let failed = false;
@@ -314,11 +336,11 @@ export class CaptureStore extends Catalog {
       signal.throwIfAborted();
       const recording = this.catalog
         .prepare(
-          "SELECT recordingId,sourceId FROM recordings WHERE recordingId>? ORDER BY recordingId LIMIT 1",
+          "SELECT recordingId AS id,sourceId FROM recordings WHERE recordingId>? ORDER BY recordingId LIMIT 1",
         )
-        .get(after) as Pick<Recording, "recordingId" | "sourceId"> | undefined;
+        .get(after) as Pick<Recording, "id" | "sourceId"> | undefined;
       if (!recording) break;
-      after = recording.recordingId;
+      after = recording.id;
       try {
         await visit(recording);
       } catch (error) {
@@ -332,11 +354,16 @@ export class CaptureStore extends Catalog {
   /** Creation sequences never move: later takes cannot enter an existing traversal. */
   list(
     cursor: RecordingCursor | null = null,
-    limit = 20,
+    limit = 100,
   ): { recordings: readonly Recording[]; nextCursor: RecordingCursor | null } {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
-      throw new CatalogError("INVALID_PARAMS", "Recording page size must be 1–100");
-    if (cursor && (!Number.isSafeInteger(cursor.beforeSequence) || cursor.beforeSequence < 1))
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000)
+      throw new CatalogError("INVALID_PARAMS", "Recording page size must be 1–1000");
+    const position = cursor === null ? undefined : pageCursor.decode("recording.list", cursor, {});
+    const before =
+      position === undefined
+        ? Number.MAX_SAFE_INTEGER
+        : (position as { sequence?: unknown }).sequence;
+    if (!Number.isSafeInteger(before) || (before as number) < 1)
       throw new CatalogError("INVALID_PARAMS", "Invalid recording page cursor");
     const rows = this.catalog
       .prepare(
@@ -344,13 +371,17 @@ export class CaptureStore extends Catalog {
        WHERE state!='canceled' AND recordingId NOT IN (SELECT recordingId FROM recording_deletions) AND creationSequence < ?
        ORDER BY creationSequence DESC LIMIT ?`,
       )
-      .all(cursor?.beforeSequence ?? Number.MAX_SAFE_INTEGER, limit + 1) as RecordingRow[];
+      .all(before as number, limit + 1) as RecordingRow[];
     const recordings = rows.slice(0, limit).map(readRecording);
     return {
       recordings,
       nextCursor:
         rows.length > limit
-          ? { beforeSequence: recordings[recordings.length - 1]!.creationSequence }
+          ? pageCursor.encode(
+              "recording.list",
+              { sequence: recordings[recordings.length - 1]!.creationSequence },
+              {},
+            )
           : null,
     };
   }
@@ -389,6 +420,16 @@ export class CaptureStore extends Catalog {
       .get() as RecordingRow | undefined;
     return row ? readRecording(row) : null;
   }
+  /** A canceled or deleting take is hidden from recording discovery. */
+  listable(recordingId: string): boolean {
+    return Boolean(
+      this.catalog
+        .prepare(
+          "SELECT 1 FROM recordings WHERE recordingId=? AND state!='canceled' AND recordingId NOT IN (SELECT recordingId FROM recording_deletions)",
+        )
+        .get(recordingId),
+    );
+  }
   /** One retained finalization for status when no current recovery or native take owns the view. */
   pendingFinalization(): Recording | null {
     const row = this.catalog
@@ -412,8 +453,7 @@ export class CaptureStore extends Catalog {
         failure.code.length < 1 ||
         failure.code.length > 128 ||
         typeof failure.message !== "string" ||
-        failure.message.length > 4096 ||
-        typeof failure.retryable !== "boolean"
+        failure.message.length > 4096
       )
         throw new CatalogError(
           "INVALID_PARAMS",
@@ -433,7 +473,8 @@ export class CaptureStore extends Catalog {
           sourceId: recording.sourceId,
           reportedSourceId: event.sourceId,
         });
-      if (event.sequence <= recording.lifecycleSequence) return recording;
+      if (recording.state === "canceled" || event.sequence <= recording.lifecycleSequence)
+        return recording;
       const stored = this.catalog
         .prepare("SELECT publication FROM recordings WHERE recordingId=?")
         .get(recordingId)!.publication as string | null;
@@ -448,6 +489,12 @@ export class CaptureStore extends Catalog {
           `A ${recording.state} recording cannot become ${event.state}`,
           { state: recording.state, reportedState: event.state },
         );
+      if (event.state === "complete" && event.completionReason)
+        this.catalog
+          .prepare(
+            "INSERT INTO recording_completions(recordingId,reason) VALUES(?,?) ON CONFLICT(recordingId) DO UPDATE SET reason=excluded.reason",
+          )
+          .run(recordingId, event.completionReason);
       if (event.state === "complete" || event.state === "interrupted")
         this.attachSource(recording, event.sourceDurationUs);
       this.catalog
@@ -463,7 +510,12 @@ export class CaptureStore extends Catalog {
             ? JSON.stringify(
                 event.finalizationError === undefined
                   ? recording.finalizationError
-                  : event.finalizationError,
+                  : event.finalizationError === null
+                    ? null
+                    : {
+                        code: event.finalizationError.code,
+                        message: event.finalizationError.message,
+                      },
               )
             : null,
           publication === null ? null : JSON.stringify(publication),
@@ -494,7 +546,7 @@ export class CaptureStore extends Catalog {
         state: recording.state,
         interruptionReason: recording.interruptionReason,
       });
-    this.storeSource(recording.recordingId, sourceDurationUs);
+    this.storeSource(recording.id, sourceDurationUs);
   }
   /** Runs inside the lifecycle/registration transaction, including an editing specialization. */
   protected storeSource(recordingId: string, sourceDurationUs: number): void {

@@ -49,13 +49,13 @@ async function fixture(
         if (op.operation === "artifact.read")
           return {
             ok: true,
-            data: delivery.read(op.params.token, op.params.offset, op.params.maxBytes),
+            data: delivery.read(op.params.token, op.params.offsetBytes, op.params.maxBytes),
           };
         if (op.operation === "artifact.renew")
-          return { ok: true, data: delivery.renew(op.params.token) };
+          return { ok: true, data: delivery.renew(op.params.token, op.params.requestId) };
         if (op.operation === "artifact.close") {
           delivery.close(op.params.token);
-          return { ok: true, data: { closed: true } };
+          return { ok: true, data: { token: op.params.token, closed: true } };
         }
       }
       return handler(request, signal);
@@ -112,7 +112,7 @@ test("full result capacity refuses before dispatch while maintenance drains the 
   expect(mutations).toBe(32);
   expect(refused).toMatchObject({
     ok: false,
-    error: { code: "LIMIT_EXCEEDED", retryable: true },
+    error: { code: "CAPACITY_EXCEEDED", retryable: true },
   });
   const request = (operation: string, params: Record<string, unknown>) =>
     callLocal(f.server.socketPath, {
@@ -121,18 +121,27 @@ test("full result capacity refuses before dispatch while maintenance drains the 
       params,
       resultDelivery: { inlineBytes: 1 },
     });
-  expect(await request("artifact.read", { token: tokens[0], offset: 0 })).toMatchObject({
+  expect(await request("artifact.read", { token: tokens[0], offsetBytes: 0 })).toMatchObject({
     ok: true,
-    data: { offset: 0, eof: true },
+    data: { offsetBytes: 0, eof: true },
   });
-  expect(await request("artifact.renew", { token: tokens[0] })).toMatchObject({
+  expect(
+    await request("artifact.renew", { token: tokens[0], requestId: "renew-test" }),
+  ).toMatchObject({
     ok: true,
     data: { token: tokens[0] },
   });
+  const renewed = await request("artifact.renew", { token: tokens[0], requestId: "renew-replay" });
+  expect(await request("artifact.renew", { token: tokens[0], requestId: "renew-replay" })).toEqual(
+    renewed,
+  );
+  expect(() => f.delivery.renew(tokens[1]!, "renew-replay")).toThrowError(
+    expect.objectContaining({ code: "REQUEST_CONFLICT" }),
+  );
   expect(await request("artifact.close", { token: tokens[0] })).toEqual({
     id: "maintenance",
     ok: true,
-    data: { closed: true },
+    data: { token: tokens[0], closed: true },
   });
   const next = await f.ask("next");
   if (!("resultDelivery" in next)) throw Error("Missing next delivery");
@@ -212,7 +221,7 @@ test("lost result publication releases capacity without rolling back or repeatin
     id: "lost",
     operation: "edit.apply",
     params: {
-      projectId: made.project.projectId,
+      projectId: made.project.id,
       expectedRevisionId: made.revision.id,
       requestId: "one-edit",
       operations: [{ operation: "track.add", track: { kind: "video", order: 0 } }],
@@ -232,7 +241,7 @@ test("lost result publication releases capacity without rolling back or repeatin
   );
   expect(result.data.revision.ordinal).toBe(1);
   expect(result.data.revision.document.tracks).toMatchObject([{ kind: "video", order: 0 }]);
-  expect(projects.history(made.project.projectId).revisions.map((r) => r.ordinal)).toEqual([0, 1]);
+  expect(projects.history(made.project.id).revisions.map((r) => r.ordinal)).toEqual([0, 1]);
   f.delivery.close(replay.resultDelivery.token);
   const releases: (() => void)[] = [];
   for (let n = 0; n < 32; n++) releases.push(f.delivery.reserve());

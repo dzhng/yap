@@ -1,5 +1,5 @@
 import { CatalogError } from "@yap/core/catalog";
-import { CONTROL_FRAME_BYTES, encodeJsonLine, personalHome } from "@yap/protocol";
+import { CONTROL_FRAME_BYTES, encodeJsonLine, personalHome, operationError } from "@yap/protocol";
 import { startProjectService } from "./project-service.js";
 import { StartupFailure } from "./startup.js";
 import { readFileSync } from "node:fs";
@@ -30,7 +30,7 @@ try {
           receiptSha256: process.env.YAP_FFMPEG_RECEIPT_SHA256 ?? "",
         }
       : undefined,
-    // Every run refreshes presets at launch and daily unless YAP_PRESETS_REFRESH=0 (tests opt in instead).
+    // Every run refreshes presets at launch and daily unless YAP_PRESETS_REFRESH=0, which the test runners set.
     presets: {
       ...(bundledPresets ? { bundled: bundledPresets } : {}),
       ...(process.env.YAP_PRESETS_REFRESH === "0" ? {} : { refresh: true as const }),
@@ -40,6 +40,8 @@ try {
     // Empty-home lifecycle tests opt out explicitly; installed runs keep the
     // first-party model acquisition default when the variable is absent.
     autoPrepareModels: process.env.YAP_AUTO_PREPARE_MODELS !== "0",
+    // Every recording and import is transcribed in the background once the model is ready.
+    autoTranscribe: process.env.YAP_AUTO_TRANSCRIBE !== "0",
   });
   for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const)
     process.on(signal, () => {
@@ -51,12 +53,11 @@ try {
     encodeJsonLine(
       {
         event: "failed",
-        error: {
-          code: typed ? error.code : "SERVICE_UNAVAILABLE",
-          message: (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
-          retryable: error instanceof CatalogError ? error.retryable : false,
-          details: error instanceof CatalogError ? error.details : {},
-        },
+        error: operationError(
+          typed ? error.code : "SERVICE_UNAVAILABLE",
+          (error instanceof Error ? error.message : String(error)).slice(0, 2_000),
+          error instanceof CatalogError ? error.details : {},
+        ).error,
       },
       CONTROL_FRAME_BYTES,
     ),

@@ -14,7 +14,7 @@ public struct SelectedAudioConversionResult: Encodable, Sendable {
     public let bytes: Int
     public let input: Format
     public let output: Format
-    public let implementationId = "native-finite-pcm-v1"
+    public let implementationId = "native-finite-pcm-v2"
     public let channelPolicy: String
     public let contextPolicy = "complete-selected-pcm-zero-origin"
 }

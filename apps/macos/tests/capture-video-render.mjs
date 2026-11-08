@@ -91,7 +91,7 @@ test(
             background: "#000000ff",
           },
         });
-        const projectId = created.project.projectId;
+        const projectId = created.project.id;
         const authored = await call("edit.apply", {
           projectId,
           requestId: randomUUID(),

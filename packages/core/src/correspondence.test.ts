@@ -7,7 +7,7 @@ const endpoint = (assetId: string) => ({
   assetId,
   streamId: "audio-1",
   channel: 0,
-  range: { startUs: 0, endUs: 4_000_000 },
+  sourceRange: { startUs: 0, endUs: 4_000_000 },
 });
 const measurement = {
   verdict: "accepted" as const,
@@ -78,5 +78,5 @@ test("accepted mapping rejects an unselected anchor or duplicate endpoint", () =
       right: endpoint("b"),
       measurement: { ...measurement, anchors: [{ ...firstAnchor, selected: null }] },
     }),
-  ).toThrow("selected");
+  ).toThrow(expect.objectContaining({ code: "INVALID_INPUT_EVIDENCE", retryable: false }));
 });

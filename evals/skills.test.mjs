@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { mkdtemp, mkdir, writeFile, symlink, rm } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectSnapshot, skillCaseFiles } from "./runtime/skills.mjs";
+
+const operationLiteral = /operation:\s*z\.literal\("([^"]+)"\)/g;
+
+function escaped(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 test("skill fixtures expose complete upstream and preserve customized installed inputs", async () => {
   const skill = { "SKILL.md": "skill", "references/install.md": "guide" };
@@ -63,4 +70,34 @@ test("capability provenance trial presents an older installed skill separately f
     files["work/.agents/skills/yap/scripts/review-bundle.mjs"],
     upstream["scripts/review-bundle.mjs"],
   );
+});
+
+test("the consumer capability catalog covers every public operation", async () => {
+  const source = await readFile(
+    new URL("../packages/protocol/src/operations.ts", import.meta.url),
+    "utf8",
+  );
+  const catalog = await readFile(
+    new URL("../skills/yap/references/capability-catalog.md", import.meta.url),
+    "utf8",
+  );
+  const operationNames = [...source.matchAll(operationLiteral)].map((match) => match[1]);
+  assert.ok(operationNames.length > 0);
+  for (const operation of operationNames)
+    assert.match(catalog, new RegExp("`" + escaped(operation) + "`"), operation);
+});
+
+test("skills contain no removed operation names or legacy fields", async () => {
+  const root = new URL("../skills/", import.meta.url);
+  const entries = await readdir(root, { recursive: true, withFileTypes: true });
+  const files = entries.filter((entry) => entry.isFile());
+  const removed = ["recording.latest", "UNKNOWN_MODEL", "afterSequence"];
+  const bareInspect =
+    /`inspect`|(?:yap|operation(?:Name|Names)?|call|invoke|run)\s+inspect\b|["'](?:operation|name)["']\s*:\s*["']inspect["']/;
+  for (const entry of files) {
+    const path = new URL(entry.parentPath ? `${entry.parentPath}/${entry.name}` : entry.name, root);
+    const text = await readFile(path, "utf8");
+    for (const name of removed) assert.equal(text.includes(name), false, `${path}: ${name}`);
+    assert.equal(bareInspect.test(text), false, `${path}: bare inspect operation alias`);
+  }
 });

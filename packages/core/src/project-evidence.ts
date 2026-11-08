@@ -1,3 +1,4 @@
+import { readJsonChunks, jsonChunks } from "./json-stream.js";
 import { createHash } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import { z } from "zod";
@@ -15,7 +16,7 @@ import {
   type SourceWindowOccurrence,
 } from "@yap/composition";
 import { AssetStore, compositionAsset } from "./assets.js";
-import { CatalogError } from "./catalog.js";
+import { CatalogError, dependencyRefusal } from "./catalog.js";
 import { ProjectStore } from "./projects.js";
 import type { JobExecution, JobQueue } from "./jobs.js";
 import type { DerivedCache } from "./cache.js";
@@ -23,7 +24,12 @@ import type { RetainedRead } from "./files.js";
 import { submitCachedDerivative } from "./cached-derivative.js";
 import { TranscriptProcessing } from "./transcript-processing.js";
 import { transcriptSearchTerms } from "./transcript-read.js";
-import type { TranscriptMetadata, TranscriptRecords } from "./transcript.js";
+import {
+  publicTranscriptMetadata,
+  publicTranscriptIssues,
+  type TranscriptMetadata,
+  type TranscriptRecords,
+} from "./transcript.js";
 import { sourceSelectionKey as selectionKey, type SourceSelection } from "./source-selection.js";
 import {
   initialTranscript,
@@ -70,9 +76,7 @@ const policy = (domain: Query["domain"]) =>
       ? "project-events-v2"
       : domain === "cursor"
         ? "project-events-v1"
-        : "project-transcript-v3";
-// Provisional inspection budgets; scale acceptance owns changes to these limits.
-const maximumBytes = 8 * 1024 * 1024;
+        : "project-transcript-v4";
 
 const cursorSchema = z.strictObject({
   projectId: z.string(),
@@ -418,8 +422,8 @@ export class ProjectEvidenceInspection {
       return {
         selection,
         transcript: status.published?.transcript ?? null,
-        issues: status.published?.issues ?? [],
         ...(speaker === undefined ? {} : { speaker }),
+        issues: publicTranscriptIssues(status.published?.issues ?? []),
         state: status.published ? "ready" : status.state,
         reason: status.published ? null : status.reason,
         retryable: status.published ? false : status.retryable,
@@ -470,7 +474,7 @@ export class ProjectEvidenceInspection {
       this.options.jobs,
       this.options.cache,
       {
-        target: { kind: "project", projectId: input.projectId, revisionId: plan.query.revisionId },
+        target: { kind: "project", id: input.projectId, revisionId: plan.query.revisionId },
         artifact,
         input: JSON.stringify({ query: plan.query, pins: digest(this.pins(dependencies)) }),
       },
@@ -481,7 +485,7 @@ export class ProjectEvidenceInspection {
   retry(input: QueryInput) {
     const status = this.request(input);
     if (!status.jobId)
-      throw new CatalogError(
+      throw dependencyRefusal(
         "NOT_READY",
         "Source evidence is not ready",
         { dependencies: status.dependencies },
@@ -495,7 +499,7 @@ export class ProjectEvidenceInspection {
       throw new CatalogError("UNSUPPORTED_JOB", "Project evidence needs a project target");
     const input = JSON.parse(job.input) as { query: Query; pins: string };
     const plan = this.plan(
-      { ...input.query, projectId: job.target.projectId, revisionId: job.target.revisionId },
+      { ...input.query, projectId: job.target.id, revisionId: job.target.revisionId },
       true,
     );
     const dependencies = this.dependencies(plan.selections, false, plan.query);
@@ -570,29 +574,31 @@ export class ProjectEvidenceInspection {
     const read = this.options.cache.acquire(id);
     if (!read) throw changed();
     leases.push(read);
-    if (read.bytes > maximumBytes)
-      throw new CatalogError("LIMIT_EXCEEDED", "Evidence cache exceeds its bound");
-    const buffer = Buffer.alloc(read.bytes);
-    let at = 0;
-    while (at < buffer.length) {
-      const bytes = read.read(buffer.subarray(at), at);
-      if (!bytes) throw changed();
-      at += bytes;
+    const held = read;
+    function* chunks() {
+      const buffer = Buffer.alloc(64 * 1024);
+      let position = 0;
+      while (position < held.bytes) {
+        const count = held.read(
+          buffer.subarray(0, Math.min(buffer.length, held.bytes - position)),
+          position,
+        );
+        if (!count) throw changed();
+        position += count;
+        yield buffer.subarray(0, count);
+      }
     }
     try {
-      return JSON.parse(buffer.toString("utf8")) as T;
+      return readJsonChunks(chunks()) as T;
     } catch {
       throw changed();
     }
   }
   private async publish(projectId: string, value: unknown, signal?: AbortSignal) {
-    const body = JSON.stringify(value);
-    if (Buffer.byteLength(body) > maximumBytes)
-      throw new CatalogError("LIMIT_EXCEEDED", "Evidence checkpoint exceeds 8MiB");
     signal?.throwIfAborted();
-    const reservation = this.options.cache.reserve({ kind: "project", projectId });
+    const reservation = this.options.cache.reserve({ kind: "project", id: projectId });
     try {
-      await writeFile(reservation.path, body, { flag: "wx" });
+      await writeFile(reservation.path, jsonChunks(value), { flag: "wx", signal });
       signal?.throwIfAborted();
       await this.options.cache.publish(reservation.id);
       signal?.throwIfAborted();
@@ -603,10 +609,23 @@ export class ProjectEvidenceInspection {
     }
   }
 
+  private publicResult<T>(result: T): T {
+    const value = result as T & { dependencies?: unknown };
+    return {
+      ...result,
+      dependencies: Array.isArray(value.dependencies)
+        ? value.dependencies.map((dependency: any) =>
+            dependency.transcript
+              ? { ...dependency, transcript: publicTranscriptMetadata(dependency.transcript) }
+              : dependency,
+          )
+        : value.dependencies,
+    } as T;
+  }
   async get(input: ProjectEvidenceInput) {
     const result = await this.read(input);
     return {
-      ...result,
+      ...this.publicResult(result),
       page: result.page && { rows: result.page.rows, nextCursor: result.page.nextCursor },
     };
   }
@@ -614,14 +633,14 @@ export class ProjectEvidenceInspection {
     transcriptSearchTerms(input.text);
     const result = await this.read(input);
     return {
-      ...result,
+      ...this.publicResult(result),
       page: result.page && { entries: result.page.entries, nextCursor: result.page.nextCursor },
     };
   }
   async events(input: ProjectEvidenceInput) {
     const result = await this.read({ ...input, domain: "events" });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.events, nextCursor: result.page.nextCursor },
     };
@@ -629,7 +648,7 @@ export class ProjectEvidenceInspection {
   async cursor(input: ProjectEvidenceInput) {
     const result = await this.read({ ...input, domain: "cursor" });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.events, nextCursor: result.page.nextCursor },
     };
@@ -637,7 +656,7 @@ export class ProjectEvidenceInspection {
   async speakers(input: ProjectSpeakerInput) {
     const result = await this.read({ ...input, domain: "speakers", prepare: false });
     return {
-      ...result,
+      ...this.publicResult(result),
       coverage: "coverage" in result ? (result.coverage ?? null) : null,
       page: result.page && { rows: result.page.speakers, nextCursor: result.page.nextCursor },
     };
@@ -652,13 +671,8 @@ export class ProjectEvidenceInspection {
       (cursor.projectId !== input.projectId ||
         (input.revisionId !== undefined && input.revisionId !== cursor.revisionId))
     )
-      throw changed();
-    const maximum =
-      input.domain === "cursor"
-        ? 5000
-        : input.domain === "events" || input.text !== undefined
-          ? 500
-          : 1000;
+      throw new CatalogError("INVALID_PARAMS", "Project evidence continuation used other filters");
+    const maximum = input.domain === "cursor" ? 5000 : 1000;
     const limit = input.limit ?? 250;
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > maximum)
       throw new CatalogError("INVALID_PARAMS", `Limit must be 1 to ${maximum}`);
@@ -677,7 +691,9 @@ export class ProjectEvidenceInspection {
         manifest?.query?.policy !==
         policy(input.domain ?? (input.text === undefined ? "transcript" : "transcript.search"))
       )
-        throw changed();
+        throw cursor && manifest
+          ? new CatalogError("INVALID_PARAMS", "Project evidence continuation is another read's")
+          : changed();
       const plan = this.pagePlan(
         {
           ...input,
@@ -689,11 +705,12 @@ export class ProjectEvidenceInspection {
         },
         input.range === undefined,
       );
-      if (
-        manifest.queryDigest !== plan.queryDigest ||
-        (cursor && cursor.queryDigest !== plan.queryDigest)
-      )
-        throw changed();
+      if (cursor && cursor.queryDigest !== plan.queryDigest)
+        throw new CatalogError(
+          "INVALID_PARAMS",
+          "Project evidence continuation used other filters",
+        );
+      if (manifest.queryDigest !== plan.queryDigest) throw changed();
       const selections = manifest.dependencies.map(({ selection }) => selection);
       const expectedPins = digest(this.pins(manifest.dependencies));
       const validate = () => {

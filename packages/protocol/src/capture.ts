@@ -11,9 +11,9 @@ const finite = z.number().finite();
 const authorization = z.enum(["authorized", "denied", "restricted", "not_determined", "unknown"]);
 
 export const captureSourceSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("display"), displayId: z.int().nonnegative() }).strict(),
-  z.object({ kind: z.literal("window"), windowId: z.int().nonnegative() }).strict(),
-  z.object({ kind: z.literal("camera"), deviceId: id.max(256) }).strict(),
+  z.object({ kind: z.literal("display"), id: z.int().nonnegative() }).strict(),
+  z.object({ kind: z.literal("window"), id: z.int().nonnegative() }).strict(),
+  z.object({ kind: z.literal("camera"), id: id.max(256) }).strict(),
   z
     .object({
       kind: z.literal("region"),
@@ -84,30 +84,22 @@ export const nativeStartSchema = captureSelectionSchema
     }
   });
 
-/**
- * Lifecycle sequences below this belong to the native capture journal, which numbers its own
- * records. The service numbers the events it authors itself — a refused start, a cancel, a
- * reconciled interruption — above this value, so the two producers share one strictly
- * increasing order and a native report can never silently occupy a service-authored number.
- */
-export const NATIVE_SEQUENCE_LIMIT = 2 ** 40;
+export const captureCompletionReasonSchema = z.enum(["maximumDuration"]);
+export type CaptureCompletionReason = z.infer<typeof captureCompletionReasonSchema>;
 
 export const captureReportSchema = z
   .object({
     recordingId: id,
     sourceId: id,
-    sequence: z
-      .int()
-      .min(1)
-      .max(NATIVE_SEQUENCE_LIMIT - 1),
+    sequence: z.int().min(1),
     state: z.enum(["recording", "paused", "finalizing", "complete", "interrupted"]),
     reason: z.string().min(1).nullish(),
+    completionReason: captureCompletionReasonSchema.nullish(),
     message: z.string().max(4096).nullish(),
     finalizationError: z
       .object({
         code: z.string().min(1).max(128),
         message: z.string().max(4096),
-        retryable: z.boolean(),
       })
       .nullable()
       .optional(),
@@ -167,8 +159,8 @@ export const captureSourcesSchema = z
       z.object({ id: z.int(), title: z.string(), application: z.string() }).strict(),
     ),
     cameras: z.array(
-      z.object({ id: id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
+      z.object({ id, name: z.string(), isDefault: z.boolean().optional() }).strict(),
     ),
-    microphones: z.array(z.object({ id: id, name: z.string(), isDefault: z.boolean() }).strict()),
+    microphones: z.array(z.object({ id, name: z.string(), isDefault: z.boolean() }).strict()),
   })
   .strict();

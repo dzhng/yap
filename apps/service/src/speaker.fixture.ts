@@ -57,7 +57,7 @@ export const speakerSource: SpeakerEvidenceSource = {
     startUs: { numerator: 125, denominator: 2 },
     endUs: { numerator: 60000125, denominator: 2 },
   },
-  pcm: { sha256: "c".repeat(64), sampleRate: 16000, frames: 480000 },
+  pcm: { sha256: "c".repeat(64), sampleRate: 16000, frameCount: 480000 },
   decoder: {
     recipe: "source-selected-span-avfoundation-f32-16k-v1",
     workerSha256: "d".repeat(64),
@@ -74,12 +74,16 @@ export const speakerSource: SpeakerEvidenceSource = {
   },
 };
 
-export async function publishControlledObservation(home: string, input: SpeakerSourceInput) {
+export async function publishControlledObservation(
+  home: string,
+  input: SpeakerSourceInput,
+  lines?: string[],
+) {
   const library = join(home, "library"),
     catalog = new Catalog(join(library, "catalog.sqlite"));
   const assets = new AssetStore(catalog, library),
     acquisitions = new AcquisitionStore(catalog),
-    models = new Models(library),
+    models = new Models(library, globalThis.fetch, undefined, catalog),
     selected = selectSpeakerSource(assets, acquisitions, input),
     evidence = new SpeakerEvidenceStore(catalog, assetSpeakerOwner(assets, acquisitions)),
     jobs = new JobQueue({
@@ -111,16 +115,12 @@ export async function publishControlledObservation(home: string, input: SpeakerS
       engine: models.speaker(input.modelId).engine,
     };
     const identity = {
-      owner: { kind: "asset" as const, assetId: input.assetId },
+      owner: { kind: "asset" as const, id: input.assetId },
       sourceId: input.assetId,
       generation: "retained-control-g1",
       policy: "speaker-v1" as const,
     };
-    const staged = evidence.stage(
-      identity,
-      source,
-      nativeOutput(undefined, source.engine.modelSha256),
-    );
+    const staged = evidence.stage(identity, source, nativeOutput(lines, source.engine.modelSha256));
     const processing = new SpeakerProcessing({
       assets,
       acquisitions,

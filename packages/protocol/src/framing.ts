@@ -1,11 +1,13 @@
 export const REQUEST_FRAME_BYTES = 1024 * 1024;
 export const RESPONSE_FRAME_BYTES = 8 * 1024 * 1024;
 export const CONTROL_FRAME_BYTES = 64 * 1024;
+// One JSON page leaves room for the response envelope and control framing.
+export const RESPONSE_PAGE_BYTES = RESPONSE_FRAME_BYTES - CONTROL_FRAME_BYTES;
 // A full result appears once structurally and at most twice as quoted JSON text.
 export const MCP_RESULT_INLINE_BYTES = Math.floor((RESPONSE_FRAME_BYTES - CONTROL_FRAME_BYTES) / 3);
 export const MAX_PENDING_CONTROL_CALLS = 32;
 export const DEFAULT_CALL_TIMEOUT_MS = 10_000;
-/** How long one native media worker run may take unless its caller budgets the work itself. */
+/** Total time for one native media worker run, including process startup. */
 export const MEDIA_WORKER_TIMEOUT_MS = 30_000;
 
 export class FrameError extends Error {

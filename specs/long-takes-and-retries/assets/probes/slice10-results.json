@@ -1,0 +1,507 @@
+{
+  "command": [
+    "node",
+    "$REPO/packages/test-harness/long-take/probe.mjs",
+    "--output",
+    "$OUT",
+    "--hours",
+    "12",
+    "--profiles",
+    "combined-typical,combined-worst"
+  ],
+  "revision": "fc2e9e96b0f0db5cfaa93b26affcb8a80be152f7",
+  "environment": {
+    "node": "v24.14.0",
+    "platform": "darwin",
+    "release": "25.6.0",
+    "cpu": "Apple M5 Pro"
+  },
+  "rates": {
+    "pcmHz": 94,
+    "cursorHz": 60,
+    "cameraHz": 30
+  },
+  "strokeSeconds": 300,
+  "budgetSecondsPerLength": 3600,
+  "results": [
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 1296000,
+        "cursorChanges": 673919,
+        "cursorSamples": 2592000,
+        "markEvents": 3,
+        "pcmAppends": 4060800
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 63.723822334,
+      "lastProgress": "generated 43200/43200.0s pcm=4060800 cursor=2592000 camera=1296000",
+      "peakRSSBytes": 28606464,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-combined-typical/source",
+        "combined-typical",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-combined-typical/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503313,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 4147928,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 4147928,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 27.87914579200001,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 18759680,
+      "command": ["$BUILD/long-take", "stream", "$OUT/12h-combined-typical/source"],
+      "log": "$OUT/12h-combined-typical/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 59.830225625000004,
+      "peakRSSBytes": 19120128,
+      "command": ["$BUILD/long-take", "publish", "$OUT/12h-combined-typical/source", "43200000000"],
+      "log": "$OUT/12h-combined-typical/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "export",
+      "detail": {
+        "bytes": 447810829,
+        "cursorSamples": 2592000,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 46.719162917000006,
+      "peakRSSBytes": 25690112,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-combined-typical/source",
+        "$OUT/12h-combined-typical/evidence.jsonl",
+        "$OUT/12h-combined-typical/receipt.json"
+      ],
+      "log": "$OUT/12h-combined-typical/export.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503313,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 447810829,
+          "lines": 2592724,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 2592724,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 720,
+          "globalX": 1923.125,
+          "globalY": 1069.375,
+          "sourceUs": 43199983333,
+          "x": 1903.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 3.784503708000004,
+      "lastProgress": "validated 2592000 normalized records",
+      "peakRSSBytes": 261898240,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/12h-combined-typical"
+      ],
+      "log": "$OUT/12h-combined-typical/ts-read.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-typical",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 2592724,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 720,
+          "globalX": 1923.125,
+          "globalY": 1069.375,
+          "sourceUs": 43199983333,
+          "x": 1903.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 20.033313915999983,
+      "lastProgress": "indexed 1402368 records",
+      "peakRSSBytes": 255246336,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/12h-combined-typical"
+      ],
+      "log": "$OUT/12h-combined-typical/ingest.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "generate",
+      "detail": {
+        "cameraRows": 1296000,
+        "cursorChanges": 2591999,
+        "cursorSamples": 2592000,
+        "markEvents": 3,
+        "pcmAppends": 4060800
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 66.57344791700001,
+      "lastProgress": "generated 43200/43200.0s pcm=4060800 cursor=2592000 camera=1296000",
+      "peakRSSBytes": 28655616,
+      "command": [
+        "$BUILD/long-take",
+        "generate",
+        "$OUT/12h-combined-worst/source",
+        "combined-worst",
+        "43200",
+        "300",
+        "94",
+        "60",
+        "30"
+      ],
+      "log": "$OUT/12h-combined-worst/generate.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503241,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "stream",
+      "detail": {
+        "completion": {
+          "durationUs": 43200000000,
+          "sequence": 4147928,
+          "state": "complete"
+        },
+        "cursorSamples": 2592000,
+        "file": "capture.journal.jsonl",
+        "finished": true,
+        "firstCursorSourceUs": 0,
+        "geometryEpochs": 720,
+        "header": {
+          "height": 1080,
+          "microphone": true,
+          "schemaVersion": 3,
+          "sessionID": "long-take-fixture",
+          "source": {
+            "displayID": 1,
+            "kind": "display"
+          },
+          "systemAudio": false,
+          "width": 1920
+        },
+        "incompleteTail": false,
+        "lastCursorSourceUs": 43199983333,
+        "lastGeometry": {
+          "contentRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 0,
+            "y": 0
+          },
+          "contentScale": 1,
+          "outputHeight": 1080,
+          "outputWidth": 1920,
+          "scaleFactor": 1,
+          "screenRect": {
+            "height": 1080,
+            "width": 1920,
+            "x": 20,
+            "y": 0
+          }
+        },
+        "lastSequence": 4147928,
+        "markEvents": 3,
+        "originHostUs": 100000000000,
+        "pauses": [],
+        "zeroOriginHeight": 1080
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 32.477115208,
+      "lastProgress": "streamed cursor=2592000",
+      "peakRSSBytes": 18857984,
+      "command": ["$BUILD/long-take", "stream", "$OUT/12h-combined-worst/source"],
+      "log": "$OUT/12h-combined-worst/stream.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "publish",
+      "code": "INVALID_MEDIA",
+      "message": "Source authority member is missing or replaced.",
+      "status": "fail",
+      "exitCode": 1,
+      "wallSeconds": 78.47671304200001,
+      "peakRSSBytes": 17203200,
+      "command": ["$BUILD/long-take", "publish", "$OUT/12h-combined-worst/source", "43200000000"],
+      "log": "$OUT/12h-combined-worst/publish.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "export",
+      "detail": {
+        "bytes": 447810757,
+        "cursorSamples": 2592000,
+        "markEvents": 3
+      },
+      "status": "pass",
+      "exitCode": 0,
+      "wallSeconds": 56.13804529099999,
+      "peakRSSBytes": 23953408,
+      "command": [
+        "$BUILD/long-take",
+        "export",
+        "$OUT/12h-combined-worst/source",
+        "$OUT/12h-combined-worst/evidence.jsonl",
+        "$OUT/12h-combined-worst/receipt.json"
+      ],
+      "log": "$OUT/12h-combined-worst/export.log",
+      "files": {
+        "journal": {
+          "bytes": 1392503241,
+          "lines": 4147928,
+          "maxLineBytes": 762822,
+          "unterminatedBytes": 0
+        },
+        "cameraMapping": {
+          "bytes": 658589339,
+          "lines": 1296000,
+          "maxLineBytes": 510,
+          "unterminatedBytes": 0
+        },
+        "evidence": {
+          "bytes": 447810757,
+          "lines": 2592724,
+          "maxLineBytes": 762805,
+          "unterminatedBytes": 0
+        }
+      }
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "ts-read",
+      "status": "pass",
+      "detail": {
+        "records": 2592724,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 720,
+          "globalX": 1923.125,
+          "globalY": 1069.375,
+          "sourceUs": 43199983333,
+          "x": 1903.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 3.485797957999981,
+      "lastProgress": "validated 2592000 normalized records",
+      "peakRSSBytes": 112754688,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ts-read",
+        "$OUT/12h-combined-worst"
+      ],
+      "log": "$OUT/12h-combined-worst/ts-read.log"
+    },
+    {
+      "seconds": 43200,
+      "profile": "combined-worst",
+      "stage": "ingest",
+      "status": "pass",
+      "detail": {
+        "records": 2592724,
+        "firstCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 1,
+          "globalX": 0.125,
+          "globalY": 0.375,
+          "sourceUs": 0,
+          "x": 0.125,
+          "y": 0.375
+        },
+        "lastCursor": {
+          "buttons": 0,
+          "eligibility": "inside",
+          "geometryEpoch": 720,
+          "globalX": 1923.125,
+          "globalY": 1069.375,
+          "sourceUs": 43199983333,
+          "x": 1903.125,
+          "y": 1069.375
+        }
+      },
+      "exitCode": 0,
+      "wallSeconds": 17.19873195799999,
+      "lastProgress": "indexed 1543680 records",
+      "peakRSSBytes": 260915200,
+      "command": [
+        "node",
+        "$REPO/packages/test-harness/long-take/ts-stage.mjs",
+        "ingest",
+        "$OUT/12h-combined-worst"
+      ],
+      "log": "$OUT/12h-combined-worst/ingest.log"
+    }
+  ],
+  "scope": "Slice 10 working tree based on revision; schema 3 unchanged, journal-only probe. Later archive/lifecycle/read-transport edits do not affect these stage owners."
+}

@@ -12,7 +12,14 @@ import { JobQueue, type JobExecutor } from "@yap/core/jobs";
 import { CaptureService } from "./capture.js";
 import { DerivativeDelivery } from "./delivery.js";
 import { openDirectoryLease } from "@yap/core/files";
-import { RecordingDeletion } from "./deletion.js";
+import { DeletionPlans } from "@yap/core/deletion-plans";
+import { LibraryDeletion } from "./library-deletion.js";
+import {
+  FaultingDeletionPlans,
+  type DeletionBoundary,
+  type DeletionFault,
+} from "./deletion-faults.fixture.js";
+import { recordingRetirement } from "./recording-retirement.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -29,6 +36,7 @@ async function fixture(
   execute: JobExecutor = async () => "ready",
   directoryReady = Promise.resolve(),
   existingHome?: string,
+  fault?: DeletionFault,
 ) {
   const home = existingHome ?? (await mkdtemp("/tmp/yap-delete-"));
   const store = new CaptureStore(join(home, "catalog.sqlite"), {
@@ -45,11 +53,11 @@ async function fixture(
             "INVALID_REQUEST",
             "Source coordinator fixture requires a source job",
           );
-        store.get(target.recordingId);
+        store.get(target.id);
         return { ...target, revisionId: null };
       },
-      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.recordingId),
-      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.recordingId),
+      isAvailable: (target) => target.kind === "recording" && store.isAvailable(target.id),
+      isDeleting: (owner) => owner.kind === "recording" && store.isDeleting(owner.id),
       isCapturing: () => store.isCapturing(),
     },
     providers: { newId: randomUUID },
@@ -96,10 +104,26 @@ async function fixture(
       },
     },
   };
-  const deletion = new RecordingDeletion({
-    ...owners,
-    sources: new CaptureSources(store, acquisitions, jobs, home, owners.files),
-  });
+  const deletion = new LibraryDeletion(
+    fault ? new FaultingDeletionPlans(store, fault) : new DeletionPlans(store),
+  );
+  deletion.register(
+    recordingRetirement({
+      ...owners,
+      sources: new CaptureSources(store, acquisitions, jobs, home, owners.files),
+      users: {
+        usersOf: () => ({
+          usedBy: [],
+          acquisitions: [],
+          derivedAssets: [],
+          freesBytes: 0,
+          cascadeFreesBytes: 0,
+        }),
+        hasUsers: () => false,
+      },
+      freedBytes: () => 0,
+    }),
+  );
   let closed = false;
   async function closeOwners() {
     if (closed) return;
@@ -121,8 +145,8 @@ async function fixture(
       { sourceId, sequence: 2, state: "finalizing" },
       { sourceId, sequence: 3, state: "complete", sourceDurationUs: 1_000_000 },
     ] as const)
-      store.ingestLifecycle(recording.recordingId, event);
-    const directory = join(home, "recordings", recording.recordingId);
+      store.ingestLifecycle(recording.id, event);
+    const directory = join(home, "recordings", recording.id);
     await mkdir(join(directory, "source"), { recursive: true });
     const video = join(directory, "source", "video.mov");
     await writeFile(video, recording.sourceId);
@@ -151,7 +175,7 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
   });
   const target = await f.take(),
     sibling = await f.take();
-  const lease = f.delivery.open({ kind: "recording", id: target.recordingId }, () => {
+  const lease = f.delivery.open({ kind: "recording", id: target.id }, () => {
     const fd = openSync(target.video, "r");
     return {
       bytes: fstatSync(fd).size,
@@ -160,7 +184,7 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
     };
   });
   const request = {
-    target: { kind: "recording" as const, recordingId: target.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: target.id, revisionId: null },
 
     lane: "frame" as const,
     artifact: "held",
@@ -171,43 +195,132 @@ test("delete coalesces callers, revokes delivery immediately, and waits for a cl
   let finished: Promise<unknown> = Promise.resolve();
   try {
     let deleted = false;
-    const first = f.deletion.delete(target.recordingId).then((result) => {
+    const first = f.deletion.delete({ kind: "recording", id: target.id }).then((result) => {
       deleted = true;
       return result;
     });
-    const second = f.deletion.delete(target.recordingId);
+    const second = f.deletion.delete({ kind: "recording", id: target.id });
     finished = Promise.allSettled([first, second]);
     expect(() => f.delivery.read(lease.token, 0, 1)).toThrow(
       expect.objectContaining({ code: "ARTIFACT_EXPIRED" }),
     );
-    expect(() => f.store.get(target.recordingId)).toThrow(
-      expect.objectContaining({ code: "NOT_FOUND" }),
-    );
+    expect(() => f.store.get(target.id)).toThrow(expect.objectContaining({ code: "NOT_FOUND" }));
     await setImmediate();
     expect(signal.aborted).toBe(true);
     expect(deleted).toBe(false);
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
     const other = {
       ...request,
-      target: { ...request.target, recordingId: sibling.recordingId },
+      target: { ...request.target, id: sibling.id },
       artifact: "other",
     };
     f.jobs.submit(other);
     await expect.poll(() => f.jobs.status(other).published?.result).toBe("sibling result");
     finish.resolve("late result");
-    await expect(first).resolves.toEqual({ recordingId: target.recordingId, deleted: true });
-    await expect(second).resolves.toEqual({ recordingId: target.recordingId, deleted: true });
+    await expect(first).resolves.toEqual({
+      id: target.id,
+      deleted: true,
+      freedBytes: 0,
+    });
+    await expect(second).resolves.toEqual({
+      id: target.id,
+      deleted: true,
+      freedBytes: 0,
+    });
     await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
-    expect(f.store.deleting(target.recordingId)).toBeNull();
-    expect(f.removed).toEqual([target.recordingId]);
+    expect(f.store.deleting(target.id)).toBeNull();
+    expect(f.removed).toEqual([target.id]);
     expect(f.jobs.status(request).jobId).toBeNull();
     expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
-    await expect(f.deletion.delete(target.recordingId)).resolves.toMatchObject({ deleted: true });
-    await expect(f.deletion.delete("../outside")).resolves.toMatchObject({ deleted: true });
+    await expect(f.deletion.delete({ kind: "recording", id: target.id })).resolves.toMatchObject({
+      deleted: true,
+    });
+    await expect(f.deletion.delete({ kind: "recording", id: "../outside" })).resolves.toMatchObject(
+      { deleted: true },
+    );
   } finally {
     finish.resolve("late result");
     await finished;
   }
+});
+
+test("a plain parent deletion keeps member deletion plain", async () => {
+  const catalogHome = await mkdtemp("/tmp/yap-delete-mode-");
+  const store = new CaptureStore(join(catalogHome, "catalog.sqlite"), {
+    now: () => "fixture",
+    newId: randomUUID,
+  });
+  const plans = new DeletionPlans(store);
+  const deletion = new LibraryDeletion(plans);
+  const memberCalls: boolean[] = [];
+  deletion.register({
+    kind: "parent",
+    checkUsers: () => [{ memberKind: "member", memberId: "m" }],
+    tombstone: () => true,
+    drain: () => {},
+    files: () => {},
+    rows: () => true,
+    freedBytes: () => 0,
+    cascadeMembersWithoutCascade: true,
+    cascadeMembers: async (_subject, _members, _signal, deleteMember) => {
+      await deleteMember({ kind: "member", id: "m" });
+    },
+  });
+  deletion.register({
+    kind: "member",
+    checkUsers: (_subject, cascade) => {
+      memberCalls.push(cascade);
+      if (!cascade) throw new CatalogError("IN_USE", "member is used", {});
+      return [];
+    },
+    tombstone: () => true,
+    drain: () => {},
+    files: () => {},
+    rows: () => true,
+    freedBytes: () => 0,
+  });
+  await expect(deletion.delete({ kind: "parent", id: "p" })).rejects.toMatchObject({
+    code: "IN_USE",
+  });
+  expect(memberCalls).toEqual([false]);
+  await deletion.close();
+  store.close();
+  await rm(catalogHome, { recursive: true, force: true });
+});
+
+test("a persisted deletion refuses a conflicting cascade mode", async () => {
+  let armed = true;
+  const f = await fixture(undefined, undefined, undefined, (phase, _subject, timing) => {
+    if (armed && phase === "files" && timing === "before") {
+      armed = false;
+      throw new Error("hold plan");
+    }
+  });
+  const target = await f.take();
+  await expect(
+    f.deletion.delete({ kind: "recording", id: target.id }, { cascade: false }),
+  ).rejects.toMatchObject({ code: "DELETE_FAILED" });
+  expect(() => f.deletion.delete({ kind: "recording", id: target.id }, { cascade: true })).toThrow(
+    expect.objectContaining({ code: "REQUEST_CONFLICT" }),
+  );
+});
+
+test("an active deletion refuses a conflicting cascade mode", async () => {
+  const f = await fixture();
+  const target = await f.take();
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  f.capture.quiesce = async () => {
+    entered.resolve();
+    await release.promise;
+  };
+  const first = f.deletion.delete({ kind: "recording", id: target.id }, { cascade: false });
+  await entered.promise;
+  expect(() => f.deletion.delete({ kind: "recording", id: target.id }, { cascade: true })).toThrow(
+    expect.objectContaining({ code: "REQUEST_CONFLICT" }),
+  );
+  release.resolve();
+  await first;
 });
 
 test("delete removes donor files but never sibling donors or prepared speech models", async () => {
@@ -218,13 +331,60 @@ test("delete removes donor files but never sibling donors or prepared speech mod
   await mkdir(model, { recursive: true });
   await writeFile(join(model, "README.md"), "model card");
 
-  await expect(f.deletion.delete(target.recordingId)).resolves.toEqual({
-    recordingId: target.recordingId,
+  await expect(f.deletion.delete({ kind: "recording", id: target.id })).resolves.toEqual({
+    id: target.id,
     deleted: true,
+    freedBytes: 0,
   });
   await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
   expect(await readFile(join(model, "README.md"), "utf8")).toBe("model card");
+});
+
+test("recording plans resume every phase boundary with the real retirement registration", async () => {
+  const boundaries: Array<[DeletionBoundary, "before" | "after"]> = [
+    ["plan", "before"],
+    ["plan", "after"],
+    ["tombstone", "before"],
+    ["tombstone", "after"],
+    ["drain", "before"],
+    ["drain", "after"],
+    ["files", "before"],
+    ["files", "after"],
+    ["rows", "before"],
+    ["rows", "after"],
+    ["clear", "before"],
+    ["clear", "after"],
+  ];
+  for (const [failedPhase, failedTiming] of boundaries) {
+    const home = await mkdtemp("/tmp/yap-delete-real-plan-");
+    let armed = true;
+    const f = await fixture(undefined, undefined, home, (phase, _subject, timing) => {
+      if (armed && phase === failedPhase && timing === failedTiming) {
+        armed = false;
+        throw new Error(`fault:${phase}:${timing}`);
+      }
+    });
+    const target = await f.take();
+    await expect(f.deletion.delete({ kind: "recording", id: target.id })).rejects.toMatchObject({
+      code: "DELETE_FAILED",
+    });
+    await f.closeOwners();
+
+    const resumed = await fixture(undefined, undefined, home);
+    const failures: unknown[] = [];
+    await resumed.deletion.resume((error) => failures.push(error));
+    if (failedPhase === "plan")
+      await expect(
+        resumed.deletion.delete({ kind: "recording", id: target.id }),
+      ).resolves.toMatchObject({ id: target.id, deleted: true });
+    expect(failures, `${failedPhase}:${failedTiming}`).toEqual([]);
+    await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(resumed.store.deletionsPage().recordings).toEqual([]);
+    expect(resumed.store.catalog.prepare("SELECT * FROM deletion_plans").all()).toEqual([]);
+    await resumed.closeOwners();
+    await rm(home, { recursive: true, force: true });
+  }
 });
 
 test("source directory lifetime gates removal; a failed path keeps intent for retry", async () => {
@@ -237,7 +397,7 @@ test("source directory lifetime gates removal; a failed path keeps intent for re
   await rm(target.directory, { recursive: true });
   await symlink(sibling.directory, target.directory);
   let settled = false;
-  const result = f.deletion.delete(target.recordingId).finally(() => {
+  const result = f.deletion.delete({ kind: "recording", id: target.id }).finally(() => {
     settled = true;
   });
   void result.catch(() => {});
@@ -246,12 +406,14 @@ test("source directory lifetime gates removal; a failed path keeps intent for re
     expect(settled).toBe(false);
     ready.resolve();
     await expect(result).rejects.toMatchObject({ code: "INVALID_STORAGE" });
-    expect(f.store.deleting(target.recordingId)?.recordingId).toBe(target.recordingId);
+    expect(f.store.deleting(target.id)?.id).toBe(target.id);
     expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
     await rm(target.directory);
     await mkdir(target.directory);
     await writeFile(original, "owned leftover");
-    await expect(f.deletion.delete(target.recordingId)).resolves.toMatchObject({ deleted: true });
+    await expect(f.deletion.delete({ kind: "recording", id: target.id })).resolves.toMatchObject({
+      deleted: true,
+    });
     await expect(lstat(original)).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(sibling.video, "utf8")).toBe(sibling.sourceId);
   } finally {
@@ -267,35 +429,35 @@ test("startup resumes durable intents and a failed recording does not strand ano
   });
   const takes = [seed.allocate().recording, seed.allocate().recording];
   for (const take of takes) {
-    seed.ingestLifecycle(take.recordingId, {
+    seed.ingestLifecycle(take.id, {
       sourceId: take.sourceId,
       sequence: 1,
       state: "interrupted",
       reason: "fixture",
       sourceDurationUs: 1,
     });
-    seed.markDeleting(take.recordingId);
+    seed.markDeleting(take.id);
   }
   seed.close();
-  const [blocked, valid] = takes.sort((a, b) => (a.recordingId < b.recordingId ? -1 : 1));
+  const [blocked, valid] = takes.sort((a, b) => (a.id < b.id ? -1 : 1));
   const outside = join(home, "sentinel");
   await mkdir(outside);
   await writeFile(join(outside, "keep"), "untouched");
   const roots = join(home, "recordings");
   await mkdir(roots);
-  await symlink(outside, join(roots, blocked!.recordingId));
-  await mkdir(join(roots, valid!.recordingId));
-  await writeFile(join(roots, valid!.recordingId, "partial"), "owned");
+  await symlink(outside, join(roots, blocked!.id));
+  await mkdir(join(roots, valid!.id));
+  await writeFile(join(roots, valid!.id, "partial"), "owned");
   const f = await fixture(undefined, undefined, home);
   const errors: unknown[] = [];
   await f.deletion.resume((error) => errors.push(error));
   expect(errors).toHaveLength(1);
   expect(errors[0]).toMatchObject({ code: "INVALID_STORAGE" });
-  expect(f.store.deleting(blocked!.recordingId)?.sourceId).toBe(blocked!.sourceId);
-  expect(f.store.markDeleting(valid!.recordingId)).toBeNull();
-  await expect(lstat(join(roots, valid!.recordingId))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(f.store.deleting(blocked!.id)?.sourceId).toBe(blocked!.sourceId);
+  expect(f.store.markDeleting(valid!.id)).toBeNull();
+  await expect(lstat(join(roots, valid!.id))).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(join(outside, "keep"), "utf8")).toBe("untouched");
-  await rm(join(roots, blocked!.recordingId));
+  await rm(join(roots, blocked!.id));
   await f.deletion.resume((error) => errors.push(error));
   expect(f.store.deletionsPage().recordings).toEqual([]);
   expect(errors).toHaveLength(1);
@@ -308,20 +470,22 @@ test("failure after file removal retains restart intent until catalog cleanup su
   f.store.catalog.exec(
     "CREATE TRIGGER block_final_delete BEFORE DELETE ON recordings BEGIN SELECT RAISE(ABORT, 'fixture cleanup fault'); END",
   );
-  await expect(f.deletion.delete(target.recordingId)).rejects.toMatchObject({
+  await expect(f.deletion.delete({ kind: "recording", id: target.id })).rejects.toMatchObject({
     code: "DELETE_FAILED",
     retryable: true,
   });
   await expect(lstat(target.directory)).rejects.toMatchObject({ code: "ENOENT" });
-  expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
+  expect(f.store.deleting(target.id)?.sourceId).toBe(target.sourceId);
   f.store.catalog.exec("DROP TRIGGER block_final_delete");
   await f.closeOwners();
   const reopened = await fixture(undefined, undefined, f.home);
   const failures: unknown[] = [];
   await reopened.deletion.resume((error) => failures.push(error));
   expect(failures).toEqual([]);
-  expect(reopened.store.markDeleting(target.recordingId)).toBeNull();
-  await expect(reopened.deletion.delete(target.recordingId)).resolves.toMatchObject({
+  expect(reopened.store.markDeleting(target.id)).toBeNull();
+  await expect(
+    reopened.deletion.delete({ kind: "recording", id: target.id }),
+  ).resolves.toMatchObject({
     deleted: true,
   });
 });
@@ -338,7 +502,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
     throw new CatalogError("INVALID_STATE", "Native closure not proven");
   };
   f.jobs.submit({
-    target: { kind: "recording" as const, recordingId: target.recordingId, revisionId: null },
+    target: { kind: "recording" as const, id: target.id, revisionId: null },
 
     lane: "frame",
     artifact: "held",
@@ -346,7 +510,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
   });
   await entered.promise;
   let settled = false;
-  const result = f.deletion.delete(target.recordingId).finally(() => {
+  const result = f.deletion.delete({ kind: "recording", id: target.id }).finally(() => {
     settled = true;
   });
   void result.catch(() => {});
@@ -356,7 +520,7 @@ test("capture refusal still waits for a closing worker and preserves retryable i
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
     finish.resolve("late");
     await expect(result).rejects.toMatchObject({ code: "INVALID_STATE", retryable: true });
-    expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
+    expect(f.store.deleting(target.id)?.sourceId).toBe(target.sourceId);
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
   } finally {
     finish.resolve("late");
@@ -368,7 +532,7 @@ test("close joins a held source-directory acquisition and aborts before removing
   const ready = deferred<void>();
   const f = await fixture(undefined, ready.promise);
   const target = await f.take();
-  const result = f.deletion.delete(target.recordingId);
+  const result = f.deletion.delete({ kind: "recording", id: target.id });
   void result.catch(() => {});
   await f.directoryEntered;
   let closed = false;
@@ -378,13 +542,13 @@ test("close joins a held source-directory acquisition and aborts before removing
   try {
     await setImmediate();
     expect(closed).toBe(false);
-    expect(() => f.deletion.delete(target.recordingId)).toThrow(
+    expect(() => f.deletion.delete({ kind: "recording", id: target.id })).toThrow(
       expect.objectContaining({ code: "SERVICE_STOPPED" }),
     );
     ready.resolve();
     await closing;
     await expect(result).rejects.toMatchObject({ code: "DELETE_FAILED", retryable: true });
-    expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
+    expect(f.store.deleting(target.id)?.sourceId).toBe(target.sourceId);
     expect(await readFile(target.video, "utf8")).toBe(target.sourceId);
   } finally {
     ready.resolve();
@@ -401,7 +565,7 @@ test("close waits for the native deletion receipt before allowing the catalog to
     entered.resolve();
     await finish.promise;
   };
-  const result = f.deletion.delete(target.recordingId);
+  const result = f.deletion.delete({ kind: "recording", id: target.id });
   void result.catch(() => {});
   await entered.promise;
   let closed = false;
@@ -411,11 +575,11 @@ test("close waits for the native deletion receipt before allowing the catalog to
   try {
     await setImmediate();
     expect(closed).toBe(false);
-    expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
+    expect(f.store.deleting(target.id)?.sourceId).toBe(target.sourceId);
     finish.resolve();
     await closing;
     await expect(result).rejects.toMatchObject({ retryable: true });
-    expect(f.store.deleting(target.recordingId)?.sourceId).toBe(target.sourceId);
+    expect(f.store.deleting(target.id)?.sourceId).toBe(target.sourceId);
   } finally {
     finish.resolve();
     await closing;

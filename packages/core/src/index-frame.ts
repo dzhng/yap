@@ -32,8 +32,7 @@ export async function retainIndexFrame<T extends { cacheId: string; file: string
   publish: (retained: Omitted<T, "cacheId">) => void,
 ): Promise<void> {
   const lease = cache.acquire(frame.cacheId);
-  if (!lease)
-    throw new CatalogError("NOT_READY", "Picture was evicted before index retention", {}, true);
+  if (!lease) throw new CatalogError("NOT_READY", "Picture was evicted before index retention", {});
   try {
     await copyRetainedFile(lease, file, signal);
     signal.throwIfAborted();

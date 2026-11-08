@@ -6,10 +6,14 @@ placement is the platform responsibility, not a second interpretation of edits:
 
 - [Capture](Sources/YapCapture/README.md) owns selected inputs, the
   acquisition clock, source writers, journals and cursor geometry.
+- [Protocol policy](Sources/YapProtocol) reads shared requirements and refusal rules
+  without depending on platform media frameworks.
 - [Media primitives](Sources/YapMedia/README.md) own physical support,
   descriptor containment and new-output publication shared by native consumers.
 - [Pictures](Sources/YapFrames/README.md) and
   [audio](Sources/YapAudio/README.md) execute compiled plans.
+- [Ink](Sources/YapInk/README.md) owns how a person's marks look, drawn live by the
+  app and in review frames of their recording.
 - [Speech](Sources/YapSpeech/README.md) owns local engine execution and
   source-bound word timing.
 
@@ -71,6 +75,9 @@ successor or removes unknown entries. This boundary is not protection against a
 writer that ignores ownership.
 
 ## Verification
+
+[Journal byte references](Tests/fixtures/journal-goldens/README.md) pin historical
+normalization and receipts independently of reader implementation.
 
 The [primary-camera fixture](Tests/YapCaptureTests/PrimaryCameraPublicationTests.swift)
 substitutes prerecorded pictures at the input boundary and exercises ordinary native

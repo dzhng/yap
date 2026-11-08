@@ -15,12 +15,16 @@ public struct PresentedControlsAction: Equatable, Sendable {
 
 /// Read-only saved-media presentation shared by Library and native semantic probes.
 public struct SavedItem: Equatable, Sendable {
-    public enum Kind: Equatable, Sendable { case recording, project, export, message }
+    public enum Kind: Equatable, Sendable { case recording, imported, project, export, message }
     public let id: String
     public let kind: Kind
     public let title: String
+    /// A short label beside the title naming where the item came from, such as "Imported".
+    public let badge: String?
     public let status: String?
     public let details: [String]
+    /// Explanation beneath the metadata, separate from the short state label.
+    public let message: String?
     public let actions: [PresentedControlsAction]
     /// Something about this item needs the person: a failure, an unconfirmed request, a retry.
     public let attention: Bool
@@ -31,14 +35,16 @@ public struct SavedItem: Equatable, Sendable {
         guard let opens, actions.contains(where: { $0.action == opens && $0.enabled }) else { return nil }
         return opens
     }
-    public init(id: String, kind: Kind, title: String, status: String? = nil,
-                details: [String] = [], actions: [PresentedControlsAction] = [],
+    public init(id: String, kind: Kind, title: String, badge: String? = nil, status: String? = nil,
+                details: [String] = [], message: String? = nil, actions: [PresentedControlsAction] = [],
                 opens: ControlsAction? = nil, attention: Bool = false) {
         self.id = id
         self.kind = kind
         self.title = title
+        self.badge = badge
         self.status = status
         self.details = details
+        self.message = message
         self.actions = actions
         self.opens = opens
         self.attention = attention
