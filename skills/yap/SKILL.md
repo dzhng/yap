@@ -345,6 +345,13 @@ For optional MCP use, read [MCP delivery](references/mcp.md); CLI is the default
 To change Yap's shortcuts, opening at login or automatic updates, read
 [app settings](references/app-settings.md).
 
+**Storyboards.** Before editing a long conversation (interview, podcast, talk, panel
+over about ten minutes), build a storyboard site so the human agrees on the story
+and shot plan before any edit. Read [storyboard](references/storyboard.md) for the
+workflow, helpers and design rules, plus [storyboard-contract](references/storyboard-contract.md)
+for the input/output shapes and [storyboard-shot-plan](references/storyboard-shot-plan.md)
+for virtual-camera framing and editorial defaults.
+
 **Presets.** When the user names a style, asks for a video "like" a kind they've
 seen, or asks how to shoot for a style, run `yap preset.list`. Read the preset whose
 description matches with `yap preset.get --params '{"presetId":"…"}'` and follow its
