@@ -24,7 +24,7 @@ Turns, each lasting until the next: `[{"startUs": 19000000, "speaker": "Host"}, 
 
 ## Helpers
 
-`sample-stills.mjs` calls `yap frame.batch` (read-only) eight instants per call:
+`storyboard-sample-stills.mjs` calls `yap frame.batch` (read-only) eight instants per call:
 
 ```json
 {"assetId": "…", "streamId": "track:1", "ranges": [{"startUs": 0, "endUs": 2466000000}],
@@ -43,7 +43,7 @@ It writes `out/batch-NNNN.json` receipts with their stills, and `out/stills.json
 
 A rerun reuses every complete batch. A refused call saves `batch-NNNN.refused.json`.
 
-`plan-shots.mjs` is pure:
+`storyboard-plan-shots.mjs` is pure:
 
 ```json
 {"chapters": "chapters.json", "turns": "turns.json", "stills": "work/stills/stills.json",
@@ -70,10 +70,10 @@ document plus `layout`, `aspect`, `source`, `host`, `guest` and
 `spoken` is the transcript text for writing summaries; the site never shows it.
 Cut chapters have no shots.
 
-`build-site.mjs`: `{"storyboard": "plan.json", "stills": "work/stills/stills.json", "out": "site"}`.
+`storyboard-build-site.mjs`: `{"storyboard": "plan.json", "stills": "work/stills/stills.json", "out": "site"}`.
 It writes `site/index.html` and hard-links the stills it shows into `site/stills/`,
 returning `{index, chapters, shots, minutes, issues}`. Issues: `still-distant` (no
 still within 2 s of a shot), `summary-missing`, `summary-long` (over 9 words).
 
-`serve-site.mjs SITE_DIR [--port N]` serves the directory read-only on 127.0.0.1,
+`storyboard-serve-site.mjs SITE_DIR [--port N]` serves the directory read-only on 127.0.0.1,
 on a free port by default, until stopped, and prints `{"url": "http://127.0.0.1:PORT/"}`.

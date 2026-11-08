@@ -168,7 +168,7 @@ export async function sampleStills(request) {
   return { manifest: manifestPath, stills: stills.length, fetchedBatches: fetched, issues };
 }
 
-if (launchedAs(import.meta.url, "sample-stills.mjs"))
+if (launchedAs(import.meta.url, "storyboard-sample-stills.mjs"))
   await runJsonHelper(
     sampleStills,
     `Usage: node sample-stills.mjs < request.json

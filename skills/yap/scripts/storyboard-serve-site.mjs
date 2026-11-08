@@ -42,7 +42,7 @@ export function serveSite(directory, port = 0) {
   });
 }
 
-if (launchedAs(import.meta.url, "serve-site.mjs")) {
+if (launchedAs(import.meta.url, "storyboard-serve-site.mjs")) {
   const [directory, flag, value] = process.argv.slice(2);
   if (!directory || directory === "--help") {
     console.log(

@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildSite } from "../skills/storyboard/scripts/build-site.mjs";
+import { buildSite } from "../skills/yap/scripts/storyboard-build-site.mjs";
 
 const S = 1_000_000;
 const source = { width: 3840, height: 2160 };
@@ -138,7 +138,7 @@ test("serves the site on the IPv4 loopback and nothing outside it", async (t) =>
   const out = join(directory, "site");
   await buildSite({ storyboard: board, stills, out });
   await writeFile(join(directory, "secret.txt"), "outside");
-  const { serveSite } = await import("../skills/storyboard/scripts/serve-site.mjs");
+  const { serveSite } = await import("../skills/yap/scripts/storyboard-serve-site.mjs");
   const { server, url } = await serveSite(out);
   t.after(() => server.close());
   assert.match(url, /^http:\/\/127\.0\.0\.1:\d+\/$/);

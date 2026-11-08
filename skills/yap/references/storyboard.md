@@ -1,20 +1,18 @@
----
-name: storyboard
-description: Before editing a long conversation (interview, podcast, talk, panel), build a storyboard site with Yap evidence so the human agrees on the story and the shot plan before any edit. It shows one row per chapter with every shot as framed by its virtual camera and a short summary, served locally and shown inline. Use when the user asks for a storyboard, "show me the chapters", "what's the story/structure", a shot plan or "how will you cut this", or before editing or splitting the edit of a recording longer than about ten minutes.
----
-
 # Storyboard
 
 A storyboard is the agreement before the edit: what story the conversation tells,
 what stays, and how each moment is framed. You make every editorial choice in it
 (chapters, calls, shots, summaries); Yap only supplies evidence. Face boxes,
 transcripts and speaker observations are evidence, never permission to cut.
-Nothing is edited until the human agrees. Then the [yap skill](../yap/SKILL.md)
-carries the plan out.
+Nothing is edited until the human agrees. Then the yap skill carries the plan out.
+
+Use storyboards before editing or splitting the edit of a recording longer than
+about ten minutes, when the user asks for a storyboard, "show me the chapters",
+"what's the story/structure", a shot plan or "how will you cut this".
 
 Run helpers with the Node from `yap service.tools` (`"$yap_node" scripts/<helper>.mjs < request.json`);
 each prints JSON and has `--help`. Run `yap` and the helpers that call it or bind a port outside
-any agent sandbox. Request and output shapes are in [contract](references/contract.md).
+any agent sandbox. Request and output shapes are in [storyboard-contract](storyboard-contract.md).
 
 ## Workflow
 
@@ -28,10 +26,9 @@ any agent sandbox. Request and output shapes are in [contract](references/contra
      Word timing is the clock for every cut; paragraph timecodes drift 1-2 s.
    - Turns: who speaks when, as `[{startUs, speaker}]`. Build them from speaker
      evidence with names bound by the caller, or an imported speaker-labeled
-     transcript; follow the speaker rules in the yap skill's
-     [podcast reference](../yap/references/podcast-videos.md). Seat position is
-     not voice identity.
-   - Stills with faces: `scripts/sample-stills.mjs` over the whole source (2 s step).
+     transcript; follow the speaker rules in [podcast-videos](podcast-videos.md).
+     Seat position is not voice identity.
+   - Stills with faces: `scripts/storyboard-sample-stills.mjs` over the whole source (2 s step).
      It saves every `frame.batch` receipt and resumes; a 40-minute 4K source takes
      about 5-15 minutes. Done when `stills.json` exists and its issues are read.
 
@@ -42,8 +39,8 @@ any agent sandbox. Request and output shapes are in [contract](references/contra
    Mark key lines in `keyLinesUs`. Done when chapters tile the recording and every
    one has a call.
 
-4. **Plan the shots** with `scripts/plan-shots.mjs`, choosing a layout from
-   [shot plan](references/shot-plan.md). The planner's rules are a default you apply
+4. **Plan the shots** with `scripts/storyboard-plan-shots.mjs`, choosing a layout from
+   [storyboard-shot-plan](storyboard-shot-plan.md). The planner's rules are a default you apply
    and adjust; edit the plan JSON wherever your judgment differs. Done when every
    kept chapter has shots and `totals` matches the pacing you intend.
 
@@ -51,14 +48,14 @@ any agent sandbox. Request and output shapes are in [contract](references/contra
    example or number), from its `spoken` text. Write them yourself or delegate in
    batches to any model available; the transcript itself never goes on the page.
 
-6. **Build, serve and show it.** Run `scripts/build-site.mjs`, then
-   `scripts/serve-site.mjs SITE_DIR` in the background. Open the printed URL in your
+6. **Build, serve and show it.** Run `scripts/storyboard-build-site.mjs`, then
+   `scripts/storyboard-serve-site.mjs SITE_DIR` in the background. Open the printed URL in your
    preview or browser tool and look at it. A path alone is not delivery. Read the
    returned `issues`. Done when the human can see the page inline and you've checked
    it against the rules below.
 
 7. **Iterate** on feedback: edit chapters or plan, rebuild, reload. Agreement on the
-   storyboard is the only done-condition of this skill. After it, plan the edit
+   storyboard is the only done-condition of this workflow. After it, plan the edit
    with the yap skill: per-shot crops are source pixels, top-left origin, ready for
    its geometry operations. Check the result with project frames from the edited revision.
 

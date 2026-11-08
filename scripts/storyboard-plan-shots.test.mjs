@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planShots } from "../skills/storyboard/scripts/plan-shots.mjs";
+import { planShots } from "../skills/yap/scripts/storyboard-plan-shots.mjs";
 
 const S = 1_000_000;
 // One locked 3840x2160 two-shot: host face on the left, guest on the right, boxes in source pixels.

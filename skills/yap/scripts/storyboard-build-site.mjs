@@ -1,6 +1,6 @@
 import { copyFile, link, mkdir, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { CALLS } from "./plan-shots.mjs";
+import { CALLS } from "./storyboard-plan-shots.mjs";
 import { failure, launchedAs, load, runJsonHelper, us } from "./storyboard-io.mjs";
 
 const S = 1_000_000;
@@ -186,7 +186,7 @@ export async function buildSite(request) {
   return { index, chapters: board.chapters.length, shots: shotCount, minutes, issues };
 }
 
-if (launchedAs(import.meta.url, "build-site.mjs"))
+if (launchedAs(import.meta.url, "storyboard-build-site.mjs"))
   await runJsonHelper(
     buildSite,
     `Usage: node build-site.mjs < request.json

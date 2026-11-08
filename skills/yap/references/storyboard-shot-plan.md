@@ -3,7 +3,7 @@
 A locked wide shot of two people becomes a multicam-style edit by cutting between
 virtual cameras: crops of the one source, recentred per shot on the measured face.
 Everything here is a recommended default for you to apply and adjust, not product
-behaviour. `scripts/plan-shots.mjs` implements it; edit its output where your
+behaviour. `scripts/storyboard-plan-shots.mjs` implements it; edit its output where your
 judgment differs.
 
 ## Virtual cameras

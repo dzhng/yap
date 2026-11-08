@@ -336,7 +336,7 @@ export async function planShots(request) {
   return { ...meta, layout, aspect, source, host, guest, chapters, totals };
 }
 
-if (launchedAs(import.meta.url, "plan-shots.mjs"))
+if (launchedAs(import.meta.url, "storyboard-plan-shots.mjs"))
   await runJsonHelper(
     async (request) => {
       const plan = await planShots(request);

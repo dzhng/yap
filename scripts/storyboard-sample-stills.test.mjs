@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { sampleStills } from "../skills/storyboard/scripts/sample-stills.mjs";
+import { sampleStills } from "../skills/yap/scripts/storyboard-sample-stills.mjs";
 
 // A stand-in for the yap launcher: answers frame.batch like the service, writing one file per
 // requested instant into --output, and counts its calls.
