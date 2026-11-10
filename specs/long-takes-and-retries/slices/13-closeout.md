@@ -20,7 +20,7 @@ The release candidate recovers the origin take with one Retry, and the docs desc
 2. Agent check: give a fresh Claude Code and a fresh Codex session a prompt for a take that is
    still importing (scratch take, not the origin) and confirm each waits as `retryAfterMs` says
    and reads the marks once ready. Record what each did.
-3. `review` skill pass (refactor-clean, code-review, write-docs).
+3. `review` skill pass (refactor-change, code-review, write-docs).
 4. Full repository check, once. Fix failures with focused reruns.
 5. Release with the `release` skill. Verify installed app, CLI, service and bundled skill versions.
 6. Acceptance on the installed build: open the Library, find take
